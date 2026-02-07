@@ -1,5 +1,6 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 // --- Styles ---
 const styles: { [key: string]: React.CSSProperties } = {
@@ -68,16 +69,47 @@ const styles: { [key: string]: React.CSSProperties } = {
         textDecoration: 'none',
         fontWeight: 600,
         transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
+    },
+    logoutButton: {
+        display: 'inline-block',
+        marginBottom: '30px',
+        marginLeft: '15px',
+        padding: '10px 20px',
+        border: '1px solid #c0392b',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        backgroundColor: '#e74c3c',
+        color: 'white',
+        textDecoration: 'none',
+        fontWeight: 600,
+        fontSize: '1em',
+        transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
+    },
+    topButtons: {
+        marginBottom: '30px',
     }
 };
 
 const Edicion: React.FC = () => {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
   return (
     <div style={styles.container}>
       <h1 style={styles.header}>Página de Edición</h1>
-      <Link to="/" style={styles.backButton}>
-          Regresar al Inicio
-      </Link>
+      <div style={styles.topButtons}>
+        <Link to="/" style={styles.backButton}>
+            Regresar al Inicio
+        </Link>
+        <button onClick={handleLogout} style={styles.logoutButton}>
+            Cerrar Sesión
+        </button>
+      </div>
       
       <div style={styles.section}>
         <h2 style={styles.sectionTitle}>Temario</h2>
