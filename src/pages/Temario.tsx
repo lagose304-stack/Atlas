@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import Footer from '../components/Footer';
 
 // --- Interfaces ---
 interface Tema {
@@ -310,20 +311,6 @@ const Temario: React.FC = () => {
 
   const anyFormOpen = isCreatingTema || isCreatingSubtema || isEditingTema || isEditingSubtema || isDeletingTema || isDeletingSubtema;
 
-  // --- Renderizado de componentes con estilos ---
-  const renderForm = (
-    title: string,
-    isOpen: boolean,
-    buttons: React.ReactNode,
-    form: React.ReactNode
-  ) => (
-    <div style={styles.section}>
-      <h2 style={styles.sectionTitle}>{title}</h2>
-      {!anyFormOpen && buttons}
-      {isOpen && form}
-    </div>
-  );
-
   const renderCreateTemaForm = () => (
     <form onSubmit={handleTemaSubmit} style={styles.form}>
       <div style={styles.formGroup}><label style={styles.label}>Nombre del Tema:</label><input style={styles.input} type="text" value={temaNombre} onChange={(e) => setTemaNombre(e.target.value)} required /></div>
@@ -387,20 +374,56 @@ const Temario: React.FC = () => {
       <h1 style={styles.header}>Gestión de Temario</h1>
       <Link to="/edicion" style={styles.backButton}>Volver a Edición</Link>
       
-      {renderForm("Crear", isCreatingTema || isCreatingSubtema, 
-        <div style={styles.buttonContainer}><button style={styles.button} onClick={openCreateTema}>Tema</button><button style={styles.button} onClick={openCreateSubtema}>Subtema</button></div>,
-        isCreatingTema ? renderCreateTemaForm() : renderCreateSubtemaForm()
+      {!anyFormOpen && (
+        <>
+          <div style={styles.section}>
+            <h2 style={styles.sectionTitle}>Crear</h2>
+            <div style={styles.buttonContainer}>
+              <button style={styles.button} onClick={openCreateTema}>Tema</button>
+              <button style={styles.button} onClick={openCreateSubtema}>Subtema</button>
+            </div>
+          </div>
+
+          <div style={styles.section}>
+            <h2 style={styles.sectionTitle}>Editar</h2>
+            <div style={styles.buttonContainer}>
+              <button style={styles.button} onClick={openEditTema}>Tema</button>
+              <button style={styles.button} onClick={openEditSubtema}>Subtema</button>
+            </div>
+          </div>
+
+          <div style={styles.section}>
+            <h2 style={styles.sectionTitle}>Borrar</h2>
+            <div style={styles.buttonContainer}>
+              <button style={styles.button} onClick={openDeleteTema}>Tema</button>
+              <button style={styles.button} onClick={openDeleteSubtema}>Subtema</button>
+            </div>
+          </div>
+        </>
       )}
 
-      {renderForm("Editar", isEditingTema || isEditingSubtema,
-        <div style={styles.buttonContainer}><button style={styles.button} onClick={openEditTema}>Tema</button><button style={styles.button} onClick={openEditSubtema}>Subtema</button></div>,
-        isEditingTema ? renderEditTemaForm() : renderEditSubtemaForm()
+      {(isCreatingTema || isCreatingSubtema) && (
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Crear</h2>
+          {isCreatingTema ? renderCreateTemaForm() : renderCreateSubtemaForm()}
+        </div>
       )}
 
-      {renderForm("Borrar", isDeletingTema || isDeletingSubtema,
-        <div style={styles.buttonContainer}><button style={styles.button} onClick={openDeleteTema}>Tema</button><button style={styles.button} onClick={openDeleteSubtema}>Subtema</button></div>,
-        isDeletingTema ? renderDeleteTemaForm() : renderDeleteSubtemaForm()
+      {(isEditingTema || isEditingSubtema) && (
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Editar</h2>
+          {isEditingTema ? renderEditTemaForm() : renderEditSubtemaForm()}
+        </div>
       )}
+
+      {(isDeletingTema || isDeletingSubtema) && (
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Borrar</h2>
+          {isDeletingTema ? renderDeleteTemaForm() : renderDeleteSubtemaForm()}
+        </div>
+      )}
+
+      <Footer />
     </div>
   );
 };

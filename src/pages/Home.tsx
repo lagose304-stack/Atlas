@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import LoginForm from '../components/LoginForm';
+import Footer from '../components/Footer';
 
 const Home: React.FC = () => {
   const [showLogin, setShowLogin] = useState(false);
@@ -93,6 +94,8 @@ const Home: React.FC = () => {
       </main>
 
       {showLogin && <LoginForm onClose={() => setShowLogin(false)} />}
+      
+      <Footer />
     </div>
   );
 };
