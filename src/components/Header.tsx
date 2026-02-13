@@ -6,7 +6,7 @@ import logoLaboratorio from '../assets/logos/laboratorio.png';
 
 const Header: React.FC = () => {
   return (
-    <section style={styles.headerSection}>
+    <section className="header-section" style={styles.headerSection}>
       {/* Elementos decorativos de fondo */}
       <div style={styles.decorativeWave2}></div>
       <div style={styles.decorativeWave1}></div>
