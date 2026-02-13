@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface LoginFormProps {
   onClose: () => void;
@@ -11,30 +11,78 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  // Validación básica del formulario
+  const validateForm = (): string | null => {
+    if (!username.trim()) {
+      return 'El nombre de usuario es obligatorio';
+    }
+    if (!password.trim()) {
+      return 'La contraseña es obligatoria';
+    }
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validar formulario
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setError('');
     setLoading(true);
 
-    const success = await login(username, password);
+    try {
+      const success = await login(username.trim(), password);
 
-    if (success) {
-      navigate('/edicion');
-      onClose();
-    } else {
-      setError('Acceso denegado: Usuario o contraseña incorrectos');
+      if (success) {
+        // Login exitoso - cerrar modal y redirigir
+        setUsername('');
+        setPassword('');
+        onClose();
+        
+        // Redirigir a la página de edición después del login
+        navigate('/edicion');
+      } else {
+        setError('Usuario o contraseña incorrectos');
+      }
+    } catch (error) {
+      console.error('Error durante el login:', error);
+      setError('Error de conexión. Por favor, intenta de nuevo.');
     }
 
     setLoading(false);
   };
 
+  const handleClose = () => {
+    setUsername('');
+    setPassword('');
+    setError('');
+    setLoading(false);
+    onClose();
+  };
+
   return (
-    <div style={styles.overlay}>
+    <div style={styles.overlay} onClick={(e) => e.target === e.currentTarget && handleClose()}>
       <div style={styles.modal}>
-        <h2 style={styles.title}>Iniciar Sesión</h2>
+        <div style={styles.header}>
+          <h2 style={styles.title}>🔐 Iniciar Sesión</h2>
+          <button 
+            onClick={handleClose}
+            style={styles.closeButton}
+            disabled={loading}
+          >
+            ✕
+          </button>
+        </div>
+        
         <form onSubmit={handleSubmit} style={styles.form}>
           <div style={styles.formGroup}>
             <label style={styles.label}>Usuario:</label>
@@ -45,6 +93,8 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
               required
               style={styles.input}
               disabled={loading}
+              placeholder="Ingresa tu usuario"
+              autoComplete="username"
             />
           </div>
           <div style={styles.formGroup}>
@@ -56,23 +106,45 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
               required
               style={styles.input}
               disabled={loading}
+              placeholder="Ingresa tu contraseña"
+              autoComplete="current-password"
             />
           </div>
-          {error && <p style={styles.error}>{error}</p>}
+          
+          {error && (
+            <div style={styles.errorContainer}>
+              <p style={styles.error}>❌ {error}</p>
+            </div>
+          )}
+          
           <div style={styles.buttons}>
-            <button type="submit" style={styles.submitButton} disabled={loading}>
-              {loading ? 'Verificando...' : 'Ingresar'}
+            <button 
+              type="submit" 
+              style={{
+                ...styles.submitButton,
+                backgroundColor: loading ? '#cccccc' : '#28a745',
+                cursor: loading ? 'not-allowed' : 'pointer'
+              }} 
+              disabled={loading}
+            >
+              {loading ? '🔄 Verificando...' : '🚀 Ingresar'}
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               style={styles.cancelButton}
               disabled={loading}
             >
-              Cancelar
+              📨 Cancelar
             </button>
           </div>
         </form>
+        
+        <div style={styles.footer}>
+          <small style={styles.footerText}>
+            🔒 Conexión segura
+          </small>
+        </div>
       </div>
     </div>
   );
@@ -85,29 +157,56 @@ const styles: { [key: string]: React.CSSProperties } = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000,
+    backdropFilter: 'blur(5px)',
   },
   modal: {
     backgroundColor: 'white',
     padding: '2rem',
-    borderRadius: '8px',
-    minWidth: '350px',
-    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+    borderRadius: '15px',
+    minWidth: '400px',
+    maxWidth: '500px',
+    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
+    border: '2px solid #e3f2fd',
+    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '1.5rem',
+    paddingBottom: '1rem',
+    borderBottom: '2px solid #f0f0f0'
   },
   title: {
-    marginTop: 0,
-    marginBottom: '1.5rem',
-    textAlign: 'center',
-    color: '#333',
+    margin: 0,
+    color: '#2c3e50',
+    fontSize: '1.5em',
+    fontWeight: 'bold'
+  },
+  closeButton: {
+    background: 'none',
+    border: 'none',
+    fontSize: '1.2em',
+    cursor: 'pointer',
+    color: '#7f8c8d',
+    padding: '5px',
+    borderRadius: '50%',
+    width: '30px',
+    height: '30px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.3s ease'
   },
   form: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '1rem',
+    gap: '1.2rem',
   },
   formGroup: {
     display: 'flex',
@@ -116,19 +215,30 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   label: {
     fontWeight: 'bold',
-    color: '#555',
+    color: '#34495e',
+    fontSize: '0.95em',
   },
   input: {
-    padding: '0.5rem',
+    padding: '0.8rem',
     fontSize: '1rem',
-    border: '1px solid #ccc',
-    borderRadius: '4px',
+    border: '2px solid #e0e0e0',
+    borderRadius: '8px',
+    transition: 'border-color 0.3s ease',
+    outline: 'none',
+  },
+  errorContainer: {
+    backgroundColor: '#f8d7da',
+    border: '1px solid #f1556c',
+    borderRadius: '8px',
+    padding: '0.8rem',
+    margin: '0.5rem 0'
   },
   error: {
-    color: 'red',
+    color: '#721c24',
     fontSize: '0.9rem',
     margin: 0,
     textAlign: 'center',
+    fontWeight: '500'
   },
   buttons: {
     display: 'flex',
@@ -137,24 +247,39 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   submitButton: {
     flex: 1,
-    padding: '0.75rem',
-    backgroundColor: '#007bff',
+    padding: '0.9rem',
+    backgroundColor: '#28a745',
     color: 'white',
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '8px',
     fontSize: '1rem',
     cursor: 'pointer',
+    fontWeight: 'bold',
+    transition: 'all 0.3s ease',
+    textTransform: 'uppercase'
   },
   cancelButton: {
     flex: 1,
-    padding: '0.75rem',
+    padding: '0.9rem',
     backgroundColor: '#6c757d',
     color: 'white',
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '8px',
     fontSize: '1rem',
     cursor: 'pointer',
+    fontWeight: 'bold',
+    transition: 'all 0.3s ease'
   },
+  footer: {
+    marginTop: '1.5rem',
+    paddingTop: '1rem',
+    borderTop: '1px solid #e0e0e0',
+    textAlign: 'center'
+  },
+  footerText: {
+    color: '#7f8c8d',
+    fontSize: '0.8em'
+  }
 };
 
 export default LoginForm;

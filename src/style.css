@@ -1,6 +1,292 @@
 #root {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: clamp(0.5rem, 2vw, 2rem);
   text-align: center;
+}
+
+/* Animación para el gradiente del título */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Animación suave de entrada */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Estilos globales para mejorar la apariencia */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  margin: 0;
+  padding: 0;
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+}
+
+/* ========================================
+   RESPONSIVE - Header
+   ======================================== */
+
+/* Tablet (768px y menos) */
+@media (max-width: 768px) {
+  .header-container {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 10px !important;
+    align-items: center !important;
+  }
+
+  .header-logo {
+    width: clamp(80px, 14vw, 110px) !important;
+    height: clamp(80px, 14vw, 110px) !important;
+    min-width: 80px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .header-logo img {
+    height: clamp(55px, 10vw, 75px) !important;
+    width: clamp(55px, 10vw, 75px) !important;
+  }
+
+  .header-content {
+    padding: 8px 5px !important;
+    min-width: 0 !important;
+  }
+
+  .decorative-hexagon,
+  .decorative-circle-5,
+  .decorative-circle-7 {
+    display: none !important;
+  }
+}
+
+/* Móvil (560px y menos) */
+@media (max-width: 560px) {
+  .header-container {
+    gap: 6px !important;
+    padding: 0 5px !important;
+  }
+
+  .header-logo {
+    width: clamp(72px, 15vw, 90px) !important;
+    height: clamp(72px, 15vw, 90px) !important;
+    min-width: 72px !important;
+  }
+
+  .header-logo img {
+    height: clamp(50px, 11vw, 62px) !important;
+    width: clamp(50px, 11vw, 62px) !important;
+  }
+
+  .header-content h1 {
+    font-size: clamp(1.3rem, 4.5vw, 1.8rem) !important;
+  }
+
+  .header-content p {
+    font-size: clamp(0.7rem, 2vw, 0.95rem) !important;
+  }
+}
+
+/* Móvil pequeño (480px y menos) */
+@media (max-width: 480px) {
+  .header-container {
+    gap: 5px !important;
+  }
+
+  .header-logo {
+    width: clamp(65px, 16vw, 80px) !important;
+    height: clamp(65px, 16vw, 80px) !important;
+    min-width: 65px !important;
+  }
+
+  .header-logo img {
+    height: clamp(45px, 12vw, 55px) !important;
+    width: clamp(45px, 12vw, 55px) !important;
+  }
+
+  .header-content h1 {
+    font-size: clamp(1.1rem, 4vw, 1.5rem) !important;
+  }
+
+  .header-content p {
+    font-size: clamp(0.65rem, 1.8vw, 0.85rem) !important;
+    margin: 4px 0 !important;
+  }
+
+  .decorative-circle-3,
+  .decorative-circle-6,
+  .decorative-circle-8,
+  .medical-hexagon,
+  .medical-hexagon-2 {
+    display: none !important;
+  }
+}
+
+/* Móvil muy pequeño (380px y menos) */
+@media (max-width: 380px) {
+  .header-logo {
+    width: 60px !important;
+    height: 60px !important;
+    min-width: 60px !important;
+  }
+
+  .header-logo img {
+    height: 42px !important;
+    width: 42px !important;
+  }
+
+  .header-content h1 {
+    font-size: 1rem !important;
+  }
+
+  .header-content p {
+    font-size: 0.6rem !important;
+  }
+}
+
+/* ========================================
+   RESPONSIVE - Login Modal
+   ======================================== */
+@media (max-width: 480px) {
+  .login-modal {
+    min-width: unset !important;
+    width: calc(100vw - 30px) !important;
+    max-width: 100% !important;
+    padding: 1.2rem !important;
+    margin: 15px !important;
+    border-radius: 12px !important;
+  }
+  
+  .login-buttons {
+    flex-direction: column !important;
+  }
+
+  .login-title {
+    font-size: 1.2em !important;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  .login-modal {
+    min-width: unset !important;
+    width: calc(100vw - 60px) !important;
+    max-width: 450px !important;
+    padding: 1.5rem !important;
+  }
+}
+
+/* ========================================
+   RESPONSIVE - Páginas (Edicion, Placas, Temario)
+   ======================================== */
+.page-container {
+  padding: clamp(20px, 4vw, 40px) clamp(12px, 3vw, 20px);
+  max-width: 800px;
+  margin: clamp(15px, 4vw, 40px) auto;
+}
+
+.page-header {
+  font-size: clamp(1.6em, 5vw, 2.5em) !important;
+  padding-bottom: clamp(12px, 2vw, 20px);
+  margin-bottom: clamp(15px, 3vw, 30px);
+}
+
+.section-title {
+  font-size: clamp(1.2em, 3.5vw, 1.8em) !important;
+}
+
+.page-section {
+  padding: clamp(15px, 3vw, 25px);
+  margin-bottom: clamp(15px, 3vw, 25px);
+}
+
+@media (max-width: 600px) {
+  .page-container {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    margin: 0 auto !important;
+  }
+
+  .button-container {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  
+  .button-container > * {
+    text-align: center !important;
+    width: 100% !important;
+  }
+
+  .top-buttons {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+  }
+  
+  .top-buttons > * {
+    margin-left: 0 !important;
+    margin-bottom: 0 !important;
+    text-align: center !important;
+    display: block !important;
+  }
+
+  .form-container {
+    padding: clamp(15px, 3vw, 30px) !important;
+  }
+}
+
+@media (min-width: 601px) and (max-width: 768px) {
+  .button-container {
+    flex-wrap: wrap !important;
+  }
+}
+
+/* ========================================
+   RESPONSIVE - Footer
+   ======================================== */
+.footer-container {
+  gap: clamp(15px, 3vw, 30px);
+}
+
+@media (max-width: 600px) {
+  .footer-section {
+    min-width: unset !important;
+    max-width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+  
+  .footer-wrapper {
+    padding: clamp(20px, 4vw, 30px) clamp(12px, 3vw, 20px) 10px !important;
+    margin-top: clamp(20px, 4vw, 50px) !important;
+  }
+}
+
+/* ========================================
+   RESPONSIVE - Utilidades táctiles
+   ======================================== */
+@media (hover: none) and (pointer: coarse) {
+  button, a, .social-icon {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }

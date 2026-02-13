@@ -12,7 +12,10 @@ const App: React.FC = () => {
     <AuthProvider>
       <Router>
         <Routes>
+          {/* Ruta pública */}
           <Route path="/" element={<Home />} />
+          
+          {/* Rutas protegidas */}
           <Route
             path="/edicion"
             element={
@@ -21,8 +24,25 @@ const App: React.FC = () => {
               </PrivateRoute>
             }
           />
-          <Route path="/temario" element={<Temario />} />
-          <Route path="/placas" element={<Placas />} />
+          <Route
+            path="/temario"
+            element={
+              <PrivateRoute>
+                <Temario />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/placas"
+            element={
+              <PrivateRoute>
+                <Placas />
+              </PrivateRoute>
+            }
+          />
+          
+          {/* Ruta de fallback */}
+          <Route path="*" element={<Home />} />
         </Routes>
       </Router>
     </AuthProvider>

@@ -1,14 +1,32 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import LoginForm from './LoginForm';
 
-const Footer: React.FC = () => {
+interface FooterProps {
+  onEdicionClick?: () => void;
+}
+
+const Footer: React.FC<FooterProps> = ({ onEdicionClick }) => {
   const currentYear = new Date().getFullYear();
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const [showLogin, setShowLogin] = useState(false);
+
+  const handleGoToEdicion = () => {
+    if (isAuthenticated) {
+      navigate('/edicion');
+    } else {
+      setShowLogin(true);
+    }
+  };
 
   const styles: { [key: string]: React.CSSProperties } = {
     footer: {
       backgroundColor: '#f8f9fa',
       color: '#2c3e50',
-      padding: '30px 20px 15px',
-      marginTop: '50px',
+      padding: 'clamp(20px, 4vw, 30px) clamp(12px, 3vw, 20px) 15px',
+      marginTop: 'clamp(20px, 5vw, 50px)',
       fontFamily: "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
       borderTop: '3px solid #3498db',
       boxShadow: '0 -2px 10px rgba(0,0,0,0.05)',
@@ -19,7 +37,7 @@ const Footer: React.FC = () => {
       display: 'flex',
       flexWrap: 'wrap',
       justifyContent: 'center',
-      gap: '30px',
+      gap: 'clamp(15px, 3vw, 30px)',
       marginBottom: '20px',
     },
     section: {
@@ -28,9 +46,9 @@ const Footer: React.FC = () => {
       gap: '10px',
       alignItems: 'center',
       textAlign: 'center',
-      minWidth: '220px',
+      minWidth: '200px',
       maxWidth: '280px',
-      flex: '1 1 220px',
+      flex: '1 1 200px',
     },
     title: {
       fontSize: '1.05em',
@@ -127,13 +145,27 @@ const Footer: React.FC = () => {
       border: '1px solid #3498db',
       color: '#2980b9',
     },
+    edicionBadgeButton: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '6px',
+      padding: '6px 12px',
+      backgroundColor: '#e8f4fd',
+      borderRadius: '15px',
+      fontSize: '0.75em',
+      marginTop: '4px',
+      border: '1px solid #3498db',
+      color: '#2980b9',
+      cursor: 'pointer',
+      transition: 'all 0.3s ease',
+    } as React.CSSProperties,
   };
 
   return (
-    <footer style={styles.footer}>
-      <div style={styles.container}>
+    <footer className="footer-wrapper" style={styles.footer}>
+      <div className="footer-container" style={styles.container}>
         {/* Sección Acerca de */}
-        <div style={styles.section}>
+        <div className="footer-section" style={styles.section}>
           <h3 style={styles.title}>
             Acerca del Proyecto
             <div style={styles.titleUnderline}></div>
@@ -141,14 +173,27 @@ const Footer: React.FC = () => {
           <p style={styles.text}>
             blablablabla
           </p>
-          <div style={styles.badge}>
-            <span>⚡</span>
-            <span>Educación Médica</span>
-          </div>
+          <button
+            onClick={handleGoToEdicion}
+            style={styles.edicionBadgeButton}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#3498db';
+              e.currentTarget.style.color = 'white';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#e8f4fd';
+              e.currentTarget.style.color = '#2980b9';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            <span>📝</span>
+            <span>Ir a Edición</span>
+          </button>
         </div>
 
         {/* Sección Contacto */}
-        <div style={styles.section}>
+        <div className="footer-section" style={styles.section}>
           <h3 style={styles.title}>
             Contacto
             <div style={styles.titleUnderline}></div>
@@ -177,7 +222,7 @@ const Footer: React.FC = () => {
         </div>
 
         {/* Sección Redes Sociales */}
-        <div style={styles.section}>
+        <div className="footer-section" style={styles.section}>
           <h3 style={styles.title}>
             Síguenos
             <div style={styles.titleUnderline}></div>
@@ -224,21 +269,6 @@ const Footer: React.FC = () => {
             </a>
           </div>
         </div>
-
-        {/* Sección Créditos */}
-        <div style={styles.section}>
-          <h3 style={styles.title}>
-            Desarrollado por
-            <div style={styles.titleUnderline}></div>
-          </h3>
-          <p style={styles.text}>
-            Yo
-          </p>
-          <div style={styles.badge}>
-            <span>⚛️</span>
-            <span>React + TypeScript</span>
-          </div>
-        </div>
       </div>
 
       <div style={styles.divider}></div>
@@ -246,6 +276,8 @@ const Footer: React.FC = () => {
       <div style={styles.copyright}>
         © {currentYear} Atlas de Histología - UNAH. Todos los derechos reservados.
       </div>
+      
+      {showLogin && <LoginForm onClose={() => setShowLogin(false)} />}
     </footer>
   );
 };
