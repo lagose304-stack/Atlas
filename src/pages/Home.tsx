@@ -148,6 +148,33 @@ const Home: React.FC = () => {
 };
 
 const styles: { [key: string]: React.CSSProperties } = {
+    '@media (max-width: 600px)': {
+      maintenanceCard: {
+        maxWidth: '98vw',
+        padding: '12px',
+        fontSize: '1em',
+        minHeight: '60px',
+        borderRadius: '8px',
+      },
+      temarioCard: {
+        maxWidth: '98vw',
+        padding: '12px',
+        borderRadius: '8px',
+      },
+      temarioSection: {
+        padding: '8px',
+        borderRadius: '6px',
+      },
+      temarioHeading: {
+        fontSize: '1.2em',
+      },
+      temarioSectionHeading: {
+        fontSize: '1em',
+      },
+      temasGrid: {
+        gap: '8px',
+      },
+    },
   temarioCard: {
     width: '100%',
     maxWidth: 'clamp(320px, 90vw, 1000px)',
@@ -199,9 +226,25 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   temasGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(120px, 30vw, 220px), 1fr))',
-    gap: 'clamp(6px, 2vw, 16px)',
     width: '100%',
+    gap: 'clamp(6px, 2vw, 16px)',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(clamp(120px, 30vw, 220px), 1fr))',
+    boxSizing: 'border-box',
+  },
+  '@media (max-width: 900px)': {
+    temasGrid: {
+      gridTemplateColumns: 'repeat(4, 1fr)',
+    },
+  },
+  '@media (max-width: 600px)': {
+    temasGrid: {
+      gridTemplateColumns: 'repeat(2, 1fr)',
+    },
+    maintenanceCard: {
+      padding: 'clamp(10px, 4vw, 24px)',
+      fontSize: 'clamp(0.9em, 2vw, 1.1em)',
+      minHeight: 'clamp(60px, 12vw, 100px)',
+    },
   },
   temaCard: {
     background: '#fff',
@@ -303,27 +346,38 @@ const styles: { [key: string]: React.CSSProperties } = {
     position: 'relative',
     color: '#0f172a',
     fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    padding: 'clamp(8px, 2vw, 24px)',
+    boxSizing: 'border-box',
   },
   main: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'column',
-    gap: '32px',
-    padding: '80px 32px 112px',
+    gap: 'clamp(12px, 3vw, 32px)',
+    padding: 'clamp(24px, 8vw, 80px) clamp(8px, 3vw, 32px) clamp(32px, 10vw, 112px)',
+    width: '100%',
+    maxWidth: '1400px',
+    boxSizing: 'border-box',
   },
   maintenanceCard: {
     width: '100%',
-    maxWidth: '1000px',
+    maxWidth: 'clamp(180px, 98vw, 480px)',
     background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
     color: '#0f172a',
-    borderRadius: '24px',
-    padding: '56px',
-    boxShadow: '0 25px 60px rgba(15, 23, 42, 0.15), 0 10px 20px rgba(15, 23, 42, 0.08)',
+    borderRadius: 'clamp(6px, 2vw, 18px)',
+    padding: 'clamp(6px, 3vw, 32px)',
+    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.12), 0 6px 12px rgba(15, 23, 42, 0.06)',
     position: 'relative',
     overflow: 'hidden',
     border: '1px solid rgba(15, 23, 42, 0.05)',
     transition: 'transform 0.3s ease',
+    boxSizing: 'border-box',
+    minHeight: 'clamp(40px, 8vw, 100px)',
   },
   badge: {
     display: 'inline-flex',
