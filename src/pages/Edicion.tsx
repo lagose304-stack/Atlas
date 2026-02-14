@@ -2,18 +2,24 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Footer from '../components/Footer';
+import Header from '../components/Header';
 
 // --- Styles ---
 const styles: { [key: string]: React.CSSProperties } = {
-    container: {
-        padding: '40px 20px',
-        fontFamily: "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
-        maxWidth: '800px',
-        margin: '40px auto',
-        backgroundColor: '#ffffff',
-        borderRadius: '12px',
-        boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
-    },
+  page: {
+    minHeight: '100vh',
+    backgroundColor: '#f5f7fa',
+    color: '#0f172a',
+    fontFamily: "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
+  },
+  container: {
+    padding: '40px 20px',
+    maxWidth: '800px',
+    margin: '32px auto 48px',
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
+  },
     header: {
         textAlign: 'center',
         borderBottom: '1px solid #e0e0e0',
@@ -101,43 +107,45 @@ const Edicion: React.FC = () => {
   };
 
   return (
-    <div style={styles.container}>
-      <h1 style={styles.header}>Página de Edición</h1>
-      <div style={styles.topButtons}>
-        <Link to="/" style={styles.backButton}>
-            Regresar al Inicio
-        </Link>
-        <button onClick={handleLogout} style={styles.logoutButton}>
-            Cerrar Sesión
-        </button>
-      </div>
-      
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Temario</h2>
-        <div style={styles.buttonContainer}>
-            <Link to="/temario" style={styles.button}>
-                Ir a Temario
-            </Link>
+    <div style={styles.page}>
+      <Header />
+      <div style={styles.container}>
+        <h1 style={styles.header}>Página de Edición</h1>
+        <div style={styles.topButtons}>
+          <Link to="/" style={styles.backButton}>
+              Regresar al Inicio
+          </Link>
+          <button onClick={handleLogout} style={styles.logoutButton}>
+              Cerrar Sesión
+          </button>
         </div>
-      </div>
-
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Placas</h2>
-        <div style={styles.buttonContainer}>
-            <Link to="/placas" style={styles.button}>
-                Ir a Placas
-            </Link>
+        
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Temario</h2>
+          <div style={styles.buttonContainer}>
+              <Link to="/temario" style={styles.button}>
+                  Ir a Temario
+              </Link>
+          </div>
         </div>
-      </div>
 
-      {/* Aquí puedes agregar más secciones en el futuro */}
-      {/* 
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Otra Sección</h2>
-        <p>Contenido de otra sección...</p>
-      </div>
-      */}
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Placas</h2>
+          <div style={styles.buttonContainer}>
+              <Link to="/placas" style={styles.button}>
+                  Ir a Placas
+              </Link>
+          </div>
+        </div>
 
+        {/* Aquí puedes agregar más secciones en el futuro */}
+        {/* 
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Otra Sección</h2>
+          <p>Contenido de otra sección...</p>
+        </div>
+        */}
+      </div>
       <Footer />
     </div>
   );

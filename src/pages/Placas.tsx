@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import ImageUploader from '../components/ImageUploader';
 import { supabase } from '../services/supabase';
 import Footer from '../components/Footer';
+import Header from '../components/Header';
 
 // --- Interfaces ---
 interface Tema {
@@ -18,15 +19,20 @@ interface Subtema {
 
 // --- Styles ---
 const styles: { [key: string]: React.CSSProperties } = {
-    container: {
-        padding: '40px 20px',
-        fontFamily: "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
-        maxWidth: '800px',
-        margin: '40px auto',
-        backgroundColor: '#ffffff',
-        borderRadius: '12px',
-        boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
-    },
+  page: {
+    minHeight: '100vh',
+    backgroundColor: '#f5f7fa',
+    color: '#0f172a',
+    fontFamily: "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
+  },
+  container: {
+    padding: '40px 20px',
+    maxWidth: '800px',
+    margin: '32px auto 48px',
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
+  },
     header: {
         textAlign: 'center',
         borderBottom: '1px solid #e0e0e0',
@@ -247,123 +253,125 @@ const Placas: React.FC = () => {
   };
 
   return (
-    <div style={styles.container}>
-      <h1 style={styles.header}>Placas</h1>
-      <Link to="/edicion" style={styles.backButton}>
-          Regresar a Edición
-      </Link>
+    <div style={styles.page}>
+      <Header />
+      <div style={styles.container}>
+        <h1 style={styles.header}>Placas</h1>
+        <Link to="/edicion" style={styles.backButton}>
+            Regresar a Edición
+        </Link>
 
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Subir placas</h2>
-        {!isAnyFormActive && (
-          <div style={styles.buttonContainer}>
-              <button 
-                style={styles.greenButton}
-                onClick={() => setShowClasificadasForm(true)}
-              >
-                Subir clasificadas
-              </button>
-              <button 
-                style={styles.yellowButton}
-                onClick={() => setShowSinClasificarForm(true)}
-              >
-                Subir sin clasificar
-              </button>
-          </div>
-        )}
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Subir placas</h2>
+          {!isAnyFormActive && (
+            <div style={styles.buttonContainer}>
+                <button 
+                  style={styles.greenButton}
+                  onClick={() => setShowClasificadasForm(true)}
+                >
+                  Subir clasificadas
+                </button>
+                <button 
+                  style={styles.yellowButton}
+                  onClick={() => setShowSinClasificarForm(true)}
+                >
+                  Subir sin clasificar
+                </button>
+            </div>
+          )}
 
-        {showClasificadasForm && (
-          <div style={styles.formContainer}>
-            <h3 style={styles.formTitle}>Subir placas ya clasificadas</h3>
-            
-            <ImageUploader onImageSelect={handleImageSelect} />
+          {showClasificadasForm && (
+            <div style={styles.formContainer}>
+              <h3 style={styles.formTitle}>Subir placas ya clasificadas</h3>
+              
+              <ImageUploader onImageSelect={handleImageSelect} />
 
-            {imageUploaded && (
-              <>
-                <div style={styles.accordionContainer}>
-                  <label style={styles.accordionLabel}>Seleccionar Tema:</label>
-                  <select
-                    style={styles.select}
-                    value={selectedTema}
-                    onChange={handleTemaChange}
-                    onFocus={(e) => e.currentTarget.style.borderColor = '#27ae60'}
-                    onBlur={(e) => e.currentTarget.style.borderColor = '#bdc3c7'}
-                  >
-                    <option value="">-- Selecciona un tema --</option>
-                    {temas.map((tema) => (
-                      <option key={tema.id} value={tema.id}>
-                        {tema.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {selectedTema && (
+              {imageUploaded && (
+                <>
                   <div style={styles.accordionContainer}>
-                    <label style={styles.accordionLabel}>Seleccionar Subtema:</label>
+                    <label style={styles.accordionLabel}>Seleccionar Tema:</label>
                     <select
                       style={styles.select}
-                      value={selectedSubtema}
-                      onChange={handleSubtemaChange}
+                      value={selectedTema}
+                      onChange={handleTemaChange}
                       onFocus={(e) => e.currentTarget.style.borderColor = '#27ae60'}
                       onBlur={(e) => e.currentTarget.style.borderColor = '#bdc3c7'}
                     >
-                      <option value="">-- Selecciona un subtema --</option>
-                      {subtemas.map((subtema) => (
-                        <option key={subtema.id} value={subtema.id}>
-                          {subtema.nombre}
+                      <option value="">-- Selecciona un tema --</option>
+                      {temas.map((tema) => (
+                        <option key={tema.id} value={tema.id}>
+                          {tema.nombre}
                         </option>
                       ))}
                     </select>
                   </div>
-                )}
-              </>
-            )}
 
-            <button 
-              style={styles.cancelButton}
-              onClick={handleCancelForm}
-            >
-              Cancelar
-            </button>
-          </div>
-        )}
+                  {selectedTema && (
+                    <div style={styles.accordionContainer}>
+                      <label style={styles.accordionLabel}>Seleccionar Subtema:</label>
+                      <select
+                        style={styles.select}
+                        value={selectedSubtema}
+                        onChange={handleSubtemaChange}
+                        onFocus={(e) => e.currentTarget.style.borderColor = '#27ae60'}
+                        onBlur={(e) => e.currentTarget.style.borderColor = '#bdc3c7'}
+                      >
+                        <option value="">-- Selecciona un subtema --</option>
+                        {subtemas.map((subtema) => (
+                          <option key={subtema.id} value={subtema.id}>
+                            {subtema.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
+              )}
 
-        {showSinClasificarForm && (
-          <div style={styles.formContainer}>
-            <h3 style={styles.formTitle}>Subir placas sin clasificar</h3>
-            
-            <ImageUploader onImageSelect={handleImageSelect} />
+              <button 
+                style={styles.cancelButton}
+                onClick={handleCancelForm}
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
 
-            <button 
-              style={styles.cancelButton}
-              onClick={handleCancelForm}
-            >
-              Cancelar
-            </button>
-          </div>
+          {showSinClasificarForm && (
+            <div style={styles.formContainer}>
+              <h3 style={styles.formTitle}>Subir placas sin clasificar</h3>
+              
+              <ImageUploader onImageSelect={handleImageSelect} />
+
+              <button 
+                style={styles.cancelButton}
+                onClick={handleCancelForm}
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+        </div>
+
+        {!isAnyFormActive && (
+          <>
+            <div style={styles.section}>
+              <h2 style={styles.sectionTitle}>Reasignacion de valores</h2>
+              <div style={styles.buttonContainer}>
+                  <button style={styles.button}>Editar</button>
+                  <button style={styles.button}>Lista de espera</button>
+              </div>
+            </div>
+
+            <div style={styles.section}>
+              <h2 style={styles.sectionTitle}>Eliminar placas</h2>
+              <div style={styles.buttonContainer}>
+                  <button style={styles.button}>Eliminar</button>
+              </div>
+            </div>
+          </>
         )}
       </div>
-
-      {!isAnyFormActive && (
-        <>
-          <div style={styles.section}>
-            <h2 style={styles.sectionTitle}>Reasignacion de valores</h2>
-            <div style={styles.buttonContainer}>
-                <button style={styles.button}>Editar</button>
-                <button style={styles.button}>Lista de espera</button>
-            </div>
-          </div>
-
-          <div style={styles.section}>
-            <h2 style={styles.sectionTitle}>Eliminar placas</h2>
-            <div style={styles.buttonContainer}>
-                <button style={styles.button}>Eliminar</button>
-            </div>
-          </div>
-        </>
-      )}
-
       <Footer />
     </div>
   );

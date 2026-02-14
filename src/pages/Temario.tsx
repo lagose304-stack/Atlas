@@ -2,6 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import Footer from '../components/Footer';
+import Header from '../components/Header';
+import CreateTemaForm from '../components/temario/CreateTemaForm';
+import CreateSubtemaForm from '../components/temario/CreateSubtemaForm';
+import EditTemaForm from '../components/temario/EditTemaForm';
+import EditSubtemaForm from '../components/temario/EditSubtemaForm';
+import DeleteTemaForm from '../components/temario/DeleteTemaForm';
+import DeleteSubtemaForm from '../components/temario/DeleteSubtemaForm';
+import { uploadToCloudinary } from '../services/cloudinary';
 
 // --- Interfaces ---
 interface Tema {
@@ -18,15 +26,20 @@ interface Subtema {
 // --- Styles ---
 // --- Styles ---
 const styles: { [key: string]: React.CSSProperties } = {
-    container: {
-        padding: '40px 20px',
-        fontFamily: "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
-        maxWidth: '800px',
-        margin: '40px auto',
-        backgroundColor: '#ffffff',
-        borderRadius: '12px',
-        boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
-    },
+  page: {
+    minHeight: '100vh',
+    backgroundColor: '#f5f7fa',
+    color: '#0f172a',
+    fontFamily: "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
+  },
+  container: {
+    padding: '40px 20px',
+    maxWidth: '800px',
+    margin: '32px auto 48px',
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
+  },
     header: {
         textAlign: 'center',
         borderBottom: '1px solid #e0e0e0',
@@ -158,6 +171,10 @@ const Temario: React.FC = () => {
   const [isCreatingTema, setIsCreatingTema] = useState(false);
   const [isCreatingSubtema, setIsCreatingSubtema] = useState(false);
   const [temaNombre, setTemaNombre] = useState('');
+  const [temaLogoUrl, setTemaLogoUrl] = useState('');
+  const [temaLogoFile, setTemaLogoFile] = useState<File | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [temaParcial, setTemaParcial] = useState<'primer' | 'segundo' | 'tercer' | ''>('');
   const [subtemas, setSubtemas] = useState<string[]>([]);
   const [isEditingTema, setIsEditingTema] = useState(false);
   const [isEditingSubtema, setIsEditingSubtema] = useState(false);
@@ -214,6 +231,7 @@ const Temario: React.FC = () => {
     setEditingSubtemaNombre(subtema ? subtema.nombre : '');
   }, [editingSubtemaId, subtemasOfSelectedTema]);
 
+
   const handleAddSubtema = () => setSubtemas([...subtemas, '']);
   const handleSubtemaChange = (index: number, value: string) => {
     const newSubtemas = [...subtemas];
@@ -221,20 +239,48 @@ const Temario: React.FC = () => {
     setSubtemas(newSubtemas);
   };
 
+  const handleLogoUpload = (file: File) => {
+    if (temaLogoUrl.startsWith('blob:')) URL.revokeObjectURL(temaLogoUrl);
+    setTemaLogoFile(file);
+    setTemaLogoUrl(URL.createObjectURL(file));
+  };
+
+  const handleRemoveLogo = () => {
+    if (temaLogoUrl.startsWith('blob:')) URL.revokeObjectURL(temaLogoUrl);
+    setTemaLogoUrl('');
+    setTemaLogoFile(null);
+    setIsUploadingLogo(false);
+  };
+
   const handleTemaSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!temaNombre.trim()) return alert('El nombre del tema no puede estar vacío.');
-    const { data: temaData, error: temaError } = await supabase.from('temas').insert([{ nombre: temaNombre }]).select();
-    if (temaError) return alert(`Error al crear el tema: ${temaError.message}`);
-    const temaId = temaData[0].id;
-    const subtemasParaInsertar = subtemas.filter(n => n.trim() !== '').map(nombre => ({ nombre, tema_id: temaId }));
-    if (subtemasParaInsertar.length > 0) {
-      const { error: subtemaError } = await supabase.from('subtemas').insert(subtemasParaInsertar);
-      if (subtemaError) return alert(`Error al crear subtemas: ${subtemaError.message}`);
+    if (!temaLogoFile) return alert('Debes subir un logo para el tema.');
+    if (!temaParcial) return alert('Selecciona el parcial al que pertenece el tema.');
+    try {
+      setIsUploadingLogo(true);
+      const upload = await uploadToCloudinary(temaLogoFile, { folder: 'temas/logos' });
+      const finalLogoUrl = upload.secure_url || '';
+      const { data: temaData, error: temaError } = await supabase
+        .from('temas')
+        .insert([{ nombre: temaNombre, logo_url: finalLogoUrl || null, parcial: temaParcial }])
+        .select();
+      if (temaError) return alert(`Error al crear el tema: ${temaError.message}`);
+      const temaId = temaData[0].id;
+      const subtemasParaInsertar = subtemas.filter(n => n.trim() !== '').map(nombre => ({ nombre, tema_id: temaId }));
+      if (subtemasParaInsertar.length > 0) {
+        const { error: subtemaError } = await supabase.from('subtemas').insert(subtemasParaInsertar);
+        if (subtemaError) return alert(`Error al crear subtemas: ${subtemaError.message}`);
+      }
+      alert('Tema y subtemas creados con éxito.');
+      fetchTemas();
+      resetAllForms();
+    } catch (error: any) {
+      console.error('Error al crear tema:', error);
+      alert('No se pudo crear el tema. Intenta de nuevo.');
+    } finally {
+      setIsUploadingLogo(false);
     }
-    alert('Tema y subtemas creados con éxito.');
-    fetchTemas();
-    resetAllForms();
   };
 
   const handleSubtemaSubmit = async (event: React.FormEvent) => {
@@ -298,6 +344,9 @@ const Temario: React.FC = () => {
     setIsEditingTema(false); setIsEditingSubtema(false);
     setIsDeletingTema(false); setIsDeletingSubtema(false);
     setTemaNombre(''); setSubtemas([]);
+    if (temaLogoUrl.startsWith('blob:')) URL.revokeObjectURL(temaLogoUrl);
+    setTemaLogoUrl(''); setTemaLogoFile(null); setIsUploadingLogo(false);
+    setTemaParcial('');
     setSelectedTemaId(''); setEditingTemaId(''); setEditingSubtemaId('');
     setDeletingTemaId(''); setDeletingSubtemaId('');
   };
@@ -311,118 +360,137 @@ const Temario: React.FC = () => {
 
   const anyFormOpen = isCreatingTema || isCreatingSubtema || isEditingTema || isEditingSubtema || isDeletingTema || isDeletingSubtema;
 
-  const renderCreateTemaForm = () => (
-    <form onSubmit={handleTemaSubmit} style={styles.form}>
-      <div style={styles.formGroup}><label style={styles.label}>Nombre del Tema:</label><input style={styles.input} type="text" value={temaNombre} onChange={(e) => setTemaNombre(e.target.value)} required /></div>
-      {subtemas.map((subtema, index) => (<div style={styles.formGroup} key={index}><label style={styles.label}>Subtema {index + 1}:</label><input style={styles.input} type="text" value={subtema} onChange={(e) => handleSubtemaChange(index, e.target.value)} /></div>))}
-      <button type="button" onClick={handleAddSubtema} style={styles.secondaryButton}>{subtemas.length === 0 ? 'Crear Subtema' : 'Agregar otro Subtema'}</button>
-      <div style={styles.actionButtons}><button type="submit" style={styles.primaryButton}>Confirmar</button><button type="button" onClick={resetAllForms} style={styles.cancelButton}>Cancelar</button></div>
-    </form>
-  );
-
-  const renderCreateSubtemaForm = () => (
-    <form onSubmit={handleSubtemaSubmit} style={styles.form}>
-      <div style={styles.formGroup}><label style={styles.label}>Seleccionar Tema:</label><select style={styles.select} value={selectedTemaId} onChange={(e) => setSelectedTemaId(e.target.value)} required><option value="" disabled>Selecciona un tema</option>{temas.map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-      {subtemas.map((subtema, index) => (<div style={styles.formGroup} key={index}><label style={styles.label}>Subtema {index + 1}:</label><input style={styles.input} type="text" value={subtema} onChange={(e) => handleSubtemaChange(index, e.target.value)} /></div>))}
-      <button type="button" onClick={handleAddSubtema} style={styles.secondaryButton}>{subtemas.length === 0 ? 'Crear Subtema' : 'Agregar otro Subtema'}</button>
-      <div style={styles.actionButtons}><button type="submit" style={styles.primaryButton}>Confirmar</button><button type="button" onClick={resetAllForms} style={styles.cancelButton}>Cancelar</button></div>
-    </form>
-  );
-
-  const renderEditTemaForm = () => (
-    <form onSubmit={handleUpdateTema} style={styles.form}>
-      <div style={styles.formGroup}><label style={styles.label}>Seleccionar Tema:</label><select style={styles.select} value={editingTemaId} onChange={(e) => setEditingTemaId(e.target.value)} required><option value="" disabled>Selecciona un tema</option>{temas.map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-      {editingTemaId && <div style={styles.formGroup}><label style={styles.label}>Nuevo nombre del Tema:</label><input style={styles.input} type="text" value={editingTemaNombre} onChange={(e) => setEditingTemaNombre(e.target.value)} required /></div>}
-      <div style={styles.actionButtons}><button type="submit" style={styles.primaryButton}>Guardar Cambios</button><button type="button" onClick={resetAllForms} style={styles.cancelButton}>Cancelar</button></div>
-    </form>
-  );
-
-  const renderEditSubtemaForm = () => (
-    <form onSubmit={handleUpdateSubtema} style={styles.form}>
-        <div style={styles.formGroup}><label style={styles.label}>Seleccionar Tema:</label><select style={styles.select} value={selectedTemaId} onChange={(e) => setSelectedTemaId(e.target.value)} required><option value="" disabled>Selecciona un tema</option>{temas.map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-        {selectedTemaId && subtemasOfSelectedTema.length > 0 && (
-            <>
-                <div style={styles.formGroup}><label style={styles.label}>Seleccionar Subtema:</label><select style={styles.select} value={editingSubtemaId} onChange={(e) => setEditingSubtemaId(e.target.value)} required><option value="" disabled>Selecciona un subtema</option>{subtemasOfSelectedTema.map(s => (<option key={s.id} value={s.id}>{s.nombre}</option>))}</select></div>
-                {editingSubtemaId && <div style={styles.formGroup}><label style={styles.label}>Nuevo nombre del Subtema:</label><input style={styles.input} type="text" value={editingSubtemaNombre} onChange={(e) => setEditingSubtemaNombre(e.target.value)} required /></div>}
-            </>
-        )}
-        {selectedTemaId && subtemasOfSelectedTema.length === 0 && <p>Este tema no tiene subtemas.</p>}
-        <div style={styles.actionButtons}><button type="submit" style={styles.primaryButton}>Guardar Cambios</button><button type="button" onClick={resetAllForms} style={styles.cancelButton}>Cancelar</button></div>
-    </form>
-  );
-
-  const renderDeleteTemaForm = () => (
-    <form onSubmit={handleDeleteTema} style={styles.form}>
-        <div style={styles.formGroup}><label style={styles.label}>Seleccionar Tema a Borrar:</label><select style={styles.select} value={deletingTemaId} onChange={(e) => setDeletingTemaId(e.target.value)} required><option value="" disabled>Selecciona un tema</option>{temas.map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-        <div style={styles.actionButtons}><button type="submit" style={styles.cancelButton}>Borrar Tema</button><button type="button" onClick={resetAllForms} style={{...styles.primaryButton, backgroundColor: '#6c757d'}}>Cancelar</button></div>
-    </form>
-  );
-
-  const renderDeleteSubtemaForm = () => (
-    <form onSubmit={handleDeleteSubtema} style={styles.form}>
-        <div style={styles.formGroup}><label style={styles.label}>Seleccionar Tema:</label><select style={styles.select} value={deletingTemaId} onChange={(e) => setDeletingTemaId(e.target.value)} required><option value="" disabled>Selecciona un tema</option>{temas.map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-        {deletingTemaId && subtemasOfSelectedTema.length > 0 && (
-            <div style={styles.formGroup}><label style={styles.label}>Seleccionar Subtema a Borrar:</label><select style={styles.select} value={deletingSubtemaId} onChange={(e) => setDeletingSubtemaId(e.target.value)} required><option value="" disabled>Selecciona un subtema</option>{subtemasOfSelectedTema.map(s => (<option key={s.id} value={s.id}>{s.nombre}</option>))}</select></div>
-        )}
-        {deletingTemaId && subtemasOfSelectedTema.length === 0 && <p>Este tema no tiene subtemas.</p>}
-        <div style={styles.actionButtons}><button type="submit" style={styles.cancelButton}>Borrar Subtema</button><button type="button" onClick={resetAllForms} style={{...styles.primaryButton, backgroundColor: '#6c757d'}}>Cancelar</button></div>
-    </form>
-  );
-
   return (
-    <div style={styles.container}>
-      <h1 style={styles.header}>Gestión de Temario</h1>
-      <Link to="/edicion" style={styles.backButton}>Volver a Edición</Link>
-      
-      {!anyFormOpen && (
-        <>
+    <div style={styles.page}>
+      <Header />
+      <div style={styles.container}>
+        <h1 style={styles.header}>Gestión de Temario</h1>
+        <Link to="/edicion" style={styles.backButton}>Volver a Edición</Link>
+        
+        {!anyFormOpen && (
+          <>
+            <div style={styles.section}>
+              <h2 style={styles.sectionTitle}>Crear</h2>
+              <div style={styles.buttonContainer}>
+                <button style={styles.button} onClick={openCreateTema}>Tema</button>
+                <button style={styles.button} onClick={openCreateSubtema}>Subtema</button>
+              </div>
+            </div>
+
+            <div style={styles.section}>
+              <h2 style={styles.sectionTitle}>Editar</h2>
+              <div style={styles.buttonContainer}>
+                <button style={styles.button} onClick={openEditTema}>Tema</button>
+                <button style={styles.button} onClick={openEditSubtema}>Subtema</button>
+              </div>
+            </div>
+
+            <div style={styles.section}>
+              <h2 style={styles.sectionTitle}>Borrar</h2>
+              <div style={styles.buttonContainer}>
+                <button style={styles.button} onClick={openDeleteTema}>Tema</button>
+                <button style={styles.button} onClick={openDeleteSubtema}>Subtema</button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {(isCreatingTema || isCreatingSubtema) && (
           <div style={styles.section}>
             <h2 style={styles.sectionTitle}>Crear</h2>
-            <div style={styles.buttonContainer}>
-              <button style={styles.button} onClick={openCreateTema}>Tema</button>
-              <button style={styles.button} onClick={openCreateSubtema}>Subtema</button>
-            </div>
+            {isCreatingTema ? (
+              <CreateTemaForm
+                styles={styles}
+                temaNombre={temaNombre}
+                temaLogoUrl={temaLogoUrl}
+                isUploadingLogo={isUploadingLogo}
+                onUploadLogo={handleLogoUpload}
+                onRemoveLogo={handleRemoveLogo}
+                temaParcial={temaParcial}
+                onChangeParcial={setTemaParcial}
+                subtemas={subtemas}
+                onChangeTemaNombre={setTemaNombre}
+                onAddSubtema={handleAddSubtema}
+                onSubtemaChange={handleSubtemaChange}
+                onSubmit={handleTemaSubmit}
+                onCancel={resetAllForms}
+              />
+            ) : (
+              <CreateSubtemaForm
+                styles={styles}
+                temas={temas}
+                selectedTemaId={selectedTemaId}
+                subtemas={subtemas}
+                onChangeSelectedTema={setSelectedTemaId}
+                onAddSubtema={handleAddSubtema}
+                onSubtemaChange={handleSubtemaChange}
+                onSubmit={handleSubtemaSubmit}
+                onCancel={resetAllForms}
+              />
+            )}
           </div>
+        )}
 
+        {(isEditingTema || isEditingSubtema) && (
           <div style={styles.section}>
             <h2 style={styles.sectionTitle}>Editar</h2>
-            <div style={styles.buttonContainer}>
-              <button style={styles.button} onClick={openEditTema}>Tema</button>
-              <button style={styles.button} onClick={openEditSubtema}>Subtema</button>
-            </div>
+            {isEditingTema ? (
+              <EditTemaForm
+                styles={styles}
+                temas={temas}
+                editingTemaId={editingTemaId}
+                editingTemaNombre={editingTemaNombre}
+                onChangeEditingTemaId={setEditingTemaId}
+                onChangeEditingTemaNombre={setEditingTemaNombre}
+                onSubmit={handleUpdateTema}
+                onCancel={resetAllForms}
+              />
+            ) : (
+              <EditSubtemaForm
+                styles={styles}
+                temas={temas}
+                selectedTemaId={selectedTemaId}
+                subtemasOfSelectedTema={subtemasOfSelectedTema}
+                editingSubtemaId={editingSubtemaId}
+                editingSubtemaNombre={editingSubtemaNombre}
+                onChangeSelectedTema={setSelectedTemaId}
+                onChangeEditingSubtemaId={setEditingSubtemaId}
+                onChangeEditingSubtemaNombre={setEditingSubtemaNombre}
+                onSubmit={handleUpdateSubtema}
+                onCancel={resetAllForms}
+              />
+            )}
           </div>
+        )}
 
+        {(isDeletingTema || isDeletingSubtema) && (
           <div style={styles.section}>
             <h2 style={styles.sectionTitle}>Borrar</h2>
-            <div style={styles.buttonContainer}>
-              <button style={styles.button} onClick={openDeleteTema}>Tema</button>
-              <button style={styles.button} onClick={openDeleteSubtema}>Subtema</button>
-            </div>
+            {isDeletingTema ? (
+              <DeleteTemaForm
+                styles={styles}
+                temas={temas}
+                deletingTemaId={deletingTemaId}
+                onChangeDeletingTemaId={setDeletingTemaId}
+                onSubmit={handleDeleteTema}
+                onCancel={resetAllForms}
+              />
+            ) : (
+              <DeleteSubtemaForm
+                styles={styles}
+                temas={temas}
+                deletingTemaId={deletingTemaId}
+                subtemasOfSelectedTema={subtemasOfSelectedTema}
+                deletingSubtemaId={deletingSubtemaId}
+                onChangeDeletingTemaId={setDeletingTemaId}
+                onChangeDeletingSubtemaId={setDeletingSubtemaId}
+                onSubmit={handleDeleteSubtema}
+                onCancel={resetAllForms}
+              />
+            )}
           </div>
-        </>
-      )}
-
-      {(isCreatingTema || isCreatingSubtema) && (
-        <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Crear</h2>
-          {isCreatingTema ? renderCreateTemaForm() : renderCreateSubtemaForm()}
-        </div>
-      )}
-
-      {(isEditingTema || isEditingSubtema) && (
-        <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Editar</h2>
-          {isEditingTema ? renderEditTemaForm() : renderEditSubtemaForm()}
-        </div>
-      )}
-
-      {(isDeletingTema || isDeletingSubtema) && (
-        <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Borrar</h2>
-          {isDeletingTema ? renderDeleteTemaForm() : renderDeleteSubtemaForm()}
-        </div>
-      )}
-
+        )}
+      </div>
       <Footer />
     </div>
   );
