@@ -28,11 +28,10 @@ const Footer: React.FC<FooterProps> = ({ onEdicionClick }) => {
       padding: 'clamp(20px, 4vw, 30px) clamp(12px, 3vw, 20px) 15px',
       marginTop: 'clamp(20px, 5vw, 50px)',
       fontFamily: "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
-      borderTop: '3px solid #3498db',
       boxShadow: '0 -2px 10px rgba(0,0,0,0.05)',
     },
     container: {
-      maxWidth: '1200px',
+      maxWidth: 'clamp(1200px, 90vw, 1600px)',
       margin: '0 auto',
       display: 'flex',
       flexWrap: 'wrap',
@@ -162,7 +161,7 @@ const Footer: React.FC<FooterProps> = ({ onEdicionClick }) => {
   };
 
   return (
-    <footer className="footer-wrapper" style={styles.footer}>
+    <footer className="footer-wrapper fullWidthSection" style={styles.footer}>
       <div className="footer-container" style={styles.container}>
         {/* Sección Acerca de */}
         <div className="footer-section" style={styles.section}>

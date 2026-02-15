@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:frontend": "npx kill-port 5173 && vite",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:all": "npm run dev:backend",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"

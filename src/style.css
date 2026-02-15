@@ -281,6 +281,20 @@ body {
   gap: clamp(15px, 3vw, 30px);
 }
 
+/* Línea superior azul en footers que usan fullWidthSection */
+.footer-wrapper::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: clamp(8px, 2vw, 24px);
+  right: clamp(8px, 2vw, 24px);
+  height: 3px;
+  background: linear-gradient(90deg, #06b6d4, #0ea5e9);
+  box-shadow: 0 2px 6px rgba(14,165,233,0.06);
+  z-index: 2;
+  border-radius: 2px;
+}
+
 /* Tablet (768px y menos) */
 @media (max-width: 768px) {
   .footer-container {
@@ -374,4 +388,197 @@ body {
     min-height: 44px;
     min-width: 44px;
   }
+}
+
+/* Temas grid - layout por defecto y responsive */
+.temasGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .temasGrid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+}
+
+/* Maintenance card styles (moved from inline styles) */
+.maintenanceCard {
+  width: 100%;
+  max-width: 1200px; /* allow cards to grow on large screens */
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  color: #0f172a;
+  border-radius: clamp(6px, 2vw, 18px);
+  padding: clamp(8px, 3vw, 36px);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12), 0 6px 12px rgba(15, 23, 42, 0.06);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.05);
+  transition: transform 0.3s ease;
+  box-sizing: border-box;
+  min-height: clamp(40px, 8vw, 100px);
+  margin: 0 auto;
+}
+
+@media (max-width: 600px) {
+  .maintenanceCard {
+    max-width: 98vw;
+    padding: 10px 12px;
+    font-size: 0.9em;
+    min-height: unset;
+    border-radius: 10px;
+    margin: 8px auto;
+  }
+}
+
+/* Make maintenance card content sizes follow page/header proportions */
+@media (min-width: 1024px) {
+  .maintenanceCard h1 {
+    font-size: clamp(1.6rem, 4.5vw, 2.5rem) !important;
+  }
+  .maintenanceCard p { font-size: clamp(1rem, 1.4vw, 1.125rem) !important; }
+}
+
+@media (max-width: 1023px) {
+  .maintenanceCard h1 {
+    font-size: clamp(1.25rem, 5vw, 1.9rem) !important;
+  }
+  .maintenanceCard p { font-size: clamp(0.9rem, 3.2vw, 1rem) !important; }
+}
+
+@media (max-width: 600px) {
+  .maintenanceCard h1 {
+    font-size: clamp(1.05rem, 5.5vw, 1.6rem) !important;
+    margin: 10px 0 !important;
+    line-height: 1.15 !important;
+  }
+
+  .maintenanceCard p {
+    font-size: clamp(0.8rem, 3.2vw, 0.95rem) !important;
+    margin-bottom: 10px !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Reduce tema title on small screens */
+@media (max-width: 600px) {
+  .temaTitle {
+    font-size: 1em !important;
+    margin-bottom: 8px !important;
+  }
+}
+
+/* Make topic cards wider on large screens to reduce side whitespace */
+@media (min-width: 1200px) {
+  .temasGrid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 18px;
+  }
+  .temarioCard {
+    max-width: 1200px !important;
+    padding: clamp(16px, 3vw, 40px) !important;
+  }
+}
+
+/* Contenedor y reglas para que las imágenes de las tarjetas sean uniformes */
+.temaLogoWrap {
+  width: 100%;
+  height: clamp(120px, 22vw, 180px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.temaImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  transition: transform 0.45s cubic-bezier(.2,.8,.2,1);
+}
+
+/* Mobile: aumentar altura de las imágenes para que queden menos rectangulares */
+@media (max-width: 600px) {
+  .temaLogoWrap {
+    height: clamp(160px, 30vw, 220px) !important;
+  }
+}
+
+/* Fondo mate claro para las tarjetas */
+.temaCard {
+  background: #e6e9ee; /* gris mate un poco más oscuro */
+}
+
+/* Diseño recomendado: barra de acento + hover 3D */
+.temaAccent {
+  height: 6px;
+  width: 44px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #06b6d4, #0ea5e9);
+  background-size: 200% 100%;
+  animation: gradientShift 3.2s linear infinite;
+  margin: 8px auto 12px auto;
+  transition: width 0.35s ease, transform 0.35s ease;
+}
+
+.temaCard {
+  perspective: 800px;
+  transform-style: preserve-3d;
+  transition: transform 0.35s cubic-bezier(.2,.8,.2,1), box-shadow 0.35s ease;
+}
+
+.temaCard:hover {
+  transform: translateY(-8px) rotateX(4deg) scale(1.02);
+  box-shadow: 0 18px 40px rgba(2,6,23,0.12), 0 8px 24px rgba(2,6,23,0.06);
+}
+
+/* colored glow rim using pseudo-element */
+.temaCard::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 0 0 rgba(14,165,233,0);
+  transition: box-shadow 0.35s ease, transform 0.35s ease;
+}
+.temaCard:hover::after {
+  box-shadow: 0 8px 40px rgba(14,165,233,0.10), 0 0 30px rgba(14,165,233,0.06);
+}
+
+.temaTitle {
+  font-size: 1.22em;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 6px 0 12px 0;
+  letter-spacing: -0.02em;
+}
+
+.temaCard:hover .temaImage {
+  transform: scale(1.04);
+}
+
+.temaCard:hover .temaAccent {
+  width: 64px;
+}
+
+/* Utility to make a section span the full viewport width (use on footers or wide sections) */
+.fullWidthSection {
+  position: relative;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  box-sizing: border-box;
+  /* usar el mismo margen lateral que el contenedor principal */
+  padding-left: clamp(8px, 2vw, 24px);
+  padding-right: clamp(8px, 2vw, 24px);
 }
