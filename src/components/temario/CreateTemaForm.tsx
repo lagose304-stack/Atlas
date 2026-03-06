@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { SubtemaInput } from './CreateSubtemaForm';
 
 interface CreateTemaFormProps {
   styles: { [key: string]: React.CSSProperties };
@@ -9,10 +10,12 @@ interface CreateTemaFormProps {
   onRemoveLogo: () => void;
   temaParcial: 'primer' | 'segundo' | 'tercer' | '';
   onChangeParcial: (value: 'primer' | 'segundo' | 'tercer' | '') => void;
-  subtemas: string[];
+  subtemas: SubtemaInput[];
   onChangeTemaNombre: (value: string) => void;
   onAddSubtema: () => void;
   onSubtemaChange: (index: number, value: string) => void;
+  onSubtemaLogoUpload: (index: number, file: File) => void;
+  onSubtemaRemoveLogo: (index: number) => void;
   onSubmit: (event: React.FormEvent) => void;
   onCancel: () => void;
 }
@@ -30,10 +33,13 @@ const CreateTemaForm: React.FC<CreateTemaFormProps> = ({
   onChangeTemaNombre,
   onAddSubtema,
   onSubtemaChange,
+  onSubtemaLogoUpload,
+  onSubtemaRemoveLogo,
   onSubmit,
   onCancel,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const subtemaFileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const isSubmitDisabled = isUploadingLogo || !temaLogoUrl || !temaParcial;
   const parcialOptions: Array<{ value: 'primer' | 'segundo' | 'tercer'; label: string }> = [
     { value: 'primer', label: 'Primer parcial' },
@@ -44,6 +50,12 @@ const CreateTemaForm: React.FC<CreateTemaFormProps> = ({
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) onUploadLogo(file);
+    event.target.value = '';
+  };
+
+  const handleSubtemaFileChange = (index: number, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) onSubtemaLogoUpload(index, file);
     event.target.value = '';
   };
 
@@ -151,13 +163,89 @@ const CreateTemaForm: React.FC<CreateTemaFormProps> = ({
       </div>
 
       {subtemas.map((subtema, index) => (
-        <div style={styles.formGroup} key={index}>
+        <div
+          key={index}
+          style={{
+            ...styles.formGroup,
+            background: '#f8fafc',
+            border: '1px solid #e0f2fe',
+            borderRadius: '10px',
+            padding: '14px',
+            gap: '10px',
+          }}
+        >
           <label style={styles.label}>Subtema {index + 1}:</label>
           <input
             style={styles.input}
             type="text"
-            value={subtema}
+            placeholder="Nombre del subtema"
+            value={subtema.nombre}
             onChange={(e) => onSubtemaChange(index, e.target.value)}
+          />
+          <label style={{ ...styles.label, marginTop: '4px' }}>Foto del subtema (opcional):</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            {!subtema.logoUrl && (
+              <button
+                type="button"
+                style={{
+                  ...styles.secondaryButton,
+                  border: '1px dashed #0ea5e9',
+                  backgroundColor: 'rgba(14,165,233,0.08)',
+                  color: '#0ea5e9',
+                  fontWeight: 700,
+                  padding: '8px 14px',
+                  fontSize: '0.9em',
+                }}
+                onClick={() => subtemaFileInputRefs.current[index]?.click()}
+                disabled={isUploadingLogo}
+              >
+                📷 Subir foto
+              </button>
+            )}
+            {subtema.logoUrl && (
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <img
+                  src={subtema.logoUrl}
+                  alt={`Logo subtema ${index + 1}`}
+                  style={{
+                    maxHeight: '60px',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 4px 10px rgba(15,23,42,0.1)',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => onSubtemaRemoveLogo(index)}
+                  style={{
+                    position: 'absolute',
+                    top: '-8px',
+                    right: '-8px',
+                    height: '24px',
+                    width: '24px',
+                    borderRadius: '12px',
+                    border: '1px solid #e2e8f0',
+                    backgroundColor: '#fff',
+                    color: '#0f172a',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 8px rgba(15,23,42,0.12)',
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    fontSize: '14px',
+                  }}
+                  aria-label="Quitar foto"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+          </div>
+          <input
+            ref={(el) => { subtemaFileInputRefs.current[index] = el; }}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => handleSubtemaFileChange(index, e)}
           />
         </div>
       ))}

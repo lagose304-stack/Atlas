@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import ImageUploader from '../components/ImageUploader';
 import { supabase } from '../services/supabase';
+import { uploadToCloudinary } from '../services/cloudinary';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
 
@@ -168,8 +169,65 @@ const styles: { [key: string]: React.CSSProperties } = {
         outline: 'none',
         color: '#2c3e50',
         fontWeight: 500,
-    }
+    },
+    saveButton: {
+        display: 'block',
+        width: '100%',
+        padding: '14px',
+        marginTop: '24px',
+        border: 'none',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        backgroundColor: '#16a34a',
+        color: 'white',
+        fontSize: '1.05em',
+        fontWeight: 700,
+        letterSpacing: '0.02em',
+        transition: 'background-color 0.2s ease, opacity 0.2s ease',
+    },
+    saveButtonDisabled: {
+        display: 'block',
+        width: '100%',
+        padding: '14px',
+        marginTop: '24px',
+        border: 'none',
+        borderRadius: '8px',
+        cursor: 'not-allowed',
+        backgroundColor: '#86efac',
+        color: 'white',
+        fontSize: '1.05em',
+        fontWeight: 700,
+        opacity: 0.7,
+    },
+    successMsg: {
+        marginTop: '16px',
+        padding: '12px 16px',
+        borderRadius: '8px',
+        backgroundColor: '#dcfce7',
+        border: '1px solid #86efac',
+        color: '#15803d',
+        fontWeight: 600,
+        textAlign: 'center',
+    },
+    errorMsg: {
+        marginTop: '16px',
+        padding: '12px 16px',
+        borderRadius: '8px',
+        backgroundColor: '#fee2e2',
+        border: '1px solid #fca5a5',
+        color: '#b91c1c',
+        fontWeight: 600,
+        textAlign: 'center',
+    },
 };
+
+// Convierte un nombre en slug seguro para carpeta de Cloudinary
+const slugify = (text: string) =>
+  text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
 
 const Placas: React.FC = () => {
   const [showClasificadasForm, setShowClasificadasForm] = useState(false);
@@ -177,10 +235,14 @@ const Placas: React.FC = () => {
   const [showReasignacionSection, setShowReasignacionSection] = useState(false);
   const [showEliminarSection, setShowEliminarSection] = useState(false);
   const [imageUploaded, setImageUploaded] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedTema, setSelectedTema] = useState('');
   const [selectedSubtema, setSelectedSubtema] = useState('');
   const [temas, setTemas] = useState<Tema[]>([]);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   // Variable para verificar si alguna sección está activa
   const isAnyFormActive = showClasificadasForm || showSinClasificarForm || showReasignacionSection || showEliminarSection;
@@ -229,8 +291,45 @@ const Placas: React.FC = () => {
   }, [selectedTema]);
 
   const handleImageSelect = (file: File) => {
-    console.log('Imagen seleccionada:', file.name);
+    setSelectedFile(file);
     setImageUploaded(true);
+    setSaveSuccess(false);
+    setSaveError('');
+  };
+
+  const handleGuardar = async () => {
+    if (!selectedFile || !selectedTema || !selectedSubtema) return;
+    const temaObj = temas.find(t => String(t.id) === selectedTema);
+    const subtemaObj = subtemas.find(s => String(s.id) === selectedSubtema);
+    if (!temaObj || !subtemaObj) return;
+
+    setIsSaving(true);
+    setSaveError('');
+    setSaveSuccess(false);
+
+    try {
+      const folder = `placas/${slugify(temaObj.nombre)}/${slugify(subtemaObj.nombre)}`;
+      const uploadResult = await uploadToCloudinary(selectedFile, { folder });
+
+      const { error } = await supabase.from('placas').insert({
+        photo_url: uploadResult.secure_url,
+        tema_id: Number(selectedTema),
+        subtema_id: Number(selectedSubtema),
+      });
+
+      if (error) throw error;
+
+      setSaveSuccess(true);
+      setSelectedFile(null);
+      setImageUploaded(false);
+      setSelectedTema('');
+      setSelectedSubtema('');
+    } catch (err) {
+      console.error('Error al guardar placa:', err);
+      setSaveError('Error al guardar. Por favor intenta de nuevo.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleTemaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -248,8 +347,11 @@ const Placas: React.FC = () => {
     setShowReasignacionSection(false);
     setShowEliminarSection(false);
     setImageUploaded(false);
+    setSelectedFile(null);
     setSelectedTema('');
     setSelectedSubtema('');
+    setSaveSuccess(false);
+    setSaveError('');
   };
 
   return (
@@ -324,6 +426,23 @@ const Placas: React.FC = () => {
                         ))}
                       </select>
                     </div>
+                  )}
+
+                  {selectedFile && selectedTema && selectedSubtema && (
+                    <button
+                      style={isSaving ? styles.saveButtonDisabled : styles.saveButton}
+                      onClick={handleGuardar}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? 'Guardando...' : '💾 Guardar placa'}
+                    </button>
+                  )}
+
+                  {saveSuccess && (
+                    <div style={styles.successMsg}>✅ Placa guardada correctamente.</div>
+                  )}
+                  {saveError && (
+                    <div style={styles.errorMsg}>❌ {saveError}</div>
                   )}
                 </>
               )}

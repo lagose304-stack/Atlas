@@ -4,23 +4,25 @@ import { supabase } from '../services/supabase';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
 import CreateTemaForm from '../components/temario/CreateTemaForm';
-import CreateSubtemaForm from '../components/temario/CreateSubtemaForm';
+import CreateSubtemaForm, { SubtemaInput } from '../components/temario/CreateSubtemaForm';
 import EditTemaForm from '../components/temario/EditTemaForm';
 import EditSubtemaForm from '../components/temario/EditSubtemaForm';
 import DeleteTemaForm from '../components/temario/DeleteTemaForm';
 import DeleteSubtemaForm from '../components/temario/DeleteSubtemaForm';
-import { uploadToCloudinary } from '../services/cloudinary';
+import { uploadToCloudinary, deleteFromCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
 
 // --- Interfaces ---
 interface Tema {
   id: number;
   nombre: string;
+  logo_url?: string;
 }
 
 interface Subtema {
   id: number;
   nombre: string;
   tema_id: number;
+  logo_url?: string;
 }
 
 // --- Styles ---
@@ -175,13 +177,20 @@ const Temario: React.FC = () => {
   const [temaLogoFile, setTemaLogoFile] = useState<File | null>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [temaParcial, setTemaParcial] = useState<'primer' | 'segundo' | 'tercer' | ''>('');
-  const [subtemas, setSubtemas] = useState<string[]>([]);
+  const [subtemas, setSubtemas] = useState<SubtemaInput[]>([]);
   const [isEditingTema, setIsEditingTema] = useState(false);
   const [isEditingSubtema, setIsEditingSubtema] = useState(false);
   const [editingTemaId, setEditingTemaId] = useState<string>('');
   const [editingTemaNombre, setEditingTemaNombre] = useState('');
   const [editingSubtemaId, setEditingSubtemaId] = useState<string>('');
   const [editingSubtemaNombre, setEditingSubtemaNombre] = useState('');
+  // Estados para edición de imágenes
+  const [editingTemaLogoUrl, setEditingTemaLogoUrl] = useState('');
+  const [editingTemaNewLogoFile, setEditingTemaNewLogoFile] = useState<File | null>(null);
+  const [editingTemaNewLogoPreviewUrl, setEditingTemaNewLogoPreviewUrl] = useState('');
+  const [editingSubtemaLogoUrl, setEditingSubtemaLogoUrl] = useState('');
+  const [editingSubtemaNewLogoFile, setEditingSubtemaNewLogoFile] = useState<File | null>(null);
+  const [editingSubtemaNewLogoPreviewUrl, setEditingSubtemaNewLogoPreviewUrl] = useState('');
   const [isDeletingTema, setIsDeletingTema] = useState(false);
   const [isDeletingSubtema, setIsDeletingSubtema] = useState(false);
   const [deletingTemaId, setDeletingTemaId] = useState<string>('');
@@ -204,6 +213,11 @@ const Temario: React.FC = () => {
   useEffect(() => {
     const tema = temas.find(t => t.id.toString() === editingTemaId);
     setEditingTemaNombre(tema ? tema.nombre : '');
+    setEditingTemaLogoUrl(tema?.logo_url || '');
+    // Limpiar nueva imagen al cambiar de tema seleccionado
+    if (editingTemaNewLogoPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(editingTemaNewLogoPreviewUrl);
+    setEditingTemaNewLogoFile(null);
+    setEditingTemaNewLogoPreviewUrl('');
   }, [editingTemaId, temas]);
 
   useEffect(() => {
@@ -229,13 +243,30 @@ const Temario: React.FC = () => {
   useEffect(() => {
     const subtema = subtemasOfSelectedTema.find(s => s.id.toString() === editingSubtemaId);
     setEditingSubtemaNombre(subtema ? subtema.nombre : '');
+    setEditingSubtemaLogoUrl(subtema?.logo_url || '');
+    // Limpiar nueva imagen al cambiar de subtema seleccionado
+    if (editingSubtemaNewLogoPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(editingSubtemaNewLogoPreviewUrl);
+    setEditingSubtemaNewLogoFile(null);
+    setEditingSubtemaNewLogoPreviewUrl('');
   }, [editingSubtemaId, subtemasOfSelectedTema]);
 
 
-  const handleAddSubtema = () => setSubtemas([...subtemas, '']);
+  const handleAddSubtema = () => setSubtemas([...subtemas, { nombre: '', logoUrl: '', logoFile: null }]);
   const handleSubtemaChange = (index: number, value: string) => {
     const newSubtemas = [...subtemas];
-    newSubtemas[index] = value;
+    newSubtemas[index] = { ...newSubtemas[index], nombre: value };
+    setSubtemas(newSubtemas);
+  };
+  const handleSubtemaLogoUpload = (index: number, file: File) => {
+    const newSubtemas = [...subtemas];
+    if (newSubtemas[index].logoUrl.startsWith('blob:')) URL.revokeObjectURL(newSubtemas[index].logoUrl);
+    newSubtemas[index] = { ...newSubtemas[index], logoUrl: URL.createObjectURL(file), logoFile: file };
+    setSubtemas(newSubtemas);
+  };
+  const handleSubtemaRemoveLogo = (index: number) => {
+    const newSubtemas = [...subtemas];
+    if (newSubtemas[index].logoUrl.startsWith('blob:')) URL.revokeObjectURL(newSubtemas[index].logoUrl);
+    newSubtemas[index] = { ...newSubtemas[index], logoUrl: '', logoFile: null };
     setSubtemas(newSubtemas);
   };
 
@@ -250,6 +281,30 @@ const Temario: React.FC = () => {
     setTemaLogoUrl('');
     setTemaLogoFile(null);
     setIsUploadingLogo(false);
+  };
+
+  const handleUploadNewTemaLogo = (file: File) => {
+    if (editingTemaNewLogoPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(editingTemaNewLogoPreviewUrl);
+    setEditingTemaNewLogoFile(file);
+    setEditingTemaNewLogoPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleRemoveNewTemaLogo = () => {
+    if (editingTemaNewLogoPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(editingTemaNewLogoPreviewUrl);
+    setEditingTemaNewLogoFile(null);
+    setEditingTemaNewLogoPreviewUrl('');
+  };
+
+  const handleUploadNewSubtemaLogo = (file: File) => {
+    if (editingSubtemaNewLogoPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(editingSubtemaNewLogoPreviewUrl);
+    setEditingSubtemaNewLogoFile(file);
+    setEditingSubtemaNewLogoPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleRemoveNewSubtemaLogo = () => {
+    if (editingSubtemaNewLogoPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(editingSubtemaNewLogoPreviewUrl);
+    setEditingSubtemaNewLogoFile(null);
+    setEditingSubtemaNewLogoPreviewUrl('');
   };
 
   const handleTemaSubmit = async (event: React.FormEvent) => {
@@ -267,9 +322,19 @@ const Temario: React.FC = () => {
         .select();
       if (temaError) return alert(`Error al crear el tema: ${temaError.message}`);
       const temaId = temaData[0].id;
-      const subtemasParaInsertar = subtemas.filter(n => n.trim() !== '').map(nombre => ({ nombre, tema_id: temaId }));
-      if (subtemasParaInsertar.length > 0) {
-        const { error: subtemaError } = await supabase.from('subtemas').insert(subtemasParaInsertar);
+      const subtemasValidos = subtemas.filter(s => s.nombre.trim() !== '');
+      if (subtemasValidos.length > 0) {
+        const subtemasConLogo = await Promise.all(
+          subtemasValidos.map(async (s) => {
+            let logoUrl: string | null = null;
+            if (s.logoFile) {
+              const up = await uploadToCloudinary(s.logoFile, { folder: 'temas' });
+              logoUrl = up.secure_url || null;
+            }
+            return { nombre: s.nombre, tema_id: temaId, logo_url: logoUrl };
+          })
+        );
+        const { error: subtemaError } = await supabase.from('subtemas').insert(subtemasConLogo);
         if (subtemaError) return alert(`Error al crear subtemas: ${subtemaError.message}`);
       }
       alert('Tema y subtemas creados con éxito.');
@@ -286,56 +351,166 @@ const Temario: React.FC = () => {
   const handleSubtemaSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedTemaId) return alert('Por favor, selecciona un tema.');
-    const subtemasParaInsertar = subtemas.filter(n => n.trim() !== '').map(nombre => ({ nombre, tema_id: parseInt(selectedTemaId, 10) }));
-    if (subtemasParaInsertar.length > 0) {
-      const { error } = await supabase.from('subtemas').insert(subtemasParaInsertar);
+    const subtemasValidos = subtemas.filter(s => s.nombre.trim() !== '');
+    if (subtemasValidos.length === 0) return alert('Agrega al menos un subtema.');
+    try {
+      setIsUploadingLogo(true);
+      const subtemasConLogo = await Promise.all(
+        subtemasValidos.map(async (s) => {
+          let logoUrl: string | null = null;
+          if (s.logoFile) {
+            const up = await uploadToCloudinary(s.logoFile, { folder: 'temas' });
+            logoUrl = up.secure_url || null;
+          }
+          return { nombre: s.nombre, tema_id: parseInt(selectedTemaId, 10), logo_url: logoUrl };
+        })
+      );
+      const { error } = await supabase.from('subtemas').insert(subtemasConLogo);
       if (error) return alert(`Error al crear subtemas: ${error.message}`);
+      alert('Subtemas agregados con éxito.');
+      resetAllForms();
+    } catch (err: any) {
+      console.error('Error al crear subtemas:', err);
+      alert('No se pudo crear los subtemas. Intenta de nuevo.');
+    } finally {
+      setIsUploadingLogo(false);
     }
-    alert('Subtemas agregados con éxito.');
-    resetAllForms();
   };
 
   const handleUpdateTema = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!editingTemaId) return alert('Por favor, selecciona un tema para editar.');
     if (!editingTemaNombre.trim()) return alert('El nombre no puede estar vacío.');
-    const { error } = await supabase.from('temas').update({ nombre: editingTemaNombre }).match({ id: editingTemaId });
-    if (error) return alert(`Error al actualizar el tema: ${error.message}`);
-    alert('Tema actualizado con éxito.');
-    fetchTemas();
-    resetAllForms();
+    try {
+      setIsUploadingLogo(true);
+      const updateData: { nombre: string; logo_url?: string } = { nombre: editingTemaNombre };
+      if (editingTemaNewLogoFile) {
+        const upload = await uploadToCloudinary(editingTemaNewLogoFile, { folder: 'temas/logos' });
+        updateData.logo_url = upload.secure_url;
+        // Borrar imagen antigua de Cloudinary
+        if (editingTemaLogoUrl) {
+          const publicId = getCloudinaryPublicId(editingTemaLogoUrl);
+          if (publicId) deleteFromCloudinary(publicId).catch(e => console.warn('No se pudo borrar imagen antigua:', e));
+        }
+      }
+      const { error } = await supabase.from('temas').update(updateData).match({ id: editingTemaId });
+      if (error) return alert(`Error al actualizar el tema: ${error.message}`);
+      alert('Tema actualizado con éxito.');
+      fetchTemas();
+      resetAllForms();
+    } catch (err: any) {
+      console.error('Error al actualizar tema:', err);
+      alert('No se pudo actualizar el tema. Intenta de nuevo.');
+    } finally {
+      setIsUploadingLogo(false);
+    }
   };
 
   const handleUpdateSubtema = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!editingSubtemaId) return alert('Por favor, selecciona un subtema para editar.');
     if (!editingSubtemaNombre.trim()) return alert('El nombre no puede estar vacío.');
-    const { error } = await supabase.from('subtemas').update({ nombre: editingSubtemaNombre }).match({ id: editingSubtemaId });
-    if (error) return alert(`Error al actualizar el subtema: ${error.message}`);
-    alert('Subtema actualizado con éxito.');
-    resetAllForms();
+    try {
+      setIsUploadingLogo(true);
+      const updateData: { nombre: string; logo_url?: string } = { nombre: editingSubtemaNombre };
+      if (editingSubtemaNewLogoFile) {
+        const upload = await uploadToCloudinary(editingSubtemaNewLogoFile, { folder: 'temas' });
+        updateData.logo_url = upload.secure_url;
+        // Borrar imagen antigua de Cloudinary
+        if (editingSubtemaLogoUrl) {
+          const publicId = getCloudinaryPublicId(editingSubtemaLogoUrl);
+          if (publicId) deleteFromCloudinary(publicId).catch(e => console.warn('No se pudo borrar imagen antigua:', e));
+        }
+      }
+      const { error } = await supabase.from('subtemas').update(updateData).match({ id: editingSubtemaId });
+      if (error) return alert(`Error al actualizar el subtema: ${error.message}`);
+      alert('Subtema actualizado con éxito.');
+      resetAllForms();
+    } catch (err: any) {
+      console.error('Error al actualizar subtema:', err);
+      alert('No se pudo actualizar el subtema. Intenta de nuevo.');
+    } finally {
+      setIsUploadingLogo(false);
+    }
   };
 
   const handleDeleteTema = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!deletingTemaId) return alert('Por favor, selecciona un tema para borrar.');
-    if (window.confirm("¿Estás seguro de que quieres borrar este tema? Todos los subtemas asociados también se eliminarán.")) {
-        const { error } = await supabase.from('temas').delete().match({ id: deletingTemaId });
-        if (error) return alert(`Error al borrar el tema: ${error.message}`);
-        alert('Tema borrado con éxito.');
-        fetchTemas();
-        resetAllForms();
+    if (!window.confirm('¿Estás seguro de que quieres borrar este tema? Todos los subtemas asociados también se eliminarán.')) return;
+    try {
+      setIsUploadingLogo(true);
+      // Obtener subtemas para borrar sus fotos
+      const { data: subtemasData } = await supabase
+        .from('subtemas')
+        .select('id, logo_url')
+        .eq('tema_id', deletingTemaId);
+
+      // Obtener foto del tema
+      const temaABorrar = temas.find(t => t.id.toString() === deletingTemaId);
+
+      // Borrar el tema de la BD (los subtemas se borran en cascada si está configurado,
+      // si no, los borramos primero)
+      const { error: subtemaDeleteError } = await supabase
+        .from('subtemas')
+        .delete()
+        .eq('tema_id', deletingTemaId);
+      if (subtemaDeleteError) console.warn('Error al borrar subtemas de BD:', subtemaDeleteError.message);
+
+      const { error } = await supabase.from('temas').delete().match({ id: deletingTemaId });
+      if (error) return alert(`Error al borrar el tema: ${error.message}`);
+
+      // Borrar fotos de Cloudinary (en segundo plano, sin bloquear)
+      const deletePromises: Promise<any>[] = [];
+      if (temaABorrar?.logo_url) {
+        const pid = getCloudinaryPublicId(temaABorrar.logo_url);
+        if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('No se pudo borrar foto del tema:', e)));
+      }
+      if (subtemasData) {
+        for (const s of subtemasData) {
+          if (s.logo_url) {
+            const pid = getCloudinaryPublicId(s.logo_url);
+            if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('No se pudo borrar foto de subtema:', e)));
+          }
+        }
+      }
+      await Promise.allSettled(deletePromises);
+
+      alert('Tema y sus subtemas borrados con éxito.');
+      fetchTemas();
+      resetAllForms();
+    } catch (err: any) {
+      console.error('Error al borrar tema:', err);
+      alert('No se pudo borrar el tema. Intenta de nuevo.');
+    } finally {
+      setIsUploadingLogo(false);
     }
   };
 
   const handleDeleteSubtema = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!deletingSubtemaId) return alert('Por favor, selecciona un subtema para borrar.');
-    if (window.confirm("¿Estás seguro de que quieres borrar este subtema?")) {
-        const { error } = await supabase.from('subtemas').delete().match({ id: deletingSubtemaId });
-        if (error) return alert(`Error al borrar el subtema: ${error.message}`);
-        alert('Subtema borrado con éxito.');
-        resetAllForms();
+    if (!window.confirm('¿Estás seguro de que quieres borrar este subtema?')) return;
+    try {
+      setIsUploadingLogo(true);
+      const subtemaABorrar = subtemasOfSelectedTema.find(s => s.id.toString() === deletingSubtemaId);
+
+      const { error } = await supabase.from('subtemas').delete().match({ id: deletingSubtemaId });
+      if (error) return alert(`Error al borrar el subtema: ${error.message}`);
+
+      // Borrar foto de Cloudinary
+      if (subtemaABorrar?.logo_url) {
+        const pid = getCloudinaryPublicId(subtemaABorrar.logo_url);
+        if (pid) deleteFromCloudinary(pid).catch(e => console.warn('No se pudo borrar foto del subtema:', e));
+      }
+
+      alert('Subtema borrado con éxito.');
+      resetAllForms();
+    } catch (err: any) {
+      console.error('Error al borrar subtema:', err);
+      alert('No se pudo borrar el subtema. Intenta de nuevo.');
+    } finally {
+      setIsUploadingLogo(false);
     }
   };
 
@@ -343,12 +518,19 @@ const Temario: React.FC = () => {
     setIsCreatingTema(false); setIsCreatingSubtema(false);
     setIsEditingTema(false); setIsEditingSubtema(false);
     setIsDeletingTema(false); setIsDeletingSubtema(false);
-    setTemaNombre(''); setSubtemas([]);
+    setTemaNombre('');
+    subtemas.forEach(s => { if (s.logoUrl?.startsWith('blob:')) URL.revokeObjectURL(s.logoUrl); });
+    setSubtemas([]);
     if (temaLogoUrl.startsWith('blob:')) URL.revokeObjectURL(temaLogoUrl);
     setTemaLogoUrl(''); setTemaLogoFile(null); setIsUploadingLogo(false);
     setTemaParcial('');
     setSelectedTemaId(''); setEditingTemaId(''); setEditingSubtemaId('');
     setDeletingTemaId(''); setDeletingSubtemaId('');
+    // Limpiar estados de edición de imágenes
+    if (editingTemaNewLogoPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(editingTemaNewLogoPreviewUrl);
+    setEditingTemaLogoUrl(''); setEditingTemaNewLogoFile(null); setEditingTemaNewLogoPreviewUrl('');
+    if (editingSubtemaNewLogoPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(editingSubtemaNewLogoPreviewUrl);
+    setEditingSubtemaLogoUrl(''); setEditingSubtemaNewLogoFile(null); setEditingSubtemaNewLogoPreviewUrl('');
   };
 
   const openCreateTema = () => { resetAllForms(); setIsCreatingTema(true); };
@@ -412,6 +594,8 @@ const Temario: React.FC = () => {
                 onChangeTemaNombre={setTemaNombre}
                 onAddSubtema={handleAddSubtema}
                 onSubtemaChange={handleSubtemaChange}
+                onSubtemaLogoUpload={handleSubtemaLogoUpload}
+                onSubtemaRemoveLogo={handleSubtemaRemoveLogo}
                 onSubmit={handleTemaSubmit}
                 onCancel={resetAllForms}
               />
@@ -424,6 +608,9 @@ const Temario: React.FC = () => {
                 onChangeSelectedTema={setSelectedTemaId}
                 onAddSubtema={handleAddSubtema}
                 onSubtemaChange={handleSubtemaChange}
+                onSubtemaLogoUpload={handleSubtemaLogoUpload}
+                onSubtemaRemoveLogo={handleSubtemaRemoveLogo}
+                isUploadingLogo={isUploadingLogo}
                 onSubmit={handleSubtemaSubmit}
                 onCancel={resetAllForms}
               />
@@ -440,8 +627,13 @@ const Temario: React.FC = () => {
                 temas={temas}
                 editingTemaId={editingTemaId}
                 editingTemaNombre={editingTemaNombre}
+                editingTemaCurrentLogoUrl={editingTemaLogoUrl}
+                editingTemaNewLogoPreviewUrl={editingTemaNewLogoPreviewUrl}
+                isUploadingLogo={isUploadingLogo}
                 onChangeEditingTemaId={setEditingTemaId}
                 onChangeEditingTemaNombre={setEditingTemaNombre}
+                onUploadNewLogo={handleUploadNewTemaLogo}
+                onRemoveNewLogo={handleRemoveNewTemaLogo}
                 onSubmit={handleUpdateTema}
                 onCancel={resetAllForms}
               />
@@ -453,9 +645,14 @@ const Temario: React.FC = () => {
                 subtemasOfSelectedTema={subtemasOfSelectedTema}
                 editingSubtemaId={editingSubtemaId}
                 editingSubtemaNombre={editingSubtemaNombre}
+                editingSubtemaCurrentLogoUrl={editingSubtemaLogoUrl}
+                editingSubtemaNewLogoPreviewUrl={editingSubtemaNewLogoPreviewUrl}
+                isUploadingLogo={isUploadingLogo}
                 onChangeSelectedTema={setSelectedTemaId}
                 onChangeEditingSubtemaId={setEditingSubtemaId}
                 onChangeEditingSubtemaNombre={setEditingSubtemaNombre}
+                onUploadNewLogo={handleUploadNewSubtemaLogo}
+                onRemoveNewLogo={handleRemoveNewSubtemaLogo}
                 onSubmit={handleUpdateSubtema}
                 onCancel={resetAllForms}
               />

@@ -571,6 +571,183 @@ body {
   width: 64px;
 }
 
+/* ========================================
+   RESPONSIVE - Temas Grid (Home)
+   ======================================== */
+
+/* Base mobile-first: 2 columnas */
+.temas-grid-home {
+  display: grid;
+  width: 100%;
+  gap: 10px;
+  grid-template-columns: repeat(2, 1fr);
+  box-sizing: border-box;
+}
+
+.tema-card-img-wrap {
+  width: 70px;
+  height: 70px;
+  flex-shrink: 0;
+}
+
+.tema-card-label {
+  font-size: 0.88em;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+}
+
+/* 3 columnas desde 640px (tablet) */
+@media (min-width: 640px) {
+  .temas-grid-home {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .tema-card-img-wrap {
+    width: 86px;
+    height: 86px;
+  }
+  .tema-card-label {
+    font-size: 0.93em;
+  }
+}
+
+/* 4 columnas desde 900px (desktop) */
+@media (min-width: 900px) {
+  .temas-grid-home {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .tema-card-img-wrap {
+    width: 100px;
+    height: 100px;
+  }
+  .tema-card-label {
+    font-size: 1em;
+  }
+}
+
+/* 5 columnas desde 1200px (pantalla grande) */
+@media (min-width: 1200px) {
+  .temas-grid-home {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 18px;
+  }
+  .tema-card-img-wrap {
+    width: 115px;
+    height: 115px;
+  }
+  .tema-card-label {
+    font-size: 1.05em;
+  }
+}
+
+/* Grid responsivo — página Subtemas */
+.subtemas-grid-page {
+  display: grid;
+  width: 100%;
+  gap: 10px;
+  grid-template-columns: repeat(2, 1fr);
+  box-sizing: border-box;
+}
+
+.subtema-card-img-wrap {
+  width: 70px;
+  height: 70px;
+  flex-shrink: 0;
+}
+
+.subtema-card-label {
+  font-size: 0.88em;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .subtemas-grid-page {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .subtema-card-img-wrap {
+    width: 86px;
+    height: 86px;
+  }
+  .subtema-card-label {
+    font-size: 0.93em;
+  }
+}
+
+@media (min-width: 900px) {
+  .subtemas-grid-page {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .subtema-card-img-wrap {
+    width: 100px;
+    height: 100px;
+  }
+  .subtema-card-label {
+    font-size: 1em;
+  }
+}
+
+@media (min-width: 1200px) {
+  .subtemas-grid-page {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 18px;
+  }
+  .subtema-card-img-wrap {
+    width: 115px;
+    height: 115px;
+  }
+  .subtema-card-label {
+    font-size: 1.05em;
+  }
+}
+
+/* Grid galería de placas — página PlacasSubtema */
+.placas-gallery-grid {
+  display: grid;
+  width: 100%;
+  gap: 10px;
+  grid-template-columns: repeat(2, 1fr);
+  box-sizing: border-box;
+}
+
+@media (min-width: 480px) {
+  .placas-gallery-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (min-width: 720px) {
+  .placas-gallery-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+}
+
+@media (min-width: 1000px) {
+  .placas-gallery-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+  }
+}
+
+@media (min-width: 1300px) {
+  .placas-gallery-grid {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 18px;
+  }
+}
+
+/* Spinner animation */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Utility to make a section span the full viewport width (use on footers or wide sections) */
 .fullWidthSection {
   position: relative;

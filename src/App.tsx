@@ -6,6 +6,8 @@ import Home from './pages/Home';
 import Edicion from './pages/Edicion';
 import Temario from './pages/Temario';
 import Placas from './pages/Placas';
+import Subtemas from './pages/Subtemas';
+import PlacasSubtema from './pages/PlacasSubtema';
 
 const App: React.FC = () => {
   return (
@@ -41,6 +43,12 @@ const App: React.FC = () => {
             }
           />
           
+          {/* Subtemas - ruta pública */}
+          <Route path="/subtemas/:temaId" element={<Subtemas />} />
+
+          {/* Placas de un subtema - ruta pública */}
+          <Route path="/ver-placas/:subtemaId" element={<PlacasSubtema />} />
+
           {/* Ruta de fallback */}
           <Route path="*" element={<Home />} />
         </Routes>

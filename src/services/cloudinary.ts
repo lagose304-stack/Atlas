@@ -29,3 +29,13 @@ export const deleteFromCloudinary = async (publicId: string) => {
   );
   return response.data;
 };
+
+export const getCloudinaryPublicId = (url: string): string => {
+  try {
+    // URL: https://res.cloudinary.com/CLOUD/image/upload/v123456/folder/file.jpg
+    const match = url.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/);
+    return match ? match[1] : '';
+  } catch {
+    return '';
+  }
+};
