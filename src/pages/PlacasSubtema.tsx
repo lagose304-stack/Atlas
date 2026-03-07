@@ -46,7 +46,7 @@ const PlacasSubtema: React.FC = () => {
         .from('placas')
         .select('id, photo_url')
         .eq('subtema_id', subtemaId)
-        .order('created_at', { ascending: false });
+        .order('sort_order', { ascending: true });
 
       if (placasData) setPlacas(placasData);
 

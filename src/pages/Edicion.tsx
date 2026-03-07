@@ -94,7 +94,22 @@ const styles: { [key: string]: React.CSSProperties } = {
     },
     topButtons: {
         marginBottom: '30px',
-    }
+    },
+    pageButton: {
+        padding: '12px 22px',
+        border: '1.5px solid #d1d5db',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        backgroundColor: '#f1f5f9',
+        color: '#334155',
+        fontSize: '1em',
+        fontWeight: 600,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        transition: 'background 0.15s, border-color 0.15s',
+        fontFamily: 'inherit',
+    },
 };
 
 const Edicion: React.FC = () => {
@@ -138,13 +153,29 @@ const Edicion: React.FC = () => {
           </div>
         </div>
 
-        {/* Aquí puedes agregar más secciones en el futuro */}
-        {/* 
         <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Otra Sección</h2>
-          <p>Contenido de otra sección...</p>
+          <h2 style={styles.sectionTitle}>Editar páginas</h2>
+          <div style={{ ...styles.buttonContainer, flexWrap: 'wrap' }}>
+            <button
+              style={styles.pageButton}
+              onClick={() => navigate('/editar-home')}
+            >
+              🏠 Editar página principal
+            </button>
+            <button
+              style={styles.pageButton}
+              onClick={() => navigate('/editar-subtemas')}
+            >
+              📂 Editar página de subtemas
+            </button>
+            <button
+              style={styles.pageButton}
+              onClick={() => navigate('/editar-placas')}
+            >
+              🔬 Editar página de placas
+            </button>
+          </div>
         </div>
-        */}
       </div>
       <Footer />
     </div>

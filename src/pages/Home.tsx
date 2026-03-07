@@ -107,7 +107,7 @@ const Home: React.FC = () => {
   useEffect(() => {
     const fetchTemas = async () => {
       setLoading(true);
-      const { data, error } = await supabase.from('temas').select('*').order('nombre', { ascending: true });
+      const { data, error } = await supabase.from('temas').select('*').order('sort_order', { ascending: true }).order('nombre', { ascending: true });
       if (data) setTemas(data);
       if (error) console.error('Error fetching temas:', error);
       setLoading(false);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import ImageUploader from '../components/ImageUploader';
 import { supabase } from '../services/supabase';
 import { uploadToCloudinary } from '../services/cloudinary';
@@ -230,6 +230,7 @@ const slugify = (text: string) =>
     .replace(/^_|_$/g, '');
 
 const Placas: React.FC = () => {
+  const navigate = useNavigate();
   const [showClasificadasForm, setShowClasificadasForm] = useState(false);
   const [showSinClasificarForm, setShowSinClasificarForm] = useState(false);
   const [showReasignacionSection, setShowReasignacionSection] = useState(false);
@@ -477,7 +478,7 @@ const Placas: React.FC = () => {
             <div style={styles.section}>
               <h2 style={styles.sectionTitle}>Reasignacion de valores</h2>
               <div style={styles.buttonContainer}>
-                  <button style={styles.button}>Editar</button>
+                  <button style={styles.button} onClick={() => navigate('/mover-placa')}>Editar</button>
                   <button style={styles.button}>Lista de espera</button>
               </div>
             </div>
@@ -485,7 +486,7 @@ const Placas: React.FC = () => {
             <div style={styles.section}>
               <h2 style={styles.sectionTitle}>Eliminar placas</h2>
               <div style={styles.buttonContainer}>
-                  <button style={styles.button}>Eliminar</button>
+                  <button style={styles.button} onClick={() => navigate('/eliminar-placas')}>Eliminar</button>
               </div>
             </div>
           </>

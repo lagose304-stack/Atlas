@@ -45,7 +45,7 @@ const Subtemas: React.FC = () => {
         .from('subtemas')
         .select('*')
         .eq('tema_id', temaId)
-        .order('nombre', { ascending: true });
+        .order('sort_order', { ascending: true });
 
       if (subtemasData) setSubtemas(subtemasData);
       if (subtemasError) console.error('Error fetching subtemas:', subtemasError);

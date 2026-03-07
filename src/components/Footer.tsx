@@ -7,7 +7,7 @@ interface FooterProps {
   onEdicionClick?: () => void;
 }
 
-const Footer: React.FC<FooterProps> = ({ onEdicionClick }) => {
+const Footer: React.FC<FooterProps> = () => {
   const currentYear = new Date().getFullYear();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -21,169 +21,38 @@ const Footer: React.FC<FooterProps> = ({ onEdicionClick }) => {
     }
   };
 
-  const styles: { [key: string]: React.CSSProperties } = {
-    footer: {
-      backgroundColor: '#f8f9fa',
-      color: '#2c3e50',
-      padding: 'clamp(20px, 4vw, 30px) clamp(12px, 3vw, 20px) 15px',
-      marginTop: 'clamp(20px, 5vw, 50px)',
-      fontFamily: "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
-      boxShadow: '0 -2px 10px rgba(0,0,0,0.05)',
-    },
-    container: {
-      maxWidth: 'clamp(1200px, 90vw, 1600px)',
-      margin: '0 auto',
-      display: 'flex',
-      flexWrap: 'wrap',
-      justifyContent: 'center',
-      gap: 'clamp(15px, 3vw, 30px)',
-      marginBottom: '20px',
-    },
-    section: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '10px',
-      alignItems: 'center',
-      textAlign: 'center',
-      minWidth: '200px',
-      maxWidth: '280px',
-      flex: '1 1 200px',
-    },
-    title: {
-      fontSize: '1.05em',
-      fontWeight: 700,
-      color: '#2c3e50',
-      marginBottom: '6px',
-      position: 'relative',
-      paddingBottom: '8px',
-    },
-    titleUnderline: {
-      position: 'absolute',
-      bottom: 0,
-      left: '50%',
-      transform: 'translateX(-50%)',
-      width: '40px',
-      height: '2px',
-      backgroundColor: '#3498db',
-      borderRadius: '2px',
-    },
-    text: {
-      fontSize: '0.85em',
-      lineHeight: '1.5',
-      color: '#5a6c7d',
-    },
-    link: {
-      color: '#5a6c7d',
-      textDecoration: 'none',
-      transition: 'color 0.3s ease, transform 0.3s ease',
-      fontSize: '0.85em',
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '8px',
-    },
-    socialLinks: {
-      display: 'flex',
-      gap: '10px',
-      marginTop: '4px',
-    },
-    socialIcon: {
-      width: '36px',
-      height: '36px',
-      borderRadius: '8px',
-      background: '#e8ecf1',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      cursor: 'pointer',
-      transition: 'all 0.3s ease',
-      fontSize: '1.1em',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-      border: '1px solid #dce1e7',
-    },
-    divider: {
-      height: '1px',
-      background: 'linear-gradient(90deg, transparent, #dce1e7, transparent)',
-      margin: '15px 0 10px',
-    },
-    copyright: {
-      textAlign: 'center',
-      fontSize: '0.8em',
-      color: '#7f8c8d',
-      paddingTop: '5px',
-      paddingBottom: '10px',
-      letterSpacing: '0.3px',
-    },
-    contactItem: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px',
-      fontSize: '0.85em',
-      padding: '4px 0',
-    },
-    iconWrapper: {
-      width: '30px',
-      height: '30px',
-      borderRadius: '6px',
-      background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: '0.95em',
-      flexShrink: 0,
-      color: '#ffffff',
-    },
-    badge: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '6px',
-      padding: '6px 12px',
-      backgroundColor: '#e8f4fd',
-      borderRadius: '15px',
-      fontSize: '0.75em',
-      marginTop: '4px',
-      border: '1px solid #3498db',
-      color: '#2980b9',
-    },
-    edicionBadgeButton: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '6px',
-      padding: '6px 12px',
-      backgroundColor: '#e8f4fd',
-      borderRadius: '15px',
-      fontSize: '0.75em',
-      marginTop: '4px',
-      border: '1px solid #3498db',
-      color: '#2980b9',
-      cursor: 'pointer',
-      transition: 'all 0.3s ease',
-    } as React.CSSProperties,
-  };
-
   return (
-    <footer className="footer-wrapper fullWidthSection" style={styles.footer}>
-      <div className="footer-container" style={styles.container}>
+    <footer style={s.footer}>
+      {/* Línea de acento superior */}
+      <div style={s.accentLine} />
+
+      <div style={s.inner} className="footer-inner">
         {/* Sección Acerca de */}
-        <div className="footer-section" style={styles.section}>
-          <h3 style={styles.title}>
-            Acerca del Proyecto
-            <div style={styles.titleUnderline}></div>
-          </h3>
-          <p style={styles.text}>
+        <div style={s.section} className="footer-col">
+          <div style={s.sectionTitleRow} className="footer-title-row">
+            <div style={s.accentDot} className="footer-dot" />
+            <h3 style={s.sectionTitle} className="footer-col-title">Acerca del Proyecto</h3>
+          </div>
+          <p style={s.text} className="footer-col-text">
             blablablabla
           </p>
           <button
             onClick={handleGoToEdicion}
-            style={styles.edicionBadgeButton}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#3498db';
-              e.currentTarget.style.color = 'white';
-              e.currentTarget.style.transform = 'scale(1.05)';
+            style={s.edicionBtn}
+            className="footer-edicion-btn"
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, #38bdf8, #818cf8)';
+              e.currentTarget.style.color = '#ffffff';
+              e.currentTarget.style.borderColor = 'transparent';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(56,189,248,0.3)';
             }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#e8f4fd';
-              e.currentTarget.style.color = '#2980b9';
-              e.currentTarget.style.transform = 'scale(1)';
+            onMouseLeave={e => {
+              e.currentTarget.style.background = '#e0f2fe';
+              e.currentTarget.style.color = '#0369a1';
+              e.currentTarget.style.borderColor = '#bae6fd';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
             }}
           >
             <span>📝</span>
@@ -191,58 +60,67 @@ const Footer: React.FC<FooterProps> = ({ onEdicionClick }) => {
           </button>
         </div>
 
+        {/* Separador vertical */}
+        <div style={s.vertDivider} className="footer-vert-div" />
+
         {/* Sección Contacto */}
-        <div className="footer-section" style={styles.section}>
-          <h3 style={styles.title}>
-            Contacto
-            <div style={styles.titleUnderline}></div>
-          </h3>
-          <div style={styles.contactItem}>
-            <div style={styles.iconWrapper}>✉</div>
-            <a 
-              href="mailto:ejemplo@gmail.com" 
-              style={styles.link}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = '#3498db';
-                e.currentTarget.style.transform = 'translateX(5px)';
+        <div style={s.section} className="footer-col">
+          <div style={s.sectionTitleRow} className="footer-title-row">
+            <div style={s.accentDot} className="footer-dot" />
+            <h3 style={s.sectionTitle} className="footer-col-title">Contacto</h3>
+          </div>
+          <div style={s.contactItem} className="footer-contact-item">
+            <div style={s.iconWrap} className="footer-icon-wrap">✉</div>
+            <a
+              href="mailto:ejemplo@gmail.com"
+              style={s.link}
+              className="footer-col-text"
+              onMouseEnter={e => {
+                e.currentTarget.style.color = '#38bdf8';
+                e.currentTarget.style.transform = 'translateX(4px)';
               }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = '#5a6c7d';
+              onMouseLeave={e => {
+                e.currentTarget.style.color = '#94a3b8';
                 e.currentTarget.style.transform = 'translateX(0)';
               }}
             >
               ejemplo@gmail.com
             </a>
           </div>
-          <div style={styles.contactItem}>
-            <div style={styles.iconWrapper}>📞</div>
-            <span style={styles.text}>9999-9999</span>
+          <div style={s.contactItem} className="footer-contact-item">
+            <div style={s.iconWrap} className="footer-icon-wrap">📞</div>
+            <span style={s.text} className="footer-col-text">9999-9999</span>
           </div>
         </div>
 
+        {/* Separador vertical */}
+        <div style={s.vertDivider} className="footer-vert-div" />
+
         {/* Sección Redes Sociales */}
-        <div className="footer-section" style={styles.section}>
-          <h3 style={styles.title}>
-            Síguenos
-            <div style={styles.titleUnderline}></div>
-          </h3>
-          <p style={styles.text}>Mantente conectado con nosotros</p>
-          <div style={styles.socialLinks}>
+        <div style={s.section} className="footer-col">
+          <div style={s.sectionTitleRow} className="footer-title-row">
+            <div style={s.accentDot} className="footer-dot" />
+            <h3 style={s.sectionTitle} className="footer-col-title">Síguenos</h3>
+          </div>
+          <p style={s.text} className="footer-col-text">Mantente conectado con nosotros</p>
+          <div style={s.socialRow} className="footer-social-row">
             <a
               href="https://facebook.com"
               target="_blank"
               rel="noopener noreferrer"
-              style={styles.socialIcon}
+              style={s.socialIcon}
               title="Facebook"
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #3b5998 0%, #2d4373 100%)';
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #3b5998, #2d4373)';
                 e.currentTarget.style.transform = 'translateY(-4px)';
-                e.currentTarget.style.boxShadow = '0 8px 20px rgba(59, 89, 152, 0.4)';
+                e.currentTarget.style.boxShadow = '0 8px 20px rgba(59,89,152,0.5)';
+                e.currentTarget.style.borderColor = 'transparent';
               }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = '#e8ecf1';
+              onMouseLeave={e => {
+                e.currentTarget.style.background = '#e2e8f0';
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = '#cbd5e1';
               }}
             >
               📘
@@ -251,17 +129,19 @@ const Footer: React.FC<FooterProps> = ({ onEdicionClick }) => {
               href="https://instagram.com"
               target="_blank"
               rel="noopener noreferrer"
-              style={styles.socialIcon}
+              style={s.socialIcon}
               title="Instagram"
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #C13584 0%, #E1306C 100%)';
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #C13584, #E1306C)';
                 e.currentTarget.style.transform = 'translateY(-4px)';
-                e.currentTarget.style.boxShadow = '0 8px 20px rgba(225, 48, 108, 0.4)';
+                e.currentTarget.style.boxShadow = '0 8px 20px rgba(225,48,108,0.5)';
+                e.currentTarget.style.borderColor = 'transparent';
               }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = '#e8ecf1';
+              onMouseLeave={e => {
+                e.currentTarget.style.background = '#e2e8f0';
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = '#cbd5e1';
               }}
             >
               📷
@@ -270,15 +150,160 @@ const Footer: React.FC<FooterProps> = ({ onEdicionClick }) => {
         </div>
       </div>
 
-      <div style={styles.divider}></div>
+      {/* Divisor */}
+      <div style={s.divider} />
 
-      <div style={styles.copyright}>
-        © {currentYear} Atlas de Histología - UNAH. Todos los derechos reservados.
-      </div>
-      
+      {/* Copyright */}
+      <p style={s.copyright} className="footer-copyright">
+        © {currentYear} Atlas de Histología — UNAH. Todos los derechos reservados.
+      </p>
+
       {showLogin && <LoginForm onClose={() => setShowLogin(false)} />}
     </footer>
   );
+};
+
+const s: { [key: string]: React.CSSProperties } = {
+  footer: {
+    background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
+    color: '#475569',
+    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    borderTop: '1px solid #e2e8f0',
+    paddingTop: 0,
+    width: '100%',
+    alignSelf: 'stretch',
+    boxSizing: 'border-box' as const,
+  },
+  accentLine: {
+    height: '3px',
+    background: 'linear-gradient(90deg, #38bdf8, #818cf8, #34d399)',
+    width: '100%',
+  },
+  inner: {
+    maxWidth: '1100px',
+    margin: '0 auto',
+    padding: 'clamp(28px, 5vw, 52px) clamp(16px, 4vw, 40px) clamp(20px, 4vw, 36px)',
+    display: 'flex',
+    flexWrap: 'nowrap',
+    gap: 'clamp(24px, 4vw, 48px)',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    boxSizing: 'border-box',
+  },
+  section: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    alignItems: 'flex-start',
+    flex: '1 1 180px',
+    maxWidth: '280px',
+  },
+  sectionTitleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '2px',
+  },
+  accentDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
+    flexShrink: 0,
+  },
+  sectionTitle: {
+    margin: 0,
+    fontSize: '0.82em',
+    fontWeight: 700,
+    color: '#0f172a',
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+  },
+  text: {
+    fontSize: '0.85em',
+    lineHeight: 1.65,
+    color: '#64748b',
+    margin: 0,
+  },
+  link: {
+    fontSize: '0.85em',
+    color: '#64748b',
+    textDecoration: 'none',
+    transition: 'color 0.2s ease, transform 0.2s ease',
+    display: 'inline-block',
+  },
+  contactItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  iconWrap: {
+    width: '30px',
+    height: '30px',
+    borderRadius: '8px',
+    background: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '0.88em',
+    flexShrink: 0,
+    color: '#fff',
+    boxShadow: '0 2px 8px rgba(14,165,233,0.25)',
+  },
+  edicionBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '7px',
+    padding: '8px 16px',
+    borderRadius: '50px',
+    border: '1.5px solid #bae6fd',
+    background: '#e0f2fe',
+    color: '#0369a1',
+    fontSize: '0.82em',
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    transition: 'all 0.2s ease',
+    marginTop: '4px',
+  } as React.CSSProperties,
+  socialRow: {
+    display: 'flex',
+    gap: '10px',
+  },
+  socialIcon: {
+    width: '38px',
+    height: '38px',
+    borderRadius: '10px',
+    background: '#e2e8f0',
+    border: '1px solid #cbd5e1',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    fontSize: '1.1em',
+    transition: 'all 0.25s ease',
+    textDecoration: 'none',
+  } as React.CSSProperties,
+  vertDivider: {
+    width: '1px',
+    background: 'linear-gradient(180deg, transparent, #cbd5e1, transparent)',
+    alignSelf: 'stretch',
+    minHeight: '80px',
+    flexShrink: 0,
+  },
+  divider: {
+    height: '1px',
+    background: 'linear-gradient(90deg, transparent, #cbd5e1, transparent)',
+    margin: '0 clamp(16px, 4vw, 40px)',
+  },
+  copyright: {
+    textAlign: 'center',
+    fontSize: '0.78em',
+    color: '#94a3b8',
+    letterSpacing: '0.3px',
+    padding: 'clamp(12px, 2vw, 18px) 20px',
+    margin: 0,
+  },
 };
 
 export default Footer;

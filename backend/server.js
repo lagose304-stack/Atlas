@@ -28,9 +28,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Ruta para eliminar imagen de Cloudinary
-app.delete('/api/images/:public_id', async (req, res) => {
-  const { public_id } = req.params;
+// Ruta para eliminar imagen de Cloudinary (soporta public_ids con sub-carpetas)
+app.delete('/api/images/*', async (req, res) => {
+  const public_id = req.params[0];
   console.log(`Intentando eliminar imagen con public_id: ${public_id}`);
   try {
     const result = await cloudinary.uploader.destroy(public_id);

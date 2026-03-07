@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { useDraggableList } from '../hooks/useDraggableList';
 
 interface Tema {
   id: number;
@@ -22,6 +23,7 @@ const PARCIALES: { key: ParcialKey; label: string; color: string; accent: string
 
 const EditarHome: React.FC = () => {
   const navigate = useNavigate();
+  const drag = useDraggableList();
 
   const [temasMap, setTemasMap] = useState<Record<ParcialKey, Tema[]>>({
     primer: [], segundo: [], tercer: [],
@@ -30,11 +32,6 @@ const EditarHome: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-
-  const [dragId, setDragId] = useState<number | null>(null);
-  const [dragParcial, setDragParcial] = useState<ParcialKey | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
-  const [dropParcial, setDropParcial] = useState<ParcialKey | null>(null);
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
 
   useEffect(() => {
@@ -56,63 +53,12 @@ const EditarHome: React.FC = () => {
     fetchTemas();
   }, []);
 
-  const handleDragStart = (e: React.DragEvent, id: number, parcial: ParcialKey) => {
-    setDragId(id);
-    setDragParcial(parcial);
-    setDropIndex(null);
-    setDropParcial(null);
-    const ghost = document.createElement('div');
-    ghost.style.position = 'fixed';
-    ghost.style.top = '-9999px';
-    document.body.appendChild(ghost);
-    e.dataTransfer.setDragImage(ghost, 0, 0);
-    setTimeout(() => document.body.removeChild(ghost), 0);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOverCard = (e: React.DragEvent, parcial: ParcialKey, cardIndex: number) => {
-    if (dragParcial !== parcial) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const half = e.clientY < rect.top + rect.height / 2;
-    const idx = half ? cardIndex : cardIndex + 1;
-    if (idx !== dropIndex || parcial !== dropParcial) {
-      setDropIndex(idx);
-      setDropParcial(parcial);
-    }
-  };
-
-  const handleDragOverContainer = (e: React.DragEvent, parcial: ParcialKey) => {
-    if (dragParcial !== parcial) return;
-    e.preventDefault();
-  };
-
   const handleDrop = (e: React.DragEvent, parcial: ParcialKey) => {
-    e.preventDefault();
-    if (dragId === null || dragParcial !== parcial || dropIndex === null) {
-      resetDrag(); return;
+    const next = drag.applyDrop(e, parcial, temasMap[parcial]);
+    if (next) {
+      setTemasMap(prev => ({ ...prev, [parcial]: next }));
+      setHasChanges(true);
     }
-    const items = [...temasMap[parcial]];
-    const fromIndex = items.findIndex(t => t.id === dragId);
-    if (fromIndex === -1) { resetDrag(); return; }
-
-    let insertAt = dropIndex;
-    if (fromIndex < insertAt) insertAt--;
-    if (insertAt === fromIndex) { resetDrag(); return; }
-
-    const [moved] = items.splice(fromIndex, 1);
-    items.splice(insertAt, 0, moved);
-    setTemasMap(prev => ({ ...prev, [parcial]: items }));
-    setHasChanges(true);
-    resetDrag();
-  };
-
-  const resetDrag = () => {
-    setDragId(null);
-    setDragParcial(null);
-    setDropIndex(null);
-    setDropParcial(null);
   };
 
   const handleSave = useCallback(async () => {
@@ -167,22 +113,8 @@ const EditarHome: React.FC = () => {
             <div style={s.sectionsContainer}>
               {PARCIALES.map(({ key, label, color, accent }) => {
                 const items = temasMap[key];
-                const isActiveParcial = dragParcial === key;
-
-                type RenderItem =
-                  | { type: 'placeholder'; key: string }
-                  | { type: 'tema'; tema: Tema; realIndex: number };
-
-                const renderItems: RenderItem[] = [];
-                items.forEach((tema, idx) => {
-                  if (isActiveParcial && dropIndex === idx && dropParcial === key) {
-                    renderItems.push({ type: 'placeholder', key: `ph-${idx}` });
-                  }
-                  renderItems.push({ type: 'tema', tema, realIndex: idx });
-                });
-                if (isActiveParcial && dropIndex === items.length && dropParcial === key) {
-                  renderItems.push({ type: 'placeholder', key: 'ph-end' });
-                }
+                const isActiveParcial = drag.dragKey === key;
+                const renderItems = drag.getRenderItems(key, items);
 
                 return (
                   <div
@@ -205,7 +137,7 @@ const EditarHome: React.FC = () => {
 
                     <div
                       className="temas-grid-home"
-                      onDragOver={(e) => handleDragOverContainer(e, key)}
+                      onDragOver={(e) => drag.onDragOverContainer(e, key)}
                       onDrop={(e) => handleDrop(e, key)}
                     >
                       {items.length === 0 && (
@@ -221,9 +153,9 @@ const EditarHome: React.FC = () => {
                           );
                         }
 
-                        const { tema, realIndex } = item;
-                        const isBeingDragged = dragId === tema.id;
-                        const isHovered = hoveredCard === tema.id && !dragId;
+                        const { item: tema, realIndex } = item;
+                        const isBeingDragged = drag.dragId === tema.id;
+                        const isHovered = hoveredCard === tema.id && !drag.dragId;
 
                         return (
                           <div
@@ -247,9 +179,9 @@ const EditarHome: React.FC = () => {
                             }}
                             onMouseEnter={() => setHoveredCard(tema.id)}
                             onMouseLeave={() => setHoveredCard(null)}
-                            onDragStart={(e) => handleDragStart(e, tema.id, key)}
-                            onDragOver={(e) => handleDragOverCard(e, key, realIndex)}
-                            onDragEnd={resetDrag}
+                            onDragStart={(e) => drag.onDragStart(e, tema.id, key)}
+                            onDragOver={(e) => drag.onDragOverCard(e, key, realIndex)}
+                            onDragEnd={drag.resetDrag}
                           >
                             <div style={{ ...s.cardAccent, background: accent }} />
                             <span style={s.positionBadge}>{realIndex + 1}</span>
