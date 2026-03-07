@@ -4,6 +4,8 @@ import { supabase } from '../services/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ImageViewerModal from '../components/ImageViewerModal';
+import ContentBlockRenderer from '../components/ContentBlockRenderer';
+import type { ContentBlock } from '../components/PageContentEditor';
 
 interface Placa {
   id: number;
@@ -25,6 +27,7 @@ const PlacasSubtema: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
 
   useEffect(() => {
     if (!subtemaId) return;
@@ -49,6 +52,15 @@ const PlacasSubtema: React.FC = () => {
         .order('sort_order', { ascending: true });
 
       if (placasData) setPlacas(placasData);
+
+      // Cargar bloques de contenido editorial
+      const { data: blocksData } = await supabase
+        .from('content_blocks')
+        .select('*')
+        .eq('entity_type', 'placas_page')
+        .eq('entity_id', Number(subtemaId))
+        .order('sort_order', { ascending: true });
+      if (blocksData) setContentBlocks(blocksData as ContentBlock[]);
 
       setLoading(false);
     };
@@ -104,6 +116,13 @@ const PlacasSubtema: React.FC = () => {
               )}
             </div>
           </div>
+
+          {/* Bloques de contenido editorial */}
+          {!loading && contentBlocks.length > 0 && (
+            <div style={{ marginBottom: '24px' }}>
+              <ContentBlockRenderer blocks={contentBlocks} />
+            </div>
+          )}
 
           {loading ? (
             <div style={styles.spinnerWrap}>

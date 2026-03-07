@@ -13,6 +13,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, onClose }) => 
   const [zoomLevel, setZoomLevel] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [isPinching, setIsPinching] = useState(false);
 
   // Refs para handlers táctiles no-pasivos (sin stale closures)
   const containerRef = useRef<HTMLDivElement>(null);
@@ -68,6 +69,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, onClose }) => 
         pinchRef.current = { dist: getPinchDist(e.touches) };
         isDraggingRef.current = false;
         setIsDragging(false);
+        setIsPinching(true);
       } else if (e.touches.length === 1) {
         pinchRef.current = null;
         if (stateRef.current.zoom > 1) {
@@ -106,7 +108,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, onClose }) => 
 
     const onTouchEnd = (e: TouchEvent) => {
       e.preventDefault();
-      if (e.touches.length < 2) pinchRef.current = null;
+      if (e.touches.length < 2) {
+        pinchRef.current = null;
+        setIsPinching(false);
+      }
       if (e.touches.length === 0) {
         isDraggingRef.current = false;
         setIsDragging(false);
@@ -180,6 +185,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, onClose }) => 
           borderRadius: '50%', width: '50px', height: '50px',
           fontSize: '1.5em', cursor: 'pointer', fontWeight: 'bold',
           boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 1002,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
         }}
       >
         ✕
@@ -209,7 +215,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, onClose }) => 
             userSelect: 'none',
             transform: `translate(${position.x}px, ${position.y}px) scale(${zoomLevel})`,
             cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-            transition: isDragging ? 'none' : 'transform 0.3s ease',
+            transition: (isDragging || isPinching) ? 'none' : 'transform 0.3s ease',
           }}
         />
       </div>

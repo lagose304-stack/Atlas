@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useDraggableList } from '../hooks/useDraggableList';
+import PageContentEditor from '../components/PageContentEditor';
 
 interface Tema {
   id: number;
@@ -131,7 +132,8 @@ const EditarSubtemas: React.FC = () => {
             <p style={s.editBannerHint}>
               Selecciona un tema y arrastra las tarjetas desde el handle{' '}
               <strong>⠿ Arrastra</strong> para cambiar el orden. Los cambios no se
-              aplican hasta que pulses <strong>Guardar orden</strong>.
+              aplican hasta que pulses <strong>Guardar orden</strong>. Después
+              del reordenador encontrarás el editor de contenido de página.
             </p>
           </div>
         </div>
@@ -177,6 +179,7 @@ const EditarSubtemas: React.FC = () => {
 
         {/* Grid de subtemas */}
         {selectedTema && (
+          <>
           <div style={s.card}>
             <div style={s.cardHeader}>
               <h2 style={s.cardTitle}>{selectedTema.nombre}</h2>
@@ -279,6 +282,13 @@ const EditarSubtemas: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Editor de contenido de la página */}
+          <PageContentEditor
+            entityType="subtemas_page"
+            entityId={selectedTemaId!}
+          />
+          </>
         )}
       </main>
 

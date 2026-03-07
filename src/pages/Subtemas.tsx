@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import ContentBlockRenderer from '../components/ContentBlockRenderer';
+import type { ContentBlock } from '../components/PageContentEditor';
 
 interface Tema {
   id: number;
@@ -26,6 +28,7 @@ const Subtemas: React.FC = () => {
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [loading, setLoading] = useState(true);
   const [hoveredSubtema, setHoveredSubtema] = useState<number | null>(null);
+  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -49,6 +52,15 @@ const Subtemas: React.FC = () => {
 
       if (subtemasData) setSubtemas(subtemasData);
       if (subtemasError) console.error('Error fetching subtemas:', subtemasError);
+
+      // Cargar bloques de contenido editorial
+      const { data: blocksData } = await supabase
+        .from('content_blocks')
+        .select('*')
+        .eq('entity_type', 'subtemas_page')
+        .eq('entity_id', Number(temaId))
+        .order('sort_order', { ascending: true });
+      if (blocksData) setContentBlocks(blocksData as ContentBlock[]);
 
       setLoading(false);
     };
@@ -100,6 +112,11 @@ const Subtemas: React.FC = () => {
 
             {/* Separador */}
             <div style={styles.divider} />
+
+            {/* Bloques de contenido editorial */}
+            {contentBlocks.length > 0 && (
+              <ContentBlockRenderer blocks={contentBlocks} />
+            )}
 
             {/* Grilla de subtemas */}
             <h2 style={styles.subtemasHeading}>Subtemas</h2>
