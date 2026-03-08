@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import LoginForm from './LoginForm';
+import facebookLogo from '../assets/logos/facebook.png';
+import igLogo from '../assets/logos/ig.png';
+import gmailLogo from '../assets/logos/gmail.png';
+import whaLogo from '../assets/logos/wha.png';
 
 interface FooterProps {
   onEdicionClick?: () => void;
@@ -70,7 +74,9 @@ const Footer: React.FC<FooterProps> = () => {
             <h3 style={s.sectionTitle} className="footer-col-title">Contacto</h3>
           </div>
           <div style={s.contactItem} className="footer-contact-item">
-            <div style={s.iconWrap} className="footer-icon-wrap">✉</div>
+            <div style={s.iconWrap} className="footer-icon-wrap">
+              <img src={gmailLogo} alt="Gmail" style={{ width: '20px', height: '20px', objectFit: 'contain', display: 'block' }} />
+            </div>
             <a
               href="mailto:ejemplo@gmail.com"
               style={s.link}
@@ -88,7 +94,9 @@ const Footer: React.FC<FooterProps> = () => {
             </a>
           </div>
           <div style={s.contactItem} className="footer-contact-item">
-            <div style={s.iconWrap} className="footer-icon-wrap">📞</div>
+            <div style={s.iconWrap} className="footer-icon-wrap">
+              <img src={whaLogo} alt="WhatsApp" style={{ width: '20px', height: '20px', objectFit: 'contain', display: 'block' }} />
+            </div>
             <span style={s.text} className="footer-col-text">9999-9999</span>
           </div>
         </div>
@@ -123,7 +131,7 @@ const Footer: React.FC<FooterProps> = () => {
                 e.currentTarget.style.borderColor = '#cbd5e1';
               }}
             >
-              📘
+              <img src={facebookLogo} alt="Facebook" style={{ width: '22px', height: '22px', objectFit: 'contain', display: 'block' }} />
             </a>
             <a
               href="https://instagram.com"
@@ -144,7 +152,7 @@ const Footer: React.FC<FooterProps> = () => {
                 e.currentTarget.style.borderColor = '#cbd5e1';
               }}
             >
-              📷
+              <img src={igLogo} alt="Instagram" style={{ width: '22px', height: '22px', objectFit: 'contain', display: 'block' }} />
             </a>
           </div>
         </div>
