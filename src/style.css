@@ -680,6 +680,11 @@ body {
   width: 100%;
 }
 
+/* Evita que los items del grid se expandan por texto largo */
+.temas-grid-home > * {
+  min-width: 0;
+}
+
 /* 3 columnas desde 640px (tablet) */
 @media (min-width: 640px) {
   .temas-grid-home {
