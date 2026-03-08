@@ -660,6 +660,7 @@ body {
   width: 100%;
   gap: 10px;
   grid-template-columns: repeat(2, 1fr);
+  align-items: start;
   box-sizing: border-box;
 }
 
@@ -739,6 +740,7 @@ body {
   width: 100%;
   gap: 10px;
   grid-template-columns: repeat(2, 1fr);
+  align-items: start;
   box-sizing: border-box;
 }
 
@@ -807,6 +809,7 @@ body {
   width: 100%;
   gap: 10px;
   grid-template-columns: repeat(2, 1fr);
+  align-items: start;
   box-sizing: border-box;
 }
 
