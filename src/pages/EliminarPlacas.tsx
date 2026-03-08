@@ -166,16 +166,43 @@ const EliminarPlacas: React.FC = () => {
       <Header />
       <main style={s.main}>
 
-        {/* Banner modo eliminación */}
-        <div style={s.editBanner}>
-          <span style={s.editBannerIcon}>🗑️</span>
-          <div>
-            <strong>Modo eliminación — Placas</strong>
-            <p style={s.editBannerHint}>
-              Selecciona un tema y subtema, luego haz clic en las placas que deseas eliminar.
-              Las eliminaciones son <strong>permanentes e irreversibles</strong>.
-            </p>
-          </div>
+        {/* Breadcrumb */}
+        <nav style={s.breadcrumb}>
+          <button
+            onClick={() => navigate('/')}
+            style={s.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            🏠 Inicio
+          </button>
+          <span style={s.breadcrumbSep}>❯</span>
+          <button
+            onClick={() => navigate('/edicion')}
+            style={s.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            Edición
+          </button>
+          <span style={s.breadcrumbSep}>❯</span>
+          <button
+            onClick={() => navigate('/placas')}
+            style={s.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            Placas
+          </button>
+          <span style={s.breadcrumbSep}>❯</span>
+          <span style={s.breadcrumbCurrent}>Eliminar placas</span>
+        </nav>
+
+        {/* Encabezado */}
+        <div style={s.pageHeader}>
+          <h1 style={s.pageTitle}>Eliminar placas</h1>
+          <p style={s.pageSubtitle}>Selecciona un tema y subtema, luego marca las placas que deseas eliminar. Esta acción es permanente e irreversible.</p>
+          <div style={s.accentLine} />
         </div>
 
         {/* Selección de tema y subtema */}
@@ -369,11 +396,11 @@ const EliminarPlacas: React.FC = () => {
       <div style={s.actionBar}>
         <button
           style={s.cancelBtn}
-          onClick={() => navigate('/edicion')}
+          onClick={() => navigate('/placas')}
           onMouseEnter={e => (e.currentTarget.style.background = '#e2e8f0')}
           onMouseLeave={e => (e.currentTarget.style.background = '#f8fafc')}
         >
-          ← Volver
+          ← Volver a Placas
         </button>
         <div style={s.actionRight}>
           {deleteSuccess && (
@@ -445,24 +472,34 @@ const s: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     gap: '24px',
   },
-  editBanner: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '14px',
-    background: 'linear-gradient(135deg, #fee2e2, #fef3f2)',
-    border: '1.5px solid #fca5a5',
-    borderRadius: '14px',
-    padding: '16px 20px',
-    fontSize: '0.95em',
-    color: '#7f1d1d',
-    boxShadow: '0 2px 12px rgba(239,68,68,0.10)',
+  breadcrumb: {
+    display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' as const,
+    background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(8px)',
+    border: '1px solid rgba(186,230,253,0.6)', borderRadius: '12px',
+    padding: '8px 16px', boxShadow: '0 2px 8px rgba(14,165,233,0.07)',
+    alignSelf: 'flex-start',
   },
-  editBannerIcon: { fontSize: '1.6em', lineHeight: 1, marginTop: '2px', flexShrink: 0 },
-  editBannerHint: {
-    margin: '4px 0 0',
-    fontSize: '0.88em',
-    color: '#991b1b',
-    fontWeight: 400,
+  breadcrumbLink: {
+    background: 'none', border: 'none', cursor: 'pointer', color: '#0ea5e9',
+    fontWeight: 600, fontSize: '0.88em', padding: '4px 8px', borderRadius: '8px',
+    transition: 'background 0.15s', fontFamily: 'inherit', letterSpacing: '0.01em',
+  },
+  breadcrumbSep: { color: '#94a3b8', fontWeight: 700, fontSize: '0.75em', userSelect: 'none' as const },
+  breadcrumbCurrent: {
+    color: '#0f172a', fontWeight: 800, fontSize: '0.88em', padding: '4px 8px',
+    background: 'linear-gradient(135deg, #e0f2fe, #ede9fe)', borderRadius: '8px',
+    border: '1px solid #bae6fd', letterSpacing: '0.01em',
+  },
+  pageHeader: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  pageTitle: {
+    fontSize: 'clamp(1.6em, 4vw, 2.4em)', fontWeight: 900, color: '#0f172a',
+    letterSpacing: '-0.03em', margin: 0,
+  },
+  pageSubtitle: { fontSize: 'clamp(0.88em, 2vw, 1em)', color: '#64748b', margin: 0, lineHeight: 1.6 },
+  accentLine: {
+    width: '56px', height: '4px',
+    background: 'linear-gradient(90deg, #ef4444, #f87171)', borderRadius: '4px',
+    marginTop: '8px',
   },
   card: {
     background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',

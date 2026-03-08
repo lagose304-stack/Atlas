@@ -23,6 +23,17 @@ interface PickerPlaca {
   photo_url: string;
 }
 
+interface AllTema {
+  id: number;
+  nombre: string;
+}
+
+interface AllSubtema {
+  id: number;
+  nombre: string;
+  tema_id: number;
+}
+
 // ── Metadatos visuales por tipo de bloque ────────────────────────────────────
 const BLOCK_META: Record<BlockType, { label: string; icon: string; color: string }> = {
   heading:    { label: 'Título',         icon: 'H1', color: '#6366f1' },
@@ -53,11 +64,19 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
     blockId: string;
     fieldKey: string;
   } | null>(null);
-  const [pickerTab, setPickerTab] = useState<'upload' | 'placas'>('upload');
+  const [pickerTab, setPickerTab] = useState<'upload' | 'placas' | 'all'>('upload');
   const [availablePlacas, setAvailablePlacas] = useState<PickerPlaca[]>([]);
   const [loadingPlacas, setLoadingPlacas] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Estados para "Todas las placas"
+  const [allTemas, setAllTemas] = useState<AllTema[]>([]);
+  const [allSubtemas, setAllSubtemas] = useState<AllSubtema[]>([]);
+  const [allPlacas, setAllPlacas] = useState<PickerPlaca[]>([]);
+  const [allFilterTema, setAllFilterTema] = useState<string>('');
+  const [allFilterSubtema, setAllFilterSubtema] = useState<string>('');
+  const [loadingAll, setLoadingAll] = useState(false);
 
   // Drag-and-drop de bloques (por índice, no por id numérico)
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -188,6 +207,9 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
     setImageModal({ blockId, fieldKey });
     setPickerTab('upload');
     setAvailablePlacas([]);
+    setAllPlacas([]);
+    setAllFilterTema('');
+    setAllFilterSubtema('');
     setLoadingPlacas(true);
     const col = entityType === 'placas_page' ? 'subtema_id' : 'tema_id';
     supabase
@@ -199,6 +221,56 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
         setAvailablePlacas(data ?? []);
         setLoadingPlacas(false);
       });
+    // Cargar temas para la pestaña "Todas"
+    supabase
+      .from('temas')
+      .select('id, nombre')
+      .order('nombre', { ascending: true })
+      .then(({ data }) => setAllTemas(data ?? []));
+    supabase
+      .from('subtemas')
+      .select('id, nombre, tema_id')
+      .order('nombre', { ascending: true })
+      .then(({ data }) => setAllSubtemas(data ?? []));
+  };
+
+  // Cargar placas cuando cambia el filtro de la pestaña "Todas"
+  const handleAllFilterTema = (temaId: string) => {
+    setAllFilterTema(temaId);
+    setAllFilterSubtema('');
+    setAllPlacas([]);
+    if (!temaId) return;
+    setLoadingAll(true);
+    supabase
+      .from('placas')
+      .select('id, photo_url')
+      .eq('tema_id', temaId)
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => { setAllPlacas(data ?? []); setLoadingAll(false); });
+  };
+
+  const handleAllFilterSubtema = (subtemaId: string) => {
+    setAllFilterSubtema(subtemaId);
+    setAllPlacas([]);
+    if (!subtemaId) {
+      // Volver a mostrar todas las del tema
+      if (!allFilterTema) return;
+      setLoadingAll(true);
+      supabase
+        .from('placas')
+        .select('id, photo_url')
+        .eq('tema_id', allFilterTema)
+        .order('sort_order', { ascending: true })
+        .then(({ data }) => { setAllPlacas(data ?? []); setLoadingAll(false); });
+      return;
+    }
+    setLoadingAll(true);
+    supabase
+      .from('placas')
+      .select('id, photo_url')
+      .eq('subtema_id', subtemaId)
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => { setAllPlacas(data ?? []); setLoadingAll(false); });
   };
 
   const closeImageModal = () => setImageModal(null);
@@ -510,6 +582,14 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
           onPickPlaca={handlePickPlaca}
           onClose={closeImageModal}
           entityType={entityType}
+          allTemas={allTemas}
+          allSubtemas={allSubtemas}
+          allPlacas={allPlacas}
+          allFilterTema={allFilterTema}
+          allFilterSubtema={allFilterSubtema}
+          loadingAll={loadingAll}
+          onAllFilterTema={handleAllFilterTema}
+          onAllFilterSubtema={handleAllFilterSubtema}
         />
       )}
     </div>
@@ -753,8 +833,8 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
 
 // Modal selector de imagen (subir o elegir placa)
 interface ImagePickerModalProps {
-  tab: 'upload' | 'placas';
-  onTabChange: (t: 'upload' | 'placas') => void;
+  tab: 'upload' | 'placas' | 'all';
+  onTabChange: (t: 'upload' | 'placas' | 'all') => void;
   placas: PickerPlaca[];
   loadingPlacas: boolean;
   uploadingImage: boolean;
@@ -763,6 +843,14 @@ interface ImagePickerModalProps {
   onPickPlaca: (url: string) => void;
   onClose: () => void;
   entityType: 'subtemas_page' | 'placas_page';
+  allTemas: AllTema[];
+  allSubtemas: AllSubtema[];
+  allPlacas: PickerPlaca[];
+  allFilterTema: string;
+  allFilterSubtema: string;
+  loadingAll: boolean;
+  onAllFilterTema: (id: string) => void;
+  onAllFilterSubtema: (id: string) => void;
 }
 const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
   tab,
@@ -775,7 +863,20 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
   onPickPlaca,
   onClose,
   entityType,
-}) => (
+  allTemas,
+  allSubtemas,
+  allPlacas,
+  allFilterTema,
+  allFilterSubtema,
+  loadingAll,
+  onAllFilterTema,
+  onAllFilterSubtema,
+}) => {
+  const subtemasFiltered = allTemas.length > 0 && allFilterTema
+    ? allSubtemas.filter(s => String(s.tema_id) === allFilterTema)
+    : [];
+
+  return (
   <div style={es.overlay} onClick={onClose}>
     <div style={es.modalBox} onClick={e => e.stopPropagation()}>
       {/* Cabecera del modal */}
@@ -804,6 +905,12 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
           onClick={() => onTabChange('placas')}
         >
           🔬 {entityType === 'placas_page' ? 'Placas del subtema' : 'Placas del tema'}
+        </button>
+        <button
+          style={{ ...es.modalTab, ...(tab === 'all' ? es.modalTabActive : {}) }}
+          onClick={() => onTabChange('all')}
+        >
+          🗂 Todas las placas
         </button>
       </div>
 
@@ -897,10 +1004,87 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
             )}
           </div>
         )}
+
+        {tab === 'all' && (
+          <div style={es.placasTab}>
+            {/* Filtros */}
+            <div style={es.allFiltersRow}>
+              <select
+                style={es.allSelect}
+                value={allFilterTema}
+                onChange={e => onAllFilterTema(e.target.value)}
+              >
+                <option value="">— Selecciona un tema —</option>
+                {allTemas.map(t => (
+                  <option key={t.id} value={String(t.id)}>{t.nombre}</option>
+                ))}
+              </select>
+              <select
+                style={{
+                  ...es.allSelect,
+                  opacity: subtemasFiltered.length === 0 ? 0.5 : 1,
+                  cursor: subtemasFiltered.length === 0 ? 'not-allowed' : 'pointer',
+                }}
+                value={allFilterSubtema}
+                onChange={e => onAllFilterSubtema(e.target.value)}
+                disabled={subtemasFiltered.length === 0}
+              >
+                <option value="">— Todos los subtemas —</option>
+                {subtemasFiltered.map(s => (
+                  <option key={s.id} value={String(s.id)}>{s.nombre}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Resultados */}
+            {!allFilterTema ? (
+              <p style={es.noPlacasText}>Selecciona un tema para ver sus placas.</p>
+            ) : loadingAll ? (
+              <div style={es.uploadingState}>
+                <div style={es.spinner} />
+                <p style={{ color: '#64748b', margin: 0 }}>Cargando placas...</p>
+              </div>
+            ) : allPlacas.length === 0 ? (
+              <p style={es.noPlacasText}>No hay placas disponibles para esta selección.</p>
+            ) : (
+              <>
+                <p style={es.placasHint}>Haz clic en una placa para usarla como imagen.</p>
+                <div style={es.placasGrid}>
+                  {allPlacas.map(p => (
+                    <div
+                      key={p.id}
+                      style={es.placaThumb}
+                      onClick={() => onPickPlaca(p.photo_url)}
+                      onMouseEnter={e => {
+                        const el = e.currentTarget as HTMLElement;
+                        el.style.borderColor = '#38bdf8';
+                        el.style.transform = 'scale(1.03)';
+                      }}
+                      onMouseLeave={e => {
+                        const el = e.currentTarget as HTMLElement;
+                        el.style.borderColor = '#e2e8f0';
+                        el.style.transform = 'scale(1)';
+                      }}
+                      title="Usar esta placa"
+                    >
+                      <img
+                        src={p.photo_url}
+                        alt={`Placa ${p.id}`}
+                        style={es.placaThumbImg}
+                        loading="lazy"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   </div>
-);
+  );
+};
 
 // ── Estilos ───────────────────────────────────────────────────────────────────
 const es: Record<string, React.CSSProperties> = {
@@ -1493,6 +1677,26 @@ const es: Record<string, React.CSSProperties> = {
     height: '100%',
     objectFit: 'cover',
     display: 'block',
+  },
+  // Estilos para "Todas las placas"
+  allFiltersRow: {
+    display: 'flex',
+    gap: '10px',
+    marginBottom: '14px',
+    flexWrap: 'wrap' as const,
+  },
+  allSelect: {
+    flex: '1 1 180px',
+    padding: '8px 12px',
+    borderRadius: '8px',
+    border: '1.5px solid #e2e8f0',
+    background: '#f8fafc',
+    color: '#1e293b',
+    fontSize: '0.88em',
+    fontFamily: 'inherit',
+    fontWeight: 500,
+    outline: 'none',
+    cursor: 'pointer',
   },
 };
 

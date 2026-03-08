@@ -72,21 +72,19 @@ const Subtemas: React.FC = () => {
       <Header />
 
       <main style={styles.main}>
-        {/* Botón volver */}
-        <button
-          style={styles.backButton}
-          onClick={() => navigate('/')}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.25)';
-            (e.currentTarget as HTMLButtonElement).style.transform = 'translateX(-3px)';
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.15)';
-            (e.currentTarget as HTMLButtonElement).style.transform = 'translateX(0)';
-          }}
-        >
-          ← Volver al inicio
-        </button>
+        {/* Breadcrumb / navegación */}
+        <nav style={styles.breadcrumb}>
+          <button
+            onClick={() => navigate('/')}
+            style={styles.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            🏠 Inicio
+          </button>
+          <span style={styles.breadcrumbSep}>❯</span>
+          <span style={styles.breadcrumbCurrent}>{tema?.nombre ?? '...'}</span>
+        </nav>
 
         {loading ? (
           <div style={styles.loadingWrap}>
@@ -183,24 +181,52 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     alignItems: 'center',
     gap: 'clamp(12px, 3vw, 28px)',
-    padding: 'clamp(16px, 4vw, 48px) clamp(8px, 3vw, 32px) clamp(32px, 8vw, 80px)',
+    padding: 'clamp(16px, 4vw, 40px) clamp(8px, 3vw, 32px) clamp(20px, 4vw, 40px)',
     width: '100%',
     maxWidth: '1200px',
     boxSizing: 'border-box',
   },
-  backButton: {
-    alignSelf: 'flex-start',
-    padding: '10px 20px',
-    borderRadius: '50px',
-    border: '1.5px solid rgba(255,255,255,0.5)',
-    background: 'rgba(255,255,255,0.15)',
-    color: '#1e40af',
-    fontWeight: 600,
-    fontSize: '0.95em',
-    cursor: 'pointer',
+  breadcrumb: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    flexWrap: 'wrap' as const,
+    background: 'rgba(255,255,255,0.75)',
     backdropFilter: 'blur(8px)',
-    transition: 'background 0.2s ease, transform 0.2s ease',
-    boxShadow: '0 2px 8px rgba(15,23,42,0.08)',
+    border: '1px solid rgba(186,230,253,0.6)',
+    borderRadius: '12px',
+    padding: '8px 16px',
+    boxShadow: '0 2px 8px rgba(14,165,233,0.07)',
+  },
+  breadcrumbLink: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: '#0ea5e9',
+    fontWeight: 600,
+    fontSize: '0.88em',
+    padding: '4px 8px',
+    borderRadius: '8px',
+    transition: 'background 0.15s, color 0.15s',
+    fontFamily: 'inherit',
+    letterSpacing: '0.01em',
+  },
+  breadcrumbSep: {
+    color: '#94a3b8',
+    fontWeight: 700,
+    fontSize: '0.75em',
+    lineHeight: 1,
+    userSelect: 'none' as const,
+  },
+  breadcrumbCurrent: {
+    color: '#0f172a',
+    fontWeight: 800,
+    fontSize: '0.88em',
+    padding: '4px 8px',
+    background: 'linear-gradient(135deg, #e0f2fe, #ede9fe)',
+    borderRadius: '8px',
+    border: '1px solid #bae6fd',
+    letterSpacing: '0.01em',
   },
   card: {
     width: '100%',

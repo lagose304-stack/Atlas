@@ -12,10 +12,10 @@ interface Tema {
   parcial: string;
 }
 
-const PARCIALES: { key: 'primer' | 'segundo' | 'tercer'; label: string; color: string; accent: string }[] = [
-  { key: 'primer',  label: 'Primer parcial',  color: '#e0f2fe', accent: 'linear-gradient(90deg, #38bdf8, #818cf8)' },
-  { key: 'segundo', label: 'Segundo parcial', color: '#ede9fe', accent: 'linear-gradient(90deg, #818cf8, #c084fc)' },
-  { key: 'tercer',  label: 'Tercer parcial',  color: '#dcfce7', accent: 'linear-gradient(90deg, #34d399, #38bdf8)' },
+const PARCIALES: { key: 'primer' | 'segundo' | 'tercer'; label: string; num: string; color: string; accent: string; badgeBg: string }[] = [
+  { key: 'primer',  label: 'Primer parcial',  num: 'I',   color: '#f0f9ff', accent: 'linear-gradient(90deg, #38bdf8, #818cf8)', badgeBg: 'linear-gradient(135deg, #0ea5e9, #6366f1)' },
+  { key: 'segundo', label: 'Segundo parcial', num: 'II',  color: '#faf5ff', accent: 'linear-gradient(90deg, #a78bfa, #c084fc)', badgeBg: 'linear-gradient(135deg, #8b5cf6, #d946ef)' },
+  { key: 'tercer',  label: 'Tercer parcial',  num: 'III', color: '#f0fdf4', accent: 'linear-gradient(90deg, #34d399, #38bdf8)', badgeBg: 'linear-gradient(135deg, #10b981, #0ea5e9)' },
 ];
 
 const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick }) => {
@@ -24,7 +24,7 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
     <div
       style={{
         borderRadius: '14px',
-        padding: 'clamp(10px, 2vw, 18px)',
+        padding: 'clamp(6px, 1.2vw, 12px)',
         background: hovered
           ? 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)'
           : 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
@@ -63,7 +63,6 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
           border: hovered ? '2px solid #7dd3fc' : '1px solid #e2e8f0',
           background: '#f8fafc',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          marginTop: '8px',
           boxShadow: hovered ? '0 6px 16px rgba(56,189,248,0.2)' : '0 2px 8px rgba(15,23,42,0.07)',
           transition: 'border 0.25s ease, box-shadow 0.25s ease',
         }}>
@@ -125,7 +124,7 @@ const Home: React.FC = () => {
           {/* Encabezado de la sección */}
           <div style={styles.sectionHeader}>
             <h2 style={styles.temarioHeading}>Temario</h2>
-            <p style={styles.temarioSubtitle}>Selecciona un tema para explorar sus subtemas</p>
+            <p style={styles.temarioSubtitle}>Selecciona un tema para explorar sus subtemas y placas histológicas</p>
             <div style={styles.headingDivider} />
           </div>
 
@@ -136,20 +135,19 @@ const Home: React.FC = () => {
             </div>
           ) : (
             <div style={styles.temarioSectionsContainer}>
-              {PARCIALES.map(({ key, label, color, accent }) => {
+              {PARCIALES.map(({ key, label, num, color, accent, badgeBg }) => {
                 const temasParcial = temas.filter(t => t.parcial === key);
                 return (
-                  <div key={key} style={styles.temarioSection}>
-                    {/* Badge de parcial */}
-                    <div style={styles.parcialBadgeRow}>
-                      <div style={{ ...styles.parcialAccentBar, background: accent }} />
-                      <span style={{ ...styles.parcialBadge, background: color }}>
-                        {label}
-                      </span>
-                      <span style={styles.parcialCount}>
+                  <div key={key} style={{ ...styles.temarioSection, background: color }}>
+                    {/* Cabecera del parcial */}
+                    <div style={styles.parcialHeaderRow}>
+                      <span style={{ ...styles.parcialNumBadge, background: badgeBg }}>{num}</span>
+                      <h3 style={styles.parcialTitle}>{label}</h3>
+                      <span style={styles.parcialCountPill}>
                         {temasParcial.length} {temasParcial.length === 1 ? 'tema' : 'temas'}
                       </span>
                     </div>
+                    <div style={{ height: '2px', background: accent, borderRadius: '2px' }} />
 
                     {temasParcial.length > 0 ? (
                       <div className="temas-grid-home">
@@ -218,6 +216,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
+    gap: '6px',
     marginBottom: 'clamp(16px, 4vw, 36px)',
   },
   temarioHeading: {
@@ -248,41 +247,51 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   temarioSection: {
     width: '100%',
-    background: 'linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%)',
     borderRadius: 'clamp(10px, 1.5vw, 18px)',
     padding: 'clamp(12px, 2.5vw, 24px)',
     boxShadow: '0 4px 16px rgba(15,23,42,0.07), 0 1px 4px rgba(15,23,42,0.04)',
-    border: '1px solid rgba(15,23,42,0.04)',
+    border: '1px solid rgba(15,23,42,0.06)',
     display: 'flex',
     flexDirection: 'column',
     gap: 'clamp(10px, 2vw, 18px)',
     boxSizing: 'border-box',
   },
-  parcialBadgeRow: {
+  parcialHeaderRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    flexWrap: 'wrap',
+    gap: '12px',
+    flexWrap: 'wrap' as const,
   },
-  parcialAccentBar: {
-    width: '4px',
-    height: '22px',
-    borderRadius: '4px',
+  parcialNumBadge: {
+    width: '38px',
+    height: '38px',
+    borderRadius: '11px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#fff',
+    fontWeight: 900,
+    fontSize: '0.9em',
     flexShrink: 0,
+    boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+    letterSpacing: '0.02em',
   },
-  parcialBadge: {
-    display: 'inline-block',
-    padding: '5px 16px',
+  parcialTitle: {
+    fontSize: 'clamp(1em, 2.2vw, 1.2em)',
+    fontWeight: 800,
+    color: '#0f172a',
+    margin: 0,
+    letterSpacing: '-0.01em',
+    flex: 1,
+  },
+  parcialCountPill: {
+    padding: '4px 12px',
     borderRadius: '50px',
-    fontSize: 'clamp(0.78em, 1.6vw, 0.92em)',
-    fontWeight: 700,
-    color: '#1e293b',
-    letterSpacing: '0.2px',
-  },
-  parcialCount: {
-    fontSize: '0.82em',
-    color: '#94a3b8',
-    fontWeight: 500,
+    background: 'rgba(15,23,42,0.07)',
+    fontSize: '0.8em',
+    fontWeight: 600,
+    color: '#64748b',
+    flexShrink: 0,
   },
   emptyState: {
     display: 'flex',

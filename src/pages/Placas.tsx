@@ -20,205 +20,40 @@ interface Subtema {
 
 // --- Styles ---
 const styles: { [key: string]: React.CSSProperties } = {
-  page: {
-    minHeight: '100vh',
-    backgroundColor: '#f5f7fa',
-    color: '#0f172a',
-    fontFamily: "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
+  saveButton: {
+    display: 'block', width: '100%', padding: '14px', marginTop: '24px',
+    border: 'none', borderRadius: '8px', cursor: 'pointer',
+    backgroundColor: '#16a34a', color: 'white', fontSize: '1.05em',
+    fontWeight: 700, letterSpacing: '0.02em',
+    transition: 'background-color 0.2s ease, opacity 0.2s ease',
   },
-  container: {
-    padding: '40px 20px',
-    maxWidth: '800px',
-    margin: '32px auto 48px',
-    backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
+  saveButtonDisabled: {
+    display: 'block', width: '100%', padding: '14px', marginTop: '24px',
+    border: 'none', borderRadius: '8px', cursor: 'not-allowed',
+    backgroundColor: '#86efac', color: 'white', fontSize: '1.05em',
+    fontWeight: 700, opacity: 0.7,
   },
-    header: {
-        textAlign: 'center',
-        borderBottom: '1px solid #e0e0e0',
-        paddingBottom: '20px',
-        marginBottom: '30px',
-        fontSize: '2.5em',
-        fontWeight: 700,
-        color: '#2c3e50',
-    },
-    section: {
-        backgroundColor: '#fdfdfd',
-        border: '1px solid #ecf0f1',
-        borderRadius: '10px',
-        padding: '25px',
-        marginBottom: '25px',
-        transition: 'box-shadow 0.3s ease',
-    },
-    sectionTitle: {
-        margin: '0 0 20px 0',
-        color: '#34495e',
-        textAlign: 'center',
-        fontSize: '1.8em',
-        fontWeight: 600,
-    },
-    button: {
-        padding: '12px 25px',
-        border: 'none',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        backgroundColor: '#3498db',
-        color: 'white',
-        fontSize: '1em',
-        fontWeight: 500,
-        transition: 'background-color 0.3s ease, transform 0.2s ease',
-        textDecoration: 'none',
-        display: 'inline-block',
-        textAlign: 'center',
-    },
-    buttonContainer: {
-        display: 'flex',
-        justifyContent: 'center',
-        gap: '15px',
-        marginTop: '20px',
-    },
-    backButton: {
-        display: 'inline-block',
-        marginBottom: '30px',
-        padding: '10px 20px',
-        border: '1px solid #bdc3c7',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        backgroundColor: '#ecf0f1',
-        color: '#34495e',
-        textDecoration: 'none',
-        fontWeight: 600,
-        transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
-    },
-    greenButton: {
-        padding: '12px 25px',
-        border: 'none',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        backgroundColor: '#27ae60',
-        color: 'white',
-        fontSize: '1em',
-        fontWeight: 600,
-        transition: 'background-color 0.3s ease, transform 0.2s ease',
-        textDecoration: 'none',
-        display: 'inline-block',
-        textAlign: 'center',
-        textShadow: '0 1px 2px rgba(0,0,0,0.2)',
-    },
-    yellowButton: {
-        padding: '12px 25px',
-        border: 'none',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        backgroundColor: '#f39c12',
-        color: '#2c3e50',
-        fontSize: '1em',
-        fontWeight: 600,
-        transition: 'background-color 0.3s ease, transform 0.2s ease',
-        textDecoration: 'none',
-        display: 'inline-block',
-        textAlign: 'center',
-    },
-    formContainer: {
-        backgroundColor: '#f8f9fa',
-        border: '2px solid #27ae60',
-        borderRadius: '12px',
-        padding: '30px',
-        marginTop: '20px',
-    },
-    formTitle: {
-        margin: '0 0 25px 0',
-        color: '#27ae60',
-        fontSize: '1.5em',
-        fontWeight: 600,
-        textAlign: 'center',
-    },
-    cancelButton: {
-        padding: '10px 20px',
-        border: 'none',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        backgroundColor: '#e74c3c',
-        color: 'white',
-        fontSize: '1em',
-        fontWeight: 600,
-        marginTop: '20px',
-        display: 'block',
-        margin: '20px auto 0',
-    },
-    accordionContainer: {
-        marginTop: '20px',
-    },
-    accordionLabel: {
-        display: 'block',
-        fontSize: '1em',
-        fontWeight: 600,
-        color: '#34495e',
-        marginBottom: '8px',
-    },
-    select: {
-        width: '100%',
-        padding: '15px',
-        fontSize: '1em',
-        border: '2px solid #bdc3c7',
-        borderRadius: '8px',
-        backgroundColor: '#fff',
-        cursor: 'pointer',
-        transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
-        outline: 'none',
-        color: '#2c3e50',
-        fontWeight: 500,
-    },
-    saveButton: {
-        display: 'block',
-        width: '100%',
-        padding: '14px',
-        marginTop: '24px',
-        border: 'none',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        backgroundColor: '#16a34a',
-        color: 'white',
-        fontSize: '1.05em',
-        fontWeight: 700,
-        letterSpacing: '0.02em',
-        transition: 'background-color 0.2s ease, opacity 0.2s ease',
-    },
-    saveButtonDisabled: {
-        display: 'block',
-        width: '100%',
-        padding: '14px',
-        marginTop: '24px',
-        border: 'none',
-        borderRadius: '8px',
-        cursor: 'not-allowed',
-        backgroundColor: '#86efac',
-        color: 'white',
-        fontSize: '1.05em',
-        fontWeight: 700,
-        opacity: 0.7,
-    },
-    successMsg: {
-        marginTop: '16px',
-        padding: '12px 16px',
-        borderRadius: '8px',
-        backgroundColor: '#dcfce7',
-        border: '1px solid #86efac',
-        color: '#15803d',
-        fontWeight: 600,
-        textAlign: 'center',
-    },
-    errorMsg: {
-        marginTop: '16px',
-        padding: '12px 16px',
-        borderRadius: '8px',
-        backgroundColor: '#fee2e2',
-        border: '1px solid #fca5a5',
-        color: '#b91c1c',
-        fontWeight: 600,
-        textAlign: 'center',
-    },
+  successMsg: {
+    marginTop: '16px', padding: '12px 16px', borderRadius: '8px',
+    backgroundColor: '#dcfce7', border: '1px solid #86efac',
+    color: '#15803d', fontWeight: 600, textAlign: 'center',
+  },
+  errorMsg: {
+    marginTop: '16px', padding: '12px 16px', borderRadius: '8px',
+    backgroundColor: '#fee2e2', border: '1px solid #fca5a5',
+    color: '#b91c1c', fontWeight: 600, textAlign: 'center',
+  },
+  select: {
+    width: '100%', padding: '15px', fontSize: '1em',
+    border: '2px solid #bdc3c7', borderRadius: '8px',
+    backgroundColor: '#fff', cursor: 'pointer',
+    transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
+    outline: 'none', color: '#2c3e50', fontWeight: 500,
+  },
+  accordionLabel: {
+    display: 'block', fontSize: '1em', fontWeight: 600,
+    color: '#34495e', marginBottom: '8px',
+  },
 };
 
 // Convierte un nombre en slug seguro para carpeta de Cloudinary
@@ -356,145 +191,317 @@ const Placas: React.FC = () => {
   };
 
   return (
-    <div style={styles.page}>
+    <div style={p.page}>
       <Header />
-      <div style={styles.container}>
-        <h1 style={styles.header}>Placas</h1>
-        <Link to="/edicion" style={styles.backButton}>
-            Regresar a Edición
-        </Link>
 
-        <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Subir placas</h2>
-          {!isAnyFormActive && (
-            <div style={styles.buttonContainer}>
-                <button 
-                  style={styles.greenButton}
-                  onClick={() => setShowClasificadasForm(true)}
-                >
-                  Subir clasificadas
-                </button>
-                <button 
-                  style={styles.yellowButton}
-                  onClick={() => setShowSinClasificarForm(true)}
-                >
-                  Subir sin clasificar
-                </button>
-            </div>
-          )}
+      <main style={p.main}>
 
-          {showClasificadasForm && (
-            <div style={styles.formContainer}>
-              <h3 style={styles.formTitle}>Subir placas ya clasificadas</h3>
-              
-              <ImageUploader onImageSelect={handleImageSelect} />
+        {/* Breadcrumb */}
+        <nav style={p.breadcrumb}>
+          <button
+            onClick={() => navigate('/')}
+            style={p.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            🏠 Inicio
+          </button>
+          <span style={p.breadcrumbSep}>❯</span>
+          <button
+            onClick={() => navigate('/edicion')}
+            style={p.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            Edición
+          </button>
+          <span style={p.breadcrumbSep}>❯</span>
+          <span style={p.breadcrumbCurrent}>Placas</span>
+        </nav>
 
-              {imageUploaded && (
-                <>
-                  <div style={styles.accordionContainer}>
-                    <label style={styles.accordionLabel}>Seleccionar Tema:</label>
-                    <select
-                      style={styles.select}
-                      value={selectedTema}
-                      onChange={handleTemaChange}
-                      onFocus={(e) => e.currentTarget.style.borderColor = '#27ae60'}
-                      onBlur={(e) => e.currentTarget.style.borderColor = '#bdc3c7'}
-                    >
-                      <option value="">-- Selecciona un tema --</option>
-                      {temas.map((tema) => (
-                        <option key={tema.id} value={tema.id}>
-                          {tema.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {selectedTema && (
-                    <div style={styles.accordionContainer}>
-                      <label style={styles.accordionLabel}>Seleccionar Subtema:</label>
-                      <select
-                        style={styles.select}
-                        value={selectedSubtema}
-                        onChange={handleSubtemaChange}
-                        onFocus={(e) => e.currentTarget.style.borderColor = '#27ae60'}
-                        onBlur={(e) => e.currentTarget.style.borderColor = '#bdc3c7'}
-                      >
-                        <option value="">-- Selecciona un subtema --</option>
-                        {subtemas.map((subtema) => (
-                          <option key={subtema.id} value={subtema.id}>
-                            {subtema.nombre}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {selectedFile && selectedTema && selectedSubtema && (
-                    <button
-                      style={isSaving ? styles.saveButtonDisabled : styles.saveButton}
-                      onClick={handleGuardar}
-                      disabled={isSaving}
-                    >
-                      {isSaving ? 'Guardando...' : '💾 Guardar placa'}
-                    </button>
-                  )}
-
-                  {saveSuccess && (
-                    <div style={styles.successMsg}>✅ Placa guardada correctamente.</div>
-                  )}
-                  {saveError && (
-                    <div style={styles.errorMsg}>❌ {saveError}</div>
-                  )}
-                </>
-              )}
-
-              <button 
-                style={styles.cancelButton}
-                onClick={handleCancelForm}
-              >
-                Cancelar
-              </button>
-            </div>
-          )}
-
-          {showSinClasificarForm && (
-            <div style={styles.formContainer}>
-              <h3 style={styles.formTitle}>Subir placas sin clasificar</h3>
-              
-              <ImageUploader onImageSelect={handleImageSelect} />
-
-              <button 
-                style={styles.cancelButton}
-                onClick={handleCancelForm}
-              >
-                Cancelar
-              </button>
-            </div>
-          )}
+        {/* Encabezado */}
+        <div style={p.pageHeader}>
+          <h1 style={p.pageTitle}>Gestión de Placas</h1>
+          <p style={p.pageSubtitle}>Sube, clasifica, reasigna y elimina las placas histológicas del atlas.</p>
+          <div style={p.accentLine} />
         </div>
 
-        {!isAnyFormActive && (
-          <>
-            <div style={styles.section}>
-              <h2 style={styles.sectionTitle}>Reasignacion de valores</h2>
-              <div style={styles.buttonContainer}>
-                  <button style={styles.button} onClick={() => navigate('/mover-placa')}>Editar</button>
-                  <button style={styles.button}>Lista de espera</button>
-              </div>
+        {/* Grid de tarjetas */}
+        <div style={{ ...p.grid, ...(isAnyFormActive ? { gridTemplateColumns: '1fr' } : {}) }} className="placas-grid">
+
+          {/* Subir placas */}
+          <div style={p.card}>
+            <div style={{ ...p.cardAccent, background: 'linear-gradient(135deg, #10b981, #34d399)' }} />
+            <div style={p.cardIcon}>📤</div>
+            <div style={p.cardBody}>
+              <h2 style={p.cardTitle}>Subir placas</h2>
+              <p style={p.cardDesc}>Agrega nuevas placas histológicas, con o sin clasificación de tema y subtema.</p>
             </div>
 
-            <div style={styles.section}>
-              <h2 style={styles.sectionTitle}>Eliminar placas</h2>
-              <div style={styles.buttonContainer}>
-                  <button style={styles.button} onClick={() => navigate('/eliminar-placas')}>Eliminar</button>
+            {!showClasificadasForm && !showSinClasificarForm && (
+              <div style={p.btnGroup}>
+                <button
+                  style={{ ...p.actionBtn, color: '#059669', background: '#ecfdf5', borderColor: '#a7f3d0' }}
+                  onClick={() => setShowClasificadasForm(true)}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#10b981,#34d399)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#ecfdf5'; e.currentTarget.style.color = '#059669'; e.currentTarget.style.borderColor = '#a7f3d0'; }}
+                >
+                  ✅ Clasificadas
+                </button>
+                <button
+                  style={{ ...p.actionBtn, color: '#b45309', background: '#fffbeb', borderColor: '#fde68a' }}
+                  onClick={() => setShowSinClasificarForm(true)}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#f59e0b,#fbbf24)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#fffbeb'; e.currentTarget.style.color = '#b45309'; e.currentTarget.style.borderColor = '#fde68a'; }}
+                >
+                  📋 Sin clasificar
+                </button>
               </div>
+            )}
+
+            {showClasificadasForm && (
+              <div style={p.formPanel}>
+                <div style={p.formPanelHeader}>
+                  <span style={{ ...p.formPanelDot, background: 'linear-gradient(135deg,#10b981,#34d399)' }} />
+                  <span style={p.formPanelTitle}>Subir placa clasificada</span>
+                </div>
+                <div style={p.formPanelBody}>
+                  <ImageUploader onImageSelect={handleImageSelect} />
+                  {imageUploaded && (
+                    <>
+                      <div style={{ marginTop: '16px' }}>
+                        <label style={styles.accordionLabel}>Seleccionar Tema:</label>
+                        <select
+                          style={styles.select}
+                          value={selectedTema}
+                          onChange={handleTemaChange}
+                          onFocus={e => (e.currentTarget.style.borderColor = '#10b981')}
+                          onBlur={e => (e.currentTarget.style.borderColor = '#bdc3c7')}
+                        >
+                          <option value="">-- Selecciona un tema --</option>
+                          {temas.map(tema => (
+                            <option key={tema.id} value={tema.id}>{tema.nombre}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {selectedTema && (
+                        <div style={{ marginTop: '16px' }}>
+                          <label style={styles.accordionLabel}>Seleccionar Subtema:</label>
+                          <select
+                            style={styles.select}
+                            value={selectedSubtema}
+                            onChange={handleSubtemaChange}
+                            onFocus={e => (e.currentTarget.style.borderColor = '#10b981')}
+                            onBlur={e => (e.currentTarget.style.borderColor = '#bdc3c7')}
+                          >
+                            <option value="">-- Selecciona un subtema --</option>
+                            {subtemas.map(subtema => (
+                              <option key={subtema.id} value={subtema.id}>{subtema.nombre}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      {selectedFile && selectedTema && selectedSubtema && (
+                        <button
+                          style={isSaving ? styles.saveButtonDisabled : styles.saveButton}
+                          onClick={handleGuardar}
+                          disabled={isSaving}
+                        >
+                          {isSaving ? 'Guardando...' : '💾 Guardar placa'}
+                        </button>
+                      )}
+                      {saveSuccess && <div style={styles.successMsg}>✅ Placa guardada correctamente.</div>}
+                      {saveError && <div style={styles.errorMsg}>❌ {saveError}</div>}
+                    </>
+                  )}
+                  <button style={p.cancelBtn} onClick={handleCancelForm}>✕ Cancelar</button>
+                </div>
+              </div>
+            )}
+
+            {showSinClasificarForm && (
+              <div style={p.formPanel}>
+                <div style={p.formPanelHeader}>
+                  <span style={{ ...p.formPanelDot, background: 'linear-gradient(135deg,#f59e0b,#fbbf24)' }} />
+                  <span style={p.formPanelTitle}>Subir placa sin clasificar</span>
+                </div>
+                <div style={p.formPanelBody}>
+                  <ImageUploader onImageSelect={handleImageSelect} />
+                  <button style={p.cancelBtn} onClick={handleCancelForm}>✕ Cancelar</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Reasignación y Eliminar — solo visibles cuando ningún form está abierto */}
+          {!isAnyFormActive && (<>
+
+          {/* Reasignación */}
+          <div style={p.card}>
+            <div style={{ ...p.cardAccent, background: 'linear-gradient(135deg, #6366f1, #818cf8)' }} />
+            <div style={p.cardIcon}>🔄</div>
+            <div style={p.cardBody}>
+              <h2 style={p.cardTitle}>Reasignación</h2>
+              <p style={p.cardDesc}>Mueve placas entre temas o subtemas, o gestiona la lista de espera de clasificación.</p>
             </div>
-          </>
-        )}
-      </div>
+            <div style={p.btnGroup}>
+              <button
+                style={{ ...p.actionBtn, color: '#6366f1', background: '#f5f3ff', borderColor: '#c7d2fe' }}
+                onClick={() => navigate('/mover-placa')}
+                onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#6366f1,#818cf8)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.color = '#6366f1'; e.currentTarget.style.borderColor = '#c7d2fe'; }}
+              >
+                📂 Mover placa
+              </button>
+              <button
+                style={{ ...p.actionBtn, color: '#6366f1', background: '#f5f3ff', borderColor: '#c7d2fe' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#6366f1,#818cf8)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.color = '#6366f1'; e.currentTarget.style.borderColor = '#c7d2fe'; }}
+              >
+                ⏳ Lista de espera
+              </button>
+            </div>
+          </div>
+
+          {/* Eliminar */}
+          <div style={p.card}>
+            <div style={{ ...p.cardAccent, background: 'linear-gradient(135deg, #ef4444, #f87171)' }} />
+            <div style={p.cardIcon}>🗑️</div>
+            <div style={p.cardBody}>
+              <h2 style={p.cardTitle}>Eliminar placas</h2>
+              <p style={p.cardDesc}>Borra permanentemente placas del atlas. Esta acción no se puede deshacer.</p>
+            </div>
+            <div style={p.btnGroup}>
+              <button
+                style={{ ...p.actionBtn, color: '#dc2626', background: '#fff1f2', borderColor: '#fecaca' }}
+                onClick={() => navigate('/eliminar-placas')}
+                onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#ef4444,#f87171)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#fff1f2'; e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fecaca'; }}
+              >
+                🗑️ Eliminar
+              </button>
+            </div>
+          </div>
+
+          </>)}
+        </div>
+      </main>
+
       <Footer />
     </div>
   );
+};
+
+const p: { [key: string]: React.CSSProperties } = {
+  page: {
+    minHeight: '100vh',
+    background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    color: '#0f172a',
+  },
+  main: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 'clamp(16px, 3vw, 28px)',
+    padding: 'clamp(16px, 4vw, 40px) clamp(12px, 3vw, 24px) clamp(24px, 5vw, 56px)',
+    width: '100%',
+    maxWidth: '960px',
+    boxSizing: 'border-box',
+  },
+  breadcrumb: {
+    display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap',
+    background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(8px)',
+    border: '1px solid rgba(186,230,253,0.6)', borderRadius: '12px',
+    padding: '8px 16px', boxShadow: '0 2px 8px rgba(14,165,233,0.07)',
+  },
+  breadcrumbLink: {
+    background: 'none', border: 'none', cursor: 'pointer', color: '#0ea5e9',
+    fontWeight: 600, fontSize: '0.88em', padding: '4px 8px', borderRadius: '8px',
+    transition: 'background 0.15s', fontFamily: 'inherit', letterSpacing: '0.01em',
+  },
+  breadcrumbSep: { color: '#94a3b8', fontWeight: 700, fontSize: '0.75em', userSelect: 'none' },
+  breadcrumbCurrent: {
+    color: '#0f172a', fontWeight: 800, fontSize: '0.88em', padding: '4px 8px',
+    background: 'linear-gradient(135deg, #e0f2fe, #ede9fe)', borderRadius: '8px',
+    border: '1px solid #bae6fd', letterSpacing: '0.01em',
+  },
+  pageHeader: { width: '100%', display: 'flex', flexDirection: 'column', gap: '6px' },
+  pageTitle: {
+    fontSize: 'clamp(1.6em, 4vw, 2.4em)', fontWeight: 900, color: '#0f172a',
+    letterSpacing: '-0.03em', margin: 0,
+  },
+  pageSubtitle: { fontSize: 'clamp(0.88em, 2vw, 1em)', color: '#64748b', margin: 0, lineHeight: 1.6 },
+  accentLine: {
+    marginTop: '10px', width: '56px', height: '4px',
+    background: 'linear-gradient(90deg, #10b981, #34d399)', borderRadius: '4px',
+  },
+  grid: {
+    width: '100%',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: 'clamp(12px, 2.5vw, 20px)',
+    alignItems: 'start',
+  },
+  card: {
+    background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+    borderRadius: '18px',
+    padding: 'clamp(18px, 2.5vw, 28px)',
+    boxShadow: '0 6px 24px rgba(15,23,42,0.08), 0 2px 6px rgba(15,23,42,0.04)',
+    border: '1px solid rgba(15,23,42,0.05)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    position: 'relative',
+    overflow: 'hidden',
+    boxSizing: 'border-box',
+  } as React.CSSProperties,
+  cardAccent: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: '4px',
+    borderRadius: '18px 18px 0 0',
+  } as React.CSSProperties,
+  cardIcon: { fontSize: 'clamp(1.8em, 2.5vw, 2.2em)', lineHeight: 1, marginTop: '4px' },
+  cardBody: { display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 },
+  cardTitle: {
+    fontSize: 'clamp(1em, 2vw, 1.25em)', fontWeight: 800, color: '#0f172a',
+    letterSpacing: '-0.02em', margin: 0,
+  },
+  cardDesc: { fontSize: 'clamp(0.78em, 1.4vw, 0.88em)', color: '#64748b', margin: 0, lineHeight: 1.6 },
+  btnGroup: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
+  actionBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '5px',
+    padding: '9px 14px', borderRadius: '10px', border: '1.5px solid #c7d2fe',
+    background: '#f5f3ff', color: '#6366f1', fontSize: '0.82em', fontWeight: 700,
+    cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s ease',
+    letterSpacing: '0.01em',
+  } as React.CSSProperties,
+  formPanel: {
+    background: 'rgba(248,250,252,0.9)',
+    borderRadius: '12px',
+    border: '1px solid rgba(15,23,42,0.08)',
+    overflow: 'hidden',
+    marginTop: '4px',
+  },
+  formPanelHeader: {
+    display: 'flex', alignItems: 'center', gap: '8px',
+    padding: '12px 16px', borderBottom: '1px solid rgba(15,23,42,0.07)',
+    background: 'rgba(255,255,255,0.6)',
+  },
+  formPanelDot: {
+    display: 'inline-block', width: '10px', height: '10px',
+    borderRadius: '50%', flexShrink: 0,
+  } as React.CSSProperties,
+  formPanelTitle: { fontSize: '0.9em', fontWeight: 700, color: '#0f172a' },
+  formPanelBody: { padding: '16px' },
+  cancelBtn: {
+    marginTop: '14px', padding: '9px 16px', border: '1.5px solid #fecaca',
+    borderRadius: '10px', background: '#fff1f2', color: '#dc2626',
+    fontSize: '0.84em', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+    transition: 'all 0.2s ease',
+  } as React.CSSProperties,
 };
 
 export default Placas;

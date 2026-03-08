@@ -47,6 +47,11 @@ body {
    RESPONSIVE - Header
    ======================================== */
 
+/* Base — sin mínimo de ancho en el contenido central, igual que el footer */
+.header-content {
+  min-width: 0;
+}
+
 /* Tablet (768px y menos) */
 @media (max-width: 768px) {
   .header-section {
@@ -78,6 +83,20 @@ body {
     min-width: 0 !important;
   }
 
+  .header-title {
+    font-size: clamp(1.4rem, 3.5vw, 2.2rem) !important;
+    margin-bottom: 6px !important;
+  }
+
+  .header-subtitle {
+    font-size: clamp(0.78rem, 1.8vw, 1.1rem) !important;
+    margin: 5px 0 !important;
+  }
+
+  .header-subtitle2 {
+    font-size: clamp(0.72rem, 1.6vw, 1rem) !important;
+  }
+
   .decorative-hexagon,
   .decorative-circle-5,
   .decorative-circle-7 {
@@ -107,12 +126,17 @@ body {
     width: clamp(50px, 11vw, 62px) !important;
   }
 
-  .header-content h1 {
-    font-size: clamp(1.3rem, 4.5vw, 1.8rem) !important;
+  .header-title {
+    font-size: clamp(1.1rem, 4vw, 1.6rem) !important;
   }
 
-  .header-content p {
-    font-size: clamp(0.7rem, 2vw, 0.95rem) !important;
+  .header-subtitle {
+    font-size: clamp(0.68rem, 2vw, 0.92rem) !important;
+    margin: 3px 0 !important;
+  }
+
+  .header-subtitle2 {
+    font-size: clamp(0.62rem, 1.8vw, 0.84rem) !important;
   }
 }
 
@@ -137,13 +161,18 @@ body {
     width: clamp(45px, 12vw, 55px) !important;
   }
 
-  .header-content h1 {
-    font-size: clamp(1.1rem, 4vw, 1.5rem) !important;
+  .header-title {
+    font-size: clamp(1rem, 4.2vw, 1.4rem) !important;
   }
 
-  .header-content p {
-    font-size: clamp(0.65rem, 1.8vw, 0.85rem) !important;
-    margin: 4px 0 !important;
+  .header-subtitle {
+    font-size: clamp(0.62rem, 1.9vw, 0.82rem) !important;
+    margin: 2px 0 !important;
+    letter-spacing: 0 !important;
+  }
+
+  .header-subtitle2 {
+    font-size: clamp(0.58rem, 1.7vw, 0.76rem) !important;
   }
 
   .decorative-circle-3,
@@ -168,12 +197,17 @@ body {
     width: 42px !important;
   }
 
-  .header-content h1 {
-    font-size: 1rem !important;
+  .header-title {
+    font-size: 0.9rem !important;
   }
 
-  .header-content p {
-    font-size: 0.6rem !important;
+  .header-subtitle {
+    font-size: 0.58rem !important;
+    margin: 1px 0 !important;
+  }
+
+  .header-subtitle2 {
+    font-size: 0.54rem !important;
   }
 }
 
@@ -585,9 +619,9 @@ body {
 }
 
 .tema-card-img-wrap {
-  width: 70px;
-  height: 70px;
-  flex-shrink: 0;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  height: auto;
 }
 
 .tema-card-label {
@@ -604,8 +638,9 @@ body {
     gap: 14px;
   }
   .tema-card-img-wrap {
-    width: 86px;
-    height: 86px;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    height: auto;
   }
   .tema-card-label {
     font-size: 0.93em;
@@ -619,8 +654,9 @@ body {
     gap: 16px;
   }
   .tema-card-img-wrap {
-    width: 100px;
-    height: 100px;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    height: auto;
   }
   .tema-card-label {
     font-size: 1em;
@@ -634,8 +670,9 @@ body {
     gap: 18px;
   }
   .tema-card-img-wrap {
-    width: 115px;
-    height: 115px;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    height: auto;
   }
   .tema-card-label {
     font-size: 1.05em;
@@ -914,5 +951,119 @@ body {
   .footer-edicion-btn {
     font-size: 0.55em !important;
     padding: 3px 6px !important;
+  }
+}
+
+/* ========================================
+   RESPONSIVE - Edicion page grid
+   ======================================== */
+@media (max-width: 600px) {
+  .edicion-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .edicion-card-wide {
+    grid-column: span 1 !important;
+  }
+}
+
+/* ========================================
+   RESPONSIVE - Temario action grid (3 cols → 1 col)
+   ======================================== */
+@media (max-width: 720px) {
+  .temario-action-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ========================================
+   RESPONSIVE - Placas grid (3 cols → 1 col)
+   ======================================== */
+@media (max-width: 720px) {
+  .placas-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Contenedor principal */
+.cb-container {
+  gap: clamp(14px, 3vw, 22px) !important;
+}
+
+/* Párrafo */
+.cb-paragraph {
+  font-size: clamp(0.88em, 2vw, 1em) !important;
+  line-height: 1.8 !important;
+}
+
+/* ── Bloque texto + imagen lado a lado ── */
+/* Valor base en desktop ya viene del estilo inline (flexWrap: nowrap, gap: 28px) */
+
+/* Tablet (768px y menos) */
+@media (max-width: 768px) {
+  .cb-ti-row {
+    gap: 18px !important;
+  }
+  .cb-ti-figure {
+    width: 40% !important;
+  }
+  .cb-ti-text {
+    font-size: 0.95em !important;
+    line-height: 1.75 !important;
+  }
+}
+
+/* Móvil (560px y menos) */
+@media (max-width: 560px) {
+  .cb-container {
+    gap: 14px !important;
+  }
+  .cb-ti-row {
+    gap: 12px !important;
+  }
+  .cb-ti-figure {
+    width: 38% !important;
+  }
+  .cb-ti-text {
+    font-size: 0.88em !important;
+    line-height: 1.65 !important;
+  }
+  .cb-paragraph {
+    font-size: 0.88em !important;
+    line-height: 1.7 !important;
+  }
+}
+
+/* Móvil pequeño (480px y menos) */
+@media (max-width: 480px) {
+  .cb-ti-row {
+    gap: 9px !important;
+    align-items: flex-start !important;
+  }
+  .cb-ti-figure {
+    width: 36% !important;
+  }
+  .cb-ti-text {
+    font-size: 0.82em !important;
+    line-height: 1.6 !important;
+  }
+  .cb-paragraph {
+    font-size: 0.84em !important;
+  }
+}
+
+/* Móvil muy pequeño (380px y menos) */
+@media (max-width: 380px) {
+  .cb-ti-row {
+    gap: 7px !important;
+  }
+  .cb-ti-figure {
+    width: 34% !important;
+  }
+  .cb-ti-text {
+    font-size: 0.76em !important;
+    line-height: 1.55 !important;
+  }
+  .cb-paragraph {
+    font-size: 0.78em !important;
   }
 }

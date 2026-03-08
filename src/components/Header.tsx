@@ -1,10 +1,13 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 // Importar logos
 import logoFacultad from '../assets/logos/facultad.png';
 import logoLaboratorio from '../assets/logos/laboratorio.png';
 
 const Header: React.FC = () => {
+  const navigate = useNavigate();
+
   return (
     <section className="header-section" style={styles.headerSection}>
       {/* Elementos decorativos de fondo */}
@@ -26,6 +29,7 @@ const Header: React.FC = () => {
         <div 
           className="header-logo"
           style={styles.logoContainer}
+          onClick={() => navigate('/')}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = 'translateY(-6px) scale(1.05)';
             e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.15), 0 10px 20px rgba(52, 152, 219, 0.25)';
@@ -48,11 +52,11 @@ const Header: React.FC = () => {
 
         {/* Contenido Central */}
         <div className="header-content" style={styles.headerContent}>
-          <h1 style={styles.title}>Atlas de Histología</h1>
-          <p style={styles.subtitle}>
+          <h1 className="header-title" style={styles.title}>Atlas de Histología</h1>
+          <p className="header-subtitle" style={styles.subtitle}>
             Laboratorio de Histología - Dr. Rafael Perdomo Vaquero
           </p>
-          <p style={styles.subtitle2}>
+          <p className="header-subtitle header-subtitle2" style={styles.subtitle2}>
             Facultad de Ciencias Médicas - UNAH
           </p>
         </div>
@@ -61,6 +65,7 @@ const Header: React.FC = () => {
         <div 
           className="header-logo"
           style={styles.logoContainer}
+          onClick={() => navigate('/')}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = 'translateY(-6px) scale(1.05)';
             e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.15), 0 10px 20px rgba(52, 152, 219, 0.25)';
@@ -247,7 +252,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: 'clamp(10px, 3vw, 20px) clamp(5px, 2vw, 10px)',
     position: 'relative',
     zIndex: 3,
-    minWidth: '200px',
+    minWidth: 0,
   },
   title: {
     fontSize: 'clamp(1.8rem, 4vw + 0.5rem, 4rem)',

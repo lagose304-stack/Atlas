@@ -220,16 +220,43 @@ const MoverPlaca: React.FC = () => {
       <Header />
       <main style={s.main}>
 
-        {/* Banner */}
-        <div style={s.editBanner}>
-          <span style={s.editBannerIcon}>🔄</span>
-          <div>
-            <strong>Mover placa — Reasignar tema/subtema</strong>
-            <p style={s.editBannerHint}>
-              Selecciona un tema y subtema para ver sus placas, haz clic en una placa para
-              editarla y asignarla a un nuevo tema o subtema.
-            </p>
-          </div>
+        {/* Breadcrumb */}
+        <nav style={s.breadcrumb}>
+          <button
+            onClick={() => navigate('/')}
+            style={s.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            🏠 Inicio
+          </button>
+          <span style={s.breadcrumbSep}>❯</span>
+          <button
+            onClick={() => navigate('/edicion')}
+            style={s.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            Edición
+          </button>
+          <span style={s.breadcrumbSep}>❯</span>
+          <button
+            onClick={() => navigate('/placas')}
+            style={s.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            Placas
+          </button>
+          <span style={s.breadcrumbSep}>❯</span>
+          <span style={s.breadcrumbCurrent}>Mover placa</span>
+        </nav>
+
+        {/* Encabezado */}
+        <div style={s.pageHeader}>
+          <h1 style={s.pageTitle}>Mover placa</h1>
+          <p style={s.pageSubtitle}>Selecciona un tema y subtema para ver sus placas, haz clic en una para reasignarla a otro tema o subtema.</p>
+          <div style={s.accentLine} />
         </div>
 
         {/* Selectores de contexto */}
@@ -513,11 +540,11 @@ const MoverPlaca: React.FC = () => {
       <div style={s.actionBar}>
         <button
           style={s.cancelBtn}
-          onClick={() => navigate('/edicion')}
+          onClick={() => navigate('/placas')}
           onMouseEnter={e => (e.currentTarget.style.background = '#e2e8f0')}
           onMouseLeave={e => (e.currentTarget.style.background = '#f8fafc')}
         >
-          ← Volver
+          ← Volver a Placas
         </button>
         <div style={s.actionRight}>
           {saveSuccess && (
@@ -562,24 +589,34 @@ const s: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     gap: '24px',
   },
-  editBanner: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '14px',
-    background: 'linear-gradient(135deg, #fef9c3, #fef3c7)',
-    border: '1.5px solid #fde68a',
-    borderRadius: '14px',
-    padding: '16px 20px',
-    fontSize: '0.95em',
-    color: '#78350f',
-    boxShadow: '0 2px 12px rgba(234,179,8,0.12)',
+  breadcrumb: {
+    display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' as const,
+    background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(8px)',
+    border: '1px solid rgba(186,230,253,0.6)', borderRadius: '12px',
+    padding: '8px 16px', boxShadow: '0 2px 8px rgba(14,165,233,0.07)',
+    alignSelf: 'flex-start',
   },
-  editBannerIcon: { fontSize: '1.6em', lineHeight: 1, marginTop: '2px', flexShrink: 0 },
-  editBannerHint: {
-    margin: '4px 0 0',
-    fontSize: '0.88em',
-    color: '#92400e',
-    fontWeight: 400,
+  breadcrumbLink: {
+    background: 'none', border: 'none', cursor: 'pointer', color: '#0ea5e9',
+    fontWeight: 600, fontSize: '0.88em', padding: '4px 8px', borderRadius: '8px',
+    transition: 'background 0.15s', fontFamily: 'inherit', letterSpacing: '0.01em',
+  },
+  breadcrumbSep: { color: '#94a3b8', fontWeight: 700, fontSize: '0.75em', userSelect: 'none' as const },
+  breadcrumbCurrent: {
+    color: '#0f172a', fontWeight: 800, fontSize: '0.88em', padding: '4px 8px',
+    background: 'linear-gradient(135deg, #e0f2fe, #ede9fe)', borderRadius: '8px',
+    border: '1px solid #bae6fd', letterSpacing: '0.01em',
+  },
+  pageHeader: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  pageTitle: {
+    fontSize: 'clamp(1.6em, 4vw, 2.4em)', fontWeight: 900, color: '#0f172a',
+    letterSpacing: '-0.03em', margin: 0,
+  },
+  pageSubtitle: { fontSize: 'clamp(0.88em, 2vw, 1em)', color: '#64748b', margin: 0, lineHeight: 1.6 },
+  accentLine: {
+    width: '56px', height: '4px',
+    background: 'linear-gradient(90deg, #6366f1, #818cf8)', borderRadius: '4px',
+    marginTop: '8px',
   },
   card: {
     background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',

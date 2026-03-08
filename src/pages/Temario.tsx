@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
@@ -26,146 +26,41 @@ interface Subtema {
 }
 
 // --- Styles ---
-// --- Styles ---
 const styles: { [key: string]: React.CSSProperties } = {
-  page: {
-    minHeight: '100vh',
-    backgroundColor: '#f5f7fa',
-    color: '#0f172a',
-    fontFamily: "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif",
+  // Internos para los subformularios (CreateTemaForm, etc.)
+  form: { display: 'flex', flexDirection: 'column', gap: '20px' },
+  formGroup: { display: 'flex', flexDirection: 'column', gap: '8px' },
+  label: { fontWeight: 600, color: '#555', fontSize: '1em' },
+  input: {
+    padding: '12px', border: '1px solid #bdc3c7', borderRadius: '8px',
+    width: '100%', boxSizing: 'border-box' as const, fontSize: '1em',
+    transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
   },
-  container: {
-    padding: '40px 20px',
-    maxWidth: '800px',
-    margin: '32px auto 48px',
-    backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
+  select: {
+    padding: '12px', border: '1px solid #bdc3c7', borderRadius: '8px',
+    width: '100%', backgroundColor: 'white', fontSize: '1em',
   },
-    header: {
-        textAlign: 'center',
-        borderBottom: '1px solid #e0e0e0',
-        paddingBottom: '20px',
-        marginBottom: '30px',
-        fontSize: '2.5em',
-        fontWeight: 700,
-        color: '#2c3e50',
-    },
-    section: {
-        backgroundColor: '#fdfdfd',
-        border: '1px solid #ecf0f1',
-        borderRadius: '10px',
-        padding: '25px',
-        marginBottom: '25px',
-        transition: 'box-shadow 0.3s ease',
-    },
-    sectionTitle: {
-        margin: '0 0 20px 0',
-        color: '#34495e',
-        textAlign: 'center',
-        fontSize: '1.8em',
-        fontWeight: 600,
-    },
-    buttonContainer: {
-        display: 'flex',
-        justifyContent: 'center',
-        gap: '15px',
-    },
-    button: {
-        padding: '12px 25px',
-        border: 'none',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        backgroundColor: '#3498db',
-        color: 'white',
-        fontSize: '1em',
-        fontWeight: 500,
-        transition: 'background-color 0.3s ease, transform 0.2s ease',
-    },
-    form: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '20px',
-    },
-    formGroup: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-    },
-    label: {
-        fontWeight: 600,
-        color: '#555',
-        fontSize: '1em',
-    },
-    input: {
-        padding: '12px',
-        border: '1px solid #bdc3c7',
-        borderRadius: '8px',
-        width: '100%',
-        boxSizing: 'border-box',
-        fontSize: '1em',
-        transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
-    },
-    select: {
-        padding: '12px',
-        border: '1px solid #bdc3c7',
-        borderRadius: '8px',
-        width: '100%',
-        backgroundColor: 'white',
-        fontSize: '1em',
-    },
-    actionButtons: {
-        display: 'flex',
-        gap: '10px',
-        marginTop: '15px',
-        justifyContent: 'flex-end',
-    },
-    primaryButton: {
-        padding: '12px 20px',
-        border: 'none',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        backgroundColor: '#2ecc71',
-        color: 'white',
-        fontSize: '1em',
-        fontWeight: 500,
-        transition: 'background-color 0.3s ease',
-    },
-    cancelButton: {
-        padding: '12px 20px',
-        border: 'none',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        backgroundColor: '#e74c3c',
-        color: 'white',
-        fontSize: '1em',
-        fontWeight: 500,
-        transition: 'background-color 0.3s ease',
-    },
-    secondaryButton: {
-        padding: '10px 18px',
-        border: '1px solid #3498db',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        backgroundColor: 'transparent',
-        color: '#3498db',
-        alignSelf: 'flex-start',
-        fontWeight: 600,
-        transition: 'background-color 0.3s ease, color 0.3s ease',
-    },
-    backButton: {
-        display: 'inline-block',
-        marginBottom: '30px',
-        padding: '10px 20px',
-        border: '1px solid #bdc3c7',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        backgroundColor: '#ecf0f1',
-        color: '#34495e',
-        textDecoration: 'none',
-        fontWeight: 600,
-        transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
-    }
+  actionButtons: { display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'flex-end' },
+  primaryButton: {
+    padding: '12px 20px', border: 'none', borderRadius: '8px', cursor: 'pointer',
+    backgroundColor: '#2ecc71', color: 'white', fontSize: '1em', fontWeight: 500,
+    transition: 'background-color 0.3s ease',
+  },
+  cancelButton: {
+    padding: '12px 20px', border: 'none', borderRadius: '8px', cursor: 'pointer',
+    backgroundColor: '#e74c3c', color: 'white', fontSize: '1em', fontWeight: 500,
+    transition: 'background-color 0.3s ease',
+  },
+  secondaryButton: {
+    padding: '10px 18px', border: '1px solid #3498db', borderRadius: '8px', cursor: 'pointer',
+    backgroundColor: 'transparent', color: '#3498db', alignSelf: 'flex-start' as const,
+    fontWeight: 600, transition: 'background-color 0.3s ease, color 0.3s ease',
+  },
+  button: {
+    padding: '12px 25px', border: 'none', borderRadius: '8px', cursor: 'pointer',
+    backgroundColor: '#3498db', color: 'white', fontSize: '1em', fontWeight: 500,
+    transition: 'background-color 0.3s ease',
+  },
 };
 
 const Temario: React.FC = () => {
@@ -541,156 +436,376 @@ const Temario: React.FC = () => {
   const openDeleteSubtema = () => { resetAllForms(); setIsDeletingSubtema(true); };
 
   const anyFormOpen = isCreatingTema || isCreatingSubtema || isEditingTema || isEditingSubtema || isDeletingTema || isDeletingSubtema;
+  const navigate = useNavigate();
 
   return (
-    <div style={styles.page}>
+    <div style={t.page}>
       <Header />
-      <div style={styles.container}>
-        <h1 style={styles.header}>Gestión de Temario</h1>
-        <Link to="/edicion" style={styles.backButton}>Volver a Edición</Link>
-        
-        {!anyFormOpen && (
-          <>
-            <div style={styles.section}>
-              <h2 style={styles.sectionTitle}>Crear</h2>
-              <div style={styles.buttonContainer}>
-                <button style={styles.button} onClick={openCreateTema}>Tema</button>
-                <button style={styles.button} onClick={openCreateSubtema}>Subtema</button>
+
+      <main style={t.main}>
+
+        {/* Breadcrumb */}
+        <nav style={t.breadcrumb}>
+          <button
+            onClick={() => navigate('/')}
+            style={t.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            🏠 Inicio
+          </button>
+          <span style={t.breadcrumbSep}>❯</span>
+          <button
+            onClick={() => navigate('/edicion')}
+            style={t.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            Edición
+          </button>
+          <span style={t.breadcrumbSep}>❯</span>
+          <span style={t.breadcrumbCurrent}>Temario</span>
+        </nav>
+
+        {/* Encabezado */}
+        <div style={t.pageHeader}>
+          <h1 style={t.pageTitle}>Gestión de Temario</h1>
+          <p style={t.pageSubtitle}>Crea, edita o elimina los temas y subtemas del atlas histológico.</p>
+          <div style={t.accentLine} />
+        </div>
+
+        {/* Contenido principal */}
+        <div style={t.contentCard}>
+
+          {!anyFormOpen && (
+            <div style={t.actionGrid} className="temario-action-grid">
+
+              {/* Crear */}
+              <div style={t.actionSection}>
+                <div style={{ ...t.sectionAccent, background: 'linear-gradient(135deg, #6366f1, #818cf8)' }} />
+                <div style={t.sectionIcon}>➕</div>
+                <h2 style={t.sectionTitle}>Crear</h2>
+                <p style={t.sectionDesc}>Agrega un nuevo tema o subtema al atlas.</p>
+                <div style={t.btnGroup}>
+                  <button
+                    style={t.actionBtn}
+                    onClick={openCreateTema}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#6366f1,#818cf8)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.color = '#6366f1'; e.currentTarget.style.borderColor = '#c7d2fe'; }}
+                  >
+                    📚 Tema
+                  </button>
+                  <button
+                    style={{ ...t.actionBtn, color: '#6366f1', background: '#f5f3ff', borderColor: '#c7d2fe' }}
+                    onClick={openCreateSubtema}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#6366f1,#818cf8)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.color = '#6366f1'; e.currentTarget.style.borderColor = '#c7d2fe'; }}
+                  >
+                    📂 Subtema
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div style={styles.section}>
-              <h2 style={styles.sectionTitle}>Editar</h2>
-              <div style={styles.buttonContainer}>
-                <button style={styles.button} onClick={openEditTema}>Tema</button>
-                <button style={styles.button} onClick={openEditSubtema}>Subtema</button>
+              {/* Editar */}
+              <div style={t.actionSection}>
+                <div style={{ ...t.sectionAccent, background: 'linear-gradient(135deg, #f59e0b, #fbbf24)' }} />
+                <div style={t.sectionIcon}>✏️</div>
+                <h2 style={t.sectionTitle}>Editar</h2>
+                <p style={t.sectionDesc}>Modifica el nombre o imagen de un tema o subtema.</p>
+                <div style={t.btnGroup}>
+                  <button
+                    style={{ ...t.actionBtn, color: '#b45309', background: '#fffbeb', borderColor: '#fde68a' }}
+                    onClick={openEditTema}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#f59e0b,#fbbf24)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#fffbeb'; e.currentTarget.style.color = '#b45309'; e.currentTarget.style.borderColor = '#fde68a'; }}
+                  >
+                    📚 Tema
+                  </button>
+                  <button
+                    style={{ ...t.actionBtn, color: '#b45309', background: '#fffbeb', borderColor: '#fde68a' }}
+                    onClick={openEditSubtema}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#f59e0b,#fbbf24)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#fffbeb'; e.currentTarget.style.color = '#b45309'; e.currentTarget.style.borderColor = '#fde68a'; }}
+                  >
+                    📂 Subtema
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div style={styles.section}>
-              <h2 style={styles.sectionTitle}>Borrar</h2>
-              <div style={styles.buttonContainer}>
-                <button style={styles.button} onClick={openDeleteTema}>Tema</button>
-                <button style={styles.button} onClick={openDeleteSubtema}>Subtema</button>
+              {/* Borrar */}
+              <div style={t.actionSection}>
+                <div style={{ ...t.sectionAccent, background: 'linear-gradient(135deg, #ef4444, #f87171)' }} />
+                <div style={t.sectionIcon}>🗑️</div>
+                <h2 style={t.sectionTitle}>Borrar</h2>
+                <p style={t.sectionDesc}>Elimina permanentemente un tema o subtema del atlas.</p>
+                <div style={t.btnGroup}>
+                  <button
+                    style={{ ...t.actionBtn, color: '#dc2626', background: '#fff1f2', borderColor: '#fecaca' }}
+                    onClick={openDeleteTema}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#ef4444,#f87171)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#fff1f2'; e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fecaca'; }}
+                  >
+                    📚 Tema
+                  </button>
+                  <button
+                    style={{ ...t.actionBtn, color: '#dc2626', background: '#fff1f2', borderColor: '#fecaca' }}
+                    onClick={openDeleteSubtema}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#ef4444,#f87171)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#fff1f2'; e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fecaca'; }}
+                  >
+                    📂 Subtema
+                  </button>
+                </div>
               </div>
+
             </div>
-          </>
-        )}
+          )}
 
-        {(isCreatingTema || isCreatingSubtema) && (
-          <div style={styles.section}>
-            <h2 style={styles.sectionTitle}>Crear</h2>
-            {isCreatingTema ? (
-              <CreateTemaForm
-                styles={styles}
-                temaNombre={temaNombre}
-                temaLogoUrl={temaLogoUrl}
-                isUploadingLogo={isUploadingLogo}
-                onUploadLogo={handleLogoUpload}
-                onRemoveLogo={handleRemoveLogo}
-                temaParcial={temaParcial}
-                onChangeParcial={setTemaParcial}
-                subtemas={subtemas}
-                onChangeTemaNombre={setTemaNombre}
-                onAddSubtema={handleAddSubtema}
-                onSubtemaChange={handleSubtemaChange}
-                onSubtemaLogoUpload={handleSubtemaLogoUpload}
-                onSubtemaRemoveLogo={handleSubtemaRemoveLogo}
-                onSubmit={handleTemaSubmit}
-                onCancel={resetAllForms}
-              />
-            ) : (
-              <CreateSubtemaForm
-                styles={styles}
-                temas={temas}
-                selectedTemaId={selectedTemaId}
-                subtemas={subtemas}
-                onChangeSelectedTema={setSelectedTemaId}
-                onAddSubtema={handleAddSubtema}
-                onSubtemaChange={handleSubtemaChange}
-                onSubtemaLogoUpload={handleSubtemaLogoUpload}
-                onSubtemaRemoveLogo={handleSubtemaRemoveLogo}
-                isUploadingLogo={isUploadingLogo}
-                onSubmit={handleSubtemaSubmit}
-                onCancel={resetAllForms}
-              />
-            )}
-          </div>
-        )}
+          {(isCreatingTema || isCreatingSubtema) && (
+            <div style={t.formPanel}>
+              <div style={t.formPanelHeader}>
+                <h2 style={t.formPanelTitle}>
+                  <span style={{ ...t.formPanelDot, background: 'linear-gradient(135deg,#6366f1,#818cf8)' }} />
+                  {isCreatingTema ? 'Crear tema' : 'Crear subtema'}
+                </h2>
+              </div>
+              {isCreatingTema ? (
+                <CreateTemaForm
+                  styles={styles}
+                  temaNombre={temaNombre}
+                  temaLogoUrl={temaLogoUrl}
+                  isUploadingLogo={isUploadingLogo}
+                  onUploadLogo={handleLogoUpload}
+                  onRemoveLogo={handleRemoveLogo}
+                  temaParcial={temaParcial}
+                  onChangeParcial={setTemaParcial}
+                  subtemas={subtemas}
+                  onChangeTemaNombre={setTemaNombre}
+                  onAddSubtema={handleAddSubtema}
+                  onSubtemaChange={handleSubtemaChange}
+                  onSubtemaLogoUpload={handleSubtemaLogoUpload}
+                  onSubtemaRemoveLogo={handleSubtemaRemoveLogo}
+                  onSubmit={handleTemaSubmit}
+                  onCancel={resetAllForms}
+                />
+              ) : (
+                <CreateSubtemaForm
+                  styles={styles}
+                  temas={temas}
+                  selectedTemaId={selectedTemaId}
+                  subtemas={subtemas}
+                  onChangeSelectedTema={setSelectedTemaId}
+                  onAddSubtema={handleAddSubtema}
+                  onSubtemaChange={handleSubtemaChange}
+                  onSubtemaLogoUpload={handleSubtemaLogoUpload}
+                  onSubtemaRemoveLogo={handleSubtemaRemoveLogo}
+                  isUploadingLogo={isUploadingLogo}
+                  onSubmit={handleSubtemaSubmit}
+                  onCancel={resetAllForms}
+                />
+              )}
+            </div>
+          )}
 
-        {(isEditingTema || isEditingSubtema) && (
-          <div style={styles.section}>
-            <h2 style={styles.sectionTitle}>Editar</h2>
-            {isEditingTema ? (
-              <EditTemaForm
-                styles={styles}
-                temas={temas}
-                editingTemaId={editingTemaId}
-                editingTemaNombre={editingTemaNombre}
-                editingTemaCurrentLogoUrl={editingTemaLogoUrl}
-                editingTemaNewLogoPreviewUrl={editingTemaNewLogoPreviewUrl}
-                isUploadingLogo={isUploadingLogo}
-                onChangeEditingTemaId={setEditingTemaId}
-                onChangeEditingTemaNombre={setEditingTemaNombre}
-                onUploadNewLogo={handleUploadNewTemaLogo}
-                onRemoveNewLogo={handleRemoveNewTemaLogo}
-                onSubmit={handleUpdateTema}
-                onCancel={resetAllForms}
-              />
-            ) : (
-              <EditSubtemaForm
-                styles={styles}
-                temas={temas}
-                selectedTemaId={selectedTemaId}
-                subtemasOfSelectedTema={subtemasOfSelectedTema}
-                editingSubtemaId={editingSubtemaId}
-                editingSubtemaNombre={editingSubtemaNombre}
-                editingSubtemaCurrentLogoUrl={editingSubtemaLogoUrl}
-                editingSubtemaNewLogoPreviewUrl={editingSubtemaNewLogoPreviewUrl}
-                isUploadingLogo={isUploadingLogo}
-                onChangeSelectedTema={setSelectedTemaId}
-                onChangeEditingSubtemaId={setEditingSubtemaId}
-                onChangeEditingSubtemaNombre={setEditingSubtemaNombre}
-                onUploadNewLogo={handleUploadNewSubtemaLogo}
-                onRemoveNewLogo={handleRemoveNewSubtemaLogo}
-                onSubmit={handleUpdateSubtema}
-                onCancel={resetAllForms}
-              />
-            )}
-          </div>
-        )}
+          {(isEditingTema || isEditingSubtema) && (
+            <div style={t.formPanel}>
+              <div style={t.formPanelHeader}>
+                <h2 style={t.formPanelTitle}>
+                  <span style={{ ...t.formPanelDot, background: 'linear-gradient(135deg,#f59e0b,#fbbf24)' }} />
+                  {isEditingTema ? 'Editar tema' : 'Editar subtema'}
+                </h2>
+              </div>
+              {isEditingTema ? (
+                <EditTemaForm
+                  styles={styles}
+                  temas={temas}
+                  editingTemaId={editingTemaId}
+                  editingTemaNombre={editingTemaNombre}
+                  editingTemaCurrentLogoUrl={editingTemaLogoUrl}
+                  editingTemaNewLogoPreviewUrl={editingTemaNewLogoPreviewUrl}
+                  isUploadingLogo={isUploadingLogo}
+                  onChangeEditingTemaId={setEditingTemaId}
+                  onChangeEditingTemaNombre={setEditingTemaNombre}
+                  onUploadNewLogo={handleUploadNewTemaLogo}
+                  onRemoveNewLogo={handleRemoveNewTemaLogo}
+                  onSubmit={handleUpdateTema}
+                  onCancel={resetAllForms}
+                />
+              ) : (
+                <EditSubtemaForm
+                  styles={styles}
+                  temas={temas}
+                  selectedTemaId={selectedTemaId}
+                  subtemasOfSelectedTema={subtemasOfSelectedTema}
+                  editingSubtemaId={editingSubtemaId}
+                  editingSubtemaNombre={editingSubtemaNombre}
+                  editingSubtemaCurrentLogoUrl={editingSubtemaLogoUrl}
+                  editingSubtemaNewLogoPreviewUrl={editingSubtemaNewLogoPreviewUrl}
+                  isUploadingLogo={isUploadingLogo}
+                  onChangeSelectedTema={setSelectedTemaId}
+                  onChangeEditingSubtemaId={setEditingSubtemaId}
+                  onChangeEditingSubtemaNombre={setEditingSubtemaNombre}
+                  onUploadNewLogo={handleUploadNewSubtemaLogo}
+                  onRemoveNewLogo={handleRemoveNewSubtemaLogo}
+                  onSubmit={handleUpdateSubtema}
+                  onCancel={resetAllForms}
+                />
+              )}
+            </div>
+          )}
 
-        {(isDeletingTema || isDeletingSubtema) && (
-          <div style={styles.section}>
-            <h2 style={styles.sectionTitle}>Borrar</h2>
-            {isDeletingTema ? (
-              <DeleteTemaForm
-                styles={styles}
-                temas={temas}
-                deletingTemaId={deletingTemaId}
-                onChangeDeletingTemaId={setDeletingTemaId}
-                onSubmit={handleDeleteTema}
-                onCancel={resetAllForms}
-              />
-            ) : (
-              <DeleteSubtemaForm
-                styles={styles}
-                temas={temas}
-                deletingTemaId={deletingTemaId}
-                subtemasOfSelectedTema={subtemasOfSelectedTema}
-                deletingSubtemaId={deletingSubtemaId}
-                onChangeDeletingTemaId={setDeletingTemaId}
-                onChangeDeletingSubtemaId={setDeletingSubtemaId}
-                onSubmit={handleDeleteSubtema}
-                onCancel={resetAllForms}
-              />
-            )}
-          </div>
-        )}
-      </div>
+          {(isDeletingTema || isDeletingSubtema) && (
+            <div style={t.formPanel}>
+              <div style={t.formPanelHeader}>
+                <h2 style={t.formPanelTitle}>
+                  <span style={{ ...t.formPanelDot, background: 'linear-gradient(135deg,#ef4444,#f87171)' }} />
+                  {isDeletingTema ? 'Borrar tema' : 'Borrar subtema'}
+                </h2>
+              </div>
+              {isDeletingTema ? (
+                <DeleteTemaForm
+                  styles={styles}
+                  temas={temas}
+                  deletingTemaId={deletingTemaId}
+                  onChangeDeletingTemaId={setDeletingTemaId}
+                  onSubmit={handleDeleteTema}
+                  onCancel={resetAllForms}
+                />
+              ) : (
+                <DeleteSubtemaForm
+                  styles={styles}
+                  temas={temas}
+                  deletingTemaId={deletingTemaId}
+                  subtemasOfSelectedTema={subtemasOfSelectedTema}
+                  deletingSubtemaId={deletingSubtemaId}
+                  onChangeDeletingTemaId={setDeletingTemaId}
+                  onChangeDeletingSubtemaId={setDeletingSubtemaId}
+                  onSubmit={handleDeleteSubtema}
+                  onCancel={resetAllForms}
+                />
+              )}
+            </div>
+          )}
+
+        </div>
+      </main>
+
       <Footer />
     </div>
   );
+};
+
+const t: { [key: string]: React.CSSProperties } = {
+  page: {
+    minHeight: '100vh',
+    background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    color: '#0f172a',
+  },
+  main: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 'clamp(16px, 3vw, 28px)',
+    padding: 'clamp(16px, 4vw, 40px) clamp(12px, 3vw, 24px) clamp(24px, 5vw, 56px)',
+    width: '100%',
+    maxWidth: '960px',
+    boxSizing: 'border-box',
+  },
+  breadcrumb: {
+    display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap',
+    background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(8px)',
+    border: '1px solid rgba(186,230,253,0.6)', borderRadius: '12px',
+    padding: '8px 16px', boxShadow: '0 2px 8px rgba(14,165,233,0.07)',
+  },
+  breadcrumbLink: {
+    background: 'none', border: 'none', cursor: 'pointer', color: '#0ea5e9',
+    fontWeight: 600, fontSize: '0.88em', padding: '4px 8px', borderRadius: '8px',
+    transition: 'background 0.15s', fontFamily: 'inherit', letterSpacing: '0.01em',
+  },
+  breadcrumbSep: { color: '#94a3b8', fontWeight: 700, fontSize: '0.75em', userSelect: 'none' },
+  breadcrumbCurrent: {
+    color: '#0f172a', fontWeight: 800, fontSize: '0.88em', padding: '4px 8px',
+    background: 'linear-gradient(135deg, #e0f2fe, #ede9fe)', borderRadius: '8px',
+    border: '1px solid #bae6fd', letterSpacing: '0.01em',
+  },
+  pageHeader: { width: '100%', display: 'flex', flexDirection: 'column', gap: '6px' },
+  pageTitle: {
+    fontSize: 'clamp(1.6em, 4vw, 2.4em)', fontWeight: 900, color: '#0f172a',
+    letterSpacing: '-0.03em', margin: 0,
+  },
+  pageSubtitle: { fontSize: 'clamp(0.88em, 2vw, 1em)', color: '#64748b', margin: 0, lineHeight: 1.6 },
+  accentLine: {
+    marginTop: '10px', width: '56px', height: '4px',
+    background: 'linear-gradient(90deg, #6366f1, #818cf8)', borderRadius: '4px',
+  },
+  contentCard: {
+    width: '100%',
+    background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+    borderRadius: '18px',
+    padding: 'clamp(20px, 3vw, 36px)',
+    boxShadow: '0 6px 24px rgba(15,23,42,0.08), 0 2px 6px rgba(15,23,42,0.04)',
+    border: '1px solid rgba(15,23,42,0.05)',
+    boxSizing: 'border-box',
+  },
+  actionGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: 'clamp(12px, 2vw, 20px)',
+  },
+  actionSection: {
+    position: 'relative',
+    background: '#f8fafc',
+    borderRadius: '14px',
+    padding: 'clamp(16px, 2.5vw, 28px)',
+    border: '1px solid rgba(15,23,42,0.06)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    overflow: 'hidden',
+    boxSizing: 'border-box',
+  } as React.CSSProperties,
+  sectionAccent: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: '4px',
+    borderRadius: '14px 14px 0 0',
+  } as React.CSSProperties,
+  sectionIcon: { fontSize: 'clamp(1.6em, 2.5vw, 2em)', lineHeight: 1, marginTop: '4px' },
+  sectionTitle: {
+    fontSize: 'clamp(1em, 2vw, 1.25em)', fontWeight: 800, color: '#0f172a',
+    letterSpacing: '-0.02em', margin: 0,
+  },
+  sectionDesc: { fontSize: 'clamp(0.78em, 1.4vw, 0.88em)', color: '#64748b', margin: 0, lineHeight: 1.55 },
+  btnGroup: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' },
+  actionBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '5px',
+    padding: '9px 16px', borderRadius: '10px', border: '1.5px solid #c7d2fe',
+    background: '#f5f3ff', color: '#6366f1', fontSize: '0.84em', fontWeight: 700,
+    cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s ease',
+    letterSpacing: '0.01em',
+  } as React.CSSProperties,
+  formPanel: {
+    background: '#f8fafc',
+    borderRadius: '14px',
+    border: '1px solid rgba(15,23,42,0.07)',
+    overflow: 'hidden',
+  },
+  formPanelHeader: {
+    padding: '16px 24px',
+    borderBottom: '1px solid rgba(15,23,42,0.07)',
+    background: 'rgba(255,255,255,0.6)',
+  },
+  formPanelTitle: {
+    display: 'flex', alignItems: 'center', gap: '10px',
+    fontSize: 'clamp(1em, 2vw, 1.2em)', fontWeight: 800, color: '#0f172a',
+    margin: 0,
+  },
+  formPanelDot: {
+    display: 'inline-block', width: '12px', height: '12px',
+    borderRadius: '50%', flexShrink: 0,
+  } as React.CSSProperties,
 };
 
 export default Temario;

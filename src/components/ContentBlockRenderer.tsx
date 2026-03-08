@@ -18,7 +18,7 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({ blocks }) =
 
   return (
     <>
-      <div style={rs.container}>
+      <div style={rs.container} className="cb-container">
         {blocks.map(block => (
           <BlockItem key={block.id} block={block} onZoom={setSelectedImage} />
         ))}
@@ -67,7 +67,7 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
     case 'paragraph': {
       if (!c.text) return null;
       const align = (c.text_align as React.CSSProperties['textAlign']) ?? 'left';
-      return <p style={{ ...rs.paragraph, textAlign: align }}>{c.text}</p>;
+      return <p className="cb-paragraph" style={{ ...rs.paragraph, textAlign: align }}>{c.text}</p>;
     }
 
     case 'image': {
@@ -105,9 +105,9 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
       const tiTextAlign = (c.ti_text_align as React.CSSProperties['textAlign']) ?? 'left';
 
       return (
-        <div style={{ ...rs.tiRow, flexDirection: direction }}>
+        <div style={{ ...rs.tiRow, flexDirection: direction }} className="cb-ti-row">
           {hasImage && (
-            <figure style={rs.tiFigure}>
+            <figure style={rs.tiFigure} className="cb-ti-figure">
               <div
                 style={{ ...rs.imgClickWrap, ...(imgHovered ? rs.imgClickWrapHover : {}) }}
                 onClick={() => onZoom(c.image_url)}
@@ -129,7 +129,7 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
               )}
             </figure>
           )}
-          {hasText && <p style={{ ...rs.tiText, textAlign: tiTextAlign }}>{c.text}</p>}
+          {hasText && <p className="cb-ti-text" style={{ ...rs.tiText, textAlign: tiTextAlign }}>{c.text}</p>}
         </div>
       );
     }
@@ -247,12 +247,11 @@ const rs: Record<string, React.CSSProperties> = {
     display: 'flex',
     gap: '28px',
     alignItems: 'flex-start',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
   },
   tiFigure: {
     flexShrink: 0,
-    width: 'min(42%, 340px)',
-    minWidth: '200px',
+    width: '42%',
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
@@ -266,7 +265,7 @@ const rs: Record<string, React.CSSProperties> = {
     boxShadow: '0 4px 18px rgba(15,23,42,0.12)',
   },
   tiText: {
-    flex: '1 1 200px',
+    flex: '1 1 0',
     minWidth: 0,
     fontSize: '1em',
     lineHeight: 1.85,
