@@ -104,10 +104,12 @@ const EditSubtemaForm: React.FC<EditSubtemaFormProps> = ({
               <div style={styles.formGroup}>
                 <label style={styles.label}>Nuevo nombre del Subtema:</label>
                 <input
-                  style={styles.input}
                   type="text"
+                  style={styles.input}
                   value={editingSubtemaNombre}
-                  onChange={(e) => onChangeEditingSubtemaNombre(e.target.value)}
+                  onChange={e => onChangeEditingSubtemaNombre(e.target.value)}
+                  spellCheck
+                  lang="es"
                   required
                 />
               </div>

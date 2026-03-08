@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import LoadingToast, { LoadingToastType } from '../components/LoadingToast';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
 import CreateTemaForm from '../components/temario/CreateTemaForm';
@@ -63,6 +64,16 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
 };
 
+// Helper: extrae todas las URLs de imagen de un array de content_blocks
+function extractBlockImageUrls(blocks: { block_type: string; content: Record<string, string> }[]): string[] {
+  const urls: string[] = [];
+  for (const b of blocks) {
+    if (b.block_type === 'image' && b.content.url) urls.push(b.content.url);
+    if (b.block_type === 'text_image' && b.content.image_url) urls.push(b.content.image_url);
+  }
+  return urls.filter(Boolean);
+}
+
 const Temario: React.FC = () => {
   // ... (todos los estados permanecen igual)
   const [isCreatingTema, setIsCreatingTema] = useState(false);
@@ -88,6 +99,8 @@ const Temario: React.FC = () => {
   const [editingSubtemaNewLogoPreviewUrl, setEditingSubtemaNewLogoPreviewUrl] = useState('');
   const [isDeletingTema, setIsDeletingTema] = useState(false);
   const [isDeletingSubtema, setIsDeletingSubtema] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
+  const [loadingType, setLoadingType] = useState<LoadingToastType>('saving');
   const [deletingTemaId, setDeletingTemaId] = useState<string>('');
   const [deletingSubtemaId, setDeletingSubtemaId] = useState<string>('');
   const [temas, setTemas] = useState<Tema[]>([]);
@@ -208,6 +221,7 @@ const Temario: React.FC = () => {
     if (!temaLogoFile) return alert('Debes subir un logo para el tema.');
     if (!temaParcial) return alert('Selecciona el parcial al que pertenece el tema.');
     try {
+      setLoadingMessage('Creando tema'); setLoadingType('uploading');
       setIsUploadingLogo(true);
       const upload = await uploadToCloudinary(temaLogoFile, { folder: 'temas/logos' });
       const finalLogoUrl = upload.secure_url || '';
@@ -249,6 +263,7 @@ const Temario: React.FC = () => {
     const subtemasValidos = subtemas.filter(s => s.nombre.trim() !== '');
     if (subtemasValidos.length === 0) return alert('Agrega al menos un subtema.');
     try {
+      setLoadingMessage('Creando subtemas'); setLoadingType('uploading');
       setIsUploadingLogo(true);
       const subtemasConLogo = await Promise.all(
         subtemasValidos.map(async (s) => {
@@ -277,6 +292,7 @@ const Temario: React.FC = () => {
     if (!editingTemaId) return alert('Por favor, selecciona un tema para editar.');
     if (!editingTemaNombre.trim()) return alert('El nombre no puede estar vacío.');
     try {
+      setLoadingMessage('Actualizando tema'); setLoadingType('updating');
       setIsUploadingLogo(true);
       const updateData: { nombre: string; logo_url?: string } = { nombre: editingTemaNombre };
       if (editingTemaNewLogoFile) {
@@ -306,6 +322,7 @@ const Temario: React.FC = () => {
     if (!editingSubtemaId) return alert('Por favor, selecciona un subtema para editar.');
     if (!editingSubtemaNombre.trim()) return alert('El nombre no puede estar vacío.');
     try {
+      setLoadingMessage('Actualizando subtema'); setLoadingType('updating');
       setIsUploadingLogo(true);
       const updateData: { nombre: string; logo_url?: string } = { nombre: editingSubtemaNombre };
       if (editingSubtemaNewLogoFile) {
@@ -332,46 +349,95 @@ const Temario: React.FC = () => {
   const handleDeleteTema = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!deletingTemaId) return alert('Por favor, selecciona un tema para borrar.');
-    if (!window.confirm('¿Estás seguro de que quieres borrar este tema? Todos los subtemas asociados también se eliminarán.')) return;
+    if (!window.confirm('¿Estás seguro? Se borrarán el tema, todos sus subtemas, placas y el contenido de todas sus páginas.')) return;
     try {
+      setLoadingMessage('Eliminando tema y contenido'); setLoadingType('deleting');
       setIsUploadingLogo(true);
-      // Obtener subtemas para borrar sus fotos
+      const temaIdNum = Number(deletingTemaId);
+
+      // 1. Recopilar subtemas del tema
       const { data: subtemasData } = await supabase
-        .from('subtemas')
-        .select('id, logo_url')
-        .eq('tema_id', deletingTemaId);
+        .from('subtemas').select('id, logo_url').eq('tema_id', temaIdNum);
+      const subtemaIds = (subtemasData ?? []).map(s => s.id);
+      const subtemaIdSet = new Set(subtemaIds);
 
-      // Obtener foto del tema
-      const temaABorrar = temas.find(t => t.id.toString() === deletingTemaId);
+      // 2. Recopilar placas del tema
+      const { data: placasData } = await supabase
+        .from('placas').select('id, photo_url').eq('tema_id', temaIdNum);
 
-      // Borrar el tema de la BD (los subtemas se borran en cascada si está configurado,
-      // si no, los borramos primero)
-      const { error: subtemaDeleteError } = await supabase
-        .from('subtemas')
-        .delete()
-        .eq('tema_id', deletingTemaId);
-      if (subtemaDeleteError) console.warn('Error al borrar subtemas de BD:', subtemaDeleteError.message);
+      // 3. Obtener TODOS los content_blocks para separar los propios de los externos
+      const { data: allBlocks } = await supabase
+        .from('content_blocks').select('block_type, content, entity_type, entity_id');
 
-      const { error } = await supabase.from('temas').delete().match({ id: deletingTemaId });
+      // Bloques que pertenecen a las páginas que vamos a borrar
+      const ownBlocks = (allBlocks ?? []).filter(b =>
+        (b.entity_type === 'subtemas_page' && b.entity_id === temaIdNum) ||
+        (b.entity_type === 'placas_page'   && subtemaIdSet.has(b.entity_id))
+      );
+      // Bloques de OTRAS páginas (no se borrarán)
+      const externalBlocks = (allBlocks ?? []).filter(b =>
+        !((b.entity_type === 'subtemas_page' && b.entity_id === temaIdNum) ||
+          (b.entity_type === 'placas_page'   && subtemaIdSet.has(b.entity_id)))
+      );
+      const externalUrlSet = new Set(extractBlockImageUrls(externalBlocks as any));
+
+      // 4. Placas que pueden borrarse: las que NO están referenciadas en páginas externas
+      const placasToDelete = (placasData ?? []).filter(p => !externalUrlSet.has(p.photo_url));
+      const placasToDeleteIds = placasToDelete.map(p => p.id);
+      const placasToDeleteUrlSet = new Set(placasToDelete.map(p => p.photo_url));
+
+      // 5. URLs de imágenes en los bloques propios (solo borrar las no protegidas externamente)
+      const ownBlockImageUrls = extractBlockImageUrls(ownBlocks as any);
+      const blockUrlsToDelete = ownBlockImageUrls.filter(u => !externalUrlSet.has(u));
+
+      // 6. Borrar content_blocks en BD
+      await supabase.from('content_blocks').delete()
+        .eq('entity_type', 'subtemas_page').eq('entity_id', temaIdNum);
+      if (subtemaIds.length > 0) {
+        await supabase.from('content_blocks').delete()
+          .eq('entity_type', 'placas_page').in('entity_id', subtemaIds);
+      }
+
+      // 7. Borrar solo las placas no protegidas en BD
+      if (placasToDeleteIds.length > 0) {
+        await supabase.from('placas').delete().in('id', placasToDeleteIds);
+      }
+
+      // 8. Borrar subtemas y tema en BD
+      await supabase.from('subtemas').delete().eq('tema_id', temaIdNum);
+      const { error } = await supabase.from('temas').delete().match({ id: temaIdNum });
       if (error) return alert(`Error al borrar el tema: ${error.message}`);
 
-      // Borrar fotos de Cloudinary (en segundo plano, sin bloquear)
+      // 9. Borrar imágenes en Cloudinary
       const deletePromises: Promise<any>[] = [];
+      const temaABorrar = temas.find(t => t.id.toString() === deletingTemaId);
       if (temaABorrar?.logo_url) {
         const pid = getCloudinaryPublicId(temaABorrar.logo_url);
-        if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('No se pudo borrar foto del tema:', e)));
+        if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Logo tema:', e)));
       }
-      if (subtemasData) {
-        for (const s of subtemasData) {
-          if (s.logo_url) {
-            const pid = getCloudinaryPublicId(s.logo_url);
-            if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('No se pudo borrar foto de subtema:', e)));
-          }
+      for (const s of (subtemasData ?? [])) {
+        if (s.logo_url) {
+          const pid = getCloudinaryPublicId(s.logo_url);
+          if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Logo subtema:', e)));
+        }
+      }
+      // Solo fotos de placas que no están protegidas
+      for (const p of placasToDelete) {
+        if (p.photo_url) {
+          const pid = getCloudinaryPublicId(p.photo_url);
+          if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Placa foto:', e)));
+        }
+      }
+      // Imágenes subidas en bloques que no son placas del tema (ya borradas arriba) y no están protegidas
+      for (const url of blockUrlsToDelete) {
+        if (!placasToDeleteUrlSet.has(url)) {
+          const pid = getCloudinaryPublicId(url);
+          if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Bloque imagen:', e)));
         }
       }
       await Promise.allSettled(deletePromises);
 
-      alert('Tema y sus subtemas borrados con éxito.');
+      alert('Tema y todo su contenido borrado con éxito.');
       fetchTemas();
       resetAllForms();
     } catch (err: any) {
@@ -385,21 +451,76 @@ const Temario: React.FC = () => {
   const handleDeleteSubtema = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!deletingSubtemaId) return alert('Por favor, selecciona un subtema para borrar.');
-    if (!window.confirm('¿Estás seguro de que quieres borrar este subtema?')) return;
+    if (!window.confirm('¿Estás seguro? Se borrarán el subtema, sus placas y el contenido de su página.')) return;
     try {
+      setLoadingMessage('Eliminando subtema'); setLoadingType('deleting');
       setIsUploadingLogo(true);
+      const subtemaIdNum = Number(deletingSubtemaId);
       const subtemaABorrar = subtemasOfSelectedTema.find(s => s.id.toString() === deletingSubtemaId);
 
-      const { error } = await supabase.from('subtemas').delete().match({ id: deletingSubtemaId });
-      if (error) return alert(`Error al borrar el subtema: ${error.message}`);
+      // 1. Recopilar placas del subtema
+      const { data: placasData } = await supabase
+        .from('placas').select('id, photo_url').eq('subtema_id', subtemaIdNum);
 
-      // Borrar foto de Cloudinary
-      if (subtemaABorrar?.logo_url) {
-        const pid = getCloudinaryPublicId(subtemaABorrar.logo_url);
-        if (pid) deleteFromCloudinary(pid).catch(e => console.warn('No se pudo borrar foto del subtema:', e));
+      // 2. Obtener TODOS los content_blocks para separar propios de externos
+      const { data: allBlocks } = await supabase
+        .from('content_blocks').select('block_type, content, entity_type, entity_id');
+
+      // Bloques que pertenecen a la página que vamos a borrar
+      const ownBlocks = (allBlocks ?? []).filter(b =>
+        b.entity_type === 'placas_page' && b.entity_id === subtemaIdNum
+      );
+      // Bloques de OTRAS páginas (no se borrarán)
+      const externalBlocks = (allBlocks ?? []).filter(b =>
+        !(b.entity_type === 'placas_page' && b.entity_id === subtemaIdNum)
+      );
+      const externalUrlSet = new Set(extractBlockImageUrls(externalBlocks as any));
+
+      // 3. Placas que pueden borrarse: las que NO están referenciadas en páginas externas
+      const placasToDelete = (placasData ?? []).filter(p => !externalUrlSet.has(p.photo_url));
+      const placasToDeleteIds = placasToDelete.map(p => p.id);
+      const placasToDeleteUrlSet = new Set(placasToDelete.map(p => p.photo_url));
+
+      // 4. URLs de imágenes en bloques propios (solo borrar las no protegidas externamente)
+      const ownBlockImageUrls = extractBlockImageUrls(ownBlocks as any);
+      const blockUrlsToDelete = ownBlockImageUrls.filter(u => !externalUrlSet.has(u));
+
+      // 5. Borrar content_blocks en BD
+      await supabase.from('content_blocks').delete()
+        .eq('entity_type', 'placas_page').eq('entity_id', subtemaIdNum);
+
+      // 6. Borrar solo las placas no protegidas en BD
+      if (placasToDeleteIds.length > 0) {
+        await supabase.from('placas').delete().in('id', placasToDeleteIds);
       }
 
-      alert('Subtema borrado con éxito.');
+      // 7. Borrar subtema en BD
+      const { error } = await supabase.from('subtemas').delete().match({ id: subtemaIdNum });
+      if (error) return alert(`Error al borrar el subtema: ${error.message}`);
+
+      // 8. Borrar imágenes en Cloudinary
+      const deletePromises: Promise<any>[] = [];
+      if (subtemaABorrar?.logo_url) {
+        const pid = getCloudinaryPublicId(subtemaABorrar.logo_url);
+        if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Logo subtema:', e)));
+      }
+      // Solo fotos de placas no protegidas
+      for (const p of placasToDelete) {
+        if (p.photo_url) {
+          const pid = getCloudinaryPublicId(p.photo_url);
+          if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Placa foto:', e)));
+        }
+      }
+      // Imágenes subidas en bloques que no son placas del subtema (ya borradas arriba) y no están protegidas
+      for (const url of blockUrlsToDelete) {
+        if (!placasToDeleteUrlSet.has(url)) {
+          const pid = getCloudinaryPublicId(url);
+          if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Bloque imagen:', e)));
+        }
+      }
+      await Promise.allSettled(deletePromises);
+
+      alert('Subtema y todo su contenido borrado con éxito.');
       resetAllForms();
     } catch (err: any) {
       console.error('Error al borrar subtema:', err);
@@ -691,6 +812,7 @@ const Temario: React.FC = () => {
       </main>
 
       <Footer />
+      <LoadingToast visible={isUploadingLogo} type={loadingType} message={loadingMessage} />
     </div>
   );
 };

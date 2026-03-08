@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useDraggableList } from '../hooks/useDraggableList';
+import LoadingToast from '../components/LoadingToast';
 
 interface Tema {
   id: number;
@@ -237,6 +238,7 @@ const EditarHome: React.FC = () => {
         )}
       </main>
       <Footer />
+      <LoadingToast visible={isSaving} type="saving" message="Guardando orden" />
     </div>
   );
 };

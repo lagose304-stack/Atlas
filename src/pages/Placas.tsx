@@ -5,6 +5,8 @@ import { supabase } from '../services/supabase';
 import { uploadToCloudinary } from '../services/cloudinary';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
+import LoadingToast from '../components/LoadingToast';
+import BoldField from '../components/BoldField';
 
 // --- Interfaces ---
 interface Tema {
@@ -54,6 +56,71 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'block', fontSize: '1em', fontWeight: 600,
     color: '#34495e', marginBottom: '8px',
   },
+  aumentoGroup: {
+    display: 'flex', gap: '8px', flexWrap: 'wrap' as const, marginTop: '4px',
+  },
+  aumentoBtn: {
+    padding: '8px 16px', borderRadius: '20px', border: '2px solid #bdc3c7',
+    background: '#fff', cursor: 'pointer', fontSize: '0.92em', fontWeight: 600,
+    color: '#475569', transition: 'all 0.15s ease',
+  },
+  aumentoBtnActive: {
+    padding: '8px 16px', borderRadius: '20px', border: '2px solid #10b981',
+    background: 'linear-gradient(135deg, #10b981, #34d399)', cursor: 'pointer',
+    fontSize: '0.92em', fontWeight: 700, color: '#fff', transition: 'all 0.15s ease',
+  },
+  senalTextField: {
+    width: '100%', padding: '10px 12px', fontSize: '0.95em',
+    border: '2px solid #bdc3c7', borderRadius: '8px', outline: 'none',
+    boxSizing: 'border-box' as const, fontFamily: 'inherit', color: '#2c3e50',
+    transition: 'border-color 0.2s',
+  },
+  senalRow: {
+    display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px',
+  },
+  senalNumber: {
+    minWidth: '26px', height: '26px', borderRadius: '50%',
+    background: 'linear-gradient(135deg, #10b981, #34d399)', color: '#fff',
+    fontWeight: 700, fontSize: '0.85em', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', flexShrink: 0,
+  },
+  removeBtn: {
+    background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444',
+    fontSize: '1.1em', padding: '0 4px', lineHeight: 1, flexShrink: 0,
+  },
+  addBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '8px 16px', borderRadius: '8px', border: '2px dashed #10b981',
+    background: '#f0fdf4', color: '#059669', cursor: 'pointer',
+    fontSize: '0.9em', fontWeight: 600, marginTop: '6px',
+    transition: 'background 0.15s', fontFamily: 'inherit',
+  },
+  addComentarioBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '8px 16px', borderRadius: '8px', border: '2px dashed #6366f1',
+    background: '#f5f3ff', color: '#4f46e5', cursor: 'pointer',
+    fontSize: '0.9em', fontWeight: 600, marginTop: '6px',
+    transition: 'background 0.15s', fontFamily: 'inherit',
+  },
+  comentarioField: {
+    width: '100%', padding: '10px 12px', fontSize: '0.95em',
+    border: '2px solid #c7d2fe', borderRadius: '8px', outline: 'none',
+    boxSizing: 'border-box' as const, fontFamily: 'inherit', color: '#2c3e50',
+    resize: 'vertical' as const, minHeight: '80px', transition: 'border-color 0.2s',
+  },
+  addTincionBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '8px 16px', borderRadius: '8px', border: '2px dashed #f59e0b',
+    background: '#fffbeb', color: '#b45309', cursor: 'pointer',
+    fontSize: '0.9em', fontWeight: 600, marginTop: '6px',
+    transition: 'background 0.15s', fontFamily: 'inherit',
+  },
+  tincionField: {
+    width: '100%', padding: '10px 12px', fontSize: '0.95em',
+    border: '2px solid #fde68a', borderRadius: '8px', outline: 'none',
+    boxSizing: 'border-box' as const, fontFamily: 'inherit', color: '#2c3e50',
+    transition: 'border-color 0.2s', background: '#fffbeb',
+  },
 };
 
 // Convierte un nombre en slug seguro para carpeta de Cloudinary
@@ -76,6 +143,12 @@ const Placas: React.FC = () => {
   const [selectedSubtema, setSelectedSubtema] = useState('');
   const [temas, setTemas] = useState<Tema[]>([]);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
+  const [selectedAumento, setSelectedAumento] = useState('');
+  const [senalados, setSenalados] = useState<string[]>([]);
+  const [comentario, setComentario] = useState('');
+  const [showComentario, setShowComentario] = useState(false);
+  const [tincion, setTincion] = useState('');
+  const [showTincion, setShowTincion] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -147,10 +220,15 @@ const Placas: React.FC = () => {
       const folder = `placas/${slugify(temaObj.nombre)}/${slugify(subtemaObj.nombre)}`;
       const uploadResult = await uploadToCloudinary(selectedFile, { folder });
 
+      const senalados_filtrados = senalados.filter(s => s.trim() !== '');
       const { error } = await supabase.from('placas').insert({
         photo_url: uploadResult.secure_url,
         tema_id: Number(selectedTema),
         subtema_id: Number(selectedSubtema),
+        aumento: selectedAumento || null,
+        senalados: senalados_filtrados.length > 0 ? senalados_filtrados : null,
+        comentario: comentario.trim() || null,
+        tincion: tincion.trim() || null,
       });
 
       if (error) throw error;
@@ -160,6 +238,12 @@ const Placas: React.FC = () => {
       setImageUploaded(false);
       setSelectedTema('');
       setSelectedSubtema('');
+      setSelectedAumento('');
+      setSenalados([]);
+      setComentario('');
+      setShowComentario(false);
+      setTincion('');
+      setShowTincion(false);
     } catch (err) {
       console.error('Error al guardar placa:', err);
       setSaveError('Error al guardar. Por favor intenta de nuevo.');
@@ -186,6 +270,12 @@ const Placas: React.FC = () => {
     setSelectedFile(null);
     setSelectedTema('');
     setSelectedSubtema('');
+    setSelectedAumento('');
+    setSenalados([]);
+    setComentario('');
+    setShowComentario(false);
+    setTincion('');
+    setShowTincion(false);
     setSaveSuccess(false);
     setSaveError('');
   };
@@ -301,6 +391,117 @@ const Placas: React.FC = () => {
                           </select>
                         </div>
                       )}
+
+                      {/* --- Aumento --- */}
+                      {selectedSubtema && (
+                        <div style={{ marginTop: '20px' }}>
+                          <label style={styles.accordionLabel}>🔬 Aumento:</label>
+                          <div style={styles.aumentoGroup}>
+                            {['x4', 'x10', 'x40', 'x50', 'x100'].map(op => (
+                              <button
+                                key={op}
+                                type="button"
+                                style={selectedAumento === op ? styles.aumentoBtnActive : styles.aumentoBtn}
+                                onClick={() => setSelectedAumento(prev => prev === op ? '' : op)}
+                              >
+                                {op}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* --- Tinción --- */}
+                      {selectedSubtema && (
+                        <div style={{ marginTop: '16px' }}>
+                          {!showTincion ? (
+                            <button
+                              type="button"
+                              style={styles.addTincionBtn}
+                              onClick={() => setShowTincion(true)}
+                            >
+                              🧪 Añadir tinción
+                            </button>
+                          ) : (
+                            <>
+                              <label style={{ ...styles.accordionLabel, color: '#b45309' }}>🧪 Tinción:</label>
+                              <BoldField
+                                as="input"
+                                style={styles.tincionField}
+                                value={tincion}
+                                placeholder="Ej: H&E, PAS, Azul de toluidina..."
+                                onChange={setTincion}
+                              />
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {/* --- Señalados --- */}
+                      {selectedSubtema && (
+                        <div style={{ marginTop: '20px' }}>
+                          <label style={styles.accordionLabel}>📌 Señalados:</label>
+                          {senalados.map((val, idx) => (
+                            <div key={idx} style={styles.senalRow}>
+                              <span style={styles.senalNumber}>{idx + 1}</span>
+                              <BoldField
+                                as="input"
+                                inline
+                                style={styles.senalTextField}
+                                value={val}
+                                placeholder={`Señalado ${idx + 1}`}
+                                onChange={v => {
+                                  const updated = [...senalados];
+                                  updated[idx] = v;
+                                  setSenalados(updated);
+                                }}
+                                onFocus={e => (e.currentTarget.style.borderColor = '#10b981')}
+                                onBlur={e => (e.currentTarget.style.borderColor = '#bdc3c7')}
+                              />
+                              <button
+                                type="button"
+                                style={styles.removeBtn}
+                                title="Eliminar señalado"
+                                onClick={() => setSenalados(prev => prev.filter((_, i) => i !== idx))}
+                              >✕</button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            style={styles.addBtn}
+                            onClick={() => setSenalados(prev => [...prev, ''])}
+                          >
+                            ＋ Añadir señalado
+                          </button>
+                        </div>
+                      )}
+
+                      {/* --- Comentario --- */}
+                      {selectedSubtema && (
+                        <div style={{ marginTop: '16px' }}>
+                          {!showComentario ? (
+                            <button
+                              type="button"
+                              style={styles.addComentarioBtn}
+                              onClick={() => setShowComentario(true)}
+                            >
+                              💬 Añadir comentario
+                            </button>
+                          ) : (
+                            <>
+                              <label style={{ ...styles.accordionLabel, color: '#4f46e5' }}>💬 Comentario:</label>
+                              <BoldField
+                                as="textarea"
+                                style={styles.comentarioField}
+                                value={comentario}
+                                placeholder="Escribe un comentario para esta placa..."
+                                onChange={setComentario}
+                              />
+                            </>
+                          )}
+                        </div>
+                      )}
+
                       {selectedFile && selectedTema && selectedSubtema && (
                         <button
                           style={isSaving ? styles.saveButtonDisabled : styles.saveButton}
@@ -388,6 +589,7 @@ const Placas: React.FC = () => {
       </main>
 
       <Footer />
+      <LoadingToast visible={isSaving} type="uploading" message="Guardando placa" />
     </div>
   );
 };

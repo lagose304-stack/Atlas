@@ -64,10 +64,12 @@ const CreateTemaForm: React.FC<CreateTemaFormProps> = ({
       <div style={styles.formGroup}>
         <label style={styles.label}>Nombre del Tema:</label>
         <input
-          style={styles.input}
           type="text"
+          style={styles.input}
           value={temaNombre}
-          onChange={(e) => onChangeTemaNombre(e.target.value)}
+          onChange={e => onChangeTemaNombre(e.target.value)}
+          spellCheck
+          lang="es"
           required
         />
       </div>
@@ -176,11 +178,13 @@ const CreateTemaForm: React.FC<CreateTemaFormProps> = ({
         >
           <label style={styles.label}>Subtema {index + 1}:</label>
           <input
-            style={styles.input}
             type="text"
-            placeholder="Nombre del subtema"
+            style={styles.input}
             value={subtema.nombre}
-            onChange={(e) => onSubtemaChange(index, e.target.value)}
+            onChange={e => onSubtemaChange(index, e.target.value)}
+            placeholder="Nombre del subtema"
+            spellCheck
+            lang="es"
           />
           <label style={{ ...styles.label, marginTop: '4px' }}>Foto del subtema (opcional):</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>

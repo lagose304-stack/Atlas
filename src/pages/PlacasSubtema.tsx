@@ -10,6 +10,10 @@ import type { ContentBlock } from '../components/PageContentEditor';
 interface Placa {
   id: number;
   photo_url: string;
+  aumento?: string | null;
+  senalados?: string[] | null;
+  comentario?: string | null;
+  tincion?: string | null;
 }
 
 interface SubtemaInfo {
@@ -25,7 +29,7 @@ const PlacasSubtema: React.FC = () => {
   const [placas, setPlacas] = useState<Placa[]>([]);
   const [subtema, setSubtema] = useState<SubtemaInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
 
@@ -47,7 +51,7 @@ const PlacasSubtema: React.FC = () => {
       // Cargar placas de este subtema
       const { data: placasData } = await supabase
         .from('placas')
-        .select('id, photo_url')
+        .select('id, photo_url, aumento, senalados, comentario, tincion')
         .eq('subtema_id', subtemaId)
         .order('sort_order', { ascending: true });
 
@@ -143,7 +147,7 @@ const PlacasSubtema: React.FC = () => {
                     ...styles.thumbWrap,
                     ...(hoveredId === placa.id ? styles.thumbWrapHover : {}),
                   }}
-                  onClick={() => setSelectedImage(placa.photo_url)}
+                  onClick={() => setSelectedPlaca(placa)}
                   onMouseEnter={() => setHoveredId(placa.id)}
                   onMouseLeave={() => setHoveredId(null)}
                   title="Ver en grande"
@@ -154,6 +158,11 @@ const PlacasSubtema: React.FC = () => {
                     style={styles.thumbImg}
                     loading="lazy"
                   />
+                  {placa.aumento && (
+                    <div style={styles.aumentoBadge}>
+                      {placa.aumento}
+                    </div>
+                  )}
                   <div style={{
                     ...styles.thumbOverlay,
                     opacity: hoveredId === placa.id ? 1 : 0,
@@ -169,10 +178,16 @@ const PlacasSubtema: React.FC = () => {
 
       <Footer />
 
-      {selectedImage && (
+      {selectedPlaca && (
         <ImageViewerModal
-          src={selectedImage}
-          onClose={() => setSelectedImage(null)}
+          src={selectedPlaca.photo_url}
+          onClose={() => setSelectedPlaca(null)}
+          temaNombre={temaNombre}
+          subtemaNombre={subtema?.nombre}
+          aumento={selectedPlaca.aumento}
+          senalados={selectedPlaca.senalados}
+          comentario={selectedPlaca.comentario}
+          tincion={selectedPlaca.tincion}
         />
       )}
     </div>
@@ -350,6 +365,30 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '2em',
     transition: 'opacity 0.2s ease',
     backdropFilter: 'blur(2px)',
+  },
+  aumentoBadge: {
+    position: 'absolute',
+    top: '7px',
+    left: '7px',
+    minWidth: '36px',
+    height: '36px',
+    borderRadius: '50%',
+    background: 'rgba(255,255,255,0.92)',
+    color: '#0369a1',
+    fontWeight: 800,
+    fontSize: '0.72em',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0 5px',
+    boxShadow: '0 2px 8px rgba(14,165,233,0.18)',
+    border: '1.5px solid #7dd3fc',
+    letterSpacing: '0.02em',
+    pointerEvents: 'none',
+    zIndex: 2,
+    lineHeight: 1,
+    textAlign: 'center',
+    backdropFilter: 'blur(4px)',
   },
 };
 

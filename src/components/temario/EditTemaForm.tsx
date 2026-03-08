@@ -67,10 +67,12 @@ const EditTemaForm: React.FC<EditTemaFormProps> = ({
           <div style={styles.formGroup}>
             <label style={styles.label}>Nuevo nombre del Tema:</label>
             <input
-              style={styles.input}
               type="text"
+              style={styles.input}
               value={editingTemaNombre}
-              onChange={(e) => onChangeEditingTemaNombre(e.target.value)}
+              onChange={e => onChangeEditingTemaNombre(e.target.value)}
+              spellCheck
+              lang="es"
               required
             />
           </div>

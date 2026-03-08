@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { ContentBlock, BlockType } from './PageContentEditor';
 import ImageViewerModal from './ImageViewerModal';
+import { renderBoldText } from './BoldField';
 
 interface ContentBlockRendererProps {
   blocks: ContentBlock[];
@@ -41,7 +42,7 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
       const align = (c.text_align as React.CSSProperties['textAlign']) ?? 'left';
       return (
         <div>
-          <h2 style={{ ...rs.heading, textAlign: align }}>{c.text}</h2>
+          <h2 style={{ ...rs.heading, textAlign: align }}>{renderBoldText(c.text)}</h2>
           <div style={{ ...rs.headingAccent, margin: align === 'center' ? '0 auto' : align === 'right' ? '0 0 0 auto' : undefined }} />
         </div>
       );
@@ -60,14 +61,14 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
           paddingRight: isRight ? '14px' : 0,
           borderLeft: isCenter || isRight ? 'none' : '4px solid #38bdf8',
           borderRight: isRight ? '4px solid #38bdf8' : 'none',
-        }}>{c.text}</h3>
+        }}>{renderBoldText(c.text)}</h3>
       );
     }
 
     case 'paragraph': {
       if (!c.text) return null;
       const align = (c.text_align as React.CSSProperties['textAlign']) ?? 'left';
-      return <p className="cb-paragraph" style={{ ...rs.paragraph, textAlign: align }}>{c.text}</p>;
+      return <p className="cb-paragraph" style={{ ...rs.paragraph, textAlign: align }}>{renderBoldText(c.text)}</p>;
     }
 
     case 'image': {
@@ -90,7 +91,7 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
             />
             <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>
           </div>
-          {c.caption && <figcaption style={rs.caption}>{c.caption}</figcaption>}
+          {c.caption && <figcaption style={rs.caption}>{renderBoldText(c.caption)}</figcaption>}
         </figure>
       );
     }
@@ -125,11 +126,11 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
                 <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>
               </div>
               {c.image_caption && (
-                <figcaption style={rs.caption}>{c.image_caption}</figcaption>
+                <figcaption style={rs.caption}>{renderBoldText(c.image_caption)}</figcaption>
               )}
             </figure>
           )}
-          {hasText && <p className="cb-ti-text" style={{ ...rs.tiText, textAlign: tiTextAlign }}>{c.text}</p>}
+          {hasText && <p className="cb-ti-text" style={{ ...rs.tiText, textAlign: tiTextAlign }}>{renderBoldText(c.text)}</p>}
         </div>
       );
     }

@@ -367,6 +367,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#0f172a',
     lineHeight: 1.3,
     margin: 0,
+    wordBreak: 'break-word',
+    overflowWrap: 'break-word',
+    width: '100%',
   },
   subtemaDesc: {
     fontSize: '0.8em',

@@ -88,11 +88,13 @@ const CreateSubtemaForm: React.FC<CreateSubtemaFormProps> = ({
         >
           <label style={styles.label}>Subtema {index + 1}:</label>
           <input
-            style={styles.input}
             type="text"
-            placeholder="Nombre del subtema"
+            style={styles.input}
             value={subtema.nombre}
-            onChange={(e) => onSubtemaChange(index, e.target.value)}
+            onChange={e => onSubtemaChange(index, e.target.value)}
+            placeholder="Nombre del subtema"
+            spellCheck
+            lang="es"
           />
 
           <label style={{ ...styles.label, marginTop: '4px' }}>Foto del subtema (opcional):</label>

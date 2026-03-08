@@ -5,6 +5,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useDraggableList } from '../hooks/useDraggableList';
 import PageContentEditor from '../components/PageContentEditor';
+import LoadingToast from '../components/LoadingToast';
 
 interface Tema {
   id: number;
@@ -393,6 +394,7 @@ const EditarPlacas: React.FC = () => {
       </div>
 
       <Footer />
+      <LoadingToast visible={isSaving} type="saving" message="Guardando orden" />
     </div>
   );
 };

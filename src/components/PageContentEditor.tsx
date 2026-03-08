@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { uploadToCloudinary } from '../services/cloudinary';
+import LoadingToast from './LoadingToast';
+import BoldField from './BoldField';
 
 // ── Tipos exportados (también los usa ContentBlockRenderer) ───────────────────
 
@@ -592,6 +594,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
           onAllFilterSubtema={handleAllFilterSubtema}
         />
       )}
+      <LoadingToast visible={isSaving} type="saving" message="Guardando contenido" />
     </div>
   );
 };
@@ -609,43 +612,21 @@ const SectionHeader: React.FC = () => (
   </div>
 );
 
-// Textarea con auto-resize
-interface AutoTextareaProps {
+// BoldField multilinea — reemplaza AutoTextarea (auto-size nativo del div)
+const AutoTextarea: React.FC<{
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   extraStyle?: React.CSSProperties;
-}
-const AutoTextarea: React.FC<AutoTextareaProps> = ({
-  value,
-  onChange,
-  placeholder,
-  extraStyle,
-}) => {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    if (ref.current) {
-      ref.current.style.height = 'auto';
-      ref.current.style.height = `${ref.current.scrollHeight}px`;
-    }
-  }, [value]);
-  return (
-    <textarea
-      ref={ref}
-      style={{ ...es.textarea, ...extraStyle }}
-      value={value}
-      placeholder={placeholder}
-      spellCheck
-      lang="es"
-      onChange={e => onChange(e.target.value)}
-      onInput={e => {
-        const el = e.currentTarget as HTMLTextAreaElement;
-        el.style.height = 'auto';
-        el.style.height = `${el.scrollHeight}px`;
-      }}
-    />
-  );
-};
+}> = ({ value, onChange, placeholder, extraStyle }) => (
+  <BoldField
+    as="textarea"
+    value={value}
+    onChange={onChange}
+    placeholder={placeholder}
+    style={{ ...es.textarea, ...extraStyle }}
+  />
+);
 
 // Editor de bloque imagen
 interface ImageBlockEditorProps {
@@ -695,10 +676,11 @@ const ImageBlockEditor: React.FC<ImageBlockEditorProps> = ({
     </div>
     <div style={es.captionRow}>
       <label style={es.fieldLabel}>Pie de foto (opcional)</label>
-      <input
+      <BoldField
+        as="input"
         style={es.captionInput}
         value={caption}
-        onChange={e => onCaptionChange(e.target.value)}
+        onChange={onCaptionChange}
         placeholder="Descripción de la imagen..."
       />
     </div>
@@ -795,10 +777,11 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
             🖼 Seleccionar imagen
           </button>
         )}
-        <input
+        <BoldField
+          as="input"
           style={{ ...es.captionInput, marginTop: '6px' }}
           value={imageCaption}
-          onChange={e => onCaptionChange(e.target.value)}
+          onChange={onCaptionChange}
           placeholder="Pie de foto..."
         />
       </div>
@@ -1232,6 +1215,37 @@ const es: Record<string, React.CSSProperties> = {
     fontSize: '0.95em',
     userSelect: 'text',
     WebkitUserSelect: 'text',
+  },
+  // Barra de negrita sobre textareas
+  boldToolbar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '5px 10px',
+    background: '#f8fafc',
+    border: '1.5px solid #e2e8f0',
+    borderBottom: 'none',
+    borderRadius: '8px 8px 0 0',
+  },
+  boldBtn: {
+    fontWeight: 900,
+    fontSize: '0.82em',
+    padding: '3px 10px',
+    border: '1.5px solid #cbd5e1',
+    borderRadius: '5px',
+    background: '#fff',
+    cursor: 'pointer',
+    color: '#1e293b',
+    lineHeight: 1.3,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
+    transition: 'background 0.12s, border-color 0.12s',
+    fontFamily: 'inherit',
+  },
+  boldHint: {
+    fontSize: '0.7em',
+    color: '#94a3b8',
+    fontStyle: 'italic',
+    userSelect: 'none',
   },
   textareaHeading: {
     fontSize: '1.5em',

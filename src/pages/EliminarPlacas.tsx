@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 import { deleteFromCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import LoadingToast from '../components/LoadingToast';
 
 interface Tema {
   id: number;
@@ -448,6 +449,7 @@ const EliminarPlacas: React.FC = () => {
       )}
 
       <Footer />
+      <LoadingToast visible={isDeleting} type="deleting" message="Eliminando placas" />
     </div>
   );
 };

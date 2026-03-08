@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import LoadingToast from '../components/LoadingToast';
+import BoldField from '../components/BoldField';
 
 interface Tema {
   id: number;
@@ -23,6 +25,10 @@ interface Placa {
   sort_order: number;
   tema_id: number;
   subtema_id: number;
+  aumento?: string | null;
+  senalados?: string[] | null;
+  comentario?: string | null;
+  tincion?: string | null;
 }
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
@@ -61,6 +67,15 @@ const MoverPlaca: React.FC = () => {
   const [editSubtemaId, setEditSubtemaId] = useState<number | null>(null);
 
   const [loadingEditSubtemas, setLoadingEditSubtemas] = useState(false);
+
+  // ── Campos editables adicionales ─────────────────────────────────────
+  const [editAumento,       setEditAumento]       = useState('');
+  const [editSenalados,     setEditSenalados]     = useState<string[]>([]);
+  const [editComentario,    setEditComentario]    = useState('');
+  const [showEditComentario, setShowEditComentario] = useState(false);
+  const [editTincion,       setEditTincion]       = useState('');
+  const [showEditTincion,   setShowEditTincion]   = useState(false);
+
   const [isSaving,    setIsSaving]    = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError,   setSaveError]   = useState('');
@@ -111,7 +126,7 @@ const MoverPlaca: React.FC = () => {
       setLoadingPlacas(true);
       const { data } = await supabase
         .from('placas')
-        .select('id, photo_url, sort_order, tema_id, subtema_id')
+        .select('id, photo_url, sort_order, tema_id, subtema_id, aumento, senalados, comentario, tincion')
         .eq('subtema_id', selectedSubtemaId)
         .order('sort_order', { ascending: true });
       if (data) setPlacas(data);
@@ -126,10 +141,22 @@ const MoverPlaca: React.FC = () => {
       setEditTemaId(null);
       setEditSubtemaId(null);
       setEditSubtemas([]);
+      setEditAumento('');
+      setEditSenalados([]);
+      setEditComentario('');
+      setShowEditComentario(false);
+      setEditTincion('');
+      setShowEditTincion(false);
       return;
     }
     setEditTemaId(selectedPlaca.tema_id);
     setEditSubtemaId(selectedPlaca.subtema_id);
+    setEditAumento(selectedPlaca.aumento ?? '');
+    setEditSenalados(selectedPlaca.senalados ? [...selectedPlaca.senalados] : []);
+    setEditComentario(selectedPlaca.comentario ?? '');
+    setShowEditComentario(!!(selectedPlaca.comentario));
+    setEditTincion(selectedPlaca.tincion ?? '');
+    setShowEditTincion(!!(selectedPlaca.tincion));
     // Cargar subtemas del tema actual de la placa
     const fetch = async () => {
       setLoadingEditSubtemas(true);
@@ -166,12 +193,29 @@ const MoverPlaca: React.FC = () => {
     setIsSaving(true);
     setSaveError('');
     setSaveSuccess(false);
+    const senalados_filtrados = editSenalados.filter(sv => sv.trim() !== '');
     try {
       const { error } = await supabase
         .from('placas')
-        .update({ tema_id: editTemaId, subtema_id: editSubtemaId })
+        .update({
+          tema_id:     editTemaId,
+          subtema_id:  editSubtemaId,
+          aumento:     editAumento || null,
+          senalados:   senalados_filtrados.length > 0 ? senalados_filtrados : null,
+          comentario:  editComentario.trim() || null,
+          tincion:     editTincion.trim() || null,
+        })
         .eq('id', selectedPlaca.id);
       if (error) throw error;
+
+      const updatedFields = {
+        tema_id:    editTemaId,
+        subtema_id: editSubtemaId,
+        aumento:    editAumento || null,
+        senalados:  senalados_filtrados.length > 0 ? senalados_filtrados : null,
+        comentario: editComentario.trim() || null,
+        tincion:    editTincion.trim() || null,
+      };
 
       // Si el subtema destino es diferente al actual, quitar la placa de la lista
       if (editSubtemaId !== selectedPlaca.subtema_id) {
@@ -179,7 +223,7 @@ const MoverPlaca: React.FC = () => {
         setSelectedPlaca(null);
       } else {
         // Actualizar el objeto en el listado
-        const updated = { ...selectedPlaca, tema_id: editTemaId, subtema_id: editSubtemaId };
+        const updated = { ...selectedPlaca, ...updatedFields };
         setPlacas(prev => prev.map(p => p.id === selectedPlaca.id ? updated : p));
         setSelectedPlaca(updated);
       }
@@ -212,8 +256,15 @@ const MoverPlaca: React.FC = () => {
   const editTema        = editTemas.find(t => t.id === editTemaId)        ?? null;
   const editSubtema     = editSubtemas.find(s => s.id === editSubtemaId)  ?? null;
 
-  const hasChanges = selectedPlaca !== null &&
-    (editTemaId !== selectedPlaca.tema_id || editSubtemaId !== selectedPlaca.subtema_id);
+  const hasChanges = selectedPlaca !== null && (
+    editTemaId    !== selectedPlaca.tema_id ||
+    editSubtemaId !== selectedPlaca.subtema_id ||
+    editAumento   !== (selectedPlaca.aumento ?? '') ||
+    editComentario !== (selectedPlaca.comentario ?? '') ||
+    JSON.stringify(editSenalados.filter(sv => sv.trim())) !==
+      JSON.stringify((selectedPlaca.senalados ?? []).filter(sv => sv.trim())) ||
+    editTincion !== (selectedPlaca.tincion ?? '')
+  );
 
   return (
     <div style={s.page}>
@@ -502,6 +553,126 @@ const MoverPlaca: React.FC = () => {
                   )}
                 </div>
 
+                {/* ── Aumento ── */}
+                <div style={s.editFieldGroup}>
+                  <label style={s.selectLabel}>🔬 Aumento</label>
+                  <div style={s.aumentoGroup}>
+                    {['x4', 'x10', 'x40', 'x50', 'x100'].map(op => (
+                      <button
+                        key={op}
+                        type="button"
+                        style={editAumento === op ? s.aumentoBtnActive : s.aumentoBtn}
+                        onClick={() => setEditAumento(prev => prev === op ? '' : op)}
+                      >
+                        {op}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── Tinción ── */}
+                <div style={s.editFieldGroup}>
+                  {!showEditTincion ? (
+                    <button
+                      type="button"
+                      style={s.addTincionBtn}
+                      onClick={() => setShowEditTincion(true)}
+                    >
+                      🧪 Añadir / editar tinción
+                    </button>
+                  ) : (
+                    <>
+                      <label style={{ ...s.selectLabel, color: '#b45309' }}>🧪 Tinción</label>
+                      <BoldField
+                        as="input"
+                        style={s.tincionField}
+                        value={editTincion}
+                        placeholder="Ej: H&E, PAS, Azul de toluidina..."
+                        onChange={setEditTincion}
+                      />
+                      {editTincion && (
+                        <button
+                          type="button"
+                          style={s.clearTincionBtn}
+                          onClick={() => { setEditTincion(''); setShowEditTincion(false); }}
+                        >
+                          🗑️ Eliminar tinción
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* ── Señalados ── */}
+                <div style={s.editFieldGroup}>
+                  <label style={s.selectLabel}>📌 Señalados</label>
+                  {editSenalados.map((val, idx) => (
+                    <div key={idx} style={s.senalRow}>
+                      <span style={s.senalNumber}>{idx + 1}</span>
+                      <BoldField
+                        as="input"
+                        inline
+                        style={s.senalInput}
+                        value={val}
+                        placeholder={`Señalado ${idx + 1}`}
+                        onChange={v => {
+                          const updated = [...editSenalados];
+                          updated[idx] = v;
+                          setEditSenalados(updated);
+                        }}
+                        onFocus={e => (e.currentTarget.style.borderColor = '#818cf8')}
+                        onBlur={e => (e.currentTarget.style.borderColor = '#cbd5e1')}
+                      />
+                      <button
+                        type="button"
+                        style={s.senalRemoveBtn}
+                        title="Eliminar señalado"
+                        onClick={() => setEditSenalados(prev => prev.filter((_, i) => i !== idx))}
+                      >✕</button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    style={s.addSenalBtn}
+                    onClick={() => setEditSenalados(prev => [...prev, ''])}
+                  >
+                    ＋ Añadir señalado
+                  </button>
+                </div>
+
+                {/* ── Comentario ── */}
+                <div style={s.editFieldGroup}>
+                  {!showEditComentario ? (
+                    <button
+                      type="button"
+                      style={s.addComentarioBtn}
+                      onClick={() => setShowEditComentario(true)}
+                    >
+                      💬 Añadir / editar comentario
+                    </button>
+                  ) : (
+                    <>
+                      <label style={{ ...s.selectLabel, color: '#4f46e5' }}>💬 Comentario</label>
+                      <BoldField
+                        as="textarea"
+                        style={s.comentarioField}
+                        value={editComentario}
+                        placeholder="Escribe un comentario para esta placa..."
+                        onChange={setEditComentario}
+                      />
+                      {editComentario && (
+                        <button
+                          type="button"
+                          style={s.clearComentarioBtn}
+                          onClick={() => { setEditComentario(''); setShowEditComentario(false); }}
+                        >
+                          🗑️ Eliminar comentario
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+
                 {/* Destino */}
                 {editTema && editSubtema && (
                   <div style={s.destInfo}>
@@ -565,6 +736,7 @@ const MoverPlaca: React.FC = () => {
       </div>
 
       <Footer />
+      <LoadingToast visible={isSaving} type="updating" message="Actualizando placa" />
     </div>
   );
 };
@@ -975,6 +1147,89 @@ const s: { [key: string]: React.CSSProperties } = {
     fontSize: '0.95em',
     fontFamily: 'inherit',
     transition: 'background 0.15s',
+  },
+  // ── Aumento ──────────────────────────────────────────────────────────────
+  aumentoGroup: {
+    display: 'flex', gap: '8px', flexWrap: 'wrap' as const,
+  },
+  aumentoBtn: {
+    padding: '7px 16px', borderRadius: '20px', border: '2px solid #cbd5e1',
+    background: '#f8fafc', cursor: 'pointer', fontSize: '0.92em', fontWeight: 600,
+    color: '#475569', fontFamily: 'inherit', transition: 'all 0.15s ease',
+  },
+  aumentoBtnActive: {
+    padding: '7px 16px', borderRadius: '20px', border: '2px solid #818cf8',
+    background: 'linear-gradient(135deg, #818cf8, #6366f1)', cursor: 'pointer',
+    fontSize: '0.92em', fontWeight: 700, color: '#fff', fontFamily: 'inherit',
+    transition: 'all 0.15s ease',
+  },
+  // ── Señalados ─────────────────────────────────────────────────────────────
+  senalRow: {
+    display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px',
+  },
+  senalNumber: {
+    minWidth: '26px', height: '26px', borderRadius: '50%',
+    background: 'linear-gradient(135deg, #818cf8, #6366f1)', color: '#fff',
+    fontWeight: 700, fontSize: '0.82em', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', flexShrink: 0,
+  },
+  senalInput: {
+    flex: 1, padding: '9px 12px', fontSize: '0.92em', fontFamily: 'inherit',
+    border: '1.5px solid #cbd5e1', borderRadius: '8px', outline: 'none',
+    color: '#0f172a', background: '#f8fafc', boxSizing: 'border-box' as const,
+    transition: 'border-color 0.2s',
+  },
+  senalRemoveBtn: {
+    background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444',
+    fontSize: '1em', padding: '0 4px', lineHeight: 1, flexShrink: 0, fontFamily: 'inherit',
+  },
+  addSenalBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '8px 16px', borderRadius: '8px', border: '2px dashed #818cf8',
+    background: '#f5f3ff', color: '#4f46e5', cursor: 'pointer',
+    fontSize: '0.88em', fontWeight: 600, fontFamily: 'inherit',
+    transition: 'background 0.15s', marginTop: '2px',
+  },
+  // ── Comentario ────────────────────────────────────────────────────────────
+  addComentarioBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '8px 16px', borderRadius: '8px', border: '2px dashed #818cf8',
+    background: '#f5f3ff', color: '#4f46e5', cursor: 'pointer',
+    fontSize: '0.88em', fontWeight: 600, fontFamily: 'inherit',
+    transition: 'background 0.15s',
+  },
+  comentarioField: {
+    width: '100%', padding: '10px 12px', fontSize: '0.95em', fontFamily: 'inherit',
+    border: '1.5px solid #c7d2fe', borderRadius: '8px', outline: 'none',
+    color: '#0f172a', resize: 'vertical' as const, minHeight: '80px',
+    boxSizing: 'border-box' as const, transition: 'border-color 0.2s', background: '#f8fafc',
+  },
+  clearComentarioBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '6px 14px', borderRadius: '8px', border: '1.5px solid #fca5a5',
+    background: '#fff1f2', color: '#dc2626', cursor: 'pointer',
+    fontSize: '0.82em', fontWeight: 600, fontFamily: 'inherit',
+    marginTop: '6px', transition: 'background 0.15s',
+  },
+  addTincionBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '8px 16px', borderRadius: '8px', border: '2px dashed #f59e0b',
+    background: '#fffbeb', color: '#b45309', cursor: 'pointer',
+    fontSize: '0.88em', fontWeight: 600, fontFamily: 'inherit',
+    transition: 'background 0.15s',
+  },
+  tincionField: {
+    width: '100%', padding: '10px 12px', fontSize: '0.95em', fontFamily: 'inherit',
+    border: '1.5px solid #fde68a', borderRadius: '8px', outline: 'none',
+    color: '#0f172a', boxSizing: 'border-box' as const, transition: 'border-color 0.2s',
+    background: '#fffbeb',
+  },
+  clearTincionBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '6px 14px', borderRadius: '8px', border: '1.5px solid #fde68a',
+    background: '#fff7ed', color: '#92400e', cursor: 'pointer',
+    fontSize: '0.82em', fontWeight: 600, fontFamily: 'inherit',
+    marginTop: '6px', transition: 'background 0.15s',
   },
 };
 
