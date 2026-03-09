@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
+import ContentBlockRenderer from '../components/ContentBlockRenderer';
+import type { ContentBlock } from '../components/PageContentEditor';
 
 // --- Interfaces ---
 interface Tema {
@@ -102,16 +104,27 @@ const Home: React.FC = () => {
   const navigate = useNavigate();
   const [temas, setTemas] = useState<Tema[]>([]);
   const [loading, setLoading] = useState(true);
+  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
 
   useEffect(() => {
     const fetchTemas = async () => {
       setLoading(true);
-      const { data, error } = await supabase.from('temas').select('*').order('sort_order', { ascending: true }).order('nombre', { ascending: true });
+      const { data, error } = await supabase.from('temas').select('*').order('sort_order', { ascending: true });
       if (data) setTemas(data);
       if (error) console.error('Error fetching temas:', error);
       setLoading(false);
     };
+    const fetchBlocks = async () => {
+      const { data } = await supabase
+        .from('content_blocks')
+        .select('*')
+        .eq('entity_type', 'home_page')
+        .eq('entity_id', 0)
+        .order('sort_order', { ascending: true });
+      if (data) setContentBlocks(data as ContentBlock[]);
+    };
     fetchTemas();
+    fetchBlocks();
   }, []);
 
   return (
@@ -119,6 +132,12 @@ const Home: React.FC = () => {
       <Header />
 
       <main style={styles.main}>
+        {contentBlocks.length > 0 && (
+          <section style={styles.temarioCard}>
+            <ContentBlockRenderer blocks={contentBlocks} />
+          </section>
+        )}
+
         <section style={styles.temarioCard}>
 
           {/* Encabezado de la sección */}
@@ -255,6 +274,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     gap: 'clamp(10px, 2vw, 18px)',
     boxSizing: 'border-box',
+    overflow: 'hidden',
   },
   parcialHeaderRow: {
     display: 'flex',

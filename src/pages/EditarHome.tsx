@@ -5,6 +5,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useDraggableList } from '../hooks/useDraggableList';
 import LoadingToast from '../components/LoadingToast';
+import PageContentEditor from '../components/PageContentEditor';
 
 interface Tema {
   id: number;
@@ -96,6 +97,15 @@ const EditarHome: React.FC = () => {
               Arrastra las tarjetas desde el handle <strong>⠿ Arrastra</strong> para cambiar el orden dentro de cada parcial. Los cambios no se aplican hasta que pulses <strong>Guardar orden</strong>.
             </p>
           </div>
+        </div>
+
+        <div style={s.card}>
+          <div style={s.cardHeader}>
+            <h2 style={s.cardTitle}>Contenido de la página</h2>
+            <p style={s.cardSubtitle}>Bloques de contenido que se muestran encima del temario en la página principal</p>
+            <div style={s.divider} />
+          </div>
+          <PageContentEditor entityType="home_page" entityId={0} />
         </div>
 
         <div style={s.card}>

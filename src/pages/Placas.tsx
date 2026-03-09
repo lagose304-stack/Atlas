@@ -221,6 +221,15 @@ const Placas: React.FC = () => {
       const uploadResult = await uploadToCloudinary(selectedFile, { folder });
 
       const senalados_filtrados = senalados.filter(s => s.trim() !== '');
+      const { data: maxPlacaData } = await supabase
+        .from('placas')
+        .select('sort_order')
+        .eq('subtema_id', Number(selectedSubtema))
+        .order('sort_order', { ascending: false })
+        .limit(1);
+      const nextPlacaSortOrder = (maxPlacaData && maxPlacaData.length > 0 && maxPlacaData[0].sort_order != null)
+        ? maxPlacaData[0].sort_order + 1
+        : 0;
       const { error } = await supabase.from('placas').insert({
         photo_url: uploadResult.secure_url,
         tema_id: Number(selectedTema),
@@ -229,6 +238,7 @@ const Placas: React.FC = () => {
         senalados: senalados_filtrados.length > 0 ? senalados_filtrados : null,
         comentario: comentario.trim() || null,
         tincion: tincion.trim() || null,
+        sort_order: nextPlacaSortOrder,
       });
 
       if (error) throw error;

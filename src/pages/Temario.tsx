@@ -225,22 +225,31 @@ const Temario: React.FC = () => {
       setIsUploadingLogo(true);
       const upload = await uploadToCloudinary(temaLogoFile, { folder: 'temas/logos' });
       const finalLogoUrl = upload.secure_url || '';
+      const { data: maxData } = await supabase
+        .from('temas')
+        .select('sort_order')
+        .eq('parcial', temaParcial)
+        .order('sort_order', { ascending: false })
+        .limit(1);
+      const nextSortOrder = (maxData && maxData.length > 0 && maxData[0].sort_order != null)
+        ? maxData[0].sort_order + 1
+        : 0;
       const { data: temaData, error: temaError } = await supabase
         .from('temas')
-        .insert([{ nombre: temaNombre, logo_url: finalLogoUrl || null, parcial: temaParcial }])
+        .insert([{ nombre: temaNombre, logo_url: finalLogoUrl || null, parcial: temaParcial, sort_order: nextSortOrder }])
         .select();
       if (temaError) return alert(`Error al crear el tema: ${temaError.message}`);
       const temaId = temaData[0].id;
       const subtemasValidos = subtemas.filter(s => s.nombre.trim() !== '');
       if (subtemasValidos.length > 0) {
         const subtemasConLogo = await Promise.all(
-          subtemasValidos.map(async (s) => {
+          subtemasValidos.map(async (s, index) => {
             let logoUrl: string | null = null;
             if (s.logoFile) {
               const up = await uploadToCloudinary(s.logoFile, { folder: 'temas' });
               logoUrl = up.secure_url || null;
             }
-            return { nombre: s.nombre, tema_id: temaId, logo_url: logoUrl };
+            return { nombre: s.nombre, tema_id: temaId, logo_url: logoUrl, sort_order: index };
           })
         );
         const { error: subtemaError } = await supabase.from('subtemas').insert(subtemasConLogo);
@@ -265,14 +274,23 @@ const Temario: React.FC = () => {
     try {
       setLoadingMessage('Creando subtemas'); setLoadingType('uploading');
       setIsUploadingLogo(true);
+      const { data: maxSubtemaData } = await supabase
+        .from('subtemas')
+        .select('sort_order')
+        .eq('tema_id', parseInt(selectedTemaId, 10))
+        .order('sort_order', { ascending: false })
+        .limit(1);
+      const baseSubtemaSortOrder = (maxSubtemaData && maxSubtemaData.length > 0 && maxSubtemaData[0].sort_order != null)
+        ? maxSubtemaData[0].sort_order + 1
+        : 0;
       const subtemasConLogo = await Promise.all(
-        subtemasValidos.map(async (s) => {
+        subtemasValidos.map(async (s, index) => {
           let logoUrl: string | null = null;
           if (s.logoFile) {
             const up = await uploadToCloudinary(s.logoFile, { folder: 'temas' });
             logoUrl = up.secure_url || null;
           }
-          return { nombre: s.nombre, tema_id: parseInt(selectedTemaId, 10), logo_url: logoUrl };
+          return { nombre: s.nombre, tema_id: parseInt(selectedTemaId, 10), logo_url: logoUrl, sort_order: baseSubtemaSortOrder + index };
         })
       );
       const { error } = await supabase.from('subtemas').insert(subtemasConLogo);

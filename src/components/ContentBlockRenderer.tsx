@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { ContentBlock, BlockType } from './PageContentEditor';
 import ImageViewerModal from './ImageViewerModal';
 import { renderBoldText } from './BoldField';
@@ -33,6 +33,9 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({ blocks }) =
 
 const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }> = ({ block, onZoom }) => {
   const [imgHovered, setImgHovered] = useState(false);
+  const [imgHoveredLeft, setImgHoveredLeft] = useState(false);
+  const [imgHoveredRight, setImgHoveredRight] = useState(false);
+  const [imgHoveredIdx, setImgHoveredIdx] = useState<number>(-1);
   const type = block.block_type as BlockType;
   const c = block.content;
 
@@ -73,8 +76,17 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
 
     case 'image': {
       if (!c.url) return null;
+      const sizeMap: Record<string, string> = { small: '340px', medium: '540px', large: '100%' };
+      const maxW = sizeMap[(c.size as string) ?? 'large'] ?? '100%';
+      const align = (c.align as string) ?? 'center';
+      const figureStyle: React.CSSProperties = {
+        ...rs.figure,
+        maxWidth: maxW,
+        marginLeft: align === 'right' ? 'auto' : align === 'center' ? 'auto' : 0,
+        marginRight: align === 'left' ? 'auto' : align === 'center' ? 'auto' : 0,
+      };
       return (
-        <figure style={rs.figure}>
+        <figure style={figureStyle}>
           <div
             style={{ ...rs.imgClickWrap, ...(imgHovered ? rs.imgClickWrapHover : {}) }}
             onClick={() => onZoom(c.url)}
@@ -135,10 +147,309 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
       );
     }
 
+    case 'two_images': {
+      const hasLeft = Boolean(c.image_url_left);
+      const hasRight = Boolean(c.image_url_right);
+      if (!hasLeft && !hasRight) return null;
+
+      return (
+        <div style={rs.twoImgRow} className="cb-two-img-row">
+          {hasLeft && (
+            <figure style={rs.twoImgFigure}>
+              <div
+                style={{ ...rs.twoImgWrap, ...(imgHoveredLeft ? rs.twoImgWrapHover : {}) }}
+                onClick={() => onZoom(c.image_url_left)}
+                onMouseEnter={() => setImgHoveredLeft(true)}
+                onMouseLeave={() => setImgHoveredLeft(false)}
+                title="Ver en grande"
+              >
+                <img
+                  src={c.image_url_left}
+                  alt={c.image_caption_left || 'Imagen izquierda'}
+                  style={rs.twoImgImage}
+                  loading="lazy"
+                  draggable={false}
+                />
+                <div style={{ ...rs.zoomOverlay, opacity: imgHoveredLeft ? 1 : 0 }}>🔍</div>
+              </div>
+              {c.image_caption_left && (
+                <figcaption style={rs.caption}>{renderBoldText(c.image_caption_left)}</figcaption>
+              )}
+            </figure>
+          )}
+          {hasRight && (
+            <figure style={rs.twoImgFigure}>
+              <div
+                style={{ ...rs.twoImgWrap, ...(imgHoveredRight ? rs.twoImgWrapHover : {}) }}
+                onClick={() => onZoom(c.image_url_right)}
+                onMouseEnter={() => setImgHoveredRight(true)}
+                onMouseLeave={() => setImgHoveredRight(false)}
+                title="Ver en grande"
+              >
+                <img
+                  src={c.image_url_right}
+                  alt={c.image_caption_right || 'Imagen derecha'}
+                  style={rs.twoImgImage}
+                  loading="lazy"
+                  draggable={false}
+                />
+                <div style={{ ...rs.zoomOverlay, opacity: imgHoveredRight ? 1 : 0 }}>🔍</div>
+              </div>
+              {c.image_caption_right && (
+                <figcaption style={rs.caption}>{renderBoldText(c.image_caption_right)}</figcaption>
+              )}
+            </figure>
+          )}
+        </div>
+      );
+    }
+
+    case 'three_images': {
+      const has1 = Boolean(c.image_url_1);
+      const has2 = Boolean(c.image_url_2);
+      const has3 = Boolean(c.image_url_3);
+      if (!has1 && !has2 && !has3) return null;
+      const items = [
+        { url: c.image_url_1, cap: c.image_caption_1 },
+        { url: c.image_url_2, cap: c.image_caption_2 },
+        { url: c.image_url_3, cap: c.image_caption_3 },
+      ].filter(x => x.url);
+      return (
+        <div style={rs.twoImgRow} className="cb-three-img-row">
+          {items.map((item, idx) => (
+            <figure key={idx} style={rs.twoImgFigure}>
+              <div
+                style={{ ...rs.twoImgWrap, ...(imgHoveredIdx === idx ? rs.twoImgWrapHover : {}) }}
+                onClick={() => onZoom(item.url)}
+                onMouseEnter={() => setImgHoveredIdx(idx)}
+                onMouseLeave={() => setImgHoveredIdx(-1)}
+                title="Ver en grande"
+              >
+                <img
+                  src={item.url}
+                  alt={item.cap || `Imagen ${idx + 1}`}
+                  style={rs.twoImgImage}
+                  loading="lazy"
+                  draggable={false}
+                />
+                <div style={{ ...rs.zoomOverlay, opacity: imgHoveredIdx === idx ? 1 : 0 }}>🔍</div>
+              </div>
+              {item.cap && <figcaption style={rs.caption}>{renderBoldText(item.cap)}</figcaption>}
+            </figure>
+          ))}
+        </div>
+      );
+    }
+
+    case 'callout': {
+      if (!c.text) return null;
+      const variants: Record<string, { icon: string; bg: string; border: string; color: string }> = {
+        info:     { icon: 'ℹ️',  bg: '#eff6ff', border: '#93c5fd', color: '#1d4ed8' },
+        tip:      { icon: '💡',  bg: '#f0fdf4', border: '#86efac', color: '#15803d' },
+        warning:  { icon: '⚠️',  bg: '#fffbeb', border: '#fcd34d', color: '#b45309' },
+        clinical: { icon: '🔬',  bg: '#fdf4ff', border: '#d8b4fe', color: '#7e22ce' },
+      };
+      const v = variants[(c.variant as string) ?? 'info'] ?? variants.info;
+      return (
+        <div style={{ background: v.bg, border: `1.5px solid ${v.border}`, borderRadius: '10px', padding: '14px 18px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+          <span style={{ fontSize: '1.2em', flexShrink: 0, lineHeight: 1.6 }}>{v.icon}</span>
+          <p style={{ margin: 0, color: v.color, fontSize: '0.96em', lineHeight: 1.75, fontWeight: 500, whiteSpace: 'pre-wrap' as const, wordBreak: 'break-word' as const }}>{renderBoldText(c.text)}</p>
+        </div>
+      );
+    }
+
+    case 'list': {
+      if (!c.items) return null;
+      const itemArr = (c.items as string).split('\n').map((s: string) => s.trim()).filter(Boolean);
+      if (itemArr.length === 0) return null;
+      const isNumbered = c.style === 'numbered';
+      const Tag = isNumbered ? 'ol' : 'ul';
+      return (
+        <Tag style={{ paddingLeft: '1.5em', margin: 0, display: 'flex', flexDirection: 'column' as const, gap: '6px' }}>
+          {itemArr.map((item: string, i: number) => (
+            <li key={i} style={{ fontSize: '1em', lineHeight: 1.75, color: '#334155' }}>{renderBoldText(item)}</li>
+          ))}
+        </Tag>
+      );
+    }
+
+    case 'divider': {
+      const divStlMap: Record<string, React.CSSProperties> = {
+        gradient: { height: '3px', background: 'linear-gradient(90deg, #38bdf8, #818cf8)', borderRadius: '4px', border: 'none' },
+        simple:   { height: '1px', background: '#e2e8f0', border: 'none' },
+        labeled:  { height: 0, border: 'none' },
+      };
+      const stl = (c.style as string) ?? 'gradient';
+      if (stl === 'labeled') {
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '4px 0' }}>
+            <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {[0, 1, 2].map(i => <div key={i} style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#94a3b8' }} />)}
+            </div>
+            <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+          </div>
+        );
+      }
+      return <div style={{ ...(divStlMap[stl] ?? divStlMap.gradient), margin: '4px 0' }} />;
+    }
+
+    case 'carousel': {
+      const slides = readCarouselSlides(c, 'image_', 8);
+      if (slides.length === 0) return null;
+      return (
+        <figure style={{ margin: '0 auto', maxWidth: '700px', width: '100%' }}>
+          <CarouselPlayer
+            slides={slides}
+            interval={Number(c.interval ?? 4)}
+            auto={(c.auto as string) !== 'false'}
+            onZoom={onZoom}
+          />
+        </figure>
+      );
+    }
+
+    case 'text_carousel': {
+      const slides = readCarouselSlides(c, 'image_', 6);
+      const hasText = Boolean(c.text);
+      if (!hasText && slides.length === 0) return null;
+      const isLeft = c.image_position !== 'right';
+      const direction: React.CSSProperties['flexDirection'] = isLeft ? 'row' : 'row-reverse';
+      const tiTextAlign = (c.ti_text_align as React.CSSProperties['textAlign']) ?? 'left';
+      return (
+        <div style={{ ...rs.tiRow, flexDirection: direction }} className="cb-ti-row">
+          {slides.length > 0 && (
+            <div style={{ flexShrink: 0, width: '42%', minWidth: 0 }} className="cb-ti-figure">
+              <CarouselPlayer
+                slides={slides}
+                interval={Number(c.interval ?? 4)}
+                auto={(c.auto as string) !== 'false'}
+                onZoom={onZoom}
+              />
+            </div>
+          )}
+          {hasText && (
+            <p className="cb-ti-text" style={{ ...rs.tiText, textAlign: tiTextAlign }}>
+              {renderBoldText(c.text as string)}
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    case 'double_carousel': {
+      const leftSlides = readCarouselSlides(c, 'left_image_', 5);
+      const rightSlides = readCarouselSlides(c, 'right_image_', 5);
+      if (leftSlides.length === 0 && rightSlides.length === 0) return null;
+      const interval = Number(c.interval ?? 4);
+      const autoPlay = (c.auto as string) !== 'false';
+      return (
+        <div style={rs.twoImgRow} className="cb-two-img-row">
+          {leftSlides.length > 0 && (
+            <div style={{ flex: '1 1 0', minWidth: 0 }}>
+              <CarouselPlayer slides={leftSlides} interval={interval} auto={autoPlay} onZoom={onZoom} />
+            </div>
+          )}
+          {rightSlides.length > 0 && (
+            <div style={{ flex: '1 1 0', minWidth: 0 }}>
+              <CarouselPlayer slides={rightSlides} interval={interval} auto={autoPlay} onZoom={onZoom} />
+            </div>
+          )}
+        </div>
+      );
+    }
+
     default:
       return null;
   }
 };
+
+// ── Reproductor de carrusel ───────────────────────────────────────────────────
+const CarouselPlayer: React.FC<{
+  slides: { url: string; caption?: string }[];
+  interval: number;
+  auto: boolean;
+  onZoom?: (url: string) => void;
+}> = ({ slides, interval, auto, onZoom }) => {
+  const [current, setCurrent] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [imgH, setImgH] = useState(false);
+  const count = slides.length;
+
+  useEffect(() => {
+    if (!auto || count <= 1 || interval <= 0 || paused) return;
+    const t = setTimeout(() => setCurrent(c => (c + 1) % count), interval * 1000);
+    return () => clearTimeout(t);
+  }, [current, paused, count, interval, auto]);
+
+  if (count === 0) {
+    return (
+      <div style={{ height: '140px', background: '#f1f5f9', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.9em' }}>
+        Sin imágenes
+      </div>
+    );
+  }
+
+  const slide = slides[current];
+  const prev = (e: React.MouseEvent) => { e.stopPropagation(); setCurrent(c => (c - 1 + count) % count); };
+  const next = (e: React.MouseEvent) => { e.stopPropagation(); setCurrent(c => (c + 1) % count); };
+
+  return (
+    <div style={rs.carouselWrap} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+      <div
+        style={{ ...rs.carouselSlide, ...(imgH ? rs.imgClickWrapHover : {}) }}
+        onClick={() => onZoom?.(slide.url)}
+        onMouseEnter={() => setImgH(true)}
+        onMouseLeave={() => setImgH(false)}
+        title="Ver en grande"
+      >
+        <img
+          key={slide.url + current}
+          src={slide.url}
+          alt={slide.caption ?? ''}
+          style={rs.carouselImage}
+          loading="lazy"
+          draggable={false}
+        />
+        <div style={{ ...rs.zoomOverlay, opacity: imgH ? 1 : 0 }}>🔍</div>
+        {count > 1 && (
+          <>
+            <button style={{ ...rs.carouselArrow, left: '8px' }} onClick={prev} title="Anterior">❮</button>
+            <button style={{ ...rs.carouselArrow, right: '8px' }} onClick={next} title="Siguiente">❯</button>
+          </>
+        )}
+      </div>
+      {slide.caption && <figcaption style={rs.caption}>{renderBoldText(slide.caption)}</figcaption>}
+      {count > 1 && (
+        <div style={rs.dotsRow}>
+          {slides.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrent(i)}
+              style={{ ...rs.dot, ...(i === current ? rs.dotActive : {}) }}
+              title={`Imagen ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Helpers para casos carousel ────────────────────────────────────────────────
+function readCarouselSlides(
+  c: Record<string, unknown>,
+  prefix: string,
+  max: number,
+): { url: string; caption?: string }[] {
+  const slides: { url: string; caption?: string }[] = [];
+  for (let i = 1; i <= max; i++) {
+    const url = (c[`${prefix}url_${i}`] as string) ?? '';
+    if (!url) break;
+    slides.push({ url, caption: (c[`${prefix}cap_${i}`] as string) || undefined });
+  }
+  return slides;
+}
 
 // ── Estilos de renderizado ────────────────────────────────────────────────────
 const rs: Record<string, React.CSSProperties> = {
@@ -275,6 +586,104 @@ const rs: Record<string, React.CSSProperties> = {
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     overflowWrap: 'break-word',
+  },
+
+  // Bloque dos imágenes
+  twoImgRow: {
+    display: 'flex',
+    gap: '16px',
+    alignItems: 'stretch',
+  },
+  twoImgFigure: {
+    flex: '1 1 0',
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    margin: 0,
+  },
+  twoImgWrap: {
+    width: '100%',
+    aspectRatio: '4 / 3',
+    overflow: 'hidden',
+    borderRadius: '12px',
+    position: 'relative',
+    cursor: 'zoom-in',
+    transition: 'transform 0.2s, box-shadow 0.2s',
+  },
+  twoImgWrapHover: {
+    transform: 'scale(1.015)',
+    boxShadow: '0 8px 32px rgba(14,165,233,0.22)',
+  },
+  twoImgImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+    boxShadow: '0 4px 18px rgba(15,23,42,0.12)',
+  },
+
+  // Carrusel
+  carouselWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    width: '100%',
+  },
+  carouselSlide: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: '4 / 3',
+    overflow: 'hidden',
+    borderRadius: '14px',
+    cursor: 'zoom-in',
+    transition: 'transform 0.2s, box-shadow 0.2s',
+    display: 'block',
+    userSelect: 'none',
+  },
+  carouselImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+    transition: 'opacity 0.3s ease',
+  },
+  carouselArrow: {
+    position: 'absolute',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    background: 'rgba(15,23,42,0.55)',
+    border: 'none',
+    color: '#fff',
+    fontSize: '1.1em',
+    padding: '8px 12px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    zIndex: 2,
+    lineHeight: 1,
+    transition: 'background 0.15s',
+  },
+  dotsRow: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '6px',
+    marginTop: '2px',
+    paddingBottom: '2px',
+  },
+  dot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    background: '#cbd5e1',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 0,
+    flexShrink: 0,
+    transition: 'background 0.2s, transform 0.2s',
+  },
+  dotActive: {
+    background: '#38bdf8',
+    transform: 'scale(1.35)',
   },
 };
 

@@ -702,10 +702,10 @@ body {
   }
 }
 
-/* 4 columnas desde 900px (desktop) */
+/* 3 columnas desde 900px en adelante (máximo 3 columnas) */
 @media (min-width: 900px) {
   .temas-grid-home {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
   }
   .tema-card-img-wrap {
@@ -715,22 +715,6 @@ body {
   }
   .tema-card-label {
     font-size: 1em;
-  }
-}
-
-/* 5 columnas desde 1200px (pantalla grande) */
-@media (min-width: 1200px) {
-  .temas-grid-home {
-    grid-template-columns: repeat(5, 1fr);
-    gap: 18px;
-  }
-  .tema-card-img-wrap {
-    width: 100%;
-    aspect-ratio: 4 / 3;
-    height: auto;
-  }
-  .tema-card-label {
-    font-size: 1.05em;
   }
 }
 
@@ -1126,5 +1110,30 @@ body {
   }
   .cb-paragraph {
     font-size: 0.78em !important;
+  }
+}
+
+/* ── Bloques de imágenes múltiples responsive ── */
+
+/* Dos imágenes: apila en columna en móvil muy pequeño */
+@media (max-width: 440px) {
+  .cb-two-img-row {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+}
+
+/* Tres imágenes: 2 cols en tablet, 1 col en móvil */
+@media (max-width: 620px) {
+  .cb-three-img-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+}
+@media (max-width: 380px) {
+  .cb-three-img-row {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
   }
 }

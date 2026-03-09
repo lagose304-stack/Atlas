@@ -6,7 +6,7 @@ import BoldField from './BoldField';
 
 // ── Tipos exportados (también los usa ContentBlockRenderer) ───────────────────
 
-export type BlockType = 'heading' | 'subheading' | 'paragraph' | 'image' | 'text_image';
+export type BlockType = 'heading' | 'subheading' | 'paragraph' | 'image' | 'text_image' | 'two_images' | 'three_images' | 'callout' | 'list' | 'divider' | 'carousel' | 'text_carousel' | 'double_carousel';
 
 export interface ContentBlock {
   id: string;
@@ -38,16 +38,24 @@ interface AllSubtema {
 
 // ── Metadatos visuales por tipo de bloque ────────────────────────────────────
 const BLOCK_META: Record<BlockType, { label: string; icon: string; color: string }> = {
-  heading:    { label: 'Título',         icon: 'H1', color: '#6366f1' },
-  subheading: { label: 'Subtítulo',      icon: 'H2', color: '#8b5cf6' },
-  paragraph:  { label: 'Párrafo',        icon: 'P',  color: '#0ea5e9' },
-  image:      { label: 'Imagen',         icon: '🖼',  color: '#10b981' },
-  text_image: { label: 'Texto + Imagen', icon: '⊞',  color: '#f59e0b' },
+  heading:      { label: 'Título',         icon: 'H1', color: '#6366f1' },
+  subheading:   { label: 'Subtítulo',      icon: 'H2', color: '#8b5cf6' },
+  paragraph:    { label: 'Párrafo',        icon: 'P',  color: '#0ea5e9' },
+  image:        { label: 'Imagen',         icon: '🖼',  color: '#10b981' },
+  text_image:   { label: 'Texto + Imagen', icon: '⊞',  color: '#f59e0b' },
+  two_images:   { label: 'Dos Imágenes',   icon: '⊟⊟', color: '#ec4899' },
+  three_images: { label: 'Tres Imágenes',  icon: '⊟⊟⊟', color: '#a855f7' },
+  callout:        { label: 'Destacado',        icon: '💡',  color: '#f97316' },
+  list:           { label: 'Lista',            icon: '☰',   color: '#06b6d4' },
+  divider:        { label: 'Separador',        icon: '─',   color: '#94a3b8' },
+  carousel:       { label: 'Galería',          icon: '🎠',  color: '#6366f1' },
+  text_carousel:  { label: 'Texto + Galería',  icon: '📋🎠', color: '#3b82f6' },
+  double_carousel:{ label: 'Doble galería',    icon: '🎠🎠', color: '#8b5cf6' },
 };
 
 // ── Props del componente ─────────────────────────────────────────────────────
 interface PageContentEditorProps {
-  entityType: 'subtemas_page' | 'placas_page';
+  entityType: 'subtemas_page' | 'placas_page' | 'home_page';
   entityId: number;
 }
 
@@ -120,9 +128,25 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
     (type: BlockType) => {
       const defaultContent: Record<string, string> =
         type === 'image'
-          ? { url: '', caption: '' }
+          ? { url: '', caption: '', size: 'large', align: 'center' }
           : type === 'text_image'
           ? { text: '', image_url: '', image_position: 'right', image_caption: '' }
+          : type === 'two_images'
+          ? { image_url_left: '', image_caption_left: '', image_url_right: '', image_caption_right: '' }
+          : type === 'three_images'
+          ? { image_url_1: '', image_caption_1: '', image_url_2: '', image_caption_2: '', image_url_3: '', image_caption_3: '' }
+          : type === 'callout'
+          ? { text: '', variant: 'info' }
+          : type === 'list'
+          ? { items: '', style: 'bullet' }
+          : type === 'divider'
+          ? { style: 'gradient' }
+          : type === 'carousel'
+          ? { interval: '4', auto: 'true' }
+          : type === 'text_carousel'
+          ? { text: '', image_position: 'right', ti_text_align: 'left', interval: '4', auto: 'true' }
+          : type === 'double_carousel'
+          ? { interval: '4', auto: 'true' }
           : { text: '' };
 
       const newBlock: EditorBlock = {
@@ -155,6 +179,24 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   const deleteBlock = useCallback((blockId: string) => {
     if (!window.confirm('¿Eliminar este bloque de contenido?')) return;
     setBlocks(prev => prev.filter(b => b.id !== blockId));
+    setHasChanges(true);
+  }, []);
+
+  const duplicateBlock = useCallback((blockId: string) => {
+    setBlocks(prev => {
+      const idx = prev.findIndex(b => b.id === blockId);
+      if (idx === -1) return prev;
+      const original = prev[idx];
+      const clone: EditorBlock = {
+        ...original,
+        id: crypto.randomUUID(),
+        content: { ...original.content },
+        _isNew: true,
+      };
+      const next = [...prev];
+      next.splice(idx + 1, 0, clone);
+      return next;
+    });
     setHasChanges(true);
   }, []);
 
@@ -213,16 +255,21 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
     setAllFilterTema('');
     setAllFilterSubtema('');
     setLoadingPlacas(true);
-    const col = entityType === 'placas_page' ? 'subtema_id' : 'tema_id';
-    supabase
-      .from('placas')
-      .select('id, photo_url')
-      .eq(col, entityId)
-      .order('sort_order', { ascending: true })
-      .then(({ data }) => {
-        setAvailablePlacas(data ?? []);
-        setLoadingPlacas(false);
-      });
+    if (entityType === 'home_page') {
+      setAvailablePlacas([]);
+      setLoadingPlacas(false);
+    } else {
+      const col = entityType === 'placas_page' ? 'subtema_id' : 'tema_id';
+      supabase
+        .from('placas')
+        .select('id, photo_url')
+        .eq(col, entityId)
+        .order('sort_order', { ascending: true })
+        .then(({ data }) => {
+          setAvailablePlacas(data ?? []);
+          setLoadingPlacas(false);
+        });
+    }
     // Cargar temas para la pestaña "Todas"
     supabase
       .from('temas')
@@ -413,15 +460,26 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
                     </span>
                     <span style={es.typeLabel}>{meta.label}</span>
                   </div>
-                  <button
-                    style={es.deleteBtn}
-                    onClick={() => deleteBlock(block.id)}
-                    title="Eliminar bloque"
-                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#fee2e2')}
-                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
-                  >
-                    ✕
-                  </button>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <button
+                      style={es.duplicateBtn}
+                      onClick={() => duplicateBlock(block.id)}
+                      title="Duplicar bloque"
+                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#e0f2fe')}
+                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
+                    >
+                      ⧉
+                    </button>
+                    <button
+                      style={es.deleteBtn}
+                      onClick={() => deleteBlock(block.id)}
+                      title="Eliminar bloque"
+                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#fee2e2')}
+                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
 
                 {/* Área de edición según tipo */}
@@ -476,7 +534,11 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
                     <ImageBlockEditor
                       url={block.content.url ?? ''}
                       caption={block.content.caption ?? ''}
+                      size={(block.content.size as 'small' | 'medium' | 'large') ?? 'large'}
+                      align={(block.content.align as 'left' | 'center' | 'right') ?? 'center'}
                       onCaptionChange={caption => updateBlockContent(block.id, { caption })}
+                      onSizeChange={size => updateBlockContent(block.id, { size })}
+                      onAlignChange={align => updateBlockContent(block.id, { align })}
                       onPickImage={() => openImageModal(block.id, 'url')}
                     />
                   )}
@@ -501,6 +563,77 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
                         updateBlockContent(block.id, { ti_text_align: align })
                       }
                       onPickImage={() => openImageModal(block.id, 'image_url')}
+                    />
+                  )}
+
+                  {block.block_type === 'two_images' && (
+                    <TwoImagesBlockEditor
+                      imageUrlLeft={block.content.image_url_left ?? ''}
+                      imageCaptionLeft={block.content.image_caption_left ?? ''}
+                      imageUrlRight={block.content.image_url_right ?? ''}
+                      imageCaptionRight={block.content.image_caption_right ?? ''}
+                      onPickLeft={() => openImageModal(block.id, 'image_url_left')}
+                      onPickRight={() => openImageModal(block.id, 'image_url_right')}
+                      onCaptionLeftChange={v => updateBlockContent(block.id, { image_caption_left: v })}
+                      onCaptionRightChange={v => updateBlockContent(block.id, { image_caption_right: v })}
+                    />
+                  )}
+
+                  {block.block_type === 'three_images' && (
+                    <ThreeImagesBlockEditor
+                      urls={[block.content.image_url_1 ?? '', block.content.image_url_2 ?? '', block.content.image_url_3 ?? '']}
+                      captions={[block.content.image_caption_1 ?? '', block.content.image_caption_2 ?? '', block.content.image_caption_3 ?? '']}
+                      onPick={i => openImageModal(block.id, `image_url_${i + 1}`)}
+                      onCaptionChange={(i, v) => updateBlockContent(block.id, { [`image_caption_${i + 1}`]: v })}
+                    />
+                  )}
+
+                  {block.block_type === 'callout' && (
+                    <CalloutBlockEditor
+                      text={block.content.text ?? ''}
+                      variant={(block.content.variant as CalloutVariant) ?? 'info'}
+                      onTextChange={text => updateBlockContent(block.id, { text })}
+                      onVariantChange={variant => updateBlockContent(block.id, { variant })}
+                    />
+                  )}
+
+                  {block.block_type === 'list' && (
+                    <ListBlockEditor
+                      items={block.content.items ?? ''}
+                      style={(block.content.style as 'bullet' | 'numbered') ?? 'bullet'}
+                      onItemsChange={items => updateBlockContent(block.id, { items })}
+                      onStyleChange={style => updateBlockContent(block.id, { style })}
+                    />
+                  )}
+
+                  {block.block_type === 'divider' && (
+                    <DividerBlockEditor
+                      style={(block.content.style as DividerStyle) ?? 'gradient'}
+                      onStyleChange={style => updateBlockContent(block.id, { style })}
+                    />
+                  )}
+
+                  {block.block_type === 'carousel' && (
+                    <CarouselBlockEditor
+                      content={block.content as Record<string, unknown>}
+                      onContentChange={changes => updateBlockContent(block.id, changes as Record<string, string>)}
+                      onPickImage={field => openImageModal(block.id, field)}
+                    />
+                  )}
+
+                  {block.block_type === 'text_carousel' && (
+                    <TextCarouselBlockEditor
+                      content={block.content as Record<string, unknown>}
+                      onContentChange={changes => updateBlockContent(block.id, changes as Record<string, string>)}
+                      onPickImage={field => openImageModal(block.id, field)}
+                    />
+                  )}
+
+                  {block.block_type === 'double_carousel' && (
+                    <DoubleCarouselBlockEditor
+                      content={block.content as Record<string, unknown>}
+                      onContentChange={changes => updateBlockContent(block.id, changes as Record<string, string>)}
+                      onPickImage={field => openImageModal(block.id, field)}
                     />
                   )}
                 </div>
@@ -632,14 +765,15 @@ const AutoTextarea: React.FC<{
 interface ImageBlockEditorProps {
   url: string;
   caption: string;
+  size: 'small' | 'medium' | 'large';
+  align: 'left' | 'center' | 'right';
   onCaptionChange: (v: string) => void;
+  onSizeChange: (v: string) => void;
+  onAlignChange: (v: string) => void;
   onPickImage: () => void;
 }
 const ImageBlockEditor: React.FC<ImageBlockEditorProps> = ({
-  url,
-  caption,
-  onCaptionChange,
-  onPickImage,
+  url, caption, size, align, onCaptionChange, onSizeChange, onAlignChange, onPickImage,
 }) => (
   <div style={es.imageBlockWrap}>
     <div style={es.imageBlockRow}>
@@ -659,20 +793,36 @@ const ImageBlockEditor: React.FC<ImageBlockEditorProps> = ({
         <button
           style={es.pickImgBtn}
           onClick={onPickImage}
-          onMouseEnter={e => {
-            const el = e.currentTarget as HTMLButtonElement;
-            el.style.borderColor = '#38bdf8';
-            el.style.background = '#f0f9ff';
-          }}
-          onMouseLeave={e => {
-            const el = e.currentTarget as HTMLButtonElement;
-            el.style.borderColor = '#cbd5e1';
-            el.style.background = '#f8fafc';
-          }}
+          onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#38bdf8'; el.style.background = '#f0f9ff'; }}
+          onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#cbd5e1'; el.style.background = '#f8fafc'; }}
         >
           🖼 Seleccionar imagen
         </button>
       )}
+    </div>
+    {/* Tamaño y alineación */}
+    <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' as const, marginTop: '10px' }}>
+      <div>
+        <span style={es.fieldLabel}>Tamaño:</span>
+        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+          {(['small', 'medium', 'large'] as const).map(s => (
+            <button key={s} style={{ ...es.posBtn, ...(size === s ? es.posBtnActive : {}) }} onClick={() => onSizeChange(s)}>
+              {s === 'small' ? 'Pequeña' : s === 'medium' ? 'Mediana' : 'Grande'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <span style={es.fieldLabel}>Alineación:</span>
+        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+          {(['left', 'center', 'right'] as const).map(a => {
+            const icons = { left: '⇤ Izq', center: '≡ Centro', right: 'Der ⇥' };
+            return (
+              <button key={a} style={{ ...es.alignBtn, ...(align === a ? es.alignBtnActive : {}) }} onClick={() => onAlignChange(a)}>{icons[a]}</button>
+            );
+          })}
+        </div>
+      </div>
     </div>
     <div style={es.captionRow}>
       <label style={es.fieldLabel}>Pie de foto (opcional)</label>
@@ -814,6 +964,445 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
   </div>
 );
 
+// Editor de bloque dos imágenes
+interface TwoImagesBlockEditorProps {
+  imageUrlLeft: string;
+  imageCaptionLeft: string;
+  imageUrlRight: string;
+  imageCaptionRight: string;
+  onPickLeft: () => void;
+  onPickRight: () => void;
+  onCaptionLeftChange: (v: string) => void;
+  onCaptionRightChange: (v: string) => void;
+}
+const TwoImagesBlockEditor: React.FC<TwoImagesBlockEditorProps> = ({
+  imageUrlLeft, imageCaptionLeft, imageUrlRight, imageCaptionRight,
+  onPickLeft, onPickRight, onCaptionLeftChange, onCaptionRightChange,
+}) => (
+  <div style={es.tiEditorWrap}>
+    <div style={es.tiEditorGrid}>
+      {/* Imagen izquierda */}
+      <div style={es.tiCol}>
+        <label style={es.fieldLabel}>Imagen izquierda</label>
+        {imageUrlLeft ? (
+          <>
+            <img src={imageUrlLeft} alt="Vista previa" style={es.tiImgPreview} />
+            <button
+              style={es.changeImgBtn}
+              onClick={onPickLeft}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#e0f2fe')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#f8fafc')}
+            >🔄 Cambiar imagen</button>
+          </>
+        ) : (
+          <button
+            style={{ ...es.pickImgBtn, minHeight: '100px' }}
+            onClick={onPickLeft}
+            onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#38bdf8'; el.style.background = '#f0f9ff'; }}
+            onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#cbd5e1'; el.style.background = '#f8fafc'; }}
+          >🖼 Seleccionar imagen</button>
+        )}
+        <BoldField
+          as="input"
+          style={{ ...es.captionInput, marginTop: '6px' }}
+          value={imageCaptionLeft}
+          onChange={onCaptionLeftChange}
+          placeholder="Pie de foto izquierda..."
+        />
+      </div>
+
+      {/* Imagen derecha */}
+      <div style={es.tiCol}>
+        <label style={es.fieldLabel}>Imagen derecha</label>
+        {imageUrlRight ? (
+          <>
+            <img src={imageUrlRight} alt="Vista previa" style={es.tiImgPreview} />
+            <button
+              style={es.changeImgBtn}
+              onClick={onPickRight}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#e0f2fe')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#f8fafc')}
+            >🔄 Cambiar imagen</button>
+          </>
+        ) : (
+          <button
+            style={{ ...es.pickImgBtn, minHeight: '100px' }}
+            onClick={onPickRight}
+            onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#38bdf8'; el.style.background = '#f0f9ff'; }}
+            onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#cbd5e1'; el.style.background = '#f8fafc'; }}
+          >🖼 Seleccionar imagen</button>
+        )}
+        <BoldField
+          as="input"
+          style={{ ...es.captionInput, marginTop: '6px' }}
+          value={imageCaptionRight}
+          onChange={onCaptionRightChange}
+          placeholder="Pie de foto derecha..."
+        />
+      </div>
+    </div>
+  </div>
+);
+
+// Editor de bloque tres imágenes
+interface ThreeImagesBlockEditorProps {
+  urls: string[];
+  captions: string[];
+  onPick: (i: number) => void;
+  onCaptionChange: (i: number, v: string) => void;
+}
+const LABEL_3 = ['Imagen izquierda', 'Imagen central', 'Imagen derecha'];
+const ThreeImagesBlockEditor: React.FC<ThreeImagesBlockEditorProps> = ({ urls, captions, onPick, onCaptionChange }) => (
+  <div style={es.tiEditorWrap}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+      {[0, 1, 2].map(i => (
+        <div key={i} style={es.tiCol}>
+          <label style={es.fieldLabel}>{LABEL_3[i]}</label>
+          {urls[i] ? (
+            <>
+              <img src={urls[i]} alt="Vista previa" style={es.tiImgPreview} />
+              <button style={es.changeImgBtn} onClick={() => onPick(i)}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#e0f2fe')}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#f8fafc')}
+              >🔄 Cambiar</button>
+            </>
+          ) : (
+            <button style={{ ...es.pickImgBtn, minHeight: '80px' }} onClick={() => onPick(i)}
+              onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#38bdf8'; el.style.background = '#f0f9ff'; }}
+              onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#cbd5e1'; el.style.background = '#f8fafc'; }}
+            >🖼 Seleccionar</button>
+          )}
+          <BoldField as="input" style={{ ...es.captionInput, marginTop: '6px' }}
+            value={captions[i]} onChange={v => onCaptionChange(i, v)} placeholder="Pie de foto..." />
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+// Editor de bloque callout
+type CalloutVariant = 'info' | 'tip' | 'warning' | 'clinical';
+const CALLOUT_META: Record<CalloutVariant, { icon: string; label: string; bg: string; border: string; color: string }> = {
+  info:     { icon: 'ℹ️',  label: 'Información', bg: '#eff6ff', border: '#93c5fd', color: '#1d4ed8' },
+  tip:      { icon: '💡',  label: 'Consejo',      bg: '#f0fdf4', border: '#86efac', color: '#15803d' },
+  warning:  { icon: '⚠️',  label: 'Importante',  bg: '#fffbeb', border: '#fcd34d', color: '#b45309' },
+  clinical: { icon: '🔬',  label: 'Dato clínico', bg: '#fdf4ff', border: '#d8b4fe', color: '#7e22ce' },
+};
+interface CalloutBlockEditorProps {
+  text: string;
+  variant: CalloutVariant;
+  onTextChange: (v: string) => void;
+  onVariantChange: (v: CalloutVariant) => void;
+}
+const CalloutBlockEditor: React.FC<CalloutBlockEditorProps> = ({ text, variant, onTextChange, onVariantChange }) => (
+  <div style={es.tiEditorWrap}>
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' as const, marginBottom: '10px' }}>
+      <span style={es.fieldLabel}>Tipo:</span>
+      {(Object.keys(CALLOUT_META) as CalloutVariant[]).map(v => {
+        const m = CALLOUT_META[v];
+        const active = variant === v;
+        return (
+          <button key={v} onClick={() => onVariantChange(v)} style={{
+            ...es.posBtn, ...(active ? { ...es.posBtnActive, background: m.bg, color: m.color, borderColor: m.border } : {}),
+          }}>{m.icon} {m.label}</button>
+        );
+      })}
+    </div>
+    <AutoTextarea value={text} onChange={onTextChange} placeholder="Escribe el contenido destacado..." extraStyle={es.textareaParagraph} />
+  </div>
+);
+
+// Editor de bloque lista
+interface ListBlockEditorProps {
+  items: string;
+  style: 'bullet' | 'numbered';
+  onItemsChange: (v: string) => void;
+  onStyleChange: (v: string) => void;
+}
+const ListBlockEditor: React.FC<ListBlockEditorProps> = ({ items, style, onItemsChange, onStyleChange }) => (
+  <div style={es.tiEditorWrap}>
+    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+      <span style={es.fieldLabel}>Estilo:</span>
+      {(['bullet', 'numbered'] as const).map(s => (
+        <button key={s} style={{ ...es.posBtn, ...(style === s ? es.posBtnActive : {}) }} onClick={() => onStyleChange(s)}>
+          {s === 'bullet' ? '• Viñetas' : '1. Numerada'}
+        </button>
+      ))}
+    </div>
+    <AutoTextarea
+      value={items}
+      onChange={onItemsChange}
+      placeholder="Escribe cada ítem en una línea separada..."
+      extraStyle={es.textareaParagraph}
+    />
+    <p style={{ margin: '6px 0 0', fontSize: '0.78em', color: '#94a3b8' }}>
+      Cada línea es un ítem de la lista. Líneas vacías se ignoran.
+    </p>
+  </div>
+);
+
+// Editor de bloque divisor
+type DividerStyle = 'gradient' | 'simple' | 'labeled';
+interface DividerBlockEditorProps {
+  style: DividerStyle;
+  onStyleChange: (v: string) => void;
+}
+const DividerBlockEditor: React.FC<DividerBlockEditorProps> = ({ style, onStyleChange }) => (
+  <div style={es.tiEditorWrap}>
+    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <span style={es.fieldLabel}>Estilo del separador:</span>
+      {(['gradient', 'simple', 'labeled'] as const).map(s => (
+        <button key={s} style={{ ...es.posBtn, ...(style === s ? es.posBtnActive : {}) }} onClick={() => onStyleChange(s)}>
+          {s === 'gradient' ? '— Degradado' : s === 'simple' ? '— Simple' : '— Con puntos'}
+        </button>
+      ))}
+    </div>
+    <div style={{ marginTop: '14px', padding: '12px', background: '#f8fafc', borderRadius: '8px' }}>
+      {style === 'gradient' && <div style={{ height: '3px', background: 'linear-gradient(90deg, #38bdf8, #818cf8)', borderRadius: '4px' }} />}
+      {style === 'simple' && <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: 0 }} />}
+      {style === 'labeled' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+          <span style={{ display: 'flex', gap: '4px' }}>
+            {[0,1,2].map(i => <span key={i} style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#94a3b8', display: 'inline-block' }} />)}
+          </span>
+          <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+// ── Utilidades para bloques de carrusel ────────────────────────────────────────
+const MAX_CAROUSEL_SLIDES = 8;
+const MAX_HALF_SLIDES = 5;
+
+function getSlidesFromContent(
+  content: Record<string, unknown>,
+  prefix: string,
+  max: number,
+): { url: string; caption: string }[] {
+  const slides: { url: string; caption: string }[] = [];
+  for (let i = 1; i <= max; i++) {
+    const url = (content[`${prefix}url_${i}`] as string) ?? '';
+    if (!url) break;
+    slides.push({ url, caption: (content[`${prefix}cap_${i}`] as string) ?? '' });
+  }
+  return slides;
+}
+
+function slidesToContent(
+  slides: { url: string; caption: string }[],
+  prefix: string,
+  max: number,
+): Record<string, string> {
+  const obj: Record<string, string> = {};
+  for (let i = 1; i <= max; i++) {
+    const s = slides[i - 1];
+    obj[`${prefix}url_${i}`] = s?.url ?? '';
+    obj[`${prefix}cap_${i}`] = s?.caption ?? '';
+  }
+  return obj;
+}
+
+// Editor de slots de carrusel (reutilizable)
+interface CarouselSlotsEditorProps {
+  slides: { url: string; caption: string }[];
+  maxSlides: number;
+  onPickSlot: (idx: number) => void;
+  onCaptionChange: (idx: number, cap: string) => void;
+  onRemoveSlot: (idx: number) => void;
+  label?: string;
+}
+const CarouselSlotsEditor: React.FC<CarouselSlotsEditorProps> = ({
+  slides, maxSlides, onPickSlot, onCaptionChange, onRemoveSlot, label,
+}) => (
+  <div>
+    {label && <p style={{ ...es.fieldLabel, marginBottom: '8px', fontWeight: 700 }}>{label}</p>}
+    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px' }}>
+      {slides.map((slide, idx) => (
+        <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '8px 10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+          <img
+            src={slide.url} alt="Vista previa"
+            style={{ width: '64px', height: '48px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0, cursor: 'pointer' }}
+            onClick={() => onPickSlot(idx)}
+            title="Cambiar imagen"
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <BoldField as="input" value={slide.caption} onChange={v => onCaptionChange(idx, v)} placeholder="Pie de foto..." style={es.captionInput} />
+          </div>
+          <button
+            style={{ ...es.deleteBtn, fontSize: '0.78em', padding: '4px 8px' }}
+            onClick={() => onRemoveSlot(idx)} title="Quitar"
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#fee2e2')}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
+          >✕</button>
+        </div>
+      ))}
+      {slides.length < maxSlides && (
+        <button
+          style={{ ...es.pickImgBtn, padding: '8px 14px' }}
+          onClick={() => onPickSlot(slides.length)}
+          onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#38bdf8'; el.style.background = '#f0f9ff'; }}
+          onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#cbd5e1'; el.style.background = '#f8fafc'; }}
+        >+ Añadir imagen ({slides.length}/{maxSlides})</button>
+      )}
+      {slides.length >= maxSlides && (
+        <p style={{ margin: 0, fontSize: '0.76em', color: '#94a3b8' }}>Máximo alcanzado ({maxSlides} imágenes)</p>
+      )}
+    </div>
+  </div>
+);
+
+// Fila de configuración de intervalo
+interface IntervalRowProps {
+  interval: number;
+  auto: boolean;
+  onIntervalChange: (v: number) => void;
+  onAutoChange: (v: boolean) => void;
+}
+const IntervalRow: React.FC<IntervalRowProps> = ({ interval, auto, onIntervalChange, onAutoChange }) => (
+  <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' as const, marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
+    <div>
+      <span style={es.fieldLabel}>Auto-avance:</span>
+      <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+        <button style={{ ...es.posBtn, ...(auto ? es.posBtnActive : {}) }} onClick={() => onAutoChange(true)}>✓ Automático</button>
+        <button style={{ ...es.posBtn, ...(!auto ? es.posBtnActive : {}) }} onClick={() => onAutoChange(false)}>Solo flechas</button>
+      </div>
+    </div>
+    {auto && (
+      <div>
+        <span style={es.fieldLabel}>Intervalo:</span>
+        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+          {[2, 3, 4, 5, 8].map(s => (
+            <button key={s} style={{ ...es.posBtn, ...(interval === s ? es.posBtnActive : {}) }} onClick={() => onIntervalChange(s)}>{s}s</button>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+);
+
+// Editor de bloque galería (carrusel individual)
+interface CarouselBlockEditorProps {
+  content: Record<string, unknown>;
+  onContentChange: (changes: Record<string, unknown>) => void;
+  onPickImage: (field: string) => void;
+}
+const CarouselBlockEditor: React.FC<CarouselBlockEditorProps> = ({ content, onContentChange, onPickImage }) => {
+  const slides = getSlidesFromContent(content, 'image_', MAX_CAROUSEL_SLIDES);
+  return (
+    <div style={es.tiEditorWrap}>
+      <CarouselSlotsEditor
+        slides={slides}
+        maxSlides={MAX_CAROUSEL_SLIDES}
+        onPickSlot={idx => onPickImage(`image_url_${idx + 1}`)}
+        onCaptionChange={(idx, cap) =>
+          onContentChange({ [`image_cap_${idx + 1}`]: cap })
+        }
+        onRemoveSlot={idx =>
+          onContentChange(slidesToContent(slides.filter((_, i) => i !== idx), 'image_', MAX_CAROUSEL_SLIDES))
+        }
+      />
+      <IntervalRow
+        interval={Number(content.interval ?? 4)}
+        auto={(content.auto as string) !== 'false'}
+        onIntervalChange={v => onContentChange({ interval: String(v) })}
+        onAutoChange={v => onContentChange({ auto: String(v) })}
+      />
+    </div>
+  );
+};
+
+// Editor de bloque texto + galería
+interface TextCarouselBlockEditorProps {
+  content: Record<string, unknown>;
+  onContentChange: (changes: Record<string, unknown>) => void;
+  onPickImage: (field: string) => void;
+}
+const TextCarouselBlockEditor: React.FC<TextCarouselBlockEditorProps> = ({ content, onContentChange, onPickImage }) => {
+  const slides = getSlidesFromContent(content, 'image_', 6);
+  const pos = (content.image_position as string) ?? 'right';
+  const tiAlign = (content.ti_text_align as string) ?? 'left';
+  return (
+    <div style={es.tiEditorWrap}>
+      {/* Posición de la galería */}
+      <div style={es.positionRow}>
+        <span style={es.fieldLabel}>Galería:</span>
+        <div style={es.positionBtns}>
+          <button style={{ ...es.posBtn, ...(pos === 'left' ? es.posBtnActive : {}) }} onClick={() => onContentChange({ image_position: 'left' })}>⇤ Izquierda</button>
+          <button style={{ ...es.posBtn, ...(pos === 'right' ? es.posBtnActive : {}) }} onClick={() => onContentChange({ image_position: 'right' })}>Derecha ⇥</button>
+        </div>
+      </div>
+      {/* Alineación del texto */}
+      <div style={es.alignRow}>
+        {(['left', 'center', 'right'] as const).map(a => {
+          const icons = { left: '⇤ Izq', center: '≡ Centro', right: 'Der ⇥' };
+          return <button key={a} style={{ ...es.alignBtn, ...(tiAlign === a ? es.alignBtnActive : {}) }} onClick={() => onContentChange({ ti_text_align: a })}>{icons[a]}</button>;
+        })}
+      </div>
+      {/* Texto */}
+      <AutoTextarea value={(content.text as string) ?? ''} onChange={text => onContentChange({ text })} placeholder="Escribe el texto que acompañará la galería..." extraStyle={es.textareaParagraph} />
+      {/* Slots de imágenes */}
+      <div style={{ marginTop: '12px' }}>
+        <CarouselSlotsEditor
+          label="Imágenes de la galería (máx. 6)"
+          slides={slides}
+          maxSlides={6}
+          onPickSlot={idx => onPickImage(`image_url_${idx + 1}`)}
+          onCaptionChange={(idx, cap) => onContentChange({ [`image_cap_${idx + 1}`]: cap })}
+          onRemoveSlot={idx => onContentChange(slidesToContent(slides.filter((_, i) => i !== idx), 'image_', 6))}
+        />
+      </div>
+      <IntervalRow
+        interval={Number(content.interval ?? 4)}
+        auto={(content.auto as string) !== 'false'}
+        onIntervalChange={v => onContentChange({ interval: String(v) })}
+        onAutoChange={v => onContentChange({ auto: String(v) })}
+      />
+    </div>
+  );
+};
+
+// Editor de bloque doble galería
+interface DoubleCarouselBlockEditorProps {
+  content: Record<string, unknown>;
+  onContentChange: (changes: Record<string, unknown>) => void;
+  onPickImage: (field: string) => void;
+}
+const DoubleCarouselBlockEditor: React.FC<DoubleCarouselBlockEditorProps> = ({ content, onContentChange, onPickImage }) => {
+  const leftSlides = getSlidesFromContent(content, 'left_image_', MAX_HALF_SLIDES);
+  const rightSlides = getSlidesFromContent(content, 'right_image_', MAX_HALF_SLIDES);
+  return (
+    <div style={es.tiEditorWrap}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <CarouselSlotsEditor
+          label="Galería izquierda"
+          slides={leftSlides}
+          maxSlides={MAX_HALF_SLIDES}
+          onPickSlot={idx => onPickImage(`left_image_url_${idx + 1}`)}
+          onCaptionChange={(idx, cap) => onContentChange({ [`left_image_cap_${idx + 1}`]: cap })}
+          onRemoveSlot={idx => onContentChange(slidesToContent(leftSlides.filter((_, i) => i !== idx), 'left_image_', MAX_HALF_SLIDES))}
+        />
+        <CarouselSlotsEditor
+          label="Galería derecha"
+          slides={rightSlides}
+          maxSlides={MAX_HALF_SLIDES}
+          onPickSlot={idx => onPickImage(`right_image_url_${idx + 1}`)}
+          onCaptionChange={(idx, cap) => onContentChange({ [`right_image_cap_${idx + 1}`]: cap })}
+          onRemoveSlot={idx => onContentChange(slidesToContent(rightSlides.filter((_, i) => i !== idx), 'right_image_', MAX_HALF_SLIDES))}
+        />
+      </div>
+      <IntervalRow
+        interval={Number(content.interval ?? 4)}
+        auto={(content.auto as string) !== 'false'}
+        onIntervalChange={v => onContentChange({ interval: String(v) })}
+        onAutoChange={v => onContentChange({ auto: String(v) })}
+      />
+    </div>
+  );
+};
+
 // Modal selector de imagen (subir o elegir placa)
 interface ImagePickerModalProps {
   tab: 'upload' | 'placas' | 'all';
@@ -825,7 +1414,7 @@ interface ImagePickerModalProps {
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onPickPlaca: (url: string) => void;
   onClose: () => void;
-  entityType: 'subtemas_page' | 'placas_page';
+  entityType: 'subtemas_page' | 'placas_page' | 'home_page';
   allTemas: AllTema[];
   allSubtemas: AllSubtema[];
   allPlacas: PickerPlaca[];
@@ -1188,6 +1777,17 @@ const es: Record<string, React.CSSProperties> = {
     padding: '4px 9px',
     borderRadius: '6px',
     fontFamily: 'inherit',
+    lineHeight: 1,
+    transition: 'background 0.15s',
+  },
+  duplicateBtn: {
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    color: '#0ea5e9',
+    fontSize: '1em',
+    padding: '4px 8px',
+    borderRadius: '6px',
     lineHeight: 1,
     transition: 'background 0.15s',
   },
