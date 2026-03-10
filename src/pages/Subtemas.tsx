@@ -324,7 +324,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   subtemaCardHover: {
     transform: 'translateY(-6px)',
     boxShadow: '0 12px 32px rgba(14,165,233,0.18)',
-    borderColor: '#38bdf8',
+    border: '1px solid #38bdf8',
   },
   subtemaAccent: {
     position: 'absolute',

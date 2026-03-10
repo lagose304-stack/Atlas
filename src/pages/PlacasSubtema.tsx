@@ -40,21 +40,23 @@ const PlacasSubtema: React.FC = () => {
       setLoading(true);
 
       // Cargar info del subtema (con nombre del tema padre)
-      const { data: subtemaData } = await supabase
+      const { data: subtemaData, error: subtemaError } = await supabase
         .from('subtemas')
         .select('id, nombre, tema_id, temas(nombre)')
         .eq('id', subtemaId)
         .single();
 
+      if (subtemaError) console.error('Error fetching subtema:', subtemaError);
       if (subtemaData) setSubtema(subtemaData as unknown as SubtemaInfo);
 
       // Cargar placas de este subtema
-      const { data: placasData } = await supabase
+      const { data: placasData, error: placasError } = await supabase
         .from('placas')
         .select('id, photo_url, aumento, senalados, comentario, tincion')
         .eq('subtema_id', subtemaId)
         .order('sort_order', { ascending: true });
 
+      if (placasError) console.error('Error fetching placas:', placasError);
       if (placasData) setPlacas(placasData);
 
       // Cargar bloques de contenido editorial
