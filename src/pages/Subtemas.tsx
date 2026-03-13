@@ -5,6 +5,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../components/PageContentEditor';
+import { getRenderableBlocks } from '../services/contentPublication';
 
 interface Tema {
   id: number;
@@ -54,13 +55,12 @@ const Subtemas: React.FC = () => {
       if (subtemasError) console.error('Error fetching subtemas:', subtemasError);
 
       // Cargar bloques de contenido editorial
-      const { data: blocksData } = await supabase
-        .from('content_blocks')
-        .select('*')
-        .eq('entity_type', 'subtemas_page')
-        .eq('entity_id', Number(temaId))
-        .order('sort_order', { ascending: true });
-      if (blocksData) setContentBlocks(blocksData as ContentBlock[]);
+      try {
+        const blocks = await getRenderableBlocks('subtemas_page', Number(temaId));
+        setContentBlocks(blocks as ContentBlock[]);
+      } catch (error) {
+        console.error('Error fetching content blocks:', error);
+      }
 
       setLoading(false);
     };
@@ -166,7 +166,7 @@ const Subtemas: React.FC = () => {
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     minHeight: '100vh',
-    background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
+    background: 'radial-gradient(circle at 12% -8%, #bfdbfe 0%, transparent 38%), radial-gradient(circle at 88% 10%, #ddd6fe 0%, transparent 30%), linear-gradient(160deg, #f8fbff 0%, #eef4ff 48%, #f3f7ff 100%)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -191,12 +191,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: '4px',
     flexWrap: 'wrap' as const,
-    background: 'rgba(255,255,255,0.75)',
-    backdropFilter: 'blur(8px)',
-    border: '1px solid rgba(186,230,253,0.6)',
-    borderRadius: '12px',
-    padding: '8px 16px',
-    boxShadow: '0 2px 8px rgba(14,165,233,0.07)',
+    background: 'rgba(255,255,255,0.7)',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(186,230,253,0.8)',
+    borderRadius: '14px',
+    padding: '9px 16px',
+    boxShadow: '0 8px 20px rgba(14,165,233,0.1)',
   },
   breadcrumbLink: {
     background: 'none',
@@ -230,11 +230,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   card: {
     width: '100%',
-    background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+    background: 'linear-gradient(155deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.88) 100%)',
+    backdropFilter: 'blur(8px)',
     borderRadius: 'clamp(10px, 2vw, 20px)',
     padding: 'clamp(16px, 4vw, 40px)',
-    boxShadow: '0 18px 40px rgba(15,23,42,0.13), 0 6px 14px rgba(15,23,42,0.07)',
-    border: '1px solid rgba(15,23,42,0.05)',
+    boxShadow: '0 26px 48px rgba(15,23,42,0.1), 0 8px 20px rgba(30,64,175,0.08)',
+    border: '1px solid rgba(186,230,253,0.75)',
     boxSizing: 'border-box',
   },
   temaHeader: {
@@ -306,14 +307,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxSizing: 'border-box',
   },
   subtemaCard: {
-    borderRadius: 'clamp(8px, 1.5vw, 14px)',
+    borderRadius: 'clamp(10px, 1.6vw, 16px)',
     padding: 'clamp(10px, 2vw, 18px)',
-    background: 'linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%)',
-    boxShadow: '0 2px 8px rgba(15,23,42,0.08)',
+    background: 'linear-gradient(150deg, rgba(255,255,255,0.95) 0%, rgba(241,245,249,0.9) 100%)',
+    boxShadow: '0 8px 18px rgba(15,23,42,0.08)',
     cursor: 'pointer',
     textAlign: 'center',
-    transition: 'transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease',
-    border: '1px solid #e0f2fe',
+    transition: 'transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease',
+    border: '1px solid rgba(186,230,253,0.8)',
     position: 'relative',
     overflow: 'hidden',
     display: 'flex',
@@ -322,8 +323,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '8px',
   },
   subtemaCardHover: {
-    transform: 'translateY(-6px)',
-    boxShadow: '0 12px 32px rgba(14,165,233,0.18)',
+    transform: 'translateY(-8px)',
+    boxShadow: '0 18px 34px rgba(14,165,233,0.22)',
     border: '1px solid #38bdf8',
   },
   subtemaAccent: {

@@ -2,6 +2,69 @@ import React, { useState, useEffect } from 'react';
 import type { ContentBlock, BlockType } from './PageContentEditor';
 import ImageViewerModal from './ImageViewerModal';
 import { renderBoldText } from './BoldField';
+import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
+import { normalizeBlockContent } from './blocks/blockRegistry';
+
+const RichTextValue: React.FC<{ value: string; className?: string; style?: React.CSSProperties }> = ({ value, className, style }) => {
+  if (!value) return null;
+  if (hasHtmlMarkup(value)) {
+    return <div className={className} style={style} dangerouslySetInnerHTML={{ __html: toSafeHtml(value) }} />;
+  }
+  return <div className={className} style={style}>{renderBoldText(value)}</div>;
+};
+
+const getBlockShellStyle = (content: Record<string, string>): React.CSSProperties => {
+  const padding = Number(content.style_padding ?? 0);
+  const radius = Number(content.style_radius ?? 0);
+  const hasBg = Boolean(content.style_bg);
+  const hasBorder = Boolean(content.style_border);
+  const effectivePadding = Number.isFinite(padding) && padding > 0
+    ? `${padding}px`
+    : hasBg || hasBorder
+    ? '14px'
+    : undefined;
+  const effectiveRadius = Number.isFinite(radius) && radius > 0
+    ? `${radius}px`
+    : hasBg || hasBorder
+    ? '12px'
+    : undefined;
+  const maxWidthMap: Record<string, string> = {
+    full: '100%',
+    '900': '900px',
+    '700': '700px',
+    '560': '560px',
+  };
+  const shadowMap: Record<string, string> = {
+    none: 'none',
+    sm: '0 2px 10px rgba(15,23,42,0.08)',
+    md: '0 10px 24px rgba(15,23,42,0.12)',
+  };
+  const fontSizeMap: Record<string, string> = {
+    default: 'inherit',
+    sm: '0.92em',
+    md: '1em',
+    lg: '1.08em',
+  };
+  const align = content.style_align || 'left';
+  return {
+    background: content.style_bg || 'transparent',
+    color: content.style_text || undefined,
+    border: content.style_border ? `1px solid ${content.style_border}` : undefined,
+    borderRadius: effectiveRadius,
+    padding: effectivePadding,
+    boxShadow: shadowMap[content.style_shadow || 'none'],
+    maxWidth: maxWidthMap[content.style_max_width || 'full'] || '100%',
+    fontSize: fontSizeMap[content.style_font_size || 'default'] || 'inherit',
+    fontWeight: content.style_font_weight && content.style_font_weight !== 'default'
+      ? Number(content.style_font_weight)
+      : undefined,
+    marginLeft: align === 'right' ? 'auto' : align === 'center' ? 'auto' : 0,
+    marginRight: align === 'left' ? 'auto' : align === 'center' ? 'auto' : 0,
+    overflow: hasBg || hasBorder ? 'hidden' : undefined,
+    boxSizing: 'border-box',
+  };
+};
 
 // Imagen con fallback visual cuando la URL ya no existe
 const BlockImg: React.FC<{
@@ -47,19 +110,31 @@ interface ContentBlockRendererProps {
  * el contenido editorial creado desde el panel de edición.
  */
 const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({ blocks }) => {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<{ view: string; zoom: string } | null>(null);
+
+  const handleZoom = (url: string) => {
+    setSelectedImage({
+      view: getCloudinaryImageUrl(url, 'view'),
+      zoom: getCloudinaryImageUrl(url, 'zoom'),
+    });
+  };
 
   if (!blocks || blocks.length === 0) return null;
 
   return (
     <>
       <div style={rs.container} className="cb-container">
-        {blocks.map(block => (
-          <BlockItem key={block.id} block={block} onZoom={setSelectedImage} />
-        ))}
+        {blocks.map(block => {
+          const normalizedContent = normalizeBlockContent(block.block_type, block.content);
+          return (
+          <div key={block.id} style={getBlockShellStyle(normalizedContent)}>
+            <BlockItem block={block} onZoom={handleZoom} />
+          </div>
+          );
+        })}
       </div>
       {selectedImage && (
-        <ImageViewerModal src={selectedImage} onClose={() => setSelectedImage(null)} />
+        <ImageViewerModal src={selectedImage.view} srcZoom={selectedImage.zoom} onClose={() => setSelectedImage(null)} />
       )}
     </>
   );
@@ -71,7 +146,7 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
   const [imgHoveredRight, setImgHoveredRight] = useState(false);
   const [imgHoveredIdx, setImgHoveredIdx] = useState<number>(-1);
   const type = block.block_type as BlockType;
-  const c = block.content;
+  const c = normalizeBlockContent(type, block.content);
 
   switch (type) {
     case 'heading': {
@@ -79,7 +154,9 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
       const align = (c.text_align as React.CSSProperties['textAlign']) ?? 'left';
       return (
         <div>
-          <h2 style={{ ...rs.heading, textAlign: align }}>{renderBoldText(c.text)}</h2>
+          <div style={{ ...rs.heading, textAlign: align }}>
+            <RichTextValue value={c.text} />
+          </div>
           <div style={{ ...rs.headingAccent, margin: align === 'center' ? '0 auto' : align === 'right' ? '0 0 0 auto' : undefined }} />
         </div>
       );
@@ -91,21 +168,23 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
       const isCenter = align === 'center';
       const isRight = align === 'right';
       return (
-        <h3 style={{
+        <div style={{
           ...rs.subheading,
           textAlign: align,
           paddingLeft: isCenter || isRight ? 0 : '14px',
           paddingRight: isRight ? '14px' : 0,
           borderLeft: isCenter || isRight ? 'none' : '4px solid #38bdf8',
           borderRight: isRight ? '4px solid #38bdf8' : 'none',
-        }}>{renderBoldText(c.text)}</h3>
+        }}>
+          <RichTextValue value={c.text} />
+        </div>
       );
     }
 
     case 'paragraph': {
       if (!c.text) return null;
       const align = (c.text_align as React.CSSProperties['textAlign']) ?? 'left';
-      return <p className="cb-paragraph" style={{ ...rs.paragraph, textAlign: align }}>{renderBoldText(c.text)}</p>;
+      return <RichTextValue className="cb-paragraph" style={{ ...rs.paragraph, textAlign: align }} value={c.text} />;
     }
 
     case 'image': {
@@ -129,13 +208,13 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
             title="Ver en grande"
           >
             <BlockImg
-              src={c.url}
+                  src={getCloudinaryImageUrl(c.url, 'view')}
               alt={c.caption || 'Imagen ilustrativa'}
               style={rs.image}
             />
             <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>
           </div>
-          {c.caption && <figcaption style={rs.caption}>{renderBoldText(c.caption)}</figcaption>}
+          {c.caption && <figcaption style={rs.caption}><RichTextValue value={c.caption} /></figcaption>}
         </figure>
       );
     }
@@ -161,18 +240,18 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
                 title="Ver en grande"
               >
                 <BlockImg
-                  src={c.image_url}
+                  src={getCloudinaryImageUrl(c.image_url, 'view')}
                   alt={c.image_caption || 'Imagen ilustrativa'}
                   style={rs.tiImage}
                 />
                 <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>
               </div>
               {c.image_caption && (
-                <figcaption style={rs.caption}>{renderBoldText(c.image_caption)}</figcaption>
+                <figcaption style={rs.caption}><RichTextValue value={c.image_caption} /></figcaption>
               )}
             </figure>
           )}
-          {hasText && <p className="cb-ti-text" style={{ ...rs.tiText, textAlign: tiTextAlign }}>{renderBoldText(c.text)}</p>}
+          {hasText && <RichTextValue className="cb-ti-text" style={{ ...rs.tiText, textAlign: tiTextAlign }} value={c.text} />}
         </div>
       );
     }
@@ -194,14 +273,14 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
                 title="Ver en grande"
               >
                 <BlockImg
-                  src={c.image_url_left}
+                  src={getCloudinaryImageUrl(c.image_url_left, 'view')}
                   alt={c.image_caption_left || 'Imagen izquierda'}
                   style={rs.twoImgImage}
                 />
                 <div style={{ ...rs.zoomOverlay, opacity: imgHoveredLeft ? 1 : 0 }}>🔍</div>
               </div>
               {c.image_caption_left && (
-                <figcaption style={rs.caption}>{renderBoldText(c.image_caption_left)}</figcaption>
+                <figcaption style={rs.caption}><RichTextValue value={c.image_caption_left} /></figcaption>
               )}
             </figure>
           )}
@@ -215,14 +294,14 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
                 title="Ver en grande"
               >
                 <BlockImg
-                  src={c.image_url_right}
+                  src={getCloudinaryImageUrl(c.image_url_right, 'view')}
                   alt={c.image_caption_right || 'Imagen derecha'}
                   style={rs.twoImgImage}
                 />
                 <div style={{ ...rs.zoomOverlay, opacity: imgHoveredRight ? 1 : 0 }}>🔍</div>
               </div>
               {c.image_caption_right && (
-                <figcaption style={rs.caption}>{renderBoldText(c.image_caption_right)}</figcaption>
+                <figcaption style={rs.caption}><RichTextValue value={c.image_caption_right} /></figcaption>
               )}
             </figure>
           )}
@@ -252,7 +331,7 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
                 title="Ver en grande"
               >
                 <BlockImg
-                  src={item.url}
+                  src={getCloudinaryImageUrl(item.url, 'view')}
                   alt={item.cap || `Imagen ${idx + 1}`}
                   style={rs.twoImgImage}
                 />
@@ -277,7 +356,7 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
       return (
         <div style={{ background: v.bg, border: `1.5px solid ${v.border}`, borderRadius: '10px', padding: '14px 18px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
           <span style={{ fontSize: '1.2em', flexShrink: 0, lineHeight: 1.6 }}>{v.icon}</span>
-          <p style={{ margin: 0, color: v.color, fontSize: '0.96em', lineHeight: 1.75, fontWeight: 500, whiteSpace: 'pre-wrap' as const, wordBreak: 'break-word' as const }}>{renderBoldText(c.text)}</p>
+          <RichTextValue style={{ margin: 0, color: v.color, fontSize: '0.96em', lineHeight: 1.75, fontWeight: 500, whiteSpace: 'pre-wrap' as const, wordBreak: 'break-word' as const }} value={c.text} />
         </div>
       );
     }
@@ -291,7 +370,7 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
       return (
         <Tag style={{ paddingLeft: '1.5em', margin: 0, display: 'flex', flexDirection: 'column' as const, gap: '6px' }}>
           {itemArr.map((item: string, i: number) => (
-            <li key={i} style={{ fontSize: '1em', lineHeight: 1.75, color: '#334155' }}>{renderBoldText(item)}</li>
+            <li key={i} style={{ fontSize: '1em', lineHeight: 1.75, color: '#334155' }}><RichTextValue value={item} /></li>
           ))}
         </Tag>
       );
@@ -436,7 +515,7 @@ const CarouselPlayer: React.FC<{
         ) : (
           <img
             key={slide.url + current}
-            src={slide.url}
+            src={getCloudinaryImageUrl(slide.url, 'view')}
             alt={slide.caption ?? ''}
             style={rs.carouselImage}
             loading="lazy"
@@ -452,7 +531,7 @@ const CarouselPlayer: React.FC<{
           </>
         )}
       </div>
-      {slide.caption && <figcaption style={rs.caption}>{renderBoldText(slide.caption)}</figcaption>}
+      {slide.caption && <figcaption style={rs.caption}><RichTextValue value={slide.caption} /></figcaption>}
       {count > 1 && (
         <div style={rs.dotsRow}>
           {slides.map((_, i) => (

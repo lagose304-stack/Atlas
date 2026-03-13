@@ -2,6 +2,27 @@
 
 ## Deploy frontend (Netlify) + image admin API
 
+## Content publishing workflow (draft vs published)
+
+The editor now supports publishing snapshots, so public pages can show only published content while you keep editing drafts.
+
+Run this SQL script in Supabase before using publish buttons:
+
+- `database/setup_content_page_publications.sql`
+
+If this table does not exist yet, the app falls back to reading live draft blocks from `content_blocks`.
+
+## Test system (tests by tema/subtema)
+
+To persist multiple tests classified by topic, run this script in Supabase:
+
+- `database/setup_tests_system.sql`
+
+This creates:
+
+- `tests`: one row per test (linked to `tema_id`, optional `subtema_id`)
+- `test_question_blocks`: blocks/questions per test with `block_type`, `config` and `answer_key`
+
 This project runs in two environments:
 
 - Local dev frontend: http://localhost:5173

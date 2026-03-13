@@ -5,6 +5,7 @@ import Footer from '../components/Footer';
 import Header from '../components/Header';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../components/PageContentEditor';
+import { getRenderableBlocks } from '../services/contentPublication';
 
 // --- Interfaces ---
 interface Tema {
@@ -25,25 +26,25 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
   return (
     <div
       style={{
-        borderRadius: '14px',
-        padding: 'clamp(6px, 1.2vw, 12px)',
+        borderRadius: '18px',
+        padding: 'clamp(8px, 1.4vw, 14px)',
         background: hovered
-          ? 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)'
-          : 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+          ? 'linear-gradient(145deg, rgba(255,255,255,0.98) 0%, rgba(224,242,254,0.9) 100%)'
+          : 'linear-gradient(145deg, rgba(255,255,255,0.94) 0%, rgba(248,250,252,0.9) 100%)',
         boxShadow: hovered
-          ? '0 16px 40px rgba(14,165,233,0.18), 0 4px 12px rgba(14,165,233,0.1)'
-          : '0 2px 10px rgba(15,23,42,0.08)',
+          ? '0 20px 40px rgba(14,165,233,0.2), 0 10px 24px rgba(37,99,235,0.16)'
+          : '0 8px 20px rgba(15,23,42,0.08)',
         cursor: 'pointer',
         textAlign: 'center',
-        transition: 'transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease, border-color 0.25s ease',
-        border: hovered ? '1.5px solid #38bdf8' : '1px solid #e0f2fe',
+        transition: 'transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease, border-color 0.3s ease',
+        border: hovered ? '1.5px solid #38bdf8' : '1px solid rgba(186,230,253,0.75)',
         position: 'relative',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         gap: '10px',
-        transform: hovered ? 'translateY(-6px)' : 'translateY(0)',
+        transform: hovered ? 'translateY(-8px)' : 'translateY(0)',
       }}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
@@ -60,13 +61,13 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
       <div
         className="tema-card-img-wrap"
         style={{
-          borderRadius: '12px',
+          borderRadius: '14px',
           overflow: 'hidden',
-          border: hovered ? '2px solid #7dd3fc' : '1px solid #e2e8f0',
+          border: hovered ? '2px solid #7dd3fc' : '1px solid #dbeafe',
           background: '#f8fafc',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: hovered ? '0 6px 16px rgba(56,189,248,0.2)' : '0 2px 8px rgba(15,23,42,0.07)',
-          transition: 'border 0.25s ease, box-shadow 0.25s ease',
+          boxShadow: hovered ? '0 8px 18px rgba(56,189,248,0.24)' : '0 3px 10px rgba(15,23,42,0.08)',
+          transition: 'border 0.3s ease, box-shadow 0.3s ease',
         }}>
         {tema.logo_url
           ? <img src={tema.logo_url} alt={tema.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -115,13 +116,12 @@ const Home: React.FC = () => {
       setLoading(false);
     };
     const fetchBlocks = async () => {
-      const { data } = await supabase
-        .from('content_blocks')
-        .select('*')
-        .eq('entity_type', 'home_page')
-        .eq('entity_id', 0)
-        .order('sort_order', { ascending: true });
-      if (data) setContentBlocks(data as ContentBlock[]);
+      try {
+        const blocks = await getRenderableBlocks('home_page', 0);
+        setContentBlocks(blocks as ContentBlock[]);
+      } catch (error) {
+        console.error('Error fetching content blocks:', error);
+      }
     };
     fetchTemas();
     fetchBlocks();
@@ -200,7 +200,7 @@ const Home: React.FC = () => {
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     minHeight: '100vh',
-    background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
+    background: 'radial-gradient(circle at 15% -5%, #bfdbfe 0%, transparent 40%), radial-gradient(circle at 90% 10%, #ddd6fe 0%, transparent 32%), linear-gradient(160deg, #f8fbff 0%, #eef4ff 48%, #f3f7ff 100%)',
     color: '#0f172a',
     fontFamily: "'Inter', 'Segoe UI', sans-serif",
     display: 'flex',
@@ -224,11 +224,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   temarioCard: {
     width: '100%',
     maxWidth: '1200px',
-    background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-    borderRadius: 'clamp(12px, 2vw, 24px)',
+    background: 'linear-gradient(155deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.85) 100%)',
+    backdropFilter: 'blur(8px)',
+    borderRadius: 'clamp(14px, 2vw, 24px)',
     padding: 'clamp(16px, 3vw, 40px)',
-    boxShadow: '0 20px 50px rgba(15,23,42,0.12), 0 6px 16px rgba(15,23,42,0.06)',
-    border: '1px solid rgba(15,23,42,0.05)',
+    boxShadow: '0 24px 45px rgba(15,23,42,0.11), 0 8px 20px rgba(30,64,175,0.08)',
+    border: '1px solid rgba(186,230,253,0.7)',
     boxSizing: 'border-box',
   },
   sectionHeader: {
@@ -268,8 +269,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '100%',
     borderRadius: 'clamp(10px, 1.5vw, 18px)',
     padding: 'clamp(12px, 2.5vw, 24px)',
-    boxShadow: '0 4px 16px rgba(15,23,42,0.07), 0 1px 4px rgba(15,23,42,0.04)',
-    border: '1px solid rgba(15,23,42,0.06)',
+    boxShadow: '0 10px 24px rgba(15,23,42,0.08), 0 2px 8px rgba(56,189,248,0.1)',
+    border: '1px solid rgba(148,163,184,0.2)',
     display: 'flex',
     flexDirection: 'column',
     gap: 'clamp(10px, 2vw, 18px)',
@@ -307,10 +308,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   parcialCountPill: {
     padding: '4px 12px',
     borderRadius: '50px',
-    background: 'rgba(15,23,42,0.07)',
+    background: 'rgba(255,255,255,0.7)',
     fontSize: '0.8em',
     fontWeight: 600,
-    color: '#64748b',
+    color: '#475569',
     flexShrink: 0,
   },
   emptyState: {

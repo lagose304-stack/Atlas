@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ReactQuill from 'react-quill';
 import { supabase } from '../services/supabase';
-import { uploadToCloudinary } from '../services/cloudinary';
+import { deleteFromCloudinary, getCloudinaryPublicId, uploadToCloudinary } from '../services/cloudinary';
+import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { BLOCK_TYPES, createDefaultBlockContent, getBlockMeta, normalizeBlockContent } from './blocks/blockRegistry';
+import { getPublicationInfo, publishBlocksSnapshot, setPublicationDraft } from '../services/contentPublication';
 import LoadingToast from './LoadingToast';
 import BoldField from './BoldField';
 
@@ -36,21 +40,66 @@ interface AllSubtema {
   tema_id: number;
 }
 
-// ── Metadatos visuales por tipo de bloque ────────────────────────────────────
-const BLOCK_META: Record<BlockType, { label: string; icon: string; color: string }> = {
-  heading:      { label: 'Título',         icon: 'H1', color: '#6366f1' },
-  subheading:   { label: 'Subtítulo',      icon: 'H2', color: '#8b5cf6' },
-  paragraph:    { label: 'Párrafo',        icon: 'P',  color: '#0ea5e9' },
-  image:        { label: 'Imagen',         icon: '🖼',  color: '#10b981' },
-  text_image:   { label: 'Texto + Imagen', icon: '⊞',  color: '#f59e0b' },
-  two_images:   { label: 'Dos Imágenes',   icon: '⊟⊟', color: '#ec4899' },
-  three_images: { label: 'Tres Imágenes',  icon: '⊟⊟⊟', color: '#a855f7' },
-  callout:        { label: 'Destacado',        icon: '💡',  color: '#f97316' },
-  list:           { label: 'Lista',            icon: '☰',   color: '#06b6d4' },
-  divider:        { label: 'Separador',        icon: '─',   color: '#94a3b8' },
-  carousel:       { label: 'Galería',          icon: '🎠',  color: '#6366f1' },
-  text_carousel:  { label: 'Texto + Galería',  icon: '📋🎠', color: '#3b82f6' },
-  double_carousel:{ label: 'Doble galería',    icon: '🎠🎠', color: '#8b5cf6' },
+const ATLAS_CONTENT_PREFIX = 'atlas-content/';
+const RICH_TEXT_HEADINGS = [{ header: [1, 2, 3, false] }];
+const RICH_TEXT_LISTS = [{ list: 'ordered' }, { list: 'bullet' }];
+const RICH_TEXT_ALIGN = [{ align: [] }];
+const RICH_TEXT_COLORS = [{ color: [] }, { background: [] }];
+const RICH_TEXT_LINK = ['link', 'clean'];
+
+const RICH_TEXT_MODULES = {
+  toolbar: [
+    RICH_TEXT_HEADINGS,
+    ['bold', 'italic', 'underline', 'strike'],
+    RICH_TEXT_COLORS,
+    RICH_TEXT_ALIGN,
+    RICH_TEXT_LISTS,
+    ['blockquote', 'code-block'],
+    RICH_TEXT_LINK,
+  ],
+};
+
+const RICH_TEXT_FORMATS = [
+  'header', 'bold', 'italic', 'underline', 'strike',
+  'color', 'background', 'align', 'list', 'bullet',
+  'blockquote', 'code-block', 'link',
+];
+
+const STYLE_CONTENT_KEYS = [
+  'style_bg',
+  'style_text',
+  'style_border',
+  'style_radius',
+  'style_padding',
+  'style_max_width',
+  'style_align',
+  'style_shadow',
+  'style_font_size',
+  'style_font_weight',
+] as const;
+
+const STYLE_PRESETS_STORAGE_KEY = 'atlas-style-presets-v1';
+
+interface StylePreset {
+  id: string;
+  name: string;
+  style: Record<string, string>;
+}
+
+const pickStyleContent = (content: Record<string, string>): Record<string, string> => {
+  return STYLE_CONTENT_KEYS.reduce<Record<string, string>>((acc, key) => {
+    acc[key] = content[key] ?? '';
+    return acc;
+  }, {});
+};
+
+const getAtlasContentPublicIdsFromBlock = (block: Pick<ContentBlock, 'content'>): string[] => {
+  const values = Object.values(block.content ?? {});
+  const ids = values
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    .map(url => getCloudinaryPublicId(url))
+    .filter(pid => pid.startsWith(ATLAS_CONTENT_PREFIX));
+  return [...new Set(ids)];
 };
 
 // ── Props del componente ─────────────────────────────────────────────────────
@@ -68,6 +117,13 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [styleClipboard, setStyleClipboard] = useState<Record<string, string> | null>(null);
+  const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
+  const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
+  const [publicationStatus, setPublicationStatus] = useState<'draft' | 'published'>('draft');
+  const [publishedAt, setPublishedAt] = useState<string | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isSwitchingToDraft, setIsSwitchingToDraft] = useState(false);
 
   // Modal selector de imagen
   const [imageModal, setImageModal] = useState<{
@@ -91,71 +147,81 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   // Drag-and-drop de bloques (por índice, no por id numérico)
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropIdx, setDropIdx] = useState<number | null>(null);
+  const pendingAssetDeleteIdsRef = useRef<Set<string>>(new Set());
 
   // Guard contra respuestas de peticiones obsoletas
   const reqIdRef = useRef(0);
 
   // ── Carga de bloques ─────────────────────────────────────────────────────
   useEffect(() => {
-    const reqId = ++reqIdRef.current;
-    setLoading(true);
-    setBlocks([]);
-    setHasChanges(false);
-    setSaveSuccess(false);
-    setSaveError(null);
+    try {
+      const raw = localStorage.getItem(STYLE_PRESETS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as StylePreset[];
+      if (!Array.isArray(parsed)) return;
+      setStylePresets(parsed);
+    } catch (error) {
+      console.warn('No se pudieron cargar presets de estilo.', error);
+    }
+  }, []);
 
-    supabase
-      .from('content_blocks')
-      .select('*')
-      .eq('entity_type', entityType)
-      .eq('entity_id', entityId)
-      .order('sort_order', { ascending: true })
-      .then(({ data, error }) => {
-        if (reqId !== reqIdRef.current) return; // petición obsoleta
-        if (error) console.error('Error al cargar bloques:', error);
-        const loaded: EditorBlock[] = (data ?? []).map((b: ContentBlock) => ({
-          ...b,
-          _isNew: false,
-        }));
-        setBlocks(loaded);
-        setSavedIds(new Set(loaded.map(b => b.id)));
-        setLoading(false);
-      });
+  useEffect(() => {
+    try {
+      localStorage.setItem(STYLE_PRESETS_STORAGE_KEY, JSON.stringify(stylePresets));
+    } catch (error) {
+      console.warn('No se pudieron guardar presets de estilo.', error);
+    }
+  }, [stylePresets]);
+
+  useEffect(() => {
+    const reqId = ++reqIdRef.current;
+
+    const load = async () => {
+      setLoading(true);
+      setBlocks([]);
+      setHasChanges(false);
+      setSaveSuccess(false);
+      setSaveError(null);
+
+      const [{ data, error }, publication] = await Promise.all([
+        supabase
+          .from('content_blocks')
+          .select('*')
+          .eq('entity_type', entityType)
+          .eq('entity_id', entityId)
+          .order('sort_order', { ascending: true }),
+        getPublicationInfo(entityType, entityId).catch(() => null),
+      ]);
+
+      if (reqId !== reqIdRef.current) return;
+
+      if (error) console.error('Error al cargar bloques:', error);
+      const loaded: EditorBlock[] = (data ?? []).map((b: ContentBlock) => ({
+        ...b,
+        content: normalizeBlockContent(b.block_type, b.content),
+        _isNew: false,
+      }));
+      setBlocks(loaded);
+      setSavedIds(new Set(loaded.map(b => b.id)));
+      setSelectedBlockIds(new Set());
+      setPublicationStatus(publication?.status === 'published' ? 'published' : 'draft');
+      setPublishedAt(publication?.published_at ?? null);
+      setLoading(false);
+    };
+
+    load();
   }, [entityType, entityId]);
 
   // ── Operaciones sobre bloques ────────────────────────────────────────────
   const addBlock = useCallback(
     (type: BlockType) => {
-      const defaultContent: Record<string, string> =
-        type === 'image'
-          ? { url: '', caption: '', size: 'large', align: 'center' }
-          : type === 'text_image'
-          ? { text: '', image_url: '', image_position: 'right', image_caption: '' }
-          : type === 'two_images'
-          ? { image_url_left: '', image_caption_left: '', image_url_right: '', image_caption_right: '' }
-          : type === 'three_images'
-          ? { image_url_1: '', image_caption_1: '', image_url_2: '', image_caption_2: '', image_url_3: '', image_caption_3: '' }
-          : type === 'callout'
-          ? { text: '', variant: 'info' }
-          : type === 'list'
-          ? { items: '', style: 'bullet' }
-          : type === 'divider'
-          ? { style: 'gradient' }
-          : type === 'carousel'
-          ? { interval: '4', auto: 'true' }
-          : type === 'text_carousel'
-          ? { text: '', image_position: 'right', ti_text_align: 'left', interval: '4', auto: 'true' }
-          : type === 'double_carousel'
-          ? { interval: '4', auto: 'true' }
-          : { text: '' };
-
       const newBlock: EditorBlock = {
         id: crypto.randomUUID(),
         entity_type: entityType,
         entity_id: entityId,
         block_type: type,
         sort_order: blocks.length,
-        content: defaultContent,
+        content: createDefaultBlockContent(type),
         _isNew: true,
       };
       setBlocks(prev => [...prev, newBlock]);
@@ -166,11 +232,26 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
 
   const updateBlockContent = useCallback(
     (blockId: string, updates: Record<string, string>) => {
+      const replacedAtlasContentIds: string[] = [];
+
       setBlocks(prev =>
-        prev.map(b =>
-          b.id === blockId ? { ...b, content: { ...b.content, ...updates } } : b
-        )
+        prev.map(b => {
+          if (b.id !== blockId) return b;
+
+          Object.entries(updates).forEach(([key, nextValue]) => {
+            const prevValue = b.content[key];
+            if (typeof prevValue !== 'string' || !prevValue || prevValue === nextValue) return;
+            const oldPublicId = getCloudinaryPublicId(prevValue);
+            if (oldPublicId.startsWith(ATLAS_CONTENT_PREFIX)) {
+              replacedAtlasContentIds.push(oldPublicId);
+            }
+          });
+
+          return { ...b, content: { ...b.content, ...updates } };
+        })
       );
+
+      replacedAtlasContentIds.forEach(pid => pendingAssetDeleteIdsRef.current.add(pid));
       setHasChanges(true);
     },
     []
@@ -178,8 +259,61 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
 
   const deleteBlock = useCallback((blockId: string) => {
     if (!window.confirm('¿Eliminar este bloque de contenido?')) return;
-    setBlocks(prev => prev.filter(b => b.id !== blockId));
+    setBlocks(prev => {
+      const toDelete = prev.find(b => b.id === blockId);
+      if (toDelete) {
+        const publicIds = getAtlasContentPublicIdsFromBlock(toDelete);
+        publicIds.forEach(pid => pendingAssetDeleteIdsRef.current.add(pid));
+      }
+      return prev.filter(b => b.id !== blockId);
+    });
+    setSelectedBlockIds(prev => {
+      const next = new Set(prev);
+      next.delete(blockId);
+      return next;
+    });
     setHasChanges(true);
+  }, []);
+
+  const toggleBlockSelection = useCallback((blockId: string, checked: boolean) => {
+    setSelectedBlockIds(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(blockId);
+      else next.delete(blockId);
+      return next;
+    });
+  }, []);
+
+  const applyStyleToBlockSelection = useCallback((style: Record<string, string>) => {
+    if (selectedBlockIds.size === 0) return;
+    setBlocks(prev => prev.map(block => {
+      if (!selectedBlockIds.has(block.id)) return block;
+      return { ...block, content: { ...block.content, ...style } };
+    }));
+    setHasChanges(true);
+  }, [selectedBlockIds]);
+
+  const selectAllBlocks = useCallback(() => {
+    setSelectedBlockIds(new Set(blocks.map(b => b.id)));
+  }, [blocks]);
+
+  const clearBlockSelection = useCallback(() => {
+    setSelectedBlockIds(new Set());
+  }, []);
+
+  const saveStylePreset = useCallback((style: Record<string, string>) => {
+    const name = window.prompt('Nombre del preset de estilo:');
+    if (!name || !name.trim()) return;
+    const preset: StylePreset = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      style,
+    };
+    setStylePresets(prev => [preset, ...prev].slice(0, 20));
+  }, []);
+
+  const deleteStylePreset = useCallback((presetId: string) => {
+    setStylePresets(prev => prev.filter(p => p.id !== presetId));
   }, []);
 
   const duplicateBlock = useCallback((blockId: string) => {
@@ -379,9 +513,36 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
         if (error) throw error;
       }
 
-      // 3. Actualizar estado local
+      // 3. Limpia assets de atlas-content que hayan quedado huérfanos tras persistir cambios.
+      const pendingAssetDeletes = [...pendingAssetDeleteIdsRef.current];
+      if (pendingAssetDeletes.length > 0) {
+        const { data: allBlocks, error: allBlocksError } = await supabase
+          .from('content_blocks')
+          .select('content');
+        if (allBlocksError) throw allBlocksError;
+
+        const stillReferenced = new Set<string>();
+        (allBlocks ?? []).forEach(row => {
+          const content = (row as { content: Record<string, string> }).content ?? {};
+          const ids = getAtlasContentPublicIdsFromBlock({ content });
+          ids.forEach(pid => stillReferenced.add(pid));
+        });
+
+        for (const publicId of pendingAssetDeletes) {
+          if (!stillReferenced.has(publicId)) {
+            try {
+              await deleteFromCloudinary(publicId);
+            } catch (cleanupError) {
+              console.warn('No se pudo limpiar asset huérfano en Cloudinary:', publicId, cleanupError);
+            }
+          }
+        }
+      }
+
+      // 4. Actualizar estado local
       setSavedIds(new Set(blocks.map(b => b.id)));
       setBlocks(prev => prev.map((b, i) => ({ ...b, sort_order: i, _isNew: false })));
+      pendingAssetDeleteIdsRef.current.clear();
       setHasChanges(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
@@ -390,6 +551,53 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       setSaveError('Error al guardar. Por favor, intenta de nuevo.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (hasChanges) {
+      setSaveError('Guarda primero los cambios antes de publicar.');
+      return;
+    }
+
+    setIsPublishing(true);
+    setSaveError(null);
+    try {
+      const payload = blocks.map((b, idx) => ({
+        id: b.id,
+        entity_type: entityType,
+        entity_id: entityId,
+        block_type: b.block_type,
+        sort_order: idx,
+        content: normalizeBlockContent(b.block_type, b.content),
+      }));
+
+      const publishedIso = await publishBlocksSnapshot(entityType, entityId, payload);
+      setPublicationStatus('published');
+      setPublishedAt(publishedIso);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3500);
+    } catch (err) {
+      console.error('Error al publicar bloques:', err);
+      setSaveError('No se pudo publicar. Verifica el script de publicaciones en Supabase.');
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handleSwitchToDraft = async () => {
+    setIsSwitchingToDraft(true);
+    setSaveError(null);
+    try {
+      await setPublicationDraft(entityType, entityId);
+      setPublicationStatus('draft');
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3500);
+    } catch (err) {
+      console.error('Error al pasar a borrador:', err);
+      setSaveError('No se pudo cambiar a borrador. Verifica el script de publicaciones en Supabase.');
+    } finally {
+      setIsSwitchingToDraft(false);
     }
   };
 
@@ -409,6 +617,16 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   return (
     <div style={es.sectionCard}>
       <SectionHeader />
+
+      {blocks.length > 0 && (
+        <div style={es.selectionBar}>
+          <span style={es.selectionBarText}>Seleccionados: {selectedBlockIds.size}</span>
+          <div style={es.selectionBarActions}>
+            <button type="button" style={es.selectionBtn} onClick={selectAllBlocks}>Seleccionar todos</button>
+            <button type="button" style={es.selectionBtn} onClick={clearBlockSelection}>Limpiar selección</button>
+          </div>
+        </div>
+      )}
 
       {/* Lista de bloques */}
       <div
@@ -431,7 +649,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
         )}
 
         {blocks.map((block, idx) => {
-          const meta = BLOCK_META[block.block_type];
+          const meta = getBlockMeta(block.block_type);
           const isDragging = dragIdx === idx;
           const isDropBefore = dropIdx === idx;
           const isDropAfterLast = idx === blocks.length - 1 && dropIdx === blocks.length;
@@ -454,6 +672,14 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
                 {/* Barra de cabecera del bloque */}
                 <div style={es.blockHeader}>
                   <div style={es.blockHeaderLeft}>
+                    <label style={es.selectBlockLabel} title="Seleccionar bloque para aplicar estilo en lote">
+                      <input
+                        type="checkbox"
+                        checked={selectedBlockIds.has(block.id)}
+                        onChange={e => toggleBlockSelection(block.id, e.target.checked)}
+                      />
+                      Sel
+                    </label>
                     <span style={es.dragHandle} title="Arrastra para reordenar">⠿</span>
                     <span style={{ ...es.typeBadge, background: meta.color }}>
                       {meta.icon}
@@ -484,6 +710,40 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
 
                 {/* Área de edición según tipo */}
                 <div style={es.blockContent}>
+                  <BlockStyleEditor
+                    bgColor={block.content.style_bg ?? ''}
+                    textColor={block.content.style_text ?? ''}
+                    borderColor={block.content.style_border ?? ''}
+                    radius={block.content.style_radius ?? '0'}
+                    padding={block.content.style_padding ?? '0'}
+                    maxWidth={block.content.style_max_width ?? 'full'}
+                    alignSelf={block.content.style_align ?? 'left'}
+                    shadow={block.content.style_shadow ?? 'none'}
+                    fontSize={block.content.style_font_size ?? 'default'}
+                    fontWeight={block.content.style_font_weight ?? 'default'}
+                    onChange={updates => updateBlockContent(block.id, updates)}
+                    onCopyStyle={() => setStyleClipboard(pickStyleContent(block.content))}
+                    onPasteStyle={() => {
+                      if (!styleClipboard) return;
+                      updateBlockContent(block.id, styleClipboard);
+                    }}
+                    canPasteStyle={Boolean(styleClipboard)}
+                    onPasteStyleToSelection={() => {
+                      if (!styleClipboard) return;
+                      applyStyleToBlockSelection(styleClipboard);
+                    }}
+                    canPasteStyleToSelection={Boolean(styleClipboard) && selectedBlockIds.size > 0}
+                    selectedCount={selectedBlockIds.size}
+                    presets={stylePresets}
+                    onSavePreset={() => saveStylePreset(pickStyleContent(block.content))}
+                    onApplyPreset={presetId => {
+                      const preset = stylePresets.find(p => p.id === presetId);
+                      if (!preset) return;
+                      updateBlockContent(block.id, preset.style);
+                    }}
+                    onDeletePreset={deleteStylePreset}
+                  />
+
                   {(block.block_type === 'heading' ||
                     block.block_type === 'subheading' ||
                     block.block_type === 'paragraph') && (
@@ -647,8 +907,8 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       {/* Toolbar para añadir bloques */}
       <div style={es.toolbar}>
         <span style={es.toolbarLabel}>Añadir:</span>
-        {(Object.keys(BLOCK_META) as BlockType[]).map(type => {
-          const meta = BLOCK_META[type];
+        {BLOCK_TYPES.map(type => {
+          const meta = getBlockMeta(type);
           return (
             <button
               key={type}
@@ -685,14 +945,36 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
           {hasChanges && !saveError && !saveSuccess && (
             <p style={es.pendingMsg}>• Cambios pendientes de guardar</p>
           )}
+          {!hasChanges && !saveError && !saveSuccess && (
+            <p style={es.publicationMsg}>
+              Estado: {publicationStatus === 'published' ? 'Publicado' : 'Borrador'}
+              {publishedAt ? ` • Ultima publicacion: ${new Date(publishedAt).toLocaleString()}` : ''}
+            </p>
+          )}
         </div>
-        <button
-          style={hasChanges && !isSaving ? es.saveBtn : es.saveBtnDisabled}
-          onClick={handleSave}
-          disabled={!hasChanges || isSaving}
-        >
-          {isSaving ? '⏳ Guardando...' : hasChanges ? '💾 Guardar contenido' : '✓ Sin cambios'}
-        </button>
+        <div style={es.saveBarActions}>
+          <button
+            style={hasChanges && !isSaving ? es.saveBtn : es.saveBtnDisabled}
+            onClick={handleSave}
+            disabled={!hasChanges || isSaving}
+          >
+            {isSaving ? 'Guardando...' : hasChanges ? 'Guardar contenido' : 'Sin cambios'}
+          </button>
+          <button
+            style={!hasChanges && !isPublishing && !isSaving ? es.publishBtn : es.saveBtnDisabled}
+            onClick={handlePublish}
+            disabled={hasChanges || isPublishing || isSaving}
+          >
+            {isPublishing ? 'Publicando...' : 'Publicar'}
+          </button>
+          <button
+            style={publicationStatus === 'published' && !isSwitchingToDraft ? es.draftBtn : es.saveBtnDisabled}
+            onClick={handleSwitchToDraft}
+            disabled={publicationStatus !== 'published' || isSwitchingToDraft}
+          >
+            {isSwitchingToDraft ? 'Cambiando...' : 'Pasar a borrador'}
+          </button>
+        </div>
       </div>
 
       {/* Input de archivo oculto */}
@@ -745,21 +1027,297 @@ const SectionHeader: React.FC = () => (
   </div>
 );
 
-// BoldField multilinea — reemplaza AutoTextarea (auto-size nativo del div)
+// Editor de texto enriquecido
 const AutoTextarea: React.FC<{
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   extraStyle?: React.CSSProperties;
-}> = ({ value, onChange, placeholder, extraStyle }) => (
-  <BoldField
-    as="textarea"
-    value={value}
-    onChange={onChange}
-    placeholder={placeholder}
-    style={{ ...es.textarea, ...extraStyle }}
-  />
-);
+}> = ({ value, onChange, placeholder, extraStyle }) => {
+  const html = value || '';
+  return (
+    <div style={{ ...es.richTextWrap, ...extraStyle }}>
+      <ReactQuill
+        theme="snow"
+        value={html}
+        onChange={onChange}
+        modules={RICH_TEXT_MODULES}
+        formats={RICH_TEXT_FORMATS}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+};
+
+interface BlockStyleEditorProps {
+  bgColor: string;
+  textColor: string;
+  borderColor: string;
+  radius: string;
+  padding: string;
+  maxWidth: string;
+  alignSelf: string;
+  shadow: string;
+  fontSize: string;
+  fontWeight: string;
+  onChange: (updates: Record<string, string>) => void;
+  onCopyStyle: () => void;
+  onPasteStyle: () => void;
+  canPasteStyle: boolean;
+  onPasteStyleToSelection: () => void;
+  canPasteStyleToSelection: boolean;
+  selectedCount: number;
+  presets: StylePreset[];
+  onSavePreset: () => void;
+  onApplyPreset: (presetId: string) => void;
+  onDeletePreset: (presetId: string) => void;
+}
+
+const BlockStyleEditor: React.FC<BlockStyleEditorProps> = ({
+  bgColor,
+  textColor,
+  borderColor,
+  radius,
+  padding,
+  maxWidth,
+  alignSelf,
+  shadow,
+  fontSize,
+  fontWeight,
+  onChange,
+  onCopyStyle,
+  onPasteStyle,
+  canPasteStyle,
+  onPasteStyleToSelection,
+  canPasteStyleToSelection,
+  selectedCount,
+  presets,
+  onSavePreset,
+  onApplyPreset,
+  onDeletePreset,
+}) => {
+  const applyBgColor = (value: string) => {
+    onChange({
+      style_bg: value,
+      ...(Number(radius || 0) <= 0 ? { style_radius: '12' } : {}),
+      ...(Number(padding || 0) <= 0 ? { style_padding: '14' } : {}),
+    });
+  };
+
+  const applyBorderColor = (value: string) => {
+    onChange({
+      style_border: value,
+      ...(Number(radius || 0) <= 0 ? { style_radius: '12' } : {}),
+      ...(Number(padding || 0) <= 0 ? { style_padding: '14' } : {}),
+    });
+  };
+
+  const previewRadius = Number(radius || 0);
+  const previewPadding = Number(padding || 0);
+  const previewShadow =
+    shadow === 'md'
+      ? '0 10px 24px rgba(15,23,42,0.12)'
+      : shadow === 'sm'
+      ? '0 2px 10px rgba(15,23,42,0.08)'
+      : 'none';
+  const previewFontSize =
+    fontSize === 'lg' ? '1.06em' : fontSize === 'sm' ? '0.9em' : '0.98em';
+  const previewFontWeight =
+    fontWeight !== 'default' ? Number(fontWeight) : 500;
+
+  return (
+  <div style={es.stylePanel}>
+    <span style={es.stylePanelTitle}>Apariencia del bloque</span>
+    <div style={es.stylePanelGrid}>
+      <label style={es.styleFieldLabel}>
+        Fondo del bloque
+        <input
+          type="color"
+          value={bgColor || '#ffffff'}
+          onChange={e => applyBgColor(e.target.value)}
+          style={es.colorInput}
+        />
+      </label>
+      <label style={es.styleFieldLabel}>
+        Texto
+        <input
+          type="color"
+          value={textColor || '#0f172a'}
+          onChange={e => onChange({ style_text: e.target.value })}
+          style={es.colorInput}
+        />
+      </label>
+      <label style={es.styleFieldLabel}>
+        Borde
+        <input
+          type="color"
+          value={borderColor || '#e2e8f0'}
+          onChange={e => applyBorderColor(e.target.value)}
+          style={es.colorInput}
+        />
+      </label>
+      <label style={es.styleFieldLabel}>
+        Radio
+        <input
+          type="range"
+          min={0}
+          max={30}
+          value={Number(radius || 0)}
+          onChange={e => onChange({ style_radius: e.target.value })}
+        />
+      </label>
+      <label style={es.styleFieldLabel}>
+        Padding
+        <input
+          type="range"
+          min={0}
+          max={48}
+          value={Number(padding || 0)}
+          onChange={e => onChange({ style_padding: e.target.value })}
+        />
+      </label>
+      <label style={es.styleFieldLabel}>
+        Ancho
+        <select value={maxWidth} onChange={e => onChange({ style_max_width: e.target.value })} style={es.styleSelect}>
+          <option value="full">Completo</option>
+          <option value="900">900px</option>
+          <option value="700">700px</option>
+          <option value="560">560px</option>
+        </select>
+      </label>
+      <label style={es.styleFieldLabel}>
+        Alineación
+        <select value={alignSelf} onChange={e => onChange({ style_align: e.target.value })} style={es.styleSelect}>
+          <option value="left">Izquierda</option>
+          <option value="center">Centro</option>
+          <option value="right">Derecha</option>
+        </select>
+      </label>
+      <label style={es.styleFieldLabel}>
+        Sombra
+        <select value={shadow} onChange={e => onChange({ style_shadow: e.target.value })} style={es.styleSelect}>
+          <option value="none">Sin sombra</option>
+          <option value="sm">Suave</option>
+          <option value="md">Media</option>
+        </select>
+      </label>
+      <label style={es.styleFieldLabel}>
+        Tamaño texto
+        <select value={fontSize} onChange={e => onChange({ style_font_size: e.target.value })} style={es.styleSelect}>
+          <option value="default">Por defecto</option>
+          <option value="sm">Pequeño</option>
+          <option value="md">Medio</option>
+          <option value="lg">Grande</option>
+        </select>
+      </label>
+      <label style={es.styleFieldLabel}>
+        Peso texto
+        <select value={fontWeight} onChange={e => onChange({ style_font_weight: e.target.value })} style={es.styleSelect}>
+          <option value="default">Normal</option>
+          <option value="500">Semi</option>
+          <option value="700">Negrita</option>
+        </select>
+      </label>
+      <div style={es.stylePreviewWrap}>
+        <span style={es.stylePreviewTitle}>Vista previa del bloque</span>
+        <div
+          style={{
+            ...es.stylePreviewCard,
+            background: bgColor || '#ffffff',
+            color: textColor || '#0f172a',
+            border: `1px solid ${borderColor || '#e2e8f0'}`,
+            borderRadius: `${Number.isFinite(previewRadius) ? previewRadius : 0}px`,
+            padding: `${Number.isFinite(previewPadding) ? previewPadding : 0}px`,
+            boxShadow: previewShadow,
+            fontSize: previewFontSize,
+            fontWeight: previewFontWeight,
+          }}
+        >
+          Este es el fondo del bloque
+        </div>
+      </div>
+      <div style={es.styleActionsRow}>
+        <button type="button" style={es.styleActionBtn} onClick={onCopyStyle}>
+          Copiar estilo
+        </button>
+        <button
+          type="button"
+          style={canPasteStyle ? es.styleActionBtn : es.styleActionBtnDisabled}
+          onClick={onPasteStyle}
+          disabled={!canPasteStyle}
+        >
+          Pegar estilo
+        </button>
+        <button
+          type="button"
+          style={canPasteStyleToSelection ? es.styleActionBtn : es.styleActionBtnDisabled}
+          onClick={onPasteStyleToSelection}
+          disabled={!canPasteStyleToSelection}
+        >
+          Pegar en seleccion ({selectedCount})
+        </button>
+        <button type="button" style={es.styleActionBtn} onClick={onSavePreset}>
+          Guardar preset
+        </button>
+      </div>
+      <div style={es.stylePresetRow}>
+        <label style={es.styleFieldLabel}>
+          Presets
+          <select
+            defaultValue=""
+            onChange={e => {
+              if (!e.target.value) return;
+              onApplyPreset(e.target.value);
+              e.currentTarget.value = '';
+            }}
+            style={es.styleSelect}
+          >
+            <option value="">Aplicar preset...</option>
+            {presets.map(preset => (
+              <option key={preset.id} value={preset.id}>{preset.name}</option>
+            ))}
+          </select>
+        </label>
+        <label style={es.styleFieldLabel}>
+          Eliminar preset
+          <select
+            defaultValue=""
+            onChange={e => {
+              if (!e.target.value) return;
+              onDeletePreset(e.target.value);
+              e.currentTarget.value = '';
+            }}
+            style={es.styleSelect}
+          >
+            <option value="">Selecciona para borrar...</option>
+            {presets.map(preset => (
+              <option key={`del-${preset.id}`} value={preset.id}>{preset.name}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <button
+        type="button"
+        style={es.styleResetBtn}
+        onClick={() => onChange({
+          style_bg: '',
+          style_text: '',
+          style_border: '',
+          style_radius: '0',
+          style_padding: '0',
+          style_max_width: 'full',
+          style_align: 'left',
+          style_shadow: 'none',
+          style_font_size: 'default',
+          style_font_weight: 'default',
+        })}
+      >
+        Restablecer
+      </button>
+    </div>
+  </div>
+  );
+};
 
 // Editor de bloque imagen
 interface ImageBlockEditorProps {
@@ -779,7 +1337,7 @@ const ImageBlockEditor: React.FC<ImageBlockEditorProps> = ({
     <div style={es.imageBlockRow}>
       {url ? (
         <div style={es.imagePreviewWrap}>
-          <img src={url} alt="Vista previa" style={es.imagePreview} />
+          <img src={getCloudinaryImageUrl(url, 'thumb')} alt="Vista previa" style={es.imagePreview} />
           <button
             style={es.changeImgBtn}
             onClick={onPickImage}
@@ -899,7 +1457,7 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
         <label style={es.fieldLabel}>Imagen</label>
         {imageUrl ? (
           <>
-            <img src={imageUrl} alt="Vista previa" style={es.tiImgPreview} />
+            <img src={getCloudinaryImageUrl(imageUrl, 'thumb')} alt="Vista previa" style={es.tiImgPreview} />
             <button
               style={es.changeImgBtn}
               onClick={onPickImage}
@@ -986,7 +1544,7 @@ const TwoImagesBlockEditor: React.FC<TwoImagesBlockEditorProps> = ({
         <label style={es.fieldLabel}>Imagen izquierda</label>
         {imageUrlLeft ? (
           <>
-            <img src={imageUrlLeft} alt="Vista previa" style={es.tiImgPreview} />
+            <img src={getCloudinaryImageUrl(imageUrlLeft, 'thumb')} alt="Vista previa" style={es.tiImgPreview} />
             <button
               style={es.changeImgBtn}
               onClick={onPickLeft}
@@ -1016,7 +1574,7 @@ const TwoImagesBlockEditor: React.FC<TwoImagesBlockEditorProps> = ({
         <label style={es.fieldLabel}>Imagen derecha</label>
         {imageUrlRight ? (
           <>
-            <img src={imageUrlRight} alt="Vista previa" style={es.tiImgPreview} />
+            <img src={getCloudinaryImageUrl(imageUrlRight, 'thumb')} alt="Vista previa" style={es.tiImgPreview} />
             <button
               style={es.changeImgBtn}
               onClick={onPickRight}
@@ -1060,7 +1618,7 @@ const ThreeImagesBlockEditor: React.FC<ThreeImagesBlockEditorProps> = ({ urls, c
           <label style={es.fieldLabel}>{LABEL_3[i]}</label>
           {urls[i] ? (
             <>
-              <img src={urls[i]} alt="Vista previa" style={es.tiImgPreview} />
+              <img src={getCloudinaryImageUrl(urls[i], 'thumb')} alt="Vista previa" style={es.tiImgPreview} />
               <button style={es.changeImgBtn} onClick={() => onPick(i)}
                 onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#e0f2fe')}
                 onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#f8fafc')}
@@ -1564,7 +2122,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
                       title="Usar esta placa"
                     >
                       <img
-                        src={p.photo_url}
+                        src={getCloudinaryImageUrl(p.photo_url, 'thumb')}
                         alt={`Placa ${p.id}`}
                         style={es.placaThumbImg}
                         loading="lazy"
@@ -1640,7 +2198,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
                       title="Usar esta placa"
                     >
                       <img
-                        src={p.photo_url}
+                        src={getCloudinaryImageUrl(p.photo_url, 'thumb')}
                         alt={`Placa ${p.id}`}
                         style={es.placaThumbImg}
                         loading="lazy"
@@ -1662,11 +2220,12 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
 const es: Record<string, React.CSSProperties> = {
   // Tarjeta contenedora (igual que las demás cards de edición)
   sectionCard: {
-    background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-    borderRadius: '20px',
+    background: 'linear-gradient(155deg, rgba(255,255,255,0.94) 0%, rgba(248,250,252,0.9) 100%)',
+    backdropFilter: 'blur(8px)',
+    borderRadius: '22px',
     padding: 'clamp(16px, 3vw, 36px)',
-    boxShadow: '0 20px 50px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.05)',
-    border: '1px solid rgba(15,23,42,0.05)',
+    boxShadow: '0 26px 48px rgba(15,23,42,0.1), 0 10px 22px rgba(30,64,175,0.08)',
+    border: '1px solid rgba(186,230,253,0.8)',
   },
   sectionHeader: {
     display: 'flex',
@@ -1702,6 +2261,40 @@ const es: Record<string, React.CSSProperties> = {
     marginBottom: '20px',
     minHeight: '20px',
   },
+  selectionBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    flexWrap: 'wrap',
+    marginBottom: '12px',
+    padding: '10px 12px',
+    borderRadius: '10px',
+    border: '1px solid #dbeafe',
+    background: '#f8fbff',
+  },
+  selectionBarText: {
+    fontSize: '0.82em',
+    fontWeight: 700,
+    color: '#334155',
+  },
+  selectionBarActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  selectionBtn: {
+    padding: '6px 10px',
+    borderRadius: '8px',
+    border: '1px solid #bfdbfe',
+    background: '#eff6ff',
+    color: '#1d4ed8',
+    fontWeight: 700,
+    fontSize: '0.78em',
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+  },
   emptyBlocks: {
     display: 'flex',
     flexDirection: 'column',
@@ -1724,26 +2317,39 @@ const es: Record<string, React.CSSProperties> = {
 
   // Tarjeta de bloque individual
   blockCard: {
-    background: '#ffffff',
-    borderRadius: '12px',
-    border: '1.5px solid #e2e8f0',
+    background: 'linear-gradient(155deg, #ffffff 0%, #f8fafc 100%)',
+    borderRadius: '14px',
+    border: '1px solid #dbeafe',
     overflow: 'hidden',
-    transition: 'opacity 0.15s, transform 0.15s, box-shadow 0.15s',
-    boxShadow: '0 2px 8px rgba(15,23,42,0.05)',
+    transition: 'opacity 0.2s, transform 0.2s, box-shadow 0.2s',
+    boxShadow: '0 10px 20px rgba(15,23,42,0.07)',
     userSelect: 'none',
   },
   blockHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '8px 14px',
-    background: '#f8fafc',
-    borderBottom: '1px solid #e2e8f0',
+    padding: '10px 14px',
+    background: 'linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%)',
+    borderBottom: '1px solid #dbeafe',
   },
   blockHeaderLeft: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
+  },
+  selectBlockLabel: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontSize: '0.7em',
+    fontWeight: 700,
+    color: '#64748b',
+    padding: '2px 6px',
+    borderRadius: '999px',
+    border: '1px solid #dbeafe',
+    background: '#f8fbff',
+    userSelect: 'none',
   },
   dragHandle: {
     fontSize: '1.15em',
@@ -1794,6 +2400,132 @@ const es: Record<string, React.CSSProperties> = {
   blockContent: {
     padding: '14px 16px',
     userSelect: 'text',
+  },
+
+  stylePanel: {
+    border: '1px solid #dbeafe',
+    borderRadius: '10px',
+    background: 'linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%)',
+    padding: '10px 12px',
+    marginBottom: '12px',
+  },
+  stylePanelTitle: {
+    display: 'block',
+    fontSize: '0.78em',
+    color: '#64748b',
+    fontWeight: 700,
+    marginBottom: '8px',
+    letterSpacing: '0.03em',
+    textTransform: 'uppercase',
+  },
+  stylePanelGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))',
+    gap: '8px 12px',
+    alignItems: 'center',
+  },
+  styleFieldLabel: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    fontSize: '0.78em',
+    color: '#475569',
+    fontWeight: 600,
+  },
+  colorInput: {
+    width: '100%',
+    height: '32px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    background: '#fff',
+    padding: '2px',
+    cursor: 'pointer',
+  },
+  styleResetBtn: {
+    padding: '7px 10px',
+    borderRadius: '8px',
+    border: '1px solid #cbd5e1',
+    background: '#fff',
+    color: '#475569',
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontSize: '0.8em',
+    fontFamily: 'inherit',
+  },
+  styleSelect: {
+    width: '100%',
+    padding: '6px 8px',
+    borderRadius: '7px',
+    border: '1px solid #cbd5e1',
+    background: '#fff',
+    color: '#1e293b',
+    fontSize: '0.82em',
+    fontFamily: 'inherit',
+  },
+  stylePreviewWrap: {
+    gridColumn: '1 / -1',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    marginTop: '4px',
+  },
+  stylePreviewTitle: {
+    fontSize: '0.75em',
+    fontWeight: 700,
+    color: '#64748b',
+    letterSpacing: '0.03em',
+    textTransform: 'uppercase',
+  },
+  stylePreviewCard: {
+    minHeight: '46px',
+    borderRadius: '10px',
+    padding: '10px 12px',
+    display: 'flex',
+    alignItems: 'center',
+    fontFamily: 'inherit',
+    lineHeight: 1.4,
+    transition: 'all 0.2s ease',
+  },
+  styleActionsRow: {
+    gridColumn: '1 / -1',
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  stylePresetRow: {
+    gridColumn: '1 / -1',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))',
+    gap: '8px 12px',
+  },
+  styleActionBtn: {
+    padding: '7px 11px',
+    borderRadius: '8px',
+    border: '1px solid #bfdbfe',
+    background: '#eff6ff',
+    color: '#1d4ed8',
+    fontWeight: 700,
+    fontSize: '0.8em',
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+  },
+  styleActionBtnDisabled: {
+    padding: '7px 11px',
+    borderRadius: '8px',
+    border: '1px solid #cbd5e1',
+    background: '#f1f5f9',
+    color: '#94a3b8',
+    fontWeight: 700,
+    fontSize: '0.8em',
+    fontFamily: 'inherit',
+    cursor: 'not-allowed',
+  },
+
+  richTextWrap: {
+    border: '1.5px solid #dbeafe',
+    borderRadius: '10px',
+    background: '#fff',
+    boxShadow: 'inset 0 1px 1px rgba(15,23,42,0.03)',
   },
 
   // Textareas
@@ -2010,8 +2742,8 @@ const es: Record<string, React.CSSProperties> = {
     gap: '8px',
     alignItems: 'center',
     padding: '16px 0',
-    borderTop: '1.5px solid #e2e8f0',
-    borderBottom: '1.5px solid #e2e8f0',
+    borderTop: '1.5px solid #dbeafe',
+    borderBottom: '1.5px solid #dbeafe',
     marginBottom: '16px',
   },
   toolbarLabel: {
@@ -2027,10 +2759,10 @@ const es: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '6px',
     padding: '7px 14px',
-    border: '1.5px solid #e2e8f0',
+    border: '1.5px solid #dbeafe',
     borderRadius: '8px',
     cursor: 'pointer',
-    background: '#f8fafc',
+    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
     color: '#475569',
     fontSize: '0.85em',
     fontWeight: 600,
@@ -2073,11 +2805,18 @@ const es: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '14px',
+    gap: '12px',
     flexWrap: 'wrap',
+    paddingTop: '6px',
   },
   saveBarLeft: {
     flex: 1,
+  },
+  saveBarActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
   },
   saveBtn: {
     padding: '11px 28px',
@@ -2089,7 +2828,7 @@ const es: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     fontSize: '1em',
     fontFamily: 'inherit',
-    boxShadow: '0 4px 14px rgba(14,165,233,0.3)',
+    boxShadow: '0 8px 16px rgba(14,165,233,0.28)',
     whiteSpace: 'nowrap',
   },
   saveBtnDisabled: {
@@ -2101,6 +2840,31 @@ const es: Record<string, React.CSSProperties> = {
     color: '#94a3b8',
     fontWeight: 700,
     fontSize: '1em',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
+  },
+  publishBtn: {
+    padding: '11px 18px',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    background: 'linear-gradient(135deg, #0ea5e9, #2563eb)',
+    color: 'white',
+    fontWeight: 700,
+    fontSize: '0.95em',
+    fontFamily: 'inherit',
+    boxShadow: '0 4px 14px rgba(37,99,235,0.25)',
+    whiteSpace: 'nowrap',
+  },
+  draftBtn: {
+    padding: '11px 16px',
+    border: '1px solid #cbd5e1',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    background: '#ffffff',
+    color: '#334155',
+    fontWeight: 700,
+    fontSize: '0.9em',
     fontFamily: 'inherit',
     whiteSpace: 'nowrap',
   },
@@ -2119,6 +2883,12 @@ const es: Record<string, React.CSSProperties> = {
   pendingMsg: {
     color: '#d97706',
     fontSize: '0.875em',
+    fontWeight: 600,
+    margin: 0,
+  },
+  publicationMsg: {
+    color: '#475569',
+    fontSize: '0.84em',
     fontWeight: 600,
     margin: 0,
   },

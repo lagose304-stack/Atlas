@@ -196,10 +196,22 @@ const Edicion: React.FC = () => {
               </p>
             </div>
             <button
-              style={s.testBtn}
-              disabled
+              style={s.testBtnEnabled}
+              onClick={() => navigate('/pruebas')}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #8b5cf6, #a78bfa)';
+                e.currentTarget.style.color = '#fff';
+                e.currentTarget.style.borderColor = 'transparent';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = '#f5f3ff';
+                e.currentTarget.style.color = '#8b5cf6';
+                e.currentTarget.style.borderColor = '#ddd6fe';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
             >
-              Iniciar prueba
+              Gestionar pruebas →
             </button>
           </div>
 
@@ -445,6 +457,23 @@ const s: { [key: string]: React.CSSProperties } = {
     opacity: 0.6,
     alignSelf: 'flex-start',
     letterSpacing: '0.01em',
+  } as React.CSSProperties,
+  testBtnEnabled: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '10px 18px',
+    borderRadius: '10px',
+    border: '1.5px solid #ddd6fe',
+    background: '#f5f3ff',
+    color: '#8b5cf6',
+    fontSize: '0.88em',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    alignSelf: 'flex-start',
+    letterSpacing: '0.01em',
+    transition: 'all 0.2s ease',
   } as React.CSSProperties,
 
   // Grupo de botones de "Editar páginas"

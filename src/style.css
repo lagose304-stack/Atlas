@@ -86,6 +86,33 @@ body {
   padding: 0;
   -webkit-text-size-adjust: 100%;
   overflow-x: hidden;
+  color: #0f172a;
+  background: #f8fbff;
+}
+
+/* Editor rich text (Quill) refinado para encajar con el estilo del sitio */
+.ql-toolbar.ql-snow {
+  border: 0 !important;
+  border-bottom: 1px solid #dbeafe !important;
+  background: linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%);
+  border-radius: 10px 10px 0 0;
+}
+
+.ql-container.ql-snow {
+  border: 0 !important;
+  min-height: 120px;
+  border-radius: 0 0 10px 10px;
+}
+
+.ql-editor {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: #1e293b;
+}
+
+.ql-editor.ql-blank::before {
+  color: #94a3b8 !important;
+  font-style: normal !important;
 }
 
 /* ========================================
@@ -658,7 +685,7 @@ body {
 .temas-grid-home {
   display: grid;
   width: 100%;
-  gap: 10px;
+  gap: 12px;
   grid-template-columns: repeat(2, 1fr);
   align-items: start;
   box-sizing: border-box;
@@ -722,7 +749,7 @@ body {
 .subtemas-grid-page {
   display: grid;
   width: 100%;
-  gap: 10px;
+  gap: 12px;
   grid-template-columns: repeat(2, 1fr);
   align-items: start;
   box-sizing: border-box;
@@ -791,10 +818,16 @@ body {
 .placas-gallery-grid {
   display: grid;
   width: 100%;
-  gap: 10px;
+  gap: 12px;
   grid-template-columns: repeat(2, 1fr);
   align-items: start;
   box-sizing: border-box;
+}
+
+/* Contenido renderizado con ritmo vertical mas limpio */
+.cb-container {
+  display: grid;
+  gap: 14px;
 }
 
 @media (min-width: 480px) {

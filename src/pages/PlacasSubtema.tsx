@@ -7,6 +7,7 @@ import ImageViewerModal from '../components/ImageViewerModal';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../components/PageContentEditor';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { getRenderableBlocks } from '../services/contentPublication';
 
 interface Placa {
   id: number;
@@ -61,13 +62,12 @@ const PlacasSubtema: React.FC = () => {
       if (placasData) setPlacas(placasData);
 
       // Cargar bloques de contenido editorial
-      const { data: blocksData } = await supabase
-        .from('content_blocks')
-        .select('*')
-        .eq('entity_type', 'placas_page')
-        .eq('entity_id', Number(subtemaId))
-        .order('sort_order', { ascending: true });
-      if (blocksData) setContentBlocks(blocksData as ContentBlock[]);
+      try {
+        const blocks = await getRenderableBlocks('placas_page', Number(subtemaId));
+        setContentBlocks(blocks as ContentBlock[]);
+      } catch (error) {
+        console.error('Error fetching content blocks:', error);
+      }
 
       setLoading(false);
     };
@@ -201,7 +201,7 @@ const PlacasSubtema: React.FC = () => {
 const styles: { [key: string]: React.CSSProperties } = {
   page: {
     minHeight: '100vh',
-    background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
+    background: 'radial-gradient(circle at 10% -10%, #bfdbfe 0%, transparent 38%), radial-gradient(circle at 88% 8%, #ddd6fe 0%, transparent 30%), linear-gradient(160deg, #f8fbff 0%, #eef4ff 48%, #f3f7ff 100%)',
     display: 'flex',
     flexDirection: 'column',
     fontFamily: "'Inter', 'Segoe UI', sans-serif",
@@ -221,12 +221,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '4px',
     marginBottom: '24px',
     flexWrap: 'wrap',
-    background: 'rgba(255,255,255,0.75)',
-    backdropFilter: 'blur(8px)',
-    border: '1px solid rgba(186,230,253,0.6)',
-    borderRadius: '12px',
-    padding: '8px 16px',
-    boxShadow: '0 2px 8px rgba(14,165,233,0.07)',
+    background: 'rgba(255,255,255,0.7)',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(186,230,253,0.8)',
+    borderRadius: '14px',
+    padding: '9px 16px',
+    boxShadow: '0 8px 20px rgba(14,165,233,0.1)',
   },
   breadcrumbLink: {
     background: 'none',
@@ -260,12 +260,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     letterSpacing: '0.01em',
   },
   section: {
-    background: 'rgba(255,255,255,0.82)',
-    backdropFilter: 'blur(6px)',
+    background: 'linear-gradient(155deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.88) 100%)',
+    backdropFilter: 'blur(8px)',
     borderRadius: '18px',
     padding: 'clamp(16px, 3vw, 36px)',
-    boxShadow: '0 4px 24px rgba(14,165,233,0.07)',
-    border: '1px solid rgba(186,230,253,0.5)',
+    boxShadow: '0 24px 46px rgba(15,23,42,0.1), 0 8px 20px rgba(30,64,175,0.08)',
+    border: '1px solid rgba(186,230,253,0.75)',
   },
   sectionHeader: {
     display: 'flex',
@@ -340,17 +340,18 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   thumbWrap: {
     position: 'relative',
-    borderRadius: '10px',
+    borderRadius: '14px',
     overflow: 'hidden',
     cursor: 'pointer',
     aspectRatio: '1 / 1',
     background: '#f1f5f9',
-    border: '2px solid #e2e8f0',
-    transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+    border: '1.5px solid #dbeafe',
+    boxShadow: '0 6px 14px rgba(15,23,42,0.08)',
+    transition: 'transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease',
   },
   thumbWrapHover: {
-    transform: 'scale(1.04)',
-    boxShadow: '0 8px 28px rgba(14,165,233,0.22)',
+    transform: 'translateY(-4px) scale(1.03)',
+    boxShadow: '0 16px 28px rgba(14,165,233,0.24)',
     borderColor: '#38bdf8',
   },
   thumbImg: {
@@ -362,13 +363,13 @@ const styles: { [key: string]: React.CSSProperties } = {
   thumbOverlay: {
     position: 'absolute',
     inset: 0,
-    background: 'rgba(14,165,233,0.4)',
+    background: 'linear-gradient(180deg, rgba(14,165,233,0.16), rgba(37,99,235,0.42))',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '2em',
     transition: 'opacity 0.2s ease',
-    backdropFilter: 'blur(2px)',
+    backdropFilter: 'blur(2.5px)',
   },
   aumentoBadge: {
     position: 'absolute',
