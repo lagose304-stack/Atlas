@@ -11,6 +11,9 @@ interface Usuario {
   username: string;
   nombre: string;
   rol: Rol;
+  activo?: boolean;
+  session_version?: number;
+  is_protected?: boolean;
 }
 
 type Panel = 'crear' | 'editar' | 'borrar' | null;
@@ -29,15 +32,19 @@ const GestionUsuarios: React.FC = () => {
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const [toast, setToast]   = useState<{ msg: string; ok: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [supportsSecurityColumns, setSupportsSecurityColumns] = useState<boolean | null>(null);
+  const [supportsProtectedColumn, setSupportsProtectedColumn] = useState<boolean | null>(null);
 
   // ---- Crear ----
   const [crearForm, setCrearForm] = useState({ username: '', password: '', nombre: '', rol: '' as Rol | '' });
+  const [showCrearPassword, setShowCrearPassword] = useState(false);
 
   // ---- Editar ----
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [busquedaEditar, setBusquedaEditar] = useState('');
   const [usuarioEditar, setUsuarioEditar] = useState<Usuario | null>(null);
   const [editarForm, setEditarForm] = useState({ username: '', password: '', nombre: '', rol: '' as Rol | '' });
+  const [showEditarPassword, setShowEditarPassword] = useState(false);
 
   // ---- Borrar ----
   const [busquedaBorrar, setBusquedaBorrar] = useState('');
@@ -48,16 +55,97 @@ const GestionUsuarios: React.FC = () => {
     setTimeout(() => setToast(null), 3500);
   };
 
+  const detectSecurityColumns = async (): Promise<boolean> => {
+    const { error } = await supabase
+      .from('usuarios')
+      .select('id, activo, session_version')
+      .limit(1);
+
+    const supported = !error;
+    setSupportsSecurityColumns(supported);
+    return supported;
+  };
+
+  const detectProtectedColumn = async (): Promise<boolean> => {
+    const { error } = await supabase
+      .from('usuarios')
+      .select('id, is_protected')
+      .limit(1);
+
+    const supported = !error;
+    setSupportsProtectedColumn(supported);
+    return supported;
+  };
+
   const loadUsuarios = async () => {
-    const { data } = await supabase.from('usuarios').select('id, username, nombre, rol').order('nombre');
-    if (data) setUsuarios(data as Usuario[]);
+    let supportsColumns = supportsSecurityColumns;
+    if (supportsColumns === null) {
+      supportsColumns = await detectSecurityColumns();
+    }
+
+    let supportsProtected = supportsProtectedColumn;
+    if (supportsProtected === null) {
+      supportsProtected = await detectProtectedColumn();
+    }
+
+    if (supportsColumns) {
+      const query = supportsProtected
+        ? supabase
+            .from('usuarios')
+            .select('id, username, nombre, rol, activo, session_version, is_protected')
+            .eq('activo', true)
+            .order('nombre')
+        : supabase
+            .from('usuarios')
+            .select('id, username, nombre, rol, activo, session_version')
+            .eq('activo', true)
+            .order('nombre');
+
+      const { data } = await query;
+      if (data) {
+        setUsuarios((data as Usuario[]).map((u) => ({
+          ...u,
+          is_protected: u.is_protected ?? false,
+        })));
+      }
+      return;
+    }
+
+    const fallbackQuery = supportsProtected
+      ? supabase
+          .from('usuarios')
+          .select('id, username, nombre, rol, is_protected')
+          .order('nombre')
+      : supabase
+          .from('usuarios')
+          .select('id, username, nombre, rol')
+          .order('nombre');
+
+    const { data } = await fallbackQuery;
+    if (data) {
+      setUsuarios((data as Usuario[]).map((u) => ({
+        ...u,
+        activo: true,
+        session_version: 1,
+        is_protected: u.is_protected ?? false,
+      })));
+    }
   };
 
   useEffect(() => {
+    void detectSecurityColumns();
+    void detectProtectedColumn();
+  }, []);
+
+  useEffect(() => {
     if (activePanel === 'editar' || activePanel === 'borrar') loadUsuarios();
-  }, [activePanel]);
+  }, [activePanel, supportsSecurityColumns, supportsProtectedColumn]);
 
   const togglePanel = (p: Panel) => setActivePanel(prev => (prev === p ? null : p));
+
+  const isProtectedUser = (u: Usuario): boolean => {
+    return u.is_protected === true;
+  };
 
   // ======================================================
   // CREAR
@@ -70,12 +158,16 @@ const GestionUsuarios: React.FC = () => {
     if (crearForm.password.length < 6) { showToast('La contraseña debe tener al menos 6 caracteres.', false); return; }
 
     setLoading(true);
-    const { error } = await supabase.from('usuarios').insert({
+    const payload = {
       username: crearForm.username.trim().toLowerCase(),
       password: crearForm.password,
       nombre: crearForm.nombre.trim(),
       rol: crearForm.rol,
-    });
+      ...(supportsSecurityColumns ? { activo: true, session_version: 1 } : {}),
+      ...(supportsProtectedColumn ? { is_protected: false } : {}),
+    };
+
+    const { error } = await supabase.from('usuarios').insert(payload);
     setLoading(false);
 
     if (error) {
@@ -83,6 +175,7 @@ const GestionUsuarios: React.FC = () => {
     } else {
       showToast('Usuario creado correctamente.');
       setCrearForm({ username: '', password: '', nombre: '', rol: '' });
+      setShowCrearPassword(false);
     }
   };
 
@@ -90,8 +183,13 @@ const GestionUsuarios: React.FC = () => {
   // EDITAR
   // ======================================================
   const seleccionarParaEditar = (u: Usuario) => {
+    if (isProtectedUser(u)) {
+      showToast('Este usuario esta protegido y no puede editarse desde este panel.', false);
+      return;
+    }
     setUsuarioEditar(u);
     setEditarForm({ username: u.username, password: '', nombre: u.nombre, rol: u.rol });
+    setShowEditarPassword(false);
   };
 
   const handleEditar = async (e: React.FormEvent) => {
@@ -112,7 +210,12 @@ const GestionUsuarios: React.FC = () => {
     }
 
     setLoading(true);
-    const { error } = await supabase.from('usuarios').update(payload).eq('id', usuarioEditar.id);
+    const updatePayload: Record<string, string | number> = {
+      ...payload,
+      ...(supportsSecurityColumns ? { session_version: (usuarioEditar.session_version ?? 1) + 1 } : {}),
+    };
+
+    const { error } = await supabase.from('usuarios').update(updatePayload).eq('id', usuarioEditar.id);
     setLoading(false);
 
     if (error) {
@@ -121,6 +224,7 @@ const GestionUsuarios: React.FC = () => {
       showToast('Usuario actualizado correctamente.');
       setUsuarioEditar(null);
       setEditarForm({ username: '', password: '', nombre: '', rol: '' });
+      setShowEditarPassword(false);
       setBusquedaEditar('');
       loadUsuarios();
     }
@@ -131,16 +235,36 @@ const GestionUsuarios: React.FC = () => {
   // ======================================================
   const handleBorrar = async () => {
     if (!usuarioBorrar) return;
-    if (!window.confirm(`¿Eliminar al usuario "${usuarioBorrar.nombre}" (${usuarioBorrar.username})?`)) return;
+    if (isProtectedUser(usuarioBorrar)) {
+      showToast('Este usuario esta protegido y no puede desactivarse.', false);
+      return;
+    }
+    if (!window.confirm(`¿Desactivar al usuario "${usuarioBorrar.nombre}" (${usuarioBorrar.username})?`)) return;
 
     setLoading(true);
-    const { error } = await supabase.from('usuarios').delete().eq('id', usuarioBorrar.id);
+
+    let error: { code?: string } | null = null;
+    if (supportsSecurityColumns) {
+      const result = await supabase
+        .from('usuarios')
+        .update({ activo: false, session_version: (usuarioBorrar.session_version ?? 1) + 1 })
+        .eq('id', usuarioBorrar.id);
+      error = result.error;
+    } else {
+      const result = await supabase.from('usuarios').delete().eq('id', usuarioBorrar.id);
+      error = result.error;
+    }
+
     setLoading(false);
 
     if (error) {
-      showToast('Error al eliminar usuario.', false);
+      showToast('Error al desactivar usuario.', false);
     } else {
-      showToast('Usuario eliminado correctamente.');
+      showToast(
+        supportsSecurityColumns
+          ? 'Usuario desactivado y sesiones revocadas correctamente.'
+          : 'Usuario eliminado correctamente.',
+      );
       setUsuarioBorrar(null);
       setBusquedaBorrar('');
       loadUsuarios();
@@ -185,7 +309,7 @@ const GestionUsuarios: React.FC = () => {
         {/* Encabezado */}
         <div style={s.pageHeader}>
           <h1 style={s.pageTitle}>Gestión de usuarios</h1>
-          <p style={s.pageSubtitle}>Crea, edita o elimina usuarios del sistema.</p>
+          <p style={s.pageSubtitle}>Crea, edita o desactiva usuarios del sistema.</p>
           <div style={s.accentLine} />
         </div>
 
@@ -232,14 +356,25 @@ const GestionUsuarios: React.FC = () => {
 
                   <label style={s.label}>
                     Contraseña
-                    <input
-                      type="password"
-                      style={s.input}
-                      placeholder="Mínimo 6 caracteres"
-                      value={crearForm.password}
-                      onChange={e => setCrearForm(p => ({ ...p, password: e.target.value }))}
-                      required
-                    />
+                    <div style={s.passwordWrap}>
+                      <input
+                        type={showCrearPassword ? 'text' : 'password'}
+                        style={{ ...s.input, ...s.passwordInput }}
+                        placeholder="Mínimo 6 caracteres"
+                        value={crearForm.password}
+                        onChange={e => setCrearForm(p => ({ ...p, password: e.target.value }))}
+                        required
+                      />
+                      <button
+                        type="button"
+                        style={s.passwordToggleBtn}
+                        onClick={() => setShowCrearPassword(prev => !prev)}
+                        aria-label={showCrearPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        title={showCrearPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                      >
+                        {showCrearPassword ? 'Ocultar' : 'Mostrar'}
+                      </button>
+                    </div>
                   </label>
 
                   <div style={s.label}>
@@ -299,7 +434,12 @@ const GestionUsuarios: React.FC = () => {
                         <p style={s.emptyMsg}>No se encontraron usuarios.</p>
                       )}
                       {usuariosFiltradosEditar.map(u => (
-                        <button key={u.id} style={s.userRow} onClick={() => seleccionarParaEditar(u)}>
+                        <button
+                          key={u.id}
+                          style={s.userRow}
+                          onClick={() => seleccionarParaEditar(u)}
+                          title={isProtectedUser(u) ? 'Usuario protegido: no editable' : 'Seleccionar usuario para editar'}
+                        >
                           <span style={s.userAvatar}>{u.nombre.charAt(0).toUpperCase()}</span>
                           <span style={s.userInfo}>
                             <strong>{u.nombre}</strong>
@@ -344,13 +484,24 @@ const GestionUsuarios: React.FC = () => {
 
                       <label style={s.label}>
                         Nueva contraseña <small style={{ color: '#94a3b8' }}>(dejar en blanco para no cambiar)</small>
-                        <input
-                          type="password"
-                          style={s.input}
-                          placeholder="Nueva contraseña"
-                          value={editarForm.password}
-                          onChange={e => setEditarForm(p => ({ ...p, password: e.target.value }))}
-                        />
+                        <div style={s.passwordWrap}>
+                          <input
+                            type={showEditarPassword ? 'text' : 'password'}
+                            style={{ ...s.input, ...s.passwordInput }}
+                            placeholder="Nueva contraseña"
+                            value={editarForm.password}
+                            onChange={e => setEditarForm(p => ({ ...p, password: e.target.value }))}
+                          />
+                          <button
+                            type="button"
+                            style={s.passwordToggleBtn}
+                            onClick={() => setShowEditarPassword(prev => !prev)}
+                            aria-label={showEditarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                            title={showEditarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                          >
+                            {showEditarPassword ? 'Ocultar' : 'Mostrar'}
+                          </button>
+                        </div>
                       </label>
 
                       <div style={s.label}>
@@ -389,7 +540,7 @@ const GestionUsuarios: React.FC = () => {
               onClick={() => togglePanel('borrar')}
             >
               <span style={{ ...s.panelDot, background: panelColor.borrar }} />
-              <span style={s.panelLabel}>🗑️ Borrar usuario</span>
+              <span style={s.panelLabel}>🚫 Desactivar usuario</span>
               <span style={s.chevron}>{activePanel === 'borrar' ? '▲' : '▼'}</span>
             </button>
 
@@ -412,7 +563,18 @@ const GestionUsuarios: React.FC = () => {
                         <p style={s.emptyMsg}>No se encontraron usuarios.</p>
                       )}
                       {usuariosFiltradosBorrar.map(u => (
-                        <button key={u.id} style={{ ...s.userRow, ...s.userRowDanger }} onClick={() => setUsuarioBorrar(u)}>
+                        <button
+                          key={u.id}
+                          style={{ ...s.userRow, ...s.userRowDanger }}
+                          onClick={() => {
+                            if (isProtectedUser(u)) {
+                              showToast('Este usuario esta protegido y no puede desactivarse.', false);
+                              return;
+                            }
+                            setUsuarioBorrar(u);
+                          }}
+                          title={isProtectedUser(u) ? 'Usuario protegido: no desactivable' : 'Seleccionar usuario para desactivar'}
+                        >
                           <span style={{ ...s.userAvatar, background: '#fee2e2', color: '#ef4444' }}>{u.nombre.charAt(0).toUpperCase()}</span>
                           <span style={s.userInfo}>
                             <strong>{u.nombre}</strong>
@@ -426,20 +588,22 @@ const GestionUsuarios: React.FC = () => {
                 ) : (
                   <div>
                     <div style={{ ...s.selectedBanner, borderColor: '#f87171', background: '#fff5f5' }}>
-                      <span>🗑️ Eliminar: <strong>{usuarioBorrar.nombre}</strong> ({usuarioBorrar.username})</span>
+                      <span>🚫 Desactivar: <strong>{usuarioBorrar.nombre}</strong> ({usuarioBorrar.username})</span>
                       <button type="button" style={s.cancelBtn} onClick={() => setUsuarioBorrar(null)}>
                         Cancelar
                       </button>
                     </div>
                     <p style={{ color: '#ef4444', margin: '12px 0', fontSize: '0.92em' }}>
-                      Esta acción no se puede deshacer. El usuario perderá el acceso al sistema.
+                      {supportsSecurityColumns
+                        ? 'El usuario perdera el acceso inmediatamente y cualquier sesion abierta sera invalidada.'
+                        : 'Esta accion no se puede deshacer. El usuario perdera el acceso al sistema.'}
                     </p>
                     <button
                       style={{ ...s.submitBtn, background: 'linear-gradient(135deg,#ef4444,#f87171)' }}
                       onClick={handleBorrar}
                       disabled={loading}
                     >
-                      {loading ? 'Eliminando...' : '🗑️ Confirmar eliminación'}
+                      {loading ? 'Procesando...' : supportsSecurityColumns ? '🚫 Confirmar desactivacion' : '🗑️ Confirmar eliminacion'}
                     </button>
                   </div>
                 )}
@@ -575,6 +739,26 @@ const s: { [key: string]: React.CSSProperties } = {
     color: '#0f172a',
     outline: 'none',
     transition: 'border-color 0.15s',
+  },
+  passwordWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  passwordInput: {
+    flex: 1,
+  },
+  passwordToggleBtn: {
+    border: '1.5px solid #cbd5e1',
+    background: '#f8fafc',
+    color: '#334155',
+    borderRadius: '8px',
+    padding: '8px 11px',
+    fontSize: '0.8em',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
   },
   roleGroup: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '2px' },
   roleChip: {

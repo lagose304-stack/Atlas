@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import ImageUploader from '../components/ImageUploader';
 import { supabase } from '../services/supabase';
 import { uploadToCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
@@ -7,6 +7,8 @@ import Footer from '../components/Footer';
 import Header from '../components/Header';
 import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
+import { useAuth } from '../contexts/AuthContext';
+import { logPlateActivity } from '../services/plateActivityAudit';
 
 // --- Interfaces ---
 interface Tema {
@@ -153,6 +155,7 @@ const slugify = (text: string) =>
 
 const Placas: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [showClasificadasForm, setShowClasificadasForm] = useState(false);
   const [showSinClasificarForm, setShowSinClasificarForm] = useState(false);
   const [showReasignacionSection, setShowReasignacionSection] = useState(false);
@@ -263,18 +266,37 @@ const Placas: React.FC = () => {
       const nextPlacaSortOrder = (maxPlacaData && maxPlacaData.length > 0 && maxPlacaData[0].sort_order != null)
         ? maxPlacaData[0].sort_order + 1
         : 0;
-      const { error } = await supabase.from('placas').insert({
-        photo_url: uploadResult.secure_url,
-        tema_id: Number(selectedTema),
-        subtema_id: Number(selectedSubtema),
-        aumento: selectedAumento || null,
-        senalados: senalados_filtrados.length > 0 ? senalados_filtrados : null,
-        comentario: comentario.trim() || null,
-        tincion: tincion.trim() || null,
-        sort_order: nextPlacaSortOrder,
-      });
+      const { data: insertedPlaca, error } = await supabase
+        .from('placas')
+        .insert({
+          photo_url: uploadResult.secure_url,
+          tema_id: Number(selectedTema),
+          subtema_id: Number(selectedSubtema),
+          aumento: selectedAumento || null,
+          senalados: senalados_filtrados.length > 0 ? senalados_filtrados : null,
+          comentario: comentario.trim() || null,
+          tincion: tincion.trim() || null,
+          sort_order: nextPlacaSortOrder,
+        })
+        .select('id')
+        .single();
 
       if (error) throw error;
+
+      await logPlateActivity({
+        actionType: 'upload_classified',
+        targetTable: 'placas',
+        placaId: insertedPlaca?.id ?? null,
+        actor: {
+          id: user?.id ?? null,
+          username: user?.username ?? null,
+        },
+        details: {
+          tema_id: Number(selectedTema),
+          subtema_id: Number(selectedSubtema),
+          source: 'placas_form',
+        },
+      });
 
       setSaveSuccess(true);
       setSelectedFile(null);
@@ -337,11 +359,28 @@ const Placas: React.FC = () => {
           optimizeForPlaque: true,
         });
         const publicId = getCloudinaryPublicId(uploadResult.secure_url);
-        const { error } = await supabase.from('placas_sin_clasificar').insert({
-          photo_url: uploadResult.secure_url,
-          public_id: publicId,
-        });
+        const { data: insertedWaiting, error } = await supabase
+          .from('placas_sin_clasificar')
+          .insert({
+            photo_url: uploadResult.secure_url,
+            public_id: publicId,
+          })
+          .select('id')
+          .single();
         if (error) throw error;
+
+        await logPlateActivity({
+          actionType: 'upload_unclassified',
+          targetTable: 'placas_sin_clasificar',
+          waitingPlateId: insertedWaiting?.id ?? null,
+          actor: {
+            id: user?.id ?? null,
+            username: user?.username ?? null,
+          },
+          details: {
+            source: 'placas_form',
+          },
+        });
       } catch (err) {
         errors.push(`Imagen ${i + 1}: error al subir`);
         console.error(err);

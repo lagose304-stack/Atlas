@@ -6,6 +6,8 @@ import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
+import { useAuth } from '../contexts/AuthContext';
+import { logPlateActivity } from '../services/plateActivityAudit';
 
 interface Tema {
   id: number;
@@ -24,6 +26,8 @@ interface Placa {
   id: number;
   photo_url: string;
   sort_order: number;
+  tema_id?: number;
+  subtema_id?: number;
 }
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
@@ -64,6 +68,7 @@ function extractAllBlockImageUrls(b: { block_type: string; content: Record<strin
 
 const EliminarPlacas: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [temas,    setTemas]    = useState<Tema[]>([]);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
@@ -125,7 +130,7 @@ const EliminarPlacas: React.FC = () => {
       setLoadingPlacas(true);
       const { data } = await supabase
         .from('placas')
-        .select('id, photo_url, sort_order')
+        .select('id, photo_url, sort_order, tema_id, subtema_id')
         .eq('subtema_id', selectedSubtemaId)
         .order('sort_order', { ascending: true });
       if (data) setPlacas(data);
@@ -181,6 +186,22 @@ const EliminarPlacas: React.FC = () => {
             try { await deleteFromCloudinary(publicId); } catch {/* ignorar si falla Cloudinary */}
           }
           await supabase.from('placas').delete().eq('id', placa.id);
+          await logPlateActivity({
+            actionType: 'delete_classified',
+            targetTable: 'placas',
+            placaId: placa.id,
+            actor: {
+              id: user?.id ?? null,
+              username: user?.username ?? null,
+            },
+            details: {
+              source: 'eliminar_placas',
+              selected_tema_id: selectedTemaId,
+              selected_subtema_id: selectedSubtemaId,
+              tema_id: placa.tema_id ?? selectedTemaId,
+              subtema_id: placa.subtema_id ?? selectedSubtemaId,
+            },
+          });
         })
       );
       setPlacas(prev => prev.filter(p => !selectedIds.has(p.id)));

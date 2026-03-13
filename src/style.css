@@ -1038,9 +1038,44 @@ body {
 @media (max-width: 600px) {
   .edicion-grid {
     grid-template-columns: 1fr !important;
+    gap: 12px !important;
   }
   .edicion-card-wide {
     grid-column: span 1 !important;
+  }
+  .edicion-main {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+  .edicion-title-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .edicion-logout-btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  .edicion-card {
+    padding: 14px !important;
+    min-width: 0 !important;
+  }
+  .edicion-action-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    text-align: center !important;
+    white-space: normal !important;
+  }
+  .edicion-pages-btn-group {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+  .edicion-pages-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    text-align: center !important;
+    white-space: normal !important;
   }
 }
 

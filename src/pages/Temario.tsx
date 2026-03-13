@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import LoadingToast, { LoadingToastType } from '../components/LoadingToast';
 import Footer from '../components/Footer';
@@ -152,7 +152,7 @@ const Temario: React.FC = () => {
     const fetchSubtemas = async () => {
       const temaId = isEditingSubtema ? selectedTemaId : (isDeletingSubtema ? deletingTemaId : null);
       if (temaId) {
-        const { data, error } = await supabase.from('subtemas').select('*').eq('tema_id', temaId).order('nombre', { ascending: true });
+        const { data } = await supabase.from('subtemas').select('*').eq('tema_id', temaId).order('nombre', { ascending: true });
         setSubtemasOfSelectedTema(data || []);
         if (isEditingSubtema) {
             setEditingSubtemaId('');

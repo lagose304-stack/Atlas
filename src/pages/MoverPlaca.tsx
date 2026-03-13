@@ -6,6 +6,8 @@ import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { useAuth } from '../contexts/AuthContext';
+import { logPlateActivity } from '../services/plateActivityAudit';
 
 interface Tema {
   id: number;
@@ -42,6 +44,7 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
 
 const MoverPlaca: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // ── Selección de contexto (tema/subtema de búsqueda) ──────────────────
   const [temas,    setTemas]    = useState<Tema[]>([]);
@@ -217,6 +220,24 @@ const MoverPlaca: React.FC = () => {
         comentario: editComentario.trim() || null,
         tincion:    editTincion.trim() || null,
       };
+
+      await logPlateActivity({
+        actionType: 'edit_plate',
+        targetTable: 'placas',
+        placaId: selectedPlaca.id,
+        actor: {
+          id: user?.id ?? null,
+          username: user?.username ?? null,
+        },
+        details: {
+          source: 'mover_placa',
+          from_tema_id: selectedPlaca.tema_id,
+          from_subtema_id: selectedPlaca.subtema_id,
+          to_tema_id: editTemaId,
+          to_subtema_id: editSubtemaId,
+          changed_fields: updatedFields,
+        },
+      });
 
       // Si el subtema destino es diferente al actual, quitar la placa de la lista
       if (editSubtemaId !== selectedPlaca.subtema_id) {

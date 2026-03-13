@@ -12,6 +12,30 @@
 3. Copia y pega el contenido del archivo `database/setup_usuarios.sql`
 4. Haz clic en **"Run"** para ejecutar el script
 
+### 2.1. Migracion recomendada de seguridad de sesion
+Si ya tienes la tabla creada, ejecuta tambien el archivo `database/alter_usuarios_seguridad_sesion.sql`.
+
+Esta migracion agrega:
+- `activo`: para desactivar cuentas sin borrarlas
+- `session_version`: para revocar sesiones abiertas al editar o desactivar usuarios
+
+### 2.1.1. Flag de usuario protegido (solo base de datos)
+Ejecuta tambien `database/alter_usuarios_protected_flag.sql`.
+
+Este campo agrega:
+- `is_protected`: bloquea editar/desactivar usuarios desde la app
+
+Reglas:
+- Se administra solo en base de datos (no hay control en UI para activarlo/desactivarlo)
+- Por defecto se crea en `false` (apagado)
+
+### 2.2. Auditoria de seguridad (recomendado)
+Ejecuta el archivo `database/setup_security_audit_logs.sql` para registrar eventos como:
+- Login exitoso y fallido
+- Bloqueo temporal por intentos repetidos
+- Sesiones invalidadas por timeout, desactivacion o revocacion
+- Intentos de acceso a rutas sin permiso por rol
+
 ### 3. Verificar que la tabla se creó correctamente
 1. En el panel lateral, haz clic en **"Table Editor"**
 2. Deberías ver la tabla **"usuarios"**
@@ -60,6 +84,41 @@ El script crea estos usuarios de ejemplo:
 4. Si las credenciales son correctas, el usuario accede a la página de edición
 5. Si son incorrectas, se muestra el mensaje "Acceso denegado"
 6. El usuario puede cerrar sesión desde la página de edición
+
+Adicionalmente, la app revalida periodicamente la sesion contra la base de datos. Si la cuenta fue desactivada o su `session_version` cambio, la sesion se cierra automaticamente.
+
+Tambien existe un timeout de sesion y bloqueo temporal por intentos fallidos.
+
+## Analitica del sitio (visitas y consultas)
+
+Para habilitar el panel de estadisticas en la seccion de edicion:
+
+1. Ejecuta `database/setup_site_analytics_events.sql` en Supabase.
+2. Verifica que existan eventos en `site_analytics_events`.
+
+Eventos registrados por la app:
+- `site_visit`: 1 vez por sesion de navegador
+- `tema_view`: al abrir una pagina de tema (subtemas)
+- `subtema_view`: al abrir una pagina de subtema (placas)
+- `placa_view`: al abrir una placa en el visor
+
+El panel de estadisticas es solo para usuarios con rol `Administrador`.
+
+Reinicio de estadisticas:
+- Existe un boton para reiniciar estadisticas en el panel de Estadisticas.
+- Solo se muestra si el usuario autenticado tiene `is_protected = true`.
+- Para que funcione, la tabla `site_analytics_events` debe tener la politica DELETE (incluida en `setup_site_analytics_events.sql`).
+
+## Indicador de usuarios activos (ojo flotante)
+
+Para habilitar el contador de usuarios activos en Inicio, Subtemas y Placas:
+
+1. Ejecuta `database/setup_site_online_presence.sql` en Supabase.
+
+Comportamiento:
+- Se muestra un indicador flotante con icono de ojo y total de usuarios activos.
+- El valor representa usuarios con actividad reciente en cualquier parte del sitio.
+- El cliente envia heartbeat periodico y refresca el contador automaticamente.
 
 ## Estructura del código
 

@@ -1,13 +1,17 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import type { UserRole } from '../security/permissions';
+import { logSecurityEvent } from '../services/securityAudit';
 
 interface PrivateRouteProps {
   children: React.ReactElement;
+  allowedRoles?: UserRole[];
 }
 
-const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles }) => {
+  const { isAuthenticated, isLoading, user } = useAuth();
+  const location = useLocation();
 
   // Mostrar loading mientras se verifica la autenticación
   if (isLoading) {
@@ -42,6 +46,22 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
   // Si no está autenticado, redirigir a home
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;
+  }
+
+  if (allowedRoles && allowedRoles.length > 0) {
+    const currentRole = user?.rol;
+    if (!currentRole || !allowedRoles.includes(currentRole)) {
+      void logSecurityEvent('route_denied', {
+        userId: user?.id ?? null,
+        username: user?.username ?? null,
+        details: {
+          path: location.pathname,
+          role: currentRole ?? null,
+          allowedRoles,
+        },
+      });
+      return <Navigate to="/acceso-denegado" replace state={{ from: location.pathname }} />;
+    }
   }
 
   // Si está autenticado, mostrar el contenido

@@ -3,10 +3,18 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
+import { hasPermission } from '../security/permissions';
 
 const Edicion: React.FC = () => {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
+
+  const canTemario = hasPermission(user?.rol, 'temario');
+  const canPlacas = hasPermission(user?.rol, 'placas');
+  const canEditarPaginas = hasPermission(user?.rol, 'editar_paginas');
+  const canPruebas = hasPermission(user?.rol, 'pruebas');
+  const canGestionUsuarios = hasPermission(user?.rol, 'gestion_usuarios');
+  const canEstadisticas = hasPermission(user?.rol, 'estadisticas');
 
   const handleLogout = () => {
     logout();
@@ -17,7 +25,7 @@ const Edicion: React.FC = () => {
     <div style={s.page}>
       <Header />
 
-      <main style={s.main}>
+      <main style={s.main} className="edicion-main">
 
         {/* Breadcrumb */}
         <nav style={s.breadcrumb}>
@@ -35,10 +43,11 @@ const Edicion: React.FC = () => {
 
         {/* Encabezado de la sección */}
         <div style={s.pageHeader}>
-          <div style={s.pageTitleRow}>
+          <div style={s.pageTitleRow} className="edicion-title-row">
             <h1 style={s.pageTitle}>Panel de Edición</h1>
             <button
               style={s.logoutBtn}
+              className="edicion-logout-btn"
               onClick={handleLogout}
               onMouseEnter={e => {
                 e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626, #b91c1c)';
@@ -64,7 +73,7 @@ const Edicion: React.FC = () => {
         <div style={s.grid} className="edicion-grid">
 
           {/* Tarjeta: Temario */}
-          <div style={s.card}>
+          {canTemario && <div style={s.card} className="edicion-card">
             <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #6366f1, #818cf8)' }} />
             <div style={s.cardIcon}>📚</div>
             <div style={s.cardBody}>
@@ -76,6 +85,7 @@ const Edicion: React.FC = () => {
             <Link
               to="/temario"
               style={s.cardBtn}
+              className="edicion-action-btn"
               onMouseEnter={e => {
                 (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, #6366f1, #818cf8)';
                 (e.currentTarget as HTMLAnchorElement).style.color = '#fff';
@@ -91,10 +101,10 @@ const Edicion: React.FC = () => {
             >
               Gestionar temario →
             </Link>
-          </div>
+          </div>}
 
           {/* Tarjeta: Placas */}
-          <div style={s.card}>
+          {canPlacas && <div style={s.card} className="edicion-card">
             <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #10b981, #34d399)' }} />
             <div style={s.cardIcon}>🔬</div>
             <div style={s.cardBody}>
@@ -106,6 +116,7 @@ const Edicion: React.FC = () => {
             <Link
               to="/placas"
               style={{ ...s.cardBtn, color: '#10b981', background: '#ecfdf5', borderColor: '#a7f3d0' }}
+              className="edicion-action-btn"
               onMouseEnter={e => {
                 (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, #10b981, #34d399)';
                 (e.currentTarget as HTMLAnchorElement).style.color = '#fff';
@@ -121,10 +132,10 @@ const Edicion: React.FC = () => {
             >
               Gestionar placas →
             </Link>
-          </div>
+          </div>}
 
           {/* Tarjeta: Editar páginas */}
-          <div style={s.card}>
+          {canEditarPaginas && <div style={s.card} className="edicion-card">
             <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #f59e0b, #fbbf24)' }} />
             <div style={s.cardIcon}>✏️</div>
             <div style={s.cardBody}>
@@ -133,9 +144,10 @@ const Edicion: React.FC = () => {
                 Añade y edita bloques de contenido editorial (textos, imágenes, títulos) en cada sección del atlas.
               </p>
             </div>
-            <div style={s.pagesBtnGroup}>
+            <div style={s.pagesBtnGroup} className="edicion-pages-btn-group">
               <button
                 style={s.pagesBtn}
+                className="edicion-pages-btn"
                 onClick={() => navigate('/editar-home')}
                 onMouseEnter={e => {
                   e.currentTarget.style.background = 'linear-gradient(135deg, #f59e0b, #fbbf24)';
@@ -152,6 +164,7 @@ const Edicion: React.FC = () => {
               </button>
               <button
                 style={s.pagesBtn}
+                className="edicion-pages-btn"
                 onClick={() => navigate('/editar-subtemas')}
                 onMouseEnter={e => {
                   e.currentTarget.style.background = 'linear-gradient(135deg, #f59e0b, #fbbf24)';
@@ -168,6 +181,7 @@ const Edicion: React.FC = () => {
               </button>
               <button
                 style={s.pagesBtn}
+                className="edicion-pages-btn"
                 onClick={() => navigate('/editar-placas')}
                 onMouseEnter={e => {
                   e.currentTarget.style.background = 'linear-gradient(135deg, #f59e0b, #fbbf24)';
@@ -183,10 +197,10 @@ const Edicion: React.FC = () => {
                 🔬 Página de placas
               </button>
             </div>
-          </div>
+          </div>}
 
           {/* Tarjeta: Realizar pruebas */}
-          <div style={s.card}>
+          {canPruebas && <div style={s.card} className="edicion-card">
             <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #8b5cf6, #a78bfa)' }} />
             <div style={s.cardIcon}>🧪</div>
             <div style={s.cardBody}>
@@ -197,6 +211,7 @@ const Edicion: React.FC = () => {
             </div>
             <button
               style={s.testBtnEnabled}
+              className="edicion-action-btn"
               onClick={() => navigate('/pruebas')}
               onMouseEnter={e => {
                 e.currentTarget.style.background = 'linear-gradient(135deg, #8b5cf6, #a78bfa)';
@@ -213,10 +228,10 @@ const Edicion: React.FC = () => {
             >
               Gestionar pruebas →
             </button>
-          </div>
+          </div>}
 
           {/* Tarjeta: Gestión de usuarios */}
-          <div style={{ ...s.card, gridColumn: 'span 2' }}>
+          {canGestionUsuarios && <div style={{ ...s.card, gridColumn: 'span 2' }} className="edicion-card edicion-card-wide">
             <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #0ea5e9, #38bdf8)' }} />
             <div style={s.cardIcon}>👥</div>
             <div style={s.cardBody}>
@@ -228,6 +243,7 @@ const Edicion: React.FC = () => {
             <Link
               to="/gestion-usuarios"
               style={{ ...s.cardBtn, color: '#0ea5e9', background: '#f0f9ff', borderColor: '#bae6fd' }}
+              className="edicion-action-btn"
               onMouseEnter={e => {
                 (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, #0ea5e9, #38bdf8)';
                 (e.currentTarget as HTMLAnchorElement).style.color = '#fff';
@@ -243,7 +259,50 @@ const Edicion: React.FC = () => {
             >
               Gestionar usuarios →
             </Link>
-          </div>
+          </div>}
+
+          {canEstadisticas && <div style={{ ...s.card, gridColumn: 'span 2' }} className="edicion-card edicion-card-wide">
+            <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #0f766e, #14b8a6)' }} />
+            <div style={s.cardIcon}>📈</div>
+            <div style={s.cardBody}>
+              <h2 style={s.cardTitle}>Estadisticas del sitio</h2>
+              <p style={s.cardDesc}>
+                Visualiza visitas por periodo y consulta de temas, subtemas y placas.
+              </p>
+            </div>
+            <Link
+              to="/estadisticas"
+              style={{ ...s.cardBtn, color: '#0f766e', background: '#f0fdfa', borderColor: '#99f6e4' }}
+              className="edicion-action-btn"
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, #0f766e, #14b8a6)';
+                (e.currentTarget as HTMLAnchorElement).style.color = '#fff';
+                (e.currentTarget as HTMLAnchorElement).style.borderColor = 'transparent';
+                (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLAnchorElement).style.background = '#f0fdfa';
+                (e.currentTarget as HTMLAnchorElement).style.color = '#0f766e';
+                (e.currentTarget as HTMLAnchorElement).style.borderColor = '#99f6e4';
+                (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(0)';
+              }}
+            >
+              Ver estadisticas →
+            </Link>
+          </div>}
+
+          {!canTemario && !canPlacas && !canEditarPaginas && !canPruebas && !canGestionUsuarios && !canEstadisticas && (
+            <div style={{ ...s.card, gridColumn: '1 / -1' }} className="edicion-card edicion-card-wide">
+              <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #dc2626, #f87171)' }} />
+              <div style={s.cardIcon}>⛔</div>
+              <div style={s.cardBody}>
+                <h2 style={s.cardTitle}>Sin permisos asignados</h2>
+                <p style={s.cardDesc}>
+                  Tu cuenta no tiene secciones habilitadas en el panel de edicion. Contacta a un administrador.
+                </p>
+              </div>
+            </div>
+          )}
 
         </div>
       </main>

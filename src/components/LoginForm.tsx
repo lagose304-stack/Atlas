@@ -9,6 +9,7 @@ interface LoginFormProps {
 const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -51,7 +52,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
         // Redirigir a la página de edición después del login
         navigate('/edicion');
       } else {
-        setError('Usuario o contraseña incorrectos');
+        setError('Acceso denegado: credenciales invalidas o acceso temporalmente bloqueado');
       }
     } catch (error) {
       console.error('Error durante el login:', error);
@@ -64,6 +65,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
   const handleClose = () => {
     setUsername('');
     setPassword('');
+    setShowPassword(false);
     setError('');
     setLoading(false);
     onClose();
@@ -99,16 +101,28 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
           </div>
           <div style={styles.formGroup}>
             <label style={styles.label}>Contraseña:</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={styles.input}
-              disabled={loading}
-              placeholder="Ingresa tu contraseña"
-              autoComplete="current-password"
-            />
+            <div style={styles.passwordWrap}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                style={{ ...styles.input, ...styles.passwordInput }}
+                disabled={loading}
+                placeholder="Ingresa tu contraseña"
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                disabled={loading}
+                style={styles.passwordToggle}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {showPassword ? 'Ocultar' : 'Mostrar'}
+              </button>
+            </div>
           </div>
           
           {error && (
@@ -225,6 +239,25 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '8px',
     transition: 'border-color 0.3s ease',
     outline: 'none',
+  },
+  passwordWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  passwordInput: {
+    flex: 1,
+  },
+  passwordToggle: {
+    border: '1px solid #cbd5e1',
+    background: '#f8fafc',
+    color: '#334155',
+    borderRadius: '8px',
+    padding: '0.58rem 0.8rem',
+    fontSize: '0.86rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
   },
   errorContainer: {
     backgroundColor: '#f8d7da',

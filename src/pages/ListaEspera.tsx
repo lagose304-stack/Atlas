@@ -7,6 +7,8 @@ import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { useAuth } from '../contexts/AuthContext';
+import { logPlateActivity } from '../services/plateActivityAudit';
 
 interface Tema {
   id: number;
@@ -38,6 +40,7 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
 
 const ListaEspera: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // ── Datos ─────────────────────────────────────────────────────────────
   const [placas,   setPlacas]   = useState<PlacaSinClasificar[]>([]);
@@ -156,6 +159,31 @@ const ListaEspera: React.FC = () => {
       });
       if (error) throw error;
 
+      const { data: recentlyCreated } = await supabase
+        .from('placas')
+        .select('id')
+        .eq('photo_url', selected.photo_url)
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      await logPlateActivity({
+        actionType: 'classify_waiting_plate',
+        targetTable: 'placas',
+        placaId: recentlyCreated?.id ?? null,
+        waitingPlateId: selected.id,
+        actor: {
+          id: user?.id ?? null,
+          username: user?.username ?? null,
+        },
+        details: {
+          tema_id: temaId,
+          subtema_id: subtemaId,
+          aumento: aumento || null,
+          source: 'lista_espera',
+        },
+      });
+
       setPlacas(prev => prev.filter(p => p.id !== selected.id));
       setSelected(null);
       resetForm();
@@ -175,8 +203,23 @@ const ListaEspera: React.FC = () => {
     setIsDeleting(true);
     setDeleteError('');
     try {
+      const deleteTargetId = deleteTarget.id;
       await deleteFromCloudinary(deleteTarget.public_id);
       await supabase.from('placas_sin_clasificar').delete().eq('id', deleteTarget.id);
+
+      await logPlateActivity({
+        actionType: 'delete_unclassified',
+        targetTable: 'placas_sin_clasificar',
+        waitingPlateId: deleteTargetId,
+        actor: {
+          id: user?.id ?? null,
+          username: user?.username ?? null,
+        },
+        details: {
+          source: 'lista_espera',
+        },
+      });
+
       setPlacas(prev => prev.filter(p => p.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) {

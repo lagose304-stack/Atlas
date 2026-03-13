@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import LoginForm from './LoginForm';
+import FloatingVisitorsIndicator from './FloatingVisitorsIndicator';
 import facebookLogo from '../assets/logos/facebook.png';
 import igLogo from '../assets/logos/ig.png';
 import gmailLogo from '../assets/logos/gmail.png';
@@ -40,28 +41,31 @@ const Footer: React.FC<FooterProps> = () => {
           <p style={s.text} className="footer-col-text">
             blablablabla
           </p>
-          <button
-            onClick={handleGoToEdicion}
-            style={s.edicionBtn}
-            className="footer-edicion-btn"
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'linear-gradient(135deg, #38bdf8, #818cf8)';
-              e.currentTarget.style.color = '#ffffff';
-              e.currentTarget.style.borderColor = 'transparent';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(56,189,248,0.3)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = '#e0f2fe';
-              e.currentTarget.style.color = '#0369a1';
-              e.currentTarget.style.borderColor = '#bae6fd';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-          >
-            <span>📝</span>
-            <span>Ir a Edición</span>
-          </button>
+          <div style={s.edicionRow}>
+            <button
+              onClick={handleGoToEdicion}
+              style={s.edicionBtn}
+              className="footer-edicion-btn"
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #38bdf8, #818cf8)';
+                e.currentTarget.style.color = '#ffffff';
+                e.currentTarget.style.borderColor = 'transparent';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(56,189,248,0.3)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = '#e0f2fe';
+                e.currentTarget.style.color = '#0369a1';
+                e.currentTarget.style.borderColor = '#bae6fd';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
+              <span>📝</span>
+              <span>Ir a Edición</span>
+            </button>
+            <FloatingVisitorsIndicator />
+          </div>
         </div>
 
         {/* Separador vertical */}
@@ -274,6 +278,13 @@ const s: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
     marginTop: '4px',
   } as React.CSSProperties,
+  edicionRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    marginTop: '4px',
+    flexWrap: 'wrap',
+  },
   socialRow: {
     display: 'flex',
     gap: '10px',

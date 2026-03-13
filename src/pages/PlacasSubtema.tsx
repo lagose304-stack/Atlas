@@ -8,6 +8,7 @@ import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../components/PageContentEditor';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { getRenderableBlocks } from '../services/contentPublication';
+import { logPlacaView, logSubtemaView } from '../services/analytics';
 
 interface Placa {
   id: number;
@@ -40,6 +41,7 @@ const PlacasSubtema: React.FC = () => {
 
     const fetchData = async () => {
       setLoading(true);
+      void logSubtemaView(Number(subtemaId));
 
       // Cargar info del subtema (con nombre del tema padre)
       const { data: subtemaData, error: subtemaError } = await supabase
@@ -150,7 +152,10 @@ const PlacasSubtema: React.FC = () => {
                     ...styles.thumbWrap,
                     ...(hoveredId === placa.id ? styles.thumbWrapHover : {}),
                   }}
-                  onClick={() => setSelectedPlaca(placa)}
+                  onClick={() => {
+                    void logPlacaView(placa.id, Number(subtemaId));
+                    setSelectedPlaca(placa);
+                  }}
                   onMouseEnter={() => setHoveredId(placa.id)}
                   onMouseLeave={() => setHoveredId(null)}
                   title="Ver en grande"

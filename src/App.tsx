@@ -16,10 +16,25 @@ import MoverPlaca from './pages/MoverPlaca';
 import ListaEspera from './pages/ListaEspera';
 import GestionUsuarios from './pages/GestionUsuarios';
 import Pruebas from './pages/Pruebas';
+import AccesoDenegado from './pages/AccesoDenegado';
+import Estadisticas from './pages/Estadisticas';
+import { logSiteVisitOncePerSession } from './services/analytics';
+
+const ROLE_ADMIN = 'Administrador' as const;
+const ROLE_INSTRUCTOR = 'Instructor' as const;
+const ROLE_MICRO = 'Microscopía' as const;
 
 const ScrollToTop: React.FC = () => {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+};
+
+const SiteVisitTracker: React.FC = () => {
+  useEffect(() => {
+    void logSiteVisitOncePerSession();
+  }, []);
+
   return null;
 };
 
@@ -28,6 +43,7 @@ const App: React.FC = () => {
     <AuthProvider>
       <Router>
         <ScrollToTop />
+        <SiteVisitTracker />
         <Routes>
           {/* Ruta pública */}
           <Route path="/" element={<Home />} />
@@ -44,7 +60,7 @@ const App: React.FC = () => {
           <Route
             path="/temario"
             element={
-              <PrivateRoute>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <Temario />
               </PrivateRoute>
             }
@@ -52,7 +68,7 @@ const App: React.FC = () => {
           <Route
             path="/placas"
             element={
-              <PrivateRoute>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <Placas />
               </PrivateRoute>
             }
@@ -60,7 +76,7 @@ const App: React.FC = () => {
           <Route
             path="/editar-home"
             element={
-              <PrivateRoute>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <EditarHome />
               </PrivateRoute>
             }
@@ -68,7 +84,7 @@ const App: React.FC = () => {
           <Route
             path="/editar-subtemas"
             element={
-              <PrivateRoute>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <EditarSubtemas />
               </PrivateRoute>
             }
@@ -76,7 +92,7 @@ const App: React.FC = () => {
           <Route
             path="/editar-placas"
             element={
-              <PrivateRoute>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <EditarPlacas />
               </PrivateRoute>
             }
@@ -84,7 +100,7 @@ const App: React.FC = () => {
           <Route
             path="/eliminar-placas"
             element={
-              <PrivateRoute>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <EliminarPlacas />
               </PrivateRoute>
             }
@@ -92,7 +108,7 @@ const App: React.FC = () => {
           <Route
             path="/mover-placa"
             element={
-              <PrivateRoute>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <MoverPlaca />
               </PrivateRoute>
             }
@@ -100,7 +116,7 @@ const App: React.FC = () => {
           <Route
             path="/lista-espera"
             element={
-              <PrivateRoute>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <ListaEspera />
               </PrivateRoute>
             }
@@ -108,16 +124,32 @@ const App: React.FC = () => {
           <Route
             path="/gestion-usuarios"
             element={
-              <PrivateRoute>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN]}>
                 <GestionUsuarios />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/estadisticas"
+            element={
+              <PrivateRoute allowedRoles={[ROLE_ADMIN]}>
+                <Estadisticas />
               </PrivateRoute>
             }
           />
           <Route
             path="/pruebas"
             element={
-              <PrivateRoute>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO, ROLE_INSTRUCTOR]}>
                 <Pruebas />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/acceso-denegado"
+            element={
+              <PrivateRoute>
+                <AccesoDenegado />
               </PrivateRoute>
             }
           />

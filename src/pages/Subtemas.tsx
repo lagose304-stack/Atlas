@@ -6,6 +6,7 @@ import Footer from '../components/Footer';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../components/PageContentEditor';
 import { getRenderableBlocks } from '../services/contentPublication';
+import { logTemaView } from '../services/analytics';
 
 interface Tema {
   id: number;
@@ -35,6 +36,8 @@ const Subtemas: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       if (!temaId) return;
+
+      void logTemaView(Number(temaId));
 
       const { data: temaData, error: temaError } = await supabase
         .from('temas')
