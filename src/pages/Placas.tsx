@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import ImageUploader from '../components/ImageUploader';
 import { supabase } from '../services/supabase';
-import { uploadToCloudinary } from '../services/cloudinary';
+import { uploadToCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
 import LoadingToast from '../components/LoadingToast';
@@ -12,7 +12,16 @@ import BoldField from '../components/BoldField';
 interface Tema {
   id: number;
   nombre: string;
+  parcial: string;
+  sort_order: number;
 }
+
+type ParcialKey = 'primer' | 'segundo' | 'tercer';
+const PARCIALES: { key: ParcialKey; label: string }[] = [
+  { key: 'primer',  label: 'Primer parcial'  },
+  { key: 'segundo', label: 'Segundo parcial' },
+  { key: 'tercer',  label: 'Tercer parcial'  },
+];
 
 interface Subtema {
   id: number;
@@ -53,26 +62,30 @@ const styles: { [key: string]: React.CSSProperties } = {
     outline: 'none', color: '#2c3e50', fontWeight: 500,
   },
   accordionLabel: {
-    display: 'block', fontSize: '1em', fontWeight: 600,
-    color: '#34495e', marginBottom: '8px',
+    display: 'block', fontSize: '0.875em', fontWeight: 700,
+    color: '#475569', letterSpacing: '0.03em', marginBottom: '8px',
+  },
+  editFieldGroup: {
+    display: 'flex', flexDirection: 'column' as const, gap: '8px',
   },
   aumentoGroup: {
     display: 'flex', gap: '8px', flexWrap: 'wrap' as const, marginTop: '4px',
   },
   aumentoBtn: {
-    padding: '8px 16px', borderRadius: '20px', border: '2px solid #bdc3c7',
-    background: '#fff', cursor: 'pointer', fontSize: '0.92em', fontWeight: 600,
-    color: '#475569', transition: 'all 0.15s ease',
+    padding: '7px 16px', borderRadius: '20px', border: '2px solid #cbd5e1',
+    background: '#f8fafc', cursor: 'pointer', fontSize: '0.92em', fontWeight: 600,
+    color: '#475569', fontFamily: 'inherit', transition: 'all 0.15s ease',
   },
   aumentoBtnActive: {
-    padding: '8px 16px', borderRadius: '20px', border: '2px solid #10b981',
-    background: 'linear-gradient(135deg, #10b981, #34d399)', cursor: 'pointer',
-    fontSize: '0.92em', fontWeight: 700, color: '#fff', transition: 'all 0.15s ease',
+    padding: '7px 16px', borderRadius: '20px', border: '2px solid #818cf8',
+    background: 'linear-gradient(135deg, #818cf8, #6366f1)', cursor: 'pointer',
+    fontSize: '0.92em', fontWeight: 700, color: '#fff', fontFamily: 'inherit',
+    transition: 'all 0.15s ease',
   },
   senalTextField: {
-    width: '100%', padding: '10px 12px', fontSize: '0.95em',
-    border: '2px solid #bdc3c7', borderRadius: '8px', outline: 'none',
-    boxSizing: 'border-box' as const, fontFamily: 'inherit', color: '#2c3e50',
+    flex: 1, padding: '9px 12px', fontSize: '0.92em', fontFamily: 'inherit',
+    border: '1.5px solid #cbd5e1', borderRadius: '8px', outline: 'none',
+    color: '#0f172a', background: '#f8fafc', boxSizing: 'border-box' as const,
     transition: 'border-color 0.2s',
   },
   senalRow: {
@@ -80,20 +93,20 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   senalNumber: {
     minWidth: '26px', height: '26px', borderRadius: '50%',
-    background: 'linear-gradient(135deg, #10b981, #34d399)', color: '#fff',
-    fontWeight: 700, fontSize: '0.85em', display: 'flex', alignItems: 'center',
+    background: 'linear-gradient(135deg, #818cf8, #6366f1)', color: '#fff',
+    fontWeight: 700, fontSize: '0.82em', display: 'flex', alignItems: 'center',
     justifyContent: 'center', flexShrink: 0,
   },
   removeBtn: {
     background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444',
-    fontSize: '1.1em', padding: '0 4px', lineHeight: 1, flexShrink: 0,
+    fontSize: '1em', padding: '0 4px', lineHeight: 1, flexShrink: 0, fontFamily: 'inherit',
   },
   addBtn: {
     display: 'inline-flex', alignItems: 'center', gap: '6px',
-    padding: '8px 16px', borderRadius: '8px', border: '2px dashed #10b981',
-    background: '#f0fdf4', color: '#059669', cursor: 'pointer',
-    fontSize: '0.9em', fontWeight: 600, marginTop: '6px',
-    transition: 'background 0.15s', fontFamily: 'inherit',
+    padding: '8px 16px', borderRadius: '8px', border: '2px dashed #818cf8',
+    background: '#f5f3ff', color: '#4f46e5', cursor: 'pointer',
+    fontSize: '0.88em', fontWeight: 600, fontFamily: 'inherit',
+    transition: 'background 0.15s', marginTop: '2px',
   },
   addComentarioBtn: {
     display: 'inline-flex', alignItems: 'center', gap: '6px',
@@ -116,10 +129,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'background 0.15s', fontFamily: 'inherit',
   },
   tincionField: {
-    width: '100%', padding: '10px 12px', fontSize: '0.95em',
-    border: '2px solid #fde68a', borderRadius: '8px', outline: 'none',
-    boxSizing: 'border-box' as const, fontFamily: 'inherit', color: '#2c3e50',
-    transition: 'border-color 0.2s', background: '#fffbeb',
+    width: '100%', padding: '10px 12px', fontSize: '0.95em', fontFamily: 'inherit',
+    border: '1.5px solid #fde68a', borderRadius: '8px', outline: 'none',
+    color: '#0f172a', boxSizing: 'border-box' as const, transition: 'border-color 0.2s',
+    background: '#fffbeb',
+  },
+  clearTincionBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '6px 14px', borderRadius: '8px', border: '1.5px solid #fde68a',
+    background: '#fff7ed', color: '#92400e', cursor: 'pointer',
+    fontSize: '0.82em', fontWeight: 600, fontFamily: 'inherit',
+    marginTop: '6px', transition: 'background 0.15s',
   },
 };
 
@@ -153,6 +173,15 @@ const Placas: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
 
+  // --- Estado para subida sin clasificar (múltiples imágenes) ---
+  const [scFiles, setScFiles] = useState<File[]>([]);
+  const [scPreviews, setScPreviews] = useState<string[]>([]);
+  const [scIsSaving, setScIsSaving] = useState(false);
+  const [scSaveSuccess, setScSaveSuccess] = useState(false);
+  const [scSaveError, setScSaveError] = useState('');
+  const [scUploadProgress, setScUploadProgress] = useState(0);
+  const scInputRef = useRef<HTMLInputElement>(null);
+
   // Variable para verificar si alguna sección está activa
   const isAnyFormActive = showClasificadasForm || showSinClasificarForm || showReasignacionSection || showEliminarSection;
 
@@ -161,8 +190,9 @@ const Placas: React.FC = () => {
     const fetchTemas = async () => {
       const { data, error } = await supabase
         .from('temas')
-        .select('*')
-        .order('nombre', { ascending: true });
+        .select('id, nombre, parcial, sort_order')
+        .order('parcial')
+        .order('sort_order', { ascending: true });
       
       if (data) {
         setTemas(data);
@@ -183,7 +213,7 @@ const Placas: React.FC = () => {
           .from('subtemas')
           .select('*')
           .eq('tema_id', selectedTema)
-          .order('nombre', { ascending: true });
+          .order('sort_order', { ascending: true });
         
         if (data) {
           setSubtemas(data);
@@ -218,7 +248,10 @@ const Placas: React.FC = () => {
 
     try {
       const folder = `placas/${slugify(temaObj.nombre)}/${slugify(subtemaObj.nombre)}`;
-      const uploadResult = await uploadToCloudinary(selectedFile, { folder });
+      const uploadResult = await uploadToCloudinary(selectedFile, {
+        folder,
+        optimizeForPlaque: true,
+      });
 
       const senalados_filtrados = senalados.filter(s => s.trim() !== '');
       const { data: maxPlacaData } = await supabase
@@ -271,6 +304,62 @@ const Placas: React.FC = () => {
     setSelectedSubtema(e.target.value);
   };
 
+  // --- Handlers para sin clasificar ---
+  const handleScFilesAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newFiles = Array.from(e.target.files ?? []);
+    if (newFiles.length === 0) return;
+    const newPreviews = newFiles.map(f => URL.createObjectURL(f));
+    setScFiles(prev => [...prev, ...newFiles]);
+    setScPreviews(prev => [...prev, ...newPreviews]);
+    setScSaveSuccess(false);
+    setScSaveError('');
+    // Limpiar input para permitir reseleccionar el mismo archivo
+    if (scInputRef.current) scInputRef.current.value = '';
+  };
+
+  const handleScRemoveFile = (idx: number) => {
+    URL.revokeObjectURL(scPreviews[idx]);
+    setScFiles(prev => prev.filter((_, i) => i !== idx));
+    setScPreviews(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleScGuardar = async () => {
+    if (scFiles.length === 0) return;
+    setScIsSaving(true);
+    setScSaveError('');
+    setScSaveSuccess(false);
+    setScUploadProgress(0);
+    const errors: string[] = [];
+    for (let i = 0; i < scFiles.length; i++) {
+      try {
+        const uploadResult = await uploadToCloudinary(scFiles[i], {
+          folder: 'placas/sin_clasificar',
+          optimizeForPlaque: true,
+        });
+        const publicId = getCloudinaryPublicId(uploadResult.secure_url);
+        const { error } = await supabase.from('placas_sin_clasificar').insert({
+          photo_url: uploadResult.secure_url,
+          public_id: publicId,
+        });
+        if (error) throw error;
+      } catch (err) {
+        errors.push(`Imagen ${i + 1}: error al subir`);
+        console.error(err);
+      }
+      setScUploadProgress(Math.round(((i + 1) / scFiles.length) * 100));
+    }
+    scPreviews.forEach(url => URL.revokeObjectURL(url));
+    setScFiles([]);
+    setScPreviews([]);
+    setScIsSaving(false);
+    if (errors.length > 0) {
+      setScSaveError(`Se completó con algunos errores: ${errors.join(', ')}`);
+    } else {
+      setScSaveSuccess(true);
+      setTimeout(() => setScSaveSuccess(false), 4000);
+    }
+  };
+
   const handleCancelForm = () => {
     setShowClasificadasForm(false);
     setShowSinClasificarForm(false);
@@ -288,6 +377,11 @@ const Placas: React.FC = () => {
     setShowTincion(false);
     setSaveSuccess(false);
     setSaveError('');
+    scPreviews.forEach(url => URL.revokeObjectURL(url));
+    setScFiles([]);
+    setScPreviews([]);
+    setScSaveSuccess(false);
+    setScSaveError('');
   };
 
   return (
@@ -369,32 +463,44 @@ const Placas: React.FC = () => {
                   <ImageUploader onImageSelect={handleImageSelect} />
                   {imageUploaded && (
                     <>
-                      <div style={{ marginTop: '16px' }}>
-                        <label style={styles.accordionLabel}>Seleccionar Tema:</label>
+                      {/* --- Tema --- */}
+                      <div style={styles.editFieldGroup}>
+                        <label style={styles.accordionLabel}>Tema</label>
                         <select
-                          style={styles.select}
+                          style={{
+                            ...styles.select,
+                            borderColor: selectedTema ? '#818cf8' : '#fca5a5',
+                            background: selectedTema ? '#f5f3ff' : '#fff1f2',
+                          }}
                           value={selectedTema}
                           onChange={handleTemaChange}
-                          onFocus={e => (e.currentTarget.style.borderColor = '#10b981')}
-                          onBlur={e => (e.currentTarget.style.borderColor = '#bdc3c7')}
                         >
-                          <option value="">-- Selecciona un tema --</option>
-                          {temas.map(tema => (
-                            <option key={tema.id} value={tema.id}>{tema.nombre}</option>
-                          ))}
+                          <option value="">— Elige un tema —</option>
+                          {PARCIALES.map(({ key, label }) => {
+                            const group = temas.filter(t => t.parcial === key);
+                            return group.length > 0 ? (
+                              <optgroup key={key} label={label}>
+                                {group.map(t => (
+                                  <option key={t.id} value={t.id}>{t.nombre}</option>
+                                ))}
+                              </optgroup>
+                            ) : null;
+                          })}
                         </select>
                       </div>
                       {selectedTema && (
-                        <div style={{ marginTop: '16px' }}>
-                          <label style={styles.accordionLabel}>Seleccionar Subtema:</label>
+                        <div style={styles.editFieldGroup}>
+                          <label style={styles.accordionLabel}>Subtema</label>
                           <select
-                            style={styles.select}
+                            style={{
+                              ...styles.select,
+                              borderColor: selectedSubtema ? '#818cf8' : '#fca5a5',
+                              background: selectedSubtema ? '#f5f3ff' : '#fff1f2',
+                            }}
                             value={selectedSubtema}
                             onChange={handleSubtemaChange}
-                            onFocus={e => (e.currentTarget.style.borderColor = '#10b981')}
-                            onBlur={e => (e.currentTarget.style.borderColor = '#bdc3c7')}
                           >
-                            <option value="">-- Selecciona un subtema --</option>
+                            <option value="">— Elige un subtema —</option>
                             {subtemas.map(subtema => (
                               <option key={subtema.id} value={subtema.id}>{subtema.nombre}</option>
                             ))}
@@ -404,8 +510,8 @@ const Placas: React.FC = () => {
 
                       {/* --- Aumento --- */}
                       {selectedSubtema && (
-                        <div style={{ marginTop: '20px' }}>
-                          <label style={styles.accordionLabel}>🔬 Aumento:</label>
+                        <div style={styles.editFieldGroup}>
+                          <label style={styles.accordionLabel}>🔬 Aumento</label>
                           <div style={styles.aumentoGroup}>
                             {['x4', 'x10', 'x40', 'x50', 'x100'].map(op => (
                               <button
@@ -423,7 +529,7 @@ const Placas: React.FC = () => {
 
                       {/* --- Tinción --- */}
                       {selectedSubtema && (
-                        <div style={{ marginTop: '16px' }}>
+                        <div style={styles.editFieldGroup}>
                           {!showTincion ? (
                             <button
                               type="button"
@@ -434,7 +540,7 @@ const Placas: React.FC = () => {
                             </button>
                           ) : (
                             <>
-                              <label style={{ ...styles.accordionLabel, color: '#b45309' }}>🧪 Tinción:</label>
+                              <label style={{ ...styles.accordionLabel, color: '#b45309' }}>🧪 Tinción</label>
                               <BoldField
                                 as="input"
                                 style={styles.tincionField}
@@ -442,6 +548,13 @@ const Placas: React.FC = () => {
                                 placeholder="Ej: H&E, PAS, Azul de toluidina..."
                                 onChange={setTincion}
                               />
+                              <button
+                                type="button"
+                                style={styles.clearTincionBtn}
+                                onClick={() => { setTincion(''); setShowTincion(false); }}
+                              >
+                                ✕ Quitar tinción
+                              </button>
                             </>
                           )}
                         </div>
@@ -449,8 +562,8 @@ const Placas: React.FC = () => {
 
                       {/* --- Señalados --- */}
                       {selectedSubtema && (
-                        <div style={{ marginTop: '20px' }}>
-                          <label style={styles.accordionLabel}>📌 Señalados:</label>
+                        <div style={styles.editFieldGroup}>
+                          <label style={styles.accordionLabel}>📌 Señalados</label>
                           {senalados.map((val, idx) => (
                             <div key={idx} style={styles.senalRow}>
                               <span style={styles.senalNumber}>{idx + 1}</span>
@@ -465,8 +578,8 @@ const Placas: React.FC = () => {
                                   updated[idx] = v;
                                   setSenalados(updated);
                                 }}
-                                onFocus={e => (e.currentTarget.style.borderColor = '#10b981')}
-                                onBlur={e => (e.currentTarget.style.borderColor = '#bdc3c7')}
+                                onFocus={e => (e.currentTarget.style.borderColor = '#818cf8')}
+                                onBlur={e => (e.currentTarget.style.borderColor = '#cbd5e1')}
                               />
                               <button
                                 type="button"
@@ -488,7 +601,7 @@ const Placas: React.FC = () => {
 
                       {/* --- Comentario --- */}
                       {selectedSubtema && (
-                        <div style={{ marginTop: '16px' }}>
+                        <div style={styles.editFieldGroup}>
                           {!showComentario ? (
                             <button
                               type="button"
@@ -499,7 +612,7 @@ const Placas: React.FC = () => {
                             </button>
                           ) : (
                             <>
-                              <label style={{ ...styles.accordionLabel, color: '#4f46e5' }}>💬 Comentario:</label>
+                              <label style={{ ...styles.accordionLabel, color: '#4f46e5' }}>💬 Comentario</label>
                               <BoldField
                                 as="textarea"
                                 style={styles.comentarioField}
@@ -534,10 +647,107 @@ const Placas: React.FC = () => {
               <div style={p.formPanel}>
                 <div style={p.formPanelHeader}>
                   <span style={{ ...p.formPanelDot, background: 'linear-gradient(135deg,#f59e0b,#fbbf24)' }} />
-                  <span style={p.formPanelTitle}>Subir placa sin clasificar</span>
+                  <span style={p.formPanelTitle}>Subir placas sin clasificar</span>
                 </div>
                 <div style={p.formPanelBody}>
-                  <ImageUploader onImageSelect={handleImageSelect} />
+                  {/* Zona de drop / botón de selección múltiple */}
+                  <div
+                    style={{
+                      border: '2px dashed #fde68a', borderRadius: '10px',
+                      background: '#fffbeb', padding: '20px', textAlign: 'center',
+                      cursor: 'pointer', color: '#b45309', fontWeight: 600, fontSize: '0.9em',
+                    }}
+                    onClick={() => scInputRef.current?.click()}
+                    onDragOver={e => { e.preventDefault(); e.currentTarget.style.background = '#fef3c7'; }}
+                    onDragLeave={e => { e.currentTarget.style.background = '#fffbeb'; }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      e.currentTarget.style.background = '#fffbeb';
+                      const dt = e.dataTransfer;
+                      const newFiles = Array.from(dt.files).filter(f => f.type.startsWith('image/'));
+                      if (newFiles.length === 0) return;
+                      const newPreviews = newFiles.map(f => URL.createObjectURL(f));
+                      setScFiles(prev => [...prev, ...newFiles]);
+                      setScPreviews(prev => [...prev, ...newPreviews]);
+                      setScSaveSuccess(false); setScSaveError('');
+                    }}
+                  >
+                    📂 Haz clic o arrastra imágenes aquí (puedes seleccionar varias)
+                  </div>
+                  <input
+                    ref={scInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={handleScFilesAdd}
+                  />
+
+                  {/* Previews */}
+                  {scPreviews.length > 0 && (
+                    <>
+                      <p style={{ margin: '14px 0 8px', fontSize: '0.85em', color: '#64748b', fontWeight: 600 }}>
+                        {scFiles.length} {scFiles.length === 1 ? 'imagen seleccionada' : 'imágenes seleccionadas'}
+                      </p>
+                      <div style={{
+                        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
+                        gap: '8px', maxHeight: '260px', overflowY: 'auto',
+                      }}>
+                        {scPreviews.map((src, idx) => (
+                          <div key={idx} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1.5px solid #fde68a' }}>
+                            <img src={src} alt={`preview-${idx}`} style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', display: 'block' }} />
+                            <button
+                              type="button"
+                              onClick={() => handleScRemoveFile(idx)}
+                              style={{
+                                position: 'absolute', top: '4px', right: '4px',
+                                background: 'rgba(239,68,68,0.85)', color: '#fff',
+                                border: 'none', borderRadius: '50%', width: '20px', height: '20px',
+                                cursor: 'pointer', fontSize: '0.75em', fontWeight: 700,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                              }}
+                              title="Quitar imagen"
+                            >✕</button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Progreso */}
+                      {scIsSaving && (
+                        <div style={{ marginTop: '12px' }}>
+                          <div style={{ background: '#fef3c7', borderRadius: '6px', overflow: 'hidden', height: '8px' }}>
+                            <div style={{ width: `${scUploadProgress}%`, height: '100%', background: 'linear-gradient(90deg,#f59e0b,#fbbf24)', transition: 'width 0.3s' }} />
+                          </div>
+                          <p style={{ fontSize: '0.82em', color: '#b45309', margin: '4px 0 0', textAlign: 'center' }}>
+                            Subiendo... {scUploadProgress}%
+                          </p>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        style={{
+                          ...styles.saveButton,
+                          background: scIsSaving || scFiles.length === 0 ? '#fde68a' : 'linear-gradient(135deg,#f59e0b,#fbbf24)',
+                          color: scIsSaving || scFiles.length === 0 ? '#92400e' : '#fff',
+                          cursor: scIsSaving || scFiles.length === 0 ? 'not-allowed' : 'pointer',
+                          opacity: scIsSaving || scFiles.length === 0 ? 0.75 : 1,
+                        }}
+                        onClick={handleScGuardar}
+                        disabled={scIsSaving || scFiles.length === 0}
+                      >
+                        {scIsSaving ? `Subiendo ${scUploadProgress}%...` : `📤 Guardar ${scFiles.length} imagen${scFiles.length !== 1 ? 'es' : ''} sin clasificar`}
+                      </button>
+                    </>
+                  )}
+
+                  {scSaveSuccess && (
+                    <div style={{ ...styles.successMsg, marginTop: '12px' }}>✅ Imágenes guardadas en lista de espera.</div>
+                  )}
+                  {scSaveError && (
+                    <div style={{ ...styles.errorMsg, marginTop: '12px' }}>⚠️ {scSaveError}</div>
+                  )}
+
                   <button style={p.cancelBtn} onClick={handleCancelForm}>✕ Cancelar</button>
                 </div>
               </div>
@@ -566,6 +776,7 @@ const Placas: React.FC = () => {
               </button>
               <button
                 style={{ ...p.actionBtn, color: '#6366f1', background: '#f5f3ff', borderColor: '#c7d2fe' }}
+                onClick={() => navigate('/lista-espera')}
                 onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#6366f1,#818cf8)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.color = '#6366f1'; e.currentTarget.style.borderColor = '#c7d2fe'; }}
               >

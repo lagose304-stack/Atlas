@@ -64,12 +64,32 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
 };
 
-// Helper: extrae todas las URLs de imagen de un array de content_blocks
+// Helper: extrae todas las URLs de imagen de un array de content_blocks (todos los tipos)
 function extractBlockImageUrls(blocks: { block_type: string; content: Record<string, string> }[]): string[] {
   const urls: string[] = [];
   for (const b of blocks) {
-    if (b.block_type === 'image' && b.content.url) urls.push(b.content.url);
-    if (b.block_type === 'text_image' && b.content.image_url) urls.push(b.content.image_url);
+    const c = b.content;
+    switch (b.block_type) {
+      case 'image':         if (c.url) urls.push(c.url); break;
+      case 'text_image':    if (c.image_url) urls.push(c.image_url); break;
+      case 'two_images':
+        if (c.image_url_left)  urls.push(c.image_url_left);
+        if (c.image_url_right) urls.push(c.image_url_right);
+        break;
+      case 'three_images':
+        if (c.image_url_1) urls.push(c.image_url_1);
+        if (c.image_url_2) urls.push(c.image_url_2);
+        if (c.image_url_3) urls.push(c.image_url_3);
+        break;
+      case 'carousel':
+      case 'text_carousel':
+        for (let i = 1; i <= 8; i++) { const u = c[`image_url_${i}`]; if (u) urls.push(u); else break; }
+        break;
+      case 'double_carousel':
+        for (let i = 1; i <= 5; i++) { const l = c[`left_image_url_${i}`];  if (l) urls.push(l); else break; }
+        for (let i = 1; i <= 5; i++) { const r = c[`right_image_url_${i}`]; if (r) urls.push(r); else break; }
+        break;
+    }
   }
   return urls.filter(Boolean);
 }
@@ -383,6 +403,11 @@ const Temario: React.FC = () => {
       const { data: placasData } = await supabase
         .from('placas').select('id, photo_url').eq('tema_id', temaIdNum);
 
+      // 2b. photo_urls de placas de OTROS temas — nunca borrar esas imágenes
+      const { data: otherPlacasData } = await supabase
+        .from('placas').select('photo_url').neq('tema_id', temaIdNum);
+      const otherPlacasUrlSet = new Set((otherPlacasData ?? []).map(p => p.photo_url).filter(Boolean));
+
       // 3. Obtener TODOS los content_blocks para separar los propios de los externos
       const { data: allBlocks } = await supabase
         .from('content_blocks').select('block_type, content, entity_type, entity_id');
@@ -404,9 +429,12 @@ const Temario: React.FC = () => {
       const placasToDeleteIds = placasToDelete.map(p => p.id);
       const placasToDeleteUrlSet = new Set(placasToDelete.map(p => p.photo_url));
 
-      // 5. URLs de imágenes en los bloques propios (solo borrar las no protegidas externamente)
+      // 5. URLs de imágenes en los bloques propios (solo borrar las no protegidas externamente
+      //    ni correspondientes a placas de otros temas)
       const ownBlockImageUrls = extractBlockImageUrls(ownBlocks as any);
-      const blockUrlsToDelete = ownBlockImageUrls.filter(u => !externalUrlSet.has(u));
+      const blockUrlsToDelete = ownBlockImageUrls.filter(
+        u => !externalUrlSet.has(u) && !otherPlacasUrlSet.has(u)
+      );
 
       // 6. Borrar content_blocks en BD
       await supabase.from('content_blocks').delete()
@@ -480,6 +508,11 @@ const Temario: React.FC = () => {
       const { data: placasData } = await supabase
         .from('placas').select('id, photo_url').eq('subtema_id', subtemaIdNum);
 
+      // 1b. photo_urls de placas de OTROS subtemas — nunca borrar esas imágenes
+      const { data: otherPlacasData } = await supabase
+        .from('placas').select('photo_url').neq('subtema_id', subtemaIdNum);
+      const otherPlacasUrlSet = new Set((otherPlacasData ?? []).map(p => p.photo_url).filter(Boolean));
+
       // 2. Obtener TODOS los content_blocks para separar propios de externos
       const { data: allBlocks } = await supabase
         .from('content_blocks').select('block_type, content, entity_type, entity_id');
@@ -499,9 +532,12 @@ const Temario: React.FC = () => {
       const placasToDeleteIds = placasToDelete.map(p => p.id);
       const placasToDeleteUrlSet = new Set(placasToDelete.map(p => p.photo_url));
 
-      // 4. URLs de imágenes en bloques propios (solo borrar las no protegidas externamente)
+      // 4. URLs de imágenes en bloques propios (solo borrar las no protegidas externamente
+      //    ni correspondientes a placas de otros subtemas)
       const ownBlockImageUrls = extractBlockImageUrls(ownBlocks as any);
-      const blockUrlsToDelete = ownBlockImageUrls.filter(u => !externalUrlSet.has(u));
+      const blockUrlsToDelete = ownBlockImageUrls.filter(
+        u => !externalUrlSet.has(u) && !otherPlacasUrlSet.has(u)
+      );
 
       // 5. Borrar content_blocks en BD
       await supabase.from('content_blocks').delete()

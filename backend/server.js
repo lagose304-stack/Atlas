@@ -25,7 +25,24 @@ console.log('Cloudinary configurado correctamente.');
 const app = express();
 
 // Middlewares
-app.use(cors());
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://atlashistolab.netlify.app',
+  ...(process.env.FRONTEND_ORIGINS ? process.env.FRONTEND_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : []),
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Permite clientes sin origin (scripts/health checks) y orígenes aprobados.
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS bloqueado para origen: ${origin}`));
+  },
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json());
 
 // Ruta para eliminar imagen de Cloudinary (soporta public_ids con sub-carpetas)
@@ -45,6 +62,21 @@ app.delete(/^\/api\/images\/(.+)$/, async (req, res) => {
   } catch (error) {
     console.error('Error detallado al eliminar la imagen de Cloudinary:', error);
     res.status(500).send({ message: 'Error al eliminar la imagen', error: error.message });
+  }
+});
+
+// Ruta para mover/renombrar imagen en Cloudinary (cambiar de carpeta)
+app.post('/api/images/move', async (req, res) => {
+  const { from_public_id, to_public_id } = req.body;
+  if (!from_public_id || !to_public_id) {
+    return res.status(400).json({ message: 'Faltan parámetros from_public_id o to_public_id' });
+  }
+  try {
+    const result = await cloudinary.uploader.rename(from_public_id, to_public_id, { overwrite: true });
+    res.status(200).json({ secure_url: result.secure_url, public_id: result.public_id });
+  } catch (error) {
+    console.error('Error al mover imagen en Cloudinary:', error);
+    res.status(500).json({ message: 'Error al mover la imagen', error: error.message });
   }
 });
 

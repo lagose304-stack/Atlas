@@ -6,6 +6,7 @@ import Footer from '../components/Footer';
 import ImageViewerModal from '../components/ImageViewerModal';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../components/PageContentEditor';
+import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 
 interface Placa {
   id: number;
@@ -155,7 +156,7 @@ const PlacasSubtema: React.FC = () => {
                   title="Ver en grande"
                 >
                   <img
-                    src={placa.photo_url}
+                    src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
                     alt="Placa histológica"
                     style={styles.thumbImg}
                     loading="lazy"
@@ -182,7 +183,8 @@ const PlacasSubtema: React.FC = () => {
 
       {selectedPlaca && (
         <ImageViewerModal
-          src={selectedPlaca.photo_url}
+          src={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
+          srcZoom={getCloudinaryImageUrl(selectedPlaca.photo_url, 'zoom')}
           onClose={() => setSelectedPlaca(null)}
           temaNombre={temaNombre}
           subtemaNombre={subtema?.nombre}

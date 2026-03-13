@@ -13,6 +13,8 @@ import EditarSubtemas from './pages/EditarSubtemas';
 import EditarPlacas from './pages/EditarPlacas';
 import EliminarPlacas from './pages/EliminarPlacas';
 import MoverPlaca from './pages/MoverPlaca';
+import ListaEspera from './pages/ListaEspera';
+import GestionUsuarios from './pages/GestionUsuarios';
 
 const ScrollToTop: React.FC = () => {
   const { pathname } = useLocation();
@@ -91,6 +93,22 @@ const App: React.FC = () => {
             element={
               <PrivateRoute>
                 <MoverPlaca />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/lista-espera"
+            element={
+              <PrivateRoute>
+                <ListaEspera />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/gestion-usuarios"
+            element={
+              <PrivateRoute>
+                <GestionUsuarios />
               </PrivateRoute>
             }
           />

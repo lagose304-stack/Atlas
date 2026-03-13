@@ -89,6 +89,29 @@ const EditarHome: React.FC = () => {
     <div style={s.page}>
       <Header />
       <main style={s.main}>
+        {/* Breadcrumb */}
+        <nav style={s.breadcrumb}>
+          <button
+            onClick={() => navigate('/')}
+            style={s.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            🏠 Inicio
+          </button>
+          <span style={s.breadcrumbSep}>❯</span>
+          <button
+            onClick={() => navigate('/edicion')}
+            style={s.breadcrumbLink}
+            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            Edición
+          </button>
+          <span style={s.breadcrumbSep}>❯</span>
+          <span style={s.breadcrumbCurrent}>Página principal</span>
+        </nav>
+
         <div style={s.editBanner}>
           <span style={s.editBannerIcon}>✏️</span>
           <div>
@@ -225,25 +248,18 @@ const EditarHome: React.FC = () => {
         </div>
 
         {!loading && (
-          <div style={s.actionBar}>
+          <div style={s.fab}>
+            {saveSuccess && (
+              <div style={s.fabToast}>✅ Guardado correctamente</div>
+            )}
             <button
-              style={s.cancelBtn}
-              onClick={() => navigate('/edicion')}
-              onMouseEnter={e => (e.currentTarget.style.background = '#e2e8f0')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#f8fafc')}
+              style={hasChanges && !isSaving ? s.fabBtn : s.fabBtnDisabled}
+              onClick={handleSave}
+              disabled={!hasChanges || isSaving}
+              title="Guardar orden"
             >
-              ← Volver
+              {isSaving ? '⏳ Guardando...' : hasChanges ? '💾 Guardar orden' : '✓ Sin cambios'}
             </button>
-            <div style={s.actionRight}>
-              {saveSuccess && <span style={s.successMsg}>✅ Orden guardado correctamente</span>}
-              <button
-                style={hasChanges && !isSaving ? s.saveBtn : s.saveBtnDisabled}
-                onClick={handleSave}
-                disabled={!hasChanges || isSaving}
-              >
-                {isSaving ? 'Guardando...' : hasChanges ? '💾 Guardar orden' : '✓ Sin cambios'}
-              </button>
-            </div>
           </div>
         )}
       </main>
@@ -421,55 +437,93 @@ const s: { [key: string]: React.CSSProperties } = {
     letterSpacing: '0.05em',
     textTransform: 'uppercase',
   },
-  actionBar: {
-    position: 'fixed',
-    bottom: 0, left: 0, right: 0,
-    background: 'rgba(255,255,255,0.95)',
-    backdropFilter: 'blur(12px)',
-    borderTop: '1px solid #e2e8f0',
-    padding: '14px clamp(16px, 4vw, 48px)',
-    display: 'flex',
+  breadcrumb: {
+    display: 'inline-flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    zIndex: 100,
-    boxShadow: '0 -4px 24px rgba(15,23,42,0.08)',
+    gap: '4px',
+    flexWrap: 'wrap',
+    background: 'rgba(255,255,255,0.75)',
+    backdropFilter: 'blur(8px)',
+    border: '1px solid rgba(186,230,253,0.6)',
+    borderRadius: '12px',
+    padding: '8px 16px',
+    marginBottom: '24px',
+    boxShadow: '0 2px 8px rgba(14,165,233,0.07)',
   },
-  actionRight: { display: 'flex', alignItems: 'center', gap: '16px' },
-  successMsg: { fontSize: '0.92em', color: '#15803d', fontWeight: 600 },
-  cancelBtn: {
-    padding: '10px 22px',
-    border: '1.5px solid #cbd5e1',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    background: '#f8fafc',
-    color: '#475569',
-    fontWeight: 600,
-    fontSize: '0.95em',
-    fontFamily: 'inherit',
-    transition: 'background 0.15s',
-  },
-  saveBtn: {
-    padding: '11px 28px',
+  breadcrumbLink: {
+    background: 'none',
     border: 'none',
+    cursor: 'pointer',
+    color: '#0ea5e9',
+    fontWeight: 600,
+    fontSize: '0.88em',
+    padding: '4px 8px',
     borderRadius: '8px',
+    transition: 'background 0.15s',
+    fontFamily: 'inherit',
+    letterSpacing: '0.01em',
+  },
+  breadcrumbSep: {
+    color: '#94a3b8',
+    fontWeight: 700,
+    fontSize: '0.75em',
+    userSelect: 'none',
+  },
+  breadcrumbCurrent: {
+    color: '#0f172a',
+    fontWeight: 800,
+    fontSize: '0.88em',
+    padding: '4px 8px',
+    background: 'linear-gradient(135deg, #e0f2fe, #ede9fe)',
+    borderRadius: '8px',
+    border: '1px solid #bae6fd',
+    letterSpacing: '0.01em',
+  },
+  fab: {
+    position: 'fixed',
+    bottom: '32px',
+    right: '32px',
+    zIndex: 200,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '10px',
+  },
+  fabToast: {
+    background: 'linear-gradient(135deg, #10b981, #34d399)',
+    color: 'white',
+    fontWeight: 700,
+    fontSize: '0.85em',
+    padding: '8px 18px',
+    borderRadius: '20px',
+    boxShadow: '0 4px 16px rgba(16,185,129,0.35)',
+    whiteSpace: 'nowrap',
+    pointerEvents: 'none',
+  },
+  fabBtn: {
+    padding: '14px 28px',
+    border: 'none',
+    borderRadius: '50px',
     cursor: 'pointer',
     background: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
     color: 'white',
     fontWeight: 700,
     fontSize: '1em',
     fontFamily: 'inherit',
-    boxShadow: '0 4px 14px rgba(14,165,233,0.3)',
+    boxShadow: '0 6px 24px rgba(14,165,233,0.45)',
+    transition: 'transform 0.15s, box-shadow 0.15s',
   },
-  saveBtnDisabled: {
-    padding: '11px 28px',
+  fabBtnDisabled: {
+    padding: '14px 28px',
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '50px',
     cursor: 'not-allowed',
     background: '#e2e8f0',
     color: '#94a3b8',
     fontWeight: 700,
     fontSize: '1em',
     fontFamily: 'inherit',
+    boxShadow: 'none',
   },
   loadingWrap: {
     display: 'flex',

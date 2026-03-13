@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { deleteFromCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
+import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
@@ -32,6 +33,34 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
   { key: 'segundo', label: 'Segundo parcial' },
   { key: 'tercer',  label: 'Tercer parcial'  },
 ];
+
+// Extrae todas las URLs de imagen de un bloque (todos los tipos)
+function extractAllBlockImageUrls(b: { block_type: string; content: Record<string, string> }): string[] {
+  const c = b.content;
+  const urls: string[] = [];
+  switch (b.block_type) {
+    case 'image':         if (c.url) urls.push(c.url); break;
+    case 'text_image':    if (c.image_url) urls.push(c.image_url); break;
+    case 'two_images':
+      if (c.image_url_left)  urls.push(c.image_url_left);
+      if (c.image_url_right) urls.push(c.image_url_right);
+      break;
+    case 'three_images':
+      if (c.image_url_1) urls.push(c.image_url_1);
+      if (c.image_url_2) urls.push(c.image_url_2);
+      if (c.image_url_3) urls.push(c.image_url_3);
+      break;
+    case 'carousel':
+    case 'text_carousel':
+      for (let i = 1; i <= 8; i++) { const u = c[`image_url_${i}`]; if (u) urls.push(u); else break; }
+      break;
+    case 'double_carousel':
+      for (let i = 1; i <= 5; i++) { const l = c[`left_image_url_${i}`];  if (l) urls.push(l); else break; }
+      for (let i = 1; i <= 5; i++) { const r = c[`right_image_url_${i}`]; if (r) urls.push(r); else break; }
+      break;
+  }
+  return urls.filter(Boolean);
+}
 
 const EliminarPlacas: React.FC = () => {
   const navigate = useNavigate();
@@ -128,14 +157,29 @@ const EliminarPlacas: React.FC = () => {
     setShowConfirm(false);
     try {
       const toDelete = placas.filter(p => selectedIds.has(p.id));
+      const toDeleteUrlSet = new Set(toDelete.map(p => p.photo_url));
+
+      // 1. Borrar content_blocks que referencian estas fotos en cualquier página del sitio
+      const { data: allBlocks } = await supabase
+        .from('content_blocks').select('id, block_type, content');
+      const blockIdsToDelete: string[] = [];
+      for (const b of (allBlocks ?? [])) {
+        const urls = extractAllBlockImageUrls(b as any);
+        if (urls.some(u => toDeleteUrlSet.has(u))) {
+          blockIdsToDelete.push(b.id as string);
+        }
+      }
+      if (blockIdsToDelete.length > 0) {
+        await supabase.from('content_blocks').delete().in('id', blockIdsToDelete);
+      }
+
+      // 2. Borrar fotos de Cloudinary y registros de placas
       await Promise.all(
         toDelete.map(async placa => {
-          // Borrar foto de Cloudinary
           const publicId = getCloudinaryPublicId(placa.photo_url);
           if (publicId) {
             try { await deleteFromCloudinary(publicId); } catch {/* ignorar si falla Cloudinary */}
           }
-          // Borrar registro de la base de datos
           await supabase.from('placas').delete().eq('id', placa.id);
         })
       );
@@ -148,7 +192,7 @@ const EliminarPlacas: React.FC = () => {
     } finally {
       setIsDeleting(false);
     }
-  }, [selectedIds]);
+  }, [selectedIds, placas]);
 
   const temasByParcial: Record<ParcialKey, Tema[]> = { primer: [], segundo: [], tercer: [] };
   temas.forEach(t => {
@@ -355,7 +399,7 @@ const EliminarPlacas: React.FC = () => {
                       {/* Imagen */}
                       <div style={s.imgWrap}>
                         <img
-                          src={placa.photo_url}
+                          src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
                           alt={`Placa ${index + 1}`}
                           style={{
                             ...s.img,
@@ -391,19 +435,9 @@ const EliminarPlacas: React.FC = () => {
             )}
           </div>
         )}
-      </main>
 
-      {/* Barra de acciones fija */}
-      <div style={s.actionBar}>
-        <button
-          style={s.cancelBtn}
-          onClick={() => navigate('/placas')}
-          onMouseEnter={e => (e.currentTarget.style.background = '#e2e8f0')}
-          onMouseLeave={e => (e.currentTarget.style.background = '#f8fafc')}
-        >
-          ← Volver a Placas
-        </button>
-        <div style={s.actionRight}>
+        {/* Botón de eliminar inline — sin barra fija */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', justifyContent: 'flex-end', marginTop: '24px', paddingBottom: '40px' }}>
           {deleteSuccess && (
             <span style={s.successMsg}>✅ Placas eliminadas correctamente</span>
           )}
@@ -419,7 +453,7 @@ const EliminarPlacas: React.FC = () => {
               : '— Ninguna seleccionada —'}
           </button>
         </div>
-      </div>
+      </main>
 
       {/* Modal de confirmación */}
       {showConfirm && (

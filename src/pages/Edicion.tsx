@@ -124,7 +124,7 @@ const Edicion: React.FC = () => {
           </div>
 
           {/* Tarjeta: Editar páginas */}
-          <div style={{ ...s.card, gridColumn: 'span 2' }} className="edicion-card-wide">
+          <div style={s.card}>
             <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #f59e0b, #fbbf24)' }} />
             <div style={s.cardIcon}>✏️</div>
             <div style={s.cardBody}>
@@ -183,6 +183,54 @@ const Edicion: React.FC = () => {
                 🔬 Página de placas
               </button>
             </div>
+          </div>
+
+          {/* Tarjeta: Realizar pruebas */}
+          <div style={s.card}>
+            <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #8b5cf6, #a78bfa)' }} />
+            <div style={s.cardIcon}>🧪</div>
+            <div style={s.cardBody}>
+              <h2 style={s.cardTitle}>Realizar pruebas</h2>
+              <p style={s.cardDesc}>
+                Ejecuta pruebas y verificaciones sobre el contenido del atlas.
+              </p>
+            </div>
+            <button
+              style={s.testBtn}
+              disabled
+            >
+              Iniciar prueba
+            </button>
+          </div>
+
+          {/* Tarjeta: Gestión de usuarios */}
+          <div style={{ ...s.card, gridColumn: 'span 2' }}>
+            <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #0ea5e9, #38bdf8)' }} />
+            <div style={s.cardIcon}>👥</div>
+            <div style={s.cardBody}>
+              <h2 style={s.cardTitle}>Gestión de usuarios</h2>
+              <p style={s.cardDesc}>
+                Crea, edita o elimina cuentas de usuario del sistema. Asigna roles y administra el acceso al panel de edición.
+              </p>
+            </div>
+            <Link
+              to="/gestion-usuarios"
+              style={{ ...s.cardBtn, color: '#0ea5e9', background: '#f0f9ff', borderColor: '#bae6fd' }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, #0ea5e9, #38bdf8)';
+                (e.currentTarget as HTMLAnchorElement).style.color = '#fff';
+                (e.currentTarget as HTMLAnchorElement).style.borderColor = 'transparent';
+                (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLAnchorElement).style.background = '#f0f9ff';
+                (e.currentTarget as HTMLAnchorElement).style.color = '#0ea5e9';
+                (e.currentTarget as HTMLAnchorElement).style.borderColor = '#bae6fd';
+                (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(0)';
+              }}
+            >
+              Gestionar usuarios →
+            </Link>
           </div>
 
         </div>
@@ -376,6 +424,25 @@ const s: { [key: string]: React.CSSProperties } = {
     fontFamily: 'inherit',
     textDecoration: 'none',
     transition: 'all 0.2s ease',
+    alignSelf: 'flex-start',
+    letterSpacing: '0.01em',
+  } as React.CSSProperties,
+
+  // Botón deshabilitado de "Realizar pruebas"
+  testBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '10px 18px',
+    borderRadius: '10px',
+    border: '1.5px solid #ddd6fe',
+    background: '#f5f3ff',
+    color: '#a78bfa',
+    fontSize: '0.88em',
+    fontWeight: 700,
+    cursor: 'not-allowed',
+    fontFamily: 'inherit',
+    opacity: 0.6,
     alignSelf: 'flex-start',
     letterSpacing: '0.01em',
   } as React.CSSProperties,

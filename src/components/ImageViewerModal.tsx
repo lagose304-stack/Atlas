@@ -3,6 +3,7 @@ import { renderBoldText } from './BoldField';
 
 interface ImageViewerModalProps {
   src: string;
+  srcZoom?: string;
   onClose: () => void;
   temaNombre?: string;
   subtemaNombre?: string;
@@ -19,6 +20,7 @@ const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min)
 
 const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   src,
+  srcZoom,
   onClose,
   temaNombre,
   subtemaNombre,
@@ -36,6 +38,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
   const isDesktop = windowWidth >= SIDEBAR_BREAKPOINT;
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [useZoomSource, setUseZoomSource] = useState(false);
 
   const [zoomLevel, setZoomLevel]   = useState(1);
   const [position, setPosition]     = useState({ x: 0, y: 0 });
@@ -55,6 +58,16 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = 'unset'; };
   }, []);
+
+  useEffect(() => {
+    setUseZoomSource(false);
+  }, [src, srcZoom]);
+
+  useEffect(() => {
+    if (srcZoom && zoomLevel > 1.01) {
+      setUseZoomSource(true);
+    }
+  }, [zoomLevel, srcZoom]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -244,7 +257,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           onMouseLeave={handleMouseUp}
         >
           <img
-            src={src}
+            src={useZoomSource && srcZoom ? srcZoom : src}
             alt="Vista ampliada"
             draggable={false}
             style={{

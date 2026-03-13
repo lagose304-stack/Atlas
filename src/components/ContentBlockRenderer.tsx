@@ -3,6 +3,40 @@ import type { ContentBlock, BlockType } from './PageContentEditor';
 import ImageViewerModal from './ImageViewerModal';
 import { renderBoldText } from './BoldField';
 
+// Imagen con fallback visual cuando la URL ya no existe
+const BlockImg: React.FC<{
+  src: string;
+  alt?: string;
+  style?: React.CSSProperties;
+}> = ({ src, alt = '', style }) => {
+  const [error, setError] = useState(false);
+  if (error) {
+    return (
+      <div style={{
+        ...style,
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', background: '#f1f5f9', color: '#94a3b8',
+        fontSize: '0.82em', fontWeight: 600, borderRadius: 'inherit',
+        minHeight: '80px', gap: '6px', textAlign: 'center', padding: '12px',
+        boxSizing: 'border-box',
+      }}>
+        <span style={{ fontSize: '1.8em', lineHeight: 1 }}>🖼️</span>
+        <span>Imagen no disponible</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      style={style}
+      loading="lazy"
+      draggable={false}
+      onError={() => setError(true)}
+    />
+  );
+};
+
 interface ContentBlockRendererProps {
   blocks: ContentBlock[];
 }
@@ -94,12 +128,10 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
             onMouseLeave={() => setImgHovered(false)}
             title="Ver en grande"
           >
-            <img
+            <BlockImg
               src={c.url}
               alt={c.caption || 'Imagen ilustrativa'}
               style={rs.image}
-              loading="lazy"
-              draggable={false}
             />
             <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>
           </div>
@@ -128,12 +160,10 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
                 onMouseLeave={() => setImgHovered(false)}
                 title="Ver en grande"
               >
-                <img
+                <BlockImg
                   src={c.image_url}
                   alt={c.image_caption || 'Imagen ilustrativa'}
                   style={rs.tiImage}
-                  loading="lazy"
-                  draggable={false}
                 />
                 <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>
               </div>
@@ -163,12 +193,10 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
                 onMouseLeave={() => setImgHoveredLeft(false)}
                 title="Ver en grande"
               >
-                <img
+                <BlockImg
                   src={c.image_url_left}
                   alt={c.image_caption_left || 'Imagen izquierda'}
                   style={rs.twoImgImage}
-                  loading="lazy"
-                  draggable={false}
                 />
                 <div style={{ ...rs.zoomOverlay, opacity: imgHoveredLeft ? 1 : 0 }}>🔍</div>
               </div>
@@ -186,12 +214,10 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
                 onMouseLeave={() => setImgHoveredRight(false)}
                 title="Ver en grande"
               >
-                <img
+                <BlockImg
                   src={c.image_url_right}
                   alt={c.image_caption_right || 'Imagen derecha'}
                   style={rs.twoImgImage}
-                  loading="lazy"
-                  draggable={false}
                 />
                 <div style={{ ...rs.zoomOverlay, opacity: imgHoveredRight ? 1 : 0 }}>🔍</div>
               </div>
@@ -225,12 +251,10 @@ const BlockItem: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }
                 onMouseLeave={() => setImgHoveredIdx(-1)}
                 title="Ver en grande"
               >
-                <img
+                <BlockImg
                   src={item.url}
                   alt={item.cap || `Imagen ${idx + 1}`}
                   style={rs.twoImgImage}
-                  loading="lazy"
-                  draggable={false}
                 />
                 <div style={{ ...rs.zoomOverlay, opacity: imgHoveredIdx === idx ? 1 : 0 }}>🔍</div>
               </div>
@@ -374,6 +398,7 @@ const CarouselPlayer: React.FC<{
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
   const [imgH, setImgH] = useState(false);
+  const [failedSlides, setFailedSlides] = useState<Set<number>>(new Set());
   const count = slides.length;
 
   useEffect(() => {
@@ -403,14 +428,22 @@ const CarouselPlayer: React.FC<{
         onMouseLeave={() => setImgH(false)}
         title="Ver en grande"
       >
-        <img
-          key={slide.url + current}
-          src={slide.url}
-          alt={slide.caption ?? ''}
-          style={rs.carouselImage}
-          loading="lazy"
-          draggable={false}
-        />
+        {failedSlides.has(current) ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', color: '#94a3b8', fontSize: '0.82em', fontWeight: 600, width: '100%', minHeight: '200px', gap: '6px' }}>
+            <span style={{ fontSize: '1.8em', lineHeight: 1 }}>🖼️</span>
+            <span>Imagen no disponible</span>
+          </div>
+        ) : (
+          <img
+            key={slide.url + current}
+            src={slide.url}
+            alt={slide.caption ?? ''}
+            style={rs.carouselImage}
+            loading="lazy"
+            draggable={false}
+            onError={() => setFailedSlides(prev => new Set([...prev, current]))}
+          />
+        )}
         <div style={{ ...rs.zoomOverlay, opacity: imgH ? 1 : 0 }}>🔍</div>
         {count > 1 && (
           <>

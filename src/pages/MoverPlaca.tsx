@@ -5,6 +5,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
+import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 
 interface Tema {
   id: number;
@@ -304,10 +305,27 @@ const MoverPlaca: React.FC = () => {
         </nav>
 
         {/* Encabezado */}
-        <div style={s.pageHeader}>
-          <h1 style={s.pageTitle}>Mover placa</h1>
-          <p style={s.pageSubtitle}>Selecciona un tema y subtema para ver sus placas, haz clic en una para reasignarla a otro tema o subtema.</p>
-          <div style={s.accentLine} />
+        <div style={{ ...s.pageHeader, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ flex: 1 }}>
+            <h1 style={s.pageTitle}>Mover placa</h1>
+            <p style={s.pageSubtitle}>Selecciona un tema y subtema para ver sus placas, haz clic en una para reasignarla a otro tema o subtema.</p>
+            <div style={s.accentLine} />
+          </div>
+          <button
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '7px',
+              padding: '11px 18px', borderRadius: '12px',
+              border: '1.5px solid #c7d2fe', background: '#f5f3ff',
+              color: '#6366f1', fontSize: '0.9em', fontWeight: 700,
+              cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s',
+              whiteSpace: 'nowrap', flexShrink: 0,
+            }}
+            onClick={() => navigate('/lista-espera')}
+            onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#6366f1,#818cf8)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.color = '#6366f1'; e.currentTarget.style.borderColor = '#c7d2fe'; }}
+          >
+            ⏳ Lista de espera
+          </button>
         </div>
 
         {/* Selectores de contexto */}
@@ -433,7 +451,7 @@ const MoverPlaca: React.FC = () => {
 
                       <div style={s.imgWrap}>
                         <img
-                          src={placa.photo_url}
+                          src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
                           alt={`Placa ${index + 1}`}
                           style={s.img}
                           loading="lazy"
@@ -475,7 +493,7 @@ const MoverPlaca: React.FC = () => {
               <div style={s.editPhotoCol}>
                 <div style={s.editPhotoWrap}>
                   <img
-                    src={selectedPlaca.photo_url}
+                    src={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
                     alt="Placa seleccionada"
                     style={s.editPhoto}
                     draggable={false}
@@ -687,6 +705,10 @@ const MoverPlaca: React.FC = () => {
                   <p style={s.errorMsg}>{saveError}</p>
                 )}
 
+                {saveSuccess && (
+                  <p style={s.successMsg}>✅ Placa reasignada correctamente</p>
+                )}
+
                 {/* Botón guardar */}
                 <button
                   style={hasChanges && !isSaving && editTemaId && editSubtemaId
@@ -706,34 +728,6 @@ const MoverPlaca: React.FC = () => {
           </div>
         )}
       </main>
-
-      {/* Barra de acciones fija */}
-      <div style={s.actionBar}>
-        <button
-          style={s.cancelBtn}
-          onClick={() => navigate('/placas')}
-          onMouseEnter={e => (e.currentTarget.style.background = '#e2e8f0')}
-          onMouseLeave={e => (e.currentTarget.style.background = '#f8fafc')}
-        >
-          ← Volver a Placas
-        </button>
-        <div style={s.actionRight}>
-          {saveSuccess && (
-            <span style={s.successMsg}>✅ Placa reasignada correctamente</span>
-          )}
-          {selectedPlaca && (
-            <button
-              style={hasChanges && !isSaving && editTemaId && editSubtemaId
-                ? s.saveBtn
-                : s.saveBtnDisabled}
-              disabled={!hasChanges || isSaving || !editTemaId || !editSubtemaId}
-              onClick={handleSave}
-            >
-              {isSaving ? 'Guardando...' : hasChanges ? '💾 Guardar cambios' : '— Sin cambios —'}
-            </button>
-          )}
-        </div>
-      </div>
 
       <Footer />
       <LoadingToast visible={isSaving} type="updating" message="Actualizando placa" />
@@ -755,7 +749,7 @@ const s: { [key: string]: React.CSSProperties } = {
     width: '100%',
     maxWidth: '1300px',
     margin: '0 auto',
-    padding: 'clamp(16px, 3vw, 40px) clamp(12px, 3vw, 40px) 120px',
+    padding: 'clamp(16px, 3vw, 40px) clamp(12px, 3vw, 40px) clamp(24px, 4vw, 60px)',
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
@@ -1121,33 +1115,7 @@ const s: { [key: string]: React.CSSProperties } = {
     fontFamily: 'inherit',
     alignSelf: 'flex-start',
   },
-  actionBar: {
-    position: 'fixed',
-    bottom: 0, left: 0, right: 0,
-    background: 'rgba(255,255,255,0.95)',
-    backdropFilter: 'blur(12px)',
-    borderTop: '1px solid #e2e8f0',
-    padding: '14px clamp(16px, 4vw, 48px)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    zIndex: 100,
-    boxShadow: '0 -4px 24px rgba(15,23,42,0.08)',
-  },
-  actionRight: { display: 'flex', alignItems: 'center', gap: '16px' },
-  successMsg: { fontSize: '0.92em', color: '#15803d', fontWeight: 600 },
-  cancelBtn: {
-    padding: '10px 22px',
-    border: '1.5px solid #cbd5e1',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    background: '#f8fafc',
-    color: '#475569',
-    fontWeight: 600,
-    fontSize: '0.95em',
-    fontFamily: 'inherit',
-    transition: 'background 0.15s',
-  },
+  successMsg: { fontSize: '0.92em', color: '#15803d', fontWeight: 600, margin: '0 0 8px' },
   // ── Aumento ──────────────────────────────────────────────────────────────
   aumentoGroup: {
     display: 'flex', gap: '8px', flexWrap: 'wrap' as const,
