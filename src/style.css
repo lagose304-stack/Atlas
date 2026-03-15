@@ -1374,6 +1374,26 @@ body {
   .temario-grid-public {
     gap: 12px !important;
   }
+
+  .temario-title-text {
+    font-size: 1.02rem !important;
+    letter-spacing: 0.01em !important;
+  }
+
+  .temario-subtitle-text {
+    font-size: 0.72rem !important;
+    line-height: 1.35 !important;
+  }
+
+  .temario-partial-title {
+    font-size: 0.84rem !important;
+    line-height: 1.2 !important;
+  }
+
+  .temario-card-title {
+    font-size: 0.8rem !important;
+    line-height: 1.14 !important;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1383,6 +1403,23 @@ body {
 
   .temario-grid-public {
     gap: 10px !important;
+  }
+
+  .temario-title-text {
+    font-size: 0.94rem !important;
+  }
+
+  .temario-subtitle-text {
+    font-size: 0.68rem !important;
+  }
+
+  .temario-partial-title {
+    font-size: 0.78rem !important;
+  }
+
+  .temario-card-title {
+    font-size: 0.74rem !important;
+    line-height: 1.12 !important;
   }
 }
 

@@ -41,8 +41,8 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
         alignItems: 'stretch',
         textAlign: 'center',
         width: '100%',
-        minHeight: '160px',
-        maxHeight: '160px',
+        minHeight: '134px',
+        maxHeight: '134px',
         transform: hovered ? 'translateY(-3px)' : 'translateY(0)',
         filter: hovered ? 'saturate(1.02)' : 'none',
       }}
@@ -70,18 +70,19 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
       </div>
 
       <h4
+        className="temario-card-title"
         style={{
           margin: '0',
-          minHeight: '65px',
-          maxHeight: '65px',
+          minHeight: '32px',
+          maxHeight: '32px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '11px 12px 10px',
+          padding: '0 10px',
           background: 'linear-gradient(180deg, #f7fbff 0%, #f1f6fb 100%)',
           color: '#2a4564',
-          fontSize: '0.94rem',
-          lineHeight: 1.2,
+          fontSize: '0.86rem',
+          lineHeight: 1,
           fontWeight: 600,
           letterSpacing: '0.003em',
           fontFamily: '"Montserrat", "Segoe UI", sans-serif',
@@ -89,12 +90,12 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
       >
         <span
           style={{
-            display: '-webkit-box',
-            WebkitBoxOrient: 'vertical',
-            WebkitLineClamp: 2,
+            display: 'block',
+            width: '100%',
+            whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            wordBreak: 'break-word',
+            lineHeight: 1.1,
           }}
         >
           {tema.nombre}
@@ -147,8 +148,8 @@ const TemarioPublico: React.FC = () => {
           <div style={styles.panelTexture} />
 
           <div className="temario-main-header" style={styles.sectionHeader}>
-            <h2 style={styles.temarioHeading}>TEMARIO</h2>
-            <p style={styles.temarioSubtitle}>Selecciona un tema para explorar sus subtemas y placas histologicas</p>
+            <h2 className="temario-title-text" style={styles.temarioHeading}>TEMARIO</h2>
+            <p className="temario-subtitle-text" style={styles.temarioSubtitle}>Selecciona un tema para explorar sus subtemas y placas histologicas</p>
           </div>
 
           {loading ? (
@@ -166,7 +167,7 @@ const TemarioPublico: React.FC = () => {
                       <span style={styles.parcialIconWrap}>
                         <span style={styles.parcialIconEmoji}>🔬</span>
                       </span>
-                      <h3 style={styles.parcialTitle}>{label} {num}</h3>
+                      <h3 className="temario-partial-title" style={styles.parcialTitle}>{label} {num}</h3>
                     </div>
 
                     {temasParcial.length > 0 ? (
@@ -264,16 +265,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: 'clamp(14px, 2vw, 20px)',
   },
   temarioHeading: {
-    fontSize: 'clamp(1.45rem, 2.2vw, 1.75rem)',
+    fontSize: 'clamp(1.2rem, 1.7vw, 1.45rem)',
     fontWeight: 800,
     color: '#1d3656',
-    letterSpacing: '0.02em',
+    letterSpacing: '0.015em',
     margin: 0,
     textAlign: 'center',
     fontFamily: '"Montserrat", "Segoe UI", sans-serif',
   },
   temarioSubtitle: {
-    fontSize: 'clamp(0.86rem, 1.05vw, 0.96rem)',
+    fontSize: 'clamp(0.78rem, 0.95vw, 0.88rem)',
     color: '#57708f',
     margin: '2px 0 0',
     textAlign: 'center',
@@ -317,7 +318,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
   },
   parcialTitle: {
-    fontSize: 'clamp(1.05rem, 1.45vw, 1.25rem)',
+    fontSize: 'clamp(0.95rem, 1.15vw, 1.06rem)',
     fontWeight: 700,
     color: '#173654',
     margin: 0,
