@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 import Home from './pages/Home';
 import Edicion from './pages/Edicion';
+import TemarioPublico from './pages/TemarioPublico';
 import Temario from './pages/Temario';
 import Placas from './pages/Placas';
 import Subtemas from './pages/Subtemas';
@@ -47,6 +48,7 @@ const App: React.FC = () => {
         <Routes>
           {/* Ruta pública */}
           <Route path="/" element={<Home />} />
+          <Route path="/temario" element={<TemarioPublico />} />
           
           {/* Rutas protegidas */}
           <Route
@@ -58,7 +60,7 @@ const App: React.FC = () => {
             }
           />
           <Route
-            path="/temario"
+            path="/temario-admin"
             element={
               <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <Temario />

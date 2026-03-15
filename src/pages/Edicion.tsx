@@ -83,7 +83,7 @@ const Edicion: React.FC = () => {
               </p>
             </div>
             <Link
-              to="/temario"
+              to="/temario-admin"
               style={s.cardBtn}
               className="edicion-action-btn"
               onMouseEnter={e => {

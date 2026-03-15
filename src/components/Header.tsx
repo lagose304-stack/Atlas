@@ -12,8 +12,8 @@ import microscopioHeader from '../assets/logos/laboratorio.png';
 import fondoHeader from '../assets/imagenes/fondo.webp';
 
 const MENU_ITEMS = [
-  { key: 'inicio', label: 'Inicio', icon: BsHouse },
-  { key: 'temario', label: 'Temario', icon: BsBook },
+  { key: 'inicio', label: 'Inicio', icon: BsHouse, path: '/' },
+  { key: 'temario', label: 'Temario', icon: BsBook, path: '/temario' },
   { key: 'aprendizaje', label: 'Aprendizaje', icon: BsBook },
   { key: 'contacto', label: 'Contacto', icon: BsTelephone },
 ] as const;
@@ -122,7 +122,9 @@ const Header: React.FC = () => {
                     type="button"
                     className="atlas-header-nav-button"
                     style={styles.navButton}
-                    onClick={(event) => event.preventDefault()}
+                    onClick={() => {
+                      if (item.path) navigate(item.path);
+                    }}
                   >
                     <Icon size={15} />
                     <span>{item.label}</span>
@@ -166,7 +168,9 @@ const Header: React.FC = () => {
                   type="button"
                   className="atlas-compact-nav-button"
                   style={styles.compactNavButton}
-                  onClick={(event) => event.preventDefault()}
+                  onClick={() => {
+                    if (item.path) navigate(item.path);
+                  }}
                 >
                   <Icon className="atlas-compact-nav-icon" size={15} />
                   {item.label}

@@ -1333,6 +1333,59 @@ body {
   min-width: 0;
 }
 
+/* Grid especifico para pagina de Temario publico */
+.temario-grid-public {
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+  justify-items: stretch;
+}
+
+.temario-main-block {
+  border-radius: 0 !important;
+}
+
+@media (min-width: 760px) {
+  .temario-grid-public {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .temario-grid-public {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .temario-main-block {
+    padding: 14px 10px 16px !important;
+    box-shadow: 0 8px 20px rgba(8, 29, 58, 0.1) !important;
+  }
+
+  .temario-main-header {
+    margin-bottom: 12px !important;
+  }
+
+  .temario-main-section {
+    gap: 10px !important;
+    padding: 6px 0 !important;
+  }
+
+  .temario-grid-public {
+    gap: 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .temario-main-block {
+    padding: 12px 8px 14px !important;
+  }
+
+  .temario-grid-public {
+    gap: 10px !important;
+  }
+}
+
 /* 3 columnas desde 640px (tablet) */
 @media (min-width: 640px) {
   .temas-grid-home {
