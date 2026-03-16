@@ -110,11 +110,22 @@ export const uploadToCloudinary = async (file: File, options?: UploadOptions) =>
     formData.append('folder', options.folder);
   }
 
-  const { data } = await axios.post(
-    `https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`,
-    formData
-  );
-  return data;
+  try {
+    const { data } = await axios.post(
+      `https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`,
+      formData
+    );
+    return data;
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      const cloudinaryMessage =
+        (error.response?.data as { error?: { message?: string } } | undefined)?.error?.message ||
+        error.response?.data?.message ||
+        error.message;
+      throw new Error(`No se pudo subir la imagen a Cloudinary. ${cloudinaryMessage}`);
+    }
+    throw new Error('No se pudo subir la imagen a Cloudinary.');
+  }
 };
 
 export const deleteFromCloudinary = async (publicId: string) => {

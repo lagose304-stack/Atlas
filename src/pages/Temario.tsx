@@ -26,6 +26,16 @@ interface Subtema {
   logo_url?: string;
 }
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+  return fallback;
+};
+
 // --- Styles ---
 const styles: { [key: string]: React.CSSProperties } = {
   // Internos para los subformularios (CreateTemaForm, etc.)
@@ -280,7 +290,8 @@ const Temario: React.FC = () => {
       resetAllForms();
     } catch (error: any) {
       console.error('Error al crear tema:', error);
-      alert('No se pudo crear el tema. Intenta de nuevo.');
+      const detail = getErrorMessage(error, 'Error desconocido al crear el tema.');
+      alert(`No se pudo crear el tema. ${detail}`);
     } finally {
       setIsUploadingLogo(false);
     }
@@ -319,7 +330,8 @@ const Temario: React.FC = () => {
       resetAllForms();
     } catch (err: any) {
       console.error('Error al crear subtemas:', err);
-      alert('No se pudo crear los subtemas. Intenta de nuevo.');
+      const detail = getErrorMessage(err, 'Error desconocido al crear subtemas.');
+      alert(`No se pudo crear los subtemas. ${detail}`);
     } finally {
       setIsUploadingLogo(false);
     }
