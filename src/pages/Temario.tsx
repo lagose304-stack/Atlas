@@ -253,7 +253,7 @@ const Temario: React.FC = () => {
     try {
       setLoadingMessage('Creando tema'); setLoadingType('uploading');
       setIsUploadingLogo(true);
-      const upload = await uploadToCloudinary(temaLogoFile, { folder: 'temas/logos' });
+      const upload = await uploadToCloudinary(temaLogoFile, { folder: 'temas/logos', optimizeImage: true });
       const finalLogoUrl = upload.secure_url || '';
       const { data: maxData } = await supabase
         .from('temas')
@@ -276,7 +276,7 @@ const Temario: React.FC = () => {
           subtemasValidos.map(async (s, index) => {
             let logoUrl: string | null = null;
             if (s.logoFile) {
-              const up = await uploadToCloudinary(s.logoFile, { folder: 'temas' });
+              const up = await uploadToCloudinary(s.logoFile, { folder: 'temas', optimizeImage: true });
               logoUrl = up.secure_url || null;
             }
             return { nombre: s.nombre, tema_id: temaId, logo_url: logoUrl, sort_order: index };
@@ -318,7 +318,7 @@ const Temario: React.FC = () => {
         subtemasValidos.map(async (s, index) => {
           let logoUrl: string | null = null;
           if (s.logoFile) {
-            const up = await uploadToCloudinary(s.logoFile, { folder: 'temas' });
+            const up = await uploadToCloudinary(s.logoFile, { folder: 'temas', optimizeImage: true });
             logoUrl = up.secure_url || null;
           }
           return { nombre: s.nombre, tema_id: parseInt(selectedTemaId, 10), logo_url: logoUrl, sort_order: baseSubtemaSortOrder + index };
@@ -346,7 +346,7 @@ const Temario: React.FC = () => {
       setIsUploadingLogo(true);
       const updateData: { nombre: string; logo_url?: string } = { nombre: editingTemaNombre };
       if (editingTemaNewLogoFile) {
-        const upload = await uploadToCloudinary(editingTemaNewLogoFile, { folder: 'temas/logos' });
+        const upload = await uploadToCloudinary(editingTemaNewLogoFile, { folder: 'temas/logos', optimizeImage: true });
         updateData.logo_url = upload.secure_url;
         // Borrar imagen antigua de Cloudinary
         if (editingTemaLogoUrl) {
@@ -376,7 +376,7 @@ const Temario: React.FC = () => {
       setIsUploadingLogo(true);
       const updateData: { nombre: string; logo_url?: string } = { nombre: editingSubtemaNombre };
       if (editingSubtemaNewLogoFile) {
-        const upload = await uploadToCloudinary(editingSubtemaNewLogoFile, { folder: 'temas' });
+        const upload = await uploadToCloudinary(editingSubtemaNewLogoFile, { folder: 'temas', optimizeImage: true });
         updateData.logo_url = upload.secure_url;
         // Borrar imagen antigua de Cloudinary
         if (editingSubtemaLogoUrl) {

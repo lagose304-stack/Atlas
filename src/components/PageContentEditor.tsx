@@ -463,7 +463,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
     if (!file || !imageModal) return;
     setUploadingImage(true);
     try {
-      const result = await uploadToCloudinary(file, { folder: 'atlas-content' });
+      const result = await uploadToCloudinary(file, { folder: 'atlas-content', optimizeImage: true });
       updateBlockContent(imageModal.blockId, {
         [imageModal.fieldKey]: result.secure_url,
       });

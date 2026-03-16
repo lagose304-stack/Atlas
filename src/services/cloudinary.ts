@@ -22,13 +22,23 @@ const isUsingNetlifyFunctions = !backendBaseUrl;
 type UploadOptions = {
   folder?: string;
   optimizeForPlaque?: boolean;
+  optimizeImage?: boolean;
 };
 
 const PLAQUE_MIN_BYTES_TO_OPTIMIZE = 2 * 1024 * 1024;
 const PLAQUE_JPEG_QUALITY = 0.96;
+const IMAGE_MIN_BYTES_TO_OPTIMIZE = 1 * 1024 * 1024;
+const IMAGE_MAX_DIMENSION = 2200;
+const IMAGE_JPEG_QUALITY = 0.9;
+const IMAGE_WEBP_QUALITY = 0.88;
 
 const shouldOptimizePlaque = (file: File) => {
   if (file.size < PLAQUE_MIN_BYTES_TO_OPTIMIZE) return false;
+  return file.type.startsWith('image/');
+};
+
+const shouldOptimizeImage = (file: File) => {
+  if (file.size < IMAGE_MIN_BYTES_TO_OPTIMIZE) return false;
   return file.type.startsWith('image/');
 };
 
@@ -62,6 +72,85 @@ const canvasToBlob = (canvas: HTMLCanvasElement, quality: number): Promise<Blob>
       quality
     );
   });
+
+const canvasToBlobWithType = (
+  canvas: HTMLCanvasElement,
+  mimeType: string,
+  quality?: number
+): Promise<Blob> =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error('No se pudo exportar la imagen optimizada.'));
+          return;
+        }
+        resolve(blob);
+      },
+      mimeType,
+      quality
+    );
+  });
+
+const hasAlphaPixels = (ctx: CanvasRenderingContext2D, width: number, height: number): boolean => {
+  const { data } = ctx.getImageData(0, 0, width, height);
+  for (let i = 3; i < data.length; i += 16) {
+    if (data[i] < 255) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const extensionForMimeType = (mimeType: string): string => {
+  if (mimeType === 'image/png') return 'png';
+  if (mimeType === 'image/webp') return 'webp';
+  return 'jpg';
+};
+
+const optimizeImageFile = async (file: File): Promise<File> => {
+  const dataUrl = await fileToDataUrl(file);
+  const image = await dataUrlToImage(dataUrl);
+
+  const scale = Math.min(1, IMAGE_MAX_DIMENSION / Math.max(image.naturalWidth, image.naturalHeight));
+  const targetWidth = Math.max(1, Math.round(image.naturalWidth * scale));
+  const targetHeight = Math.max(1, Math.round(image.naturalHeight * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return file;
+
+  ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+  const keepsAlpha = file.type === 'image/png' && hasAlphaPixels(ctx, targetWidth, targetHeight);
+  const targetMimeType = keepsAlpha
+    ? 'image/png'
+    : file.type === 'image/webp'
+      ? 'image/webp'
+      : 'image/jpeg';
+  const quality = targetMimeType === 'image/jpeg'
+    ? IMAGE_JPEG_QUALITY
+    : targetMimeType === 'image/webp'
+      ? IMAGE_WEBP_QUALITY
+      : undefined;
+
+  const optimizedBlob = await canvasToBlobWithType(canvas, targetMimeType, quality);
+
+  // Conserva original si la mejora no compensa el reprocesado.
+  if (optimizedBlob.size >= file.size * 0.98) {
+    return file;
+  }
+
+  const baseName = file.name.replace(/\.[^.]+$/, '');
+  const extension = extensionForMimeType(targetMimeType);
+  return new File([optimizedBlob], `${baseName}.${extension}`, {
+    type: targetMimeType,
+    lastModified: Date.now(),
+  });
+};
 
 const optimizePlaqueFile = async (file: File): Promise<File> => {
   const dataUrl = await fileToDataUrl(file);
@@ -97,6 +186,12 @@ export const uploadToCloudinary = async (file: File, options?: UploadOptions) =>
   if (options?.optimizeForPlaque && shouldOptimizePlaque(file)) {
     try {
       fileToUpload = await optimizePlaqueFile(file);
+    } catch {
+      fileToUpload = file;
+    }
+  } else if (options?.optimizeImage && shouldOptimizeImage(file)) {
+    try {
+      fileToUpload = await optimizeImageFile(file);
     } catch {
       fileToUpload = file;
     }
