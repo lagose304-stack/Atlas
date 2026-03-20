@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useDraggableList } from '../hooks/useDraggableList';
@@ -119,33 +120,19 @@ const EditarSubtemas: React.FC = () => {
 
   const renderItems = drag.getRenderItems(LIST_KEY, subtemas);
   const accent = 'linear-gradient(90deg, #38bdf8, #818cf8)';
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
 
   return (
     <div style={s.page}>
       <Header />
       <main style={s.main}>
-        {/* Breadcrumb */}
-        <nav style={s.breadcrumb}>
-          <button
-            onClick={() => navigate('/')}
-            style={s.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            🏠 Inicio
-          </button>
-          <span style={s.breadcrumbSep}>❯</span>
-          <button
-            onClick={() => navigate('/edicion')}
-            style={s.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            Edición
-          </button>
-          <span style={s.breadcrumbSep}>❯</span>
-          <span style={s.breadcrumbCurrent}>Subtemas</span>
-        </nav>
+                <BackButton onClick={handleGoBack} />
 
         {/* Banner modo edición */}
         <div style={s.editBanner}>
@@ -241,9 +228,7 @@ const EditarSubtemas: React.FC = () => {
 
                   const { item: sub, realIndex } = ri;
                   const isBeingDragged = drag.dragId === sub.id;
-                  const isHovered = hoveredCard === sub.id && !drag.dragId;
-
-                  return (
+                  const isHovered = hoveredCard === sub.id && !drag.dragId;return (
                     <div
                       key={sub.id}
                       draggable
@@ -343,9 +328,9 @@ const EditarSubtemas: React.FC = () => {
 const s: { [key: string]: React.CSSProperties } = {
   page: {
     minHeight: '100vh',
-    background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
+    background: 'transparent',
     color: '#0f172a',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     display: 'flex',
     flexDirection: 'column',
   },
@@ -380,11 +365,11 @@ const s: { [key: string]: React.CSSProperties } = {
     fontWeight: 400,
   },
   card: {
-    background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+    background: 'transparent',
     borderRadius: '20px',
     padding: 'clamp(16px, 3vw, 36px)',
-    boxShadow: '0 20px 50px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.05)',
-    border: '1px solid rgba(15,23,42,0.05)',
+    boxShadow: 'none',
+    border: 'none',
   },
   cardHeader: {
     display: 'flex',
@@ -415,7 +400,7 @@ const s: { [key: string]: React.CSSProperties } = {
     width: '100%',
     padding: '12px 16px',
     fontSize: '1em',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     borderRadius: '10px',
     border: '1.5px solid #cbd5e1',
     background: '#f8fafc',
@@ -626,3 +611,9 @@ const s: { [key: string]: React.CSSProperties } = {
 };
 
 export default EditarSubtemas;
+
+
+
+
+
+

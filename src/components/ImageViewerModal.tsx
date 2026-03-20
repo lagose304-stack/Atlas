@@ -39,6 +39,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const isDesktop = windowWidth >= SIDEBAR_BREAKPOINT;
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [useZoomSource, setUseZoomSource] = useState(false);
+  const [zoomSourceFailed, setZoomSourceFailed] = useState(false);
 
   const [zoomLevel, setZoomLevel]   = useState(1);
   const [position, setPosition]     = useState({ x: 0, y: 0 });
@@ -61,13 +62,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   useEffect(() => {
     setUseZoomSource(false);
+    setZoomSourceFailed(false);
   }, [src, srcZoom]);
 
   useEffect(() => {
-    if (srcZoom && zoomLevel > 1.01) {
+    if (srcZoom && zoomLevel > 1.01 && !zoomSourceFailed) {
       setUseZoomSource(true);
     }
-  }, [zoomLevel, srcZoom]);
+  }, [zoomLevel, srcZoom, zoomSourceFailed]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -260,6 +262,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             src={useZoomSource && srcZoom ? srcZoom : src}
             alt="Vista ampliada"
             draggable={false}
+            onError={() => {
+              // Fallback: algunas URLs de zoom pueden no resolver para ciertos recursos.
+              if (useZoomSource) {
+                setUseZoomSource(false);
+                setZoomSourceFailed(true);
+              }
+            }}
             style={{
               maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
               userSelect: 'none',

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { deleteFromCloudinary } from '../services/cloudinary';
+import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
@@ -240,34 +241,20 @@ const ListaEspera: React.FC = () => {
   const temaSeleccionado  = temas.find(t => t.id === temaId) ?? null;
   const subSeleccionado   = subtemas.find(s => s.id === subtemaId) ?? null;
   const canSave           = !!temaId && !!subtemaId && !isSaving;
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
 
   return (
     <div style={s.page}>
       <Header />
       <main style={s.main}>
 
-        {/* Breadcrumb */}
-        <nav style={s.breadcrumb}>
-          <button onClick={() => navigate('/')} style={s.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-            🏠 Inicio
-          </button>
-          <span style={s.breadcrumbSep}>❯</span>
-          <button onClick={() => navigate('/edicion')} style={s.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-            Edición
-          </button>
-          <span style={s.breadcrumbSep}>❯</span>
-          <button onClick={() => navigate('/placas')} style={s.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-            Placas
-          </button>
-          <span style={s.breadcrumbSep}>❯</span>
-          <span style={s.breadcrumbCurrent}>Lista de espera</span>
-        </nav>
+                <BackButton onClick={handleGoBack} />
 
         {/* Encabezado */}
         <div style={s.pageHeader}>
@@ -584,7 +571,7 @@ const ListaEspera: React.FC = () => {
                       ))}
                       <button type="button" style={s.addSenalBtn}
                         onClick={() => setSenalados(prev => [...prev, ''])}>
-                        ＋ Añadir señalado
+                        ï¼‹ Añadir señalado
                       </button>
                     </div>
 
@@ -682,7 +669,7 @@ const ListaEspera: React.FC = () => {
 const s: { [key: string]: React.CSSProperties } = {
   page: {
     minHeight: '100vh',
-    background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
+    background: 'transparent',
     color: '#0f172a',
     fontFamily: "'Inter', 'Segoe UI', sans-serif",
     display: 'flex',
@@ -775,11 +762,11 @@ const s: { [key: string]: React.CSSProperties } = {
   countLabel: { fontWeight: 700, color: '#0f172a', fontSize: '0.95em' },
   countHint: { color: '#94a3b8', fontSize: '0.88em' },
   card: {
-    background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+    background: 'transparent',
     borderRadius: '20px',
     padding: 'clamp(16px, 2.5vw, 32px)',
-    boxShadow: '0 20px 50px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.05)',
-    border: '1px solid rgba(15,23,42,0.05)',
+    boxShadow: 'none',
+    border: 'none',
   },
   placaCard: {
     borderRadius: '12px',
@@ -978,7 +965,7 @@ const s: { [key: string]: React.CSSProperties } = {
     width: '100%', padding: '10px 12px', fontSize: '0.95em',
     border: '2px solid #c7d2fe', borderRadius: '8px', outline: 'none',
     boxSizing: 'border-box' as const, fontFamily: 'inherit', color: '#0f172a',
-    resize: 'vertical' as const, minHeight: '80px', background: '#f5f3ff',
+    resize: 'vertical' as const, minHeight: '80px', background: 'transparent',
     transition: 'border-color 0.2s',
   },
   errorMsg: {
@@ -1004,3 +991,9 @@ const s: { [key: string]: React.CSSProperties } = {
 };
 
 export default ListaEspera;
+
+
+
+
+
+

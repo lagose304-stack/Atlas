@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -47,7 +47,7 @@ const s: { [key: string]: React.CSSProperties } = {
     minHeight: '100vh',
     display: 'flex',
     flexDirection: 'column',
-    background: 'radial-gradient(circle at 10% 10%, #fee2e2, #f8fafc 45%, #eef2ff 100%)',
+    background: 'transparent',
   },
   main: {
     width: '100%',
@@ -120,3 +120,6 @@ const s: { [key: string]: React.CSSProperties } = {
 };
 
 export default AccesoDenegado;
+
+
+

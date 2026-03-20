@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
@@ -70,29 +71,25 @@ const Subtemas: React.FC = () => {
     fetchData();
   }, [temaId]);
 
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
+
   return (
-    <div style={styles.container}>
+    <div className="atlas-temario-typography" style={styles.container}>
       <Header />
 
       <main style={styles.main}>
-        {/* Breadcrumb / navegación */}
-        <nav style={styles.breadcrumb}>
-          <button
-            onClick={() => navigate('/')}
-            style={styles.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            🏠 Inicio
-          </button>
-          <span style={styles.breadcrumbSep}>❯</span>
-          <span style={styles.breadcrumbCurrent}>{tema?.nombre ?? '...'}</span>
-        </nav>
+        <BackButton onClick={handleGoBack} />
 
         {loading ? (
           <div style={styles.loadingWrap}>
             <div style={styles.spinner} />
-            <p style={styles.loadingText}>Cargando subtemas...</p>
+            <p className="atlas-typo-body" style={styles.loadingText}>Cargando subtemas...</p>
           </div>
         ) : (
           <section style={styles.card}>
@@ -107,7 +104,7 @@ const Subtemas: React.FC = () => {
                 <span style={styles.parciallBadge}>
                   {tema?.parcial ? `${tema.parcial.charAt(0).toUpperCase() + tema.parcial.slice(1)} parcial` : ''}
                 </span>
-                <h1 style={styles.temaTitle}>{tema?.nombre ?? 'Tema'}</h1>
+                <h1 className="atlas-typo-title" style={styles.temaTitle}>{tema?.nombre ?? 'Tema'}</h1>
               </div>
             </div>
 
@@ -120,10 +117,10 @@ const Subtemas: React.FC = () => {
             )}
 
             {/* Grilla de subtemas */}
-            <h2 style={styles.subtemasHeading}>Subtemas</h2>
+            <h2 className="atlas-typo-section-title" style={styles.subtemasHeading}>Subtemas</h2>
             {subtemas.length === 0 ? (
               <div style={styles.emptyState}>
-                <p style={styles.emptyText}>Aún no hay subtemas registrados para este tema.</p>
+                <p className="atlas-typo-body" style={styles.emptyText}>Aún no hay subtemas registrados para este tema.</p>
               </div>
             ) : (
               <div className="subtemas-grid-page">
@@ -149,9 +146,9 @@ const Subtemas: React.FC = () => {
                         <span style={styles.subtemaIconText}>📄</span>
                       </div>
                     )}
-                    <h3 className="subtema-card-label" style={styles.subtemaTitle}>{subtema.nombre}</h3>
+                    <h3 className="subtema-card-label atlas-typo-card" style={styles.subtemaTitle}>{subtema.nombre}</h3>
                     {subtema.descripcion && (
-                      <p style={styles.subtemaDesc}>{subtema.descripcion}</p>
+                      <p className="atlas-typo-body" style={styles.subtemaDesc}>{subtema.descripcion}</p>
                     )}
                   </div>
                 ))}
@@ -169,76 +166,45 @@ const Subtemas: React.FC = () => {
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     minHeight: '100vh',
-    background: 'radial-gradient(circle at 12% -8%, #bfdbfe 0%, transparent 38%), radial-gradient(circle at 88% 10%, #ddd6fe 0%, transparent 30%), linear-gradient(160deg, #f8fbff 0%, #eef4ff 48%, #f3f7ff 100%)',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    padding: 'clamp(8px, 2vw, 24px)',
-    boxSizing: 'border-box',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     color: '#0f172a',
+    backgroundColor: 'transparent',
   },
   main: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 'clamp(12px, 3vw, 28px)',
-    padding: 'clamp(16px, 4vw, 40px) clamp(8px, 3vw, 32px) clamp(20px, 4vw, 40px)',
+    flex: 1,
     width: '100%',
-    maxWidth: '1200px',
+    maxWidth: '1280px',
+    margin: '0 auto',
     boxSizing: 'border-box',
+    display: 'flex', flexDirection: 'column',
   },
-  breadcrumb: {
+  backButton: {
+    alignSelf: 'flex-start',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '4px',
-    flexWrap: 'wrap' as const,
-    background: 'rgba(255,255,255,0.7)',
-    backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(186,230,253,0.8)',
-    borderRadius: '14px',
-    padding: '9px 16px',
-    boxShadow: '0 8px 20px rgba(14,165,233,0.1)',
-  },
-  breadcrumbLink: {
-    background: 'none',
-    border: 'none',
+    gap: '6px',
+    marginBottom: '16px',
+    background: '#ffffff',
+    border: '1px solid #e5e7eb',
+    color: '#4b5563',
+    borderRadius: '999px',
+    padding: '8px 16px',
+    fontSize: '0.9em',
+    fontWeight: 500,
     cursor: 'pointer',
-    color: '#0ea5e9',
-    fontWeight: 600,
-    fontSize: '0.88em',
-    padding: '4px 8px',
-    borderRadius: '8px',
-    transition: 'background 0.15s, color 0.15s',
+    transition: 'all 0.2s ease',
     fontFamily: 'inherit',
-    letterSpacing: '0.01em',
-  },
-  breadcrumbSep: {
-    color: '#94a3b8',
-    fontWeight: 700,
-    fontSize: '0.75em',
-    lineHeight: 1,
-    userSelect: 'none' as const,
-  },
-  breadcrumbCurrent: {
-    color: '#0f172a',
-    fontWeight: 800,
-    fontSize: '0.88em',
-    padding: '4px 8px',
-    background: 'linear-gradient(135deg, #e0f2fe, #ede9fe)',
-    borderRadius: '8px',
-    border: '1px solid #bae6fd',
-    letterSpacing: '0.01em',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
   },
   card: {
     width: '100%',
-    background: 'linear-gradient(155deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.88) 100%)',
-    backdropFilter: 'blur(8px)',
-    borderRadius: 'clamp(10px, 2vw, 20px)',
-    padding: 'clamp(16px, 4vw, 40px)',
-    boxShadow: '0 26px 48px rgba(15,23,42,0.1), 0 8px 20px rgba(30,64,175,0.08)',
-    border: '1px solid rgba(186,230,253,0.75)',
+    background: 'transparent',
+    borderRadius: '18px',
+    padding: '0',
+    boxShadow: 'none',
+    border: 'none',
     boxSizing: 'border-box',
   },
   temaHeader: {
@@ -283,10 +249,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: 'fit-content',
   },
   temaTitle: {
-    fontSize: 'clamp(1.4em, 4vw, 2.4em)',
-    fontWeight: 800,
-    color: '#0f172a',
-    letterSpacing: '-0.02em',
     margin: 0,
   },
   divider: {
@@ -296,11 +258,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: 'clamp(16px, 3vw, 28px) 0',
   },
   subtemasHeading: {
-    fontSize: 'clamp(1em, 3vw, 1.5em)',
-    fontWeight: 700,
-    color: '#0f172a',
     marginBottom: 'clamp(12px, 3vw, 24px)',
-    letterSpacing: '-0.01em',
+    marginTop: 0,
   },
   subtemasGrid: {
     display: 'grid',
@@ -367,8 +326,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: 'clamp(1.5em, 3vw, 2.2em)',
   },
   subtemaTitle: {
-    fontWeight: 700,
-    color: '#0f172a',
     lineHeight: 1.3,
     margin: 0,
     wordBreak: 'break-word',
@@ -376,8 +333,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '100%',
   },
   subtemaDesc: {
-    fontSize: '0.8em',
-    color: '#64748b',
     lineHeight: 1.5,
     margin: 0,
   },
@@ -392,9 +347,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: '1px dashed #cbd5e1',
   },
   emptyText: {
-    color: '#64748b',
     fontStyle: 'italic',
-    fontSize: '1.05em',
     textAlign: 'center',
   },
   loadingWrap: {
@@ -413,10 +366,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     animation: 'spin 0.8s linear infinite',
   },
   loadingText: {
-    color: '#64748b',
-    fontSize: '1em',
-    fontWeight: 500,
+    fontStyle: 'italic',
   },
 };
 
 export default Subtemas;
+
+
+
+

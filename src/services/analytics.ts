@@ -222,3 +222,16 @@ export const fetchAnalyticsEvents = async (range: AnalyticsRangePreset): Promise
 
   return data as AnalyticsEvent[];
 };
+
+export const fetchTotalSiteViews = async (): Promise<number> => {
+  const { count, error } = await supabase
+    .from('site_analytics_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_type', 'site_visit');
+
+  if (error) {
+    return 0;
+  }
+
+  return count ?? 0;
+};

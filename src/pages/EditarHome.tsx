@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useDraggableList } from '../hooks/useDraggableList';
@@ -84,48 +85,34 @@ const EditarHome: React.FC = () => {
       setIsSaving(false);
     }
   }, [temasMap]);
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
 
   return (
     <div style={s.page}>
       <Header />
       <main style={s.main}>
-        {/* Breadcrumb */}
-        <nav style={s.breadcrumb}>
-          <button
-            onClick={() => navigate('/')}
-            style={s.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            🏠 Inicio
-          </button>
-          <span style={s.breadcrumbSep}>❯</span>
-          <button
-            onClick={() => navigate('/edicion')}
-            style={s.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            Edición
-          </button>
-          <span style={s.breadcrumbSep}>❯</span>
-          <span style={s.breadcrumbCurrent}>Página principal</span>
-        </nav>
+                <BackButton onClick={handleGoBack} />
 
         <div style={s.editBanner}>
-          <span style={s.editBannerIcon}>✏️</span>
+          <span style={s.editBannerIcon}>??</span>
           <div>
-            <strong>Modo edición — Página principal</strong>
+            <strong>Modo ediciï¿½n ï¿½ Pï¿½gina principal</strong>
             <p style={s.editBannerHint}>
-              Arrastra las tarjetas desde el handle <strong>⠿ Arrastra</strong> para cambiar el orden dentro de cada parcial. Los cambios no se aplican hasta que pulses <strong>Guardar orden</strong>.
+              Arrastra las tarjetas desde el handle <strong>? Arrastra</strong> para cambiar el orden dentro de cada parcial. Los cambios no se aplican hasta que pulses <strong>Guardar orden</strong>.
             </p>
           </div>
         </div>
 
         <div style={s.card}>
           <div style={s.cardHeader}>
-            <h2 style={s.cardTitle}>Contenido de la página</h2>
-            <p style={s.cardSubtitle}>Bloques de contenido que se muestran encima del temario en la página principal</p>
+            <h2 style={s.cardTitle}>Contenido de la pï¿½gina</h2>
+            <p style={s.cardSubtitle}>Bloques de contenido que se muestran encima del temario en la pï¿½gina principal</p>
             <div style={s.divider} />
           </div>
           <PageContentEditor entityType="home_page" entityId={0} />
@@ -134,7 +121,7 @@ const EditarHome: React.FC = () => {
         <div style={s.card}>
           <div style={s.cardHeader}>
             <h2 style={s.cardTitle}>Temario</h2>
-            <p style={s.cardSubtitle}>Orden actual de los temas en la página principal</p>
+            <p style={s.cardSubtitle}>Orden actual de los temas en la pï¿½gina principal</p>
             <div style={s.divider} />
           </div>
 
@@ -148,9 +135,7 @@ const EditarHome: React.FC = () => {
               {PARCIALES.map(({ key, label, color, accent }) => {
                 const items = temasMap[key];
                 const isActiveParcial = drag.dragKey === key;
-                const renderItems = drag.getRenderItems(key, items);
-
-                return (
+                const renderItems = drag.getRenderItems(key, items);return (
                   <div
                     key={key}
                     style={{
@@ -165,7 +150,7 @@ const EditarHome: React.FC = () => {
                         {items.length} {items.length === 1 ? 'tema' : 'temas'}
                       </span>
                       {isActiveParcial && (
-                        <span style={s.draggingHint}>↕ Arrastrando...</span>
+                        <span style={s.draggingHint}>? Arrastrando...</span>
                       )}
                     </div>
 
@@ -182,16 +167,14 @@ const EditarHome: React.FC = () => {
                         if (item.type === 'placeholder') {
                           return (
                             <div key={item.key} style={s.placeholder}>
-                              <span style={s.placeholderIcon}>⬇</span>
+                              <span style={s.placeholderIcon}>?</span>
                             </div>
                           );
                         }
 
                         const { item: tema, realIndex } = item;
                         const isBeingDragged = drag.dragId === tema.id;
-                        const isHovered = hoveredCard === tema.id && !drag.dragId;
-
-                        return (
+                        const isHovered = hoveredCard === tema.id && !drag.dragId;return (
                           <div
                             key={tema.id}
                             draggable
@@ -222,7 +205,7 @@ const EditarHome: React.FC = () => {
                             <div style={s.imgWrap} className="tema-card-img-wrap">
                               {tema.logo_url
                                 ? <img src={tema.logo_url} alt={tema.nombre} style={s.img} />
-                                : <span style={s.imgFallback}>🔬</span>
+                                : <span style={s.imgFallback}>??</span>
                               }
                             </div>
                             <h4 className="tema-card-label" style={s.cardName}>{tema.nombre}</h4>
@@ -233,7 +216,7 @@ const EditarHome: React.FC = () => {
                                 : '#f8fafc',
                               borderColor: isHovered ? '#7dd3fc' : '#e2e8f0',
                             }}>
-                              <span style={s.dragHandleDots}>⠿</span>
+                              <span style={s.dragHandleDots}>?</span>
                               <span style={s.dragHandleText}>Arrastra</span>
                             </div>
                           </div>
@@ -250,7 +233,7 @@ const EditarHome: React.FC = () => {
         {!loading && (
           <div style={s.fab}>
             {saveSuccess && (
-              <div style={s.fabToast}>✅ Guardado correctamente</div>
+              <div style={s.fabToast}>? Guardado correctamente</div>
             )}
             <button
               style={hasChanges && !isSaving ? s.fabBtn : s.fabBtnDisabled}
@@ -258,7 +241,7 @@ const EditarHome: React.FC = () => {
               disabled={!hasChanges || isSaving}
               title="Guardar orden"
             >
-              {isSaving ? '⏳ Guardando...' : hasChanges ? '💾 Guardar orden' : '✓ Sin cambios'}
+              {isSaving ? '? Guardando...' : hasChanges ? '?? Guardar orden' : '? Sin cambios'}
             </button>
           </div>
         )}
@@ -272,9 +255,9 @@ const EditarHome: React.FC = () => {
 const s: { [key: string]: React.CSSProperties } = {
   page: {
     minHeight: '100vh',
-    background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
+    background: 'transparent',
     color: '#0f172a',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     display: 'flex',
     flexDirection: 'column',
   },
@@ -304,11 +287,11 @@ const s: { [key: string]: React.CSSProperties } = {
   editBannerIcon: { fontSize: '1.6em', lineHeight: 1, marginTop: '2px', flexShrink: 0 },
   editBannerHint: { margin: '4px 0 0', fontSize: '0.88em', color: '#92400e', fontWeight: 400 },
   card: {
-    background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+    background: 'transparent',
     borderRadius: '20px',
     padding: 'clamp(16px, 3vw, 36px)',
-    boxShadow: '0 20px 50px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.05)',
-    border: '1px solid rgba(15,23,42,0.05)',
+    boxShadow: 'none',
+    border: 'none',
   },
   cardHeader: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '28px' },
   cardTitle: { fontSize: 'clamp(1.4em, 3vw, 2.2em)', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.03em', margin: '0 0 6px' },
@@ -544,3 +527,8 @@ const s: { [key: string]: React.CSSProperties } = {
 };
 
 export default EditarHome;
+
+
+
+
+

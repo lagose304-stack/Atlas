@@ -1,41 +1,38 @@
-import React, { useState } from 'react';
-import { useActiveVisitorsCount } from '../hooks/useActiveVisitorsCount';
+import React from 'react';
+import { fetchTotalSiteViews } from '../services/analytics';
 
 const FloatingVisitorsIndicator: React.FC = () => {
-  const count = useActiveVisitorsCount();
-  const [showHint, setShowHint] = useState(false);
+  const [totalViews, setTotalViews] = React.useState<number>(0);
 
-  const handleClick = () => {
-    setShowHint(true);
-    window.setTimeout(() => setShowHint(false), 2800);
-  };
+  React.useEffect(() => {
+    let isMounted = true;
+
+    const loadTotalViews = async () => {
+      const count = await fetchTotalSiteViews();
+      if (isMounted) {
+        setTotalViews(count);
+      }
+    };
+
+    loadTotalViews();
+    const intervalId = window.setInterval(loadTotalViews, 60000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  const formattedTotalViews = new Intl.NumberFormat('es-HN').format(totalViews);
 
   return (
     <>
-      <style>{`
-        @keyframes atlas-eye-blink {
-          0%, 92%, 100% { transform: scaleY(1); }
-          94%, 96% { transform: scaleY(0.15); }
-        }
-        @keyframes atlas-pill-pulse {
-          0%, 100% { box-shadow: 0 10px 24px rgba(2,6,23,0.35); }
-          50% { box-shadow: 0 14px 30px rgba(15,23,42,0.45); }
-        }
-      `}</style>
-
       <div
         style={s.wrap}
-        title="Usuarios activos en el sitio"
-        onClick={handleClick}
+        title="Visualizaciones totales del sitio"
       >
-        <span style={s.eye}>👁</span>
-        <strong style={s.count}>{count}</strong>
-
-        {showHint && (
-          <div style={s.hintBubble}>
-            Este numero representa visitantes activos recientes en cualquier pagina del sitio.
-          </div>
-        )}
+        <strong style={s.count}>{formattedTotalViews}</strong>
+        <span style={s.label}>Visualizaciones</span>
       </div>
     </>
   );
@@ -43,48 +40,31 @@ const FloatingVisitorsIndicator: React.FC = () => {
 
 const s: { [key: string]: React.CSSProperties } = {
   wrap: {
-    position: 'relative',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '8px',
-    background: 'rgba(15,23,42,0.84)',
-    color: '#e2e8f0',
-    border: '1px solid rgba(148,163,184,0.35)',
-    borderRadius: '999px',
-    padding: '8px 12px',
-    boxShadow: '0 10px 24px rgba(2,6,23,0.35)',
-    animation: 'atlas-pill-pulse 2.8s ease-in-out infinite',
-    backdropFilter: 'blur(6px)',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    gap: '4px',
+    background: '#1a1f24',
+    border: '1px solid #c9b485',
+    borderRadius: '4px',
+    padding: '6px 10px',
+    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.5)',
+    color: '#e4d2a1',
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     userSelect: 'none',
-    cursor: 'pointer',
-  },
-  eye: {
-    fontSize: '1rem',
-    lineHeight: 1,
-    display: 'inline-block',
-    transformOrigin: 'center',
-    animation: 'atlas-eye-blink 4.6s ease-in-out infinite',
+    whiteSpace: 'nowrap',
   },
   count: {
-    fontSize: '0.92rem',
-    color: '#ffffff',
-    minWidth: '18px',
+    fontSize: '0.85rem',
+    color: '#f0dfa8',
+    minWidth: '0',
     textAlign: 'right',
+    fontWeight: 700,
   },
-  hintBubble: {
-    position: 'absolute',
-    right: 0,
-    bottom: 'calc(100% + 10px)',
-    width: '260px',
-    padding: '9px 11px',
-    borderRadius: '10px',
-    background: 'rgba(15,23,42,0.95)',
-    border: '1px solid rgba(148,163,184,0.4)',
-    color: '#e2e8f0',
-    fontSize: '0.76rem',
-    lineHeight: 1.35,
-    boxShadow: '0 8px 20px rgba(2,6,23,0.35)',
+  label: {
+    fontSize: '0.8rem',
+    color: '#d4c292',
+    letterSpacing: '0.02em',
+    fontWeight: 500,
   },
 };
 

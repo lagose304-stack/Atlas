@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ImageViewerModal from '../components/ImageViewerModal';
@@ -77,39 +78,24 @@ const PlacasSubtema: React.FC = () => {
     fetchData();
   }, [subtemaId]);
 
-  const temaNombre = (() => {
-    if (!subtema?.temas) return '';
-    if (Array.isArray(subtema.temas)) return (subtema.temas as { nombre: string }[])[0]?.nombre ?? '';
-    return (subtema.temas as { nombre: string }).nombre ?? '';
-  })();
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
+
+  const temaNombre = Array.isArray(subtema?.temas)
+    ? (subtema?.temas[0]?.nombre ?? '')
+    : (subtema?.temas?.nombre ?? '');
 
   return (
     <div style={styles.page}>
       <Header />
 
       <main style={styles.main}>
-        {/* Breadcrumb / navegación */}
-        <nav style={styles.breadcrumb}>
-          <button
-            onClick={() => navigate('/')}
-            style={styles.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            🏠 Inicio
-          </button>
-          <span style={styles.breadcrumbSep}>❯</span>
-          <button
-            onClick={() => navigate(`/subtemas/${subtema?.tema_id}`)}
-            style={styles.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            {temaNombre || 'Subtemas'}
-          </button>
-          <span style={styles.breadcrumbSep}>❯</span>
-          <span style={styles.breadcrumbCurrent}>{subtema?.nombre ?? '...'}</span>
-        </nav>
+        <BackButton onClick={handleGoBack} />
 
         <section style={styles.section}>
           <div style={styles.sectionHeader}>
@@ -206,71 +192,42 @@ const PlacasSubtema: React.FC = () => {
 const styles: { [key: string]: React.CSSProperties } = {
   page: {
     minHeight: '100vh',
-    background: 'radial-gradient(circle at 10% -10%, #bfdbfe 0%, transparent 38%), radial-gradient(circle at 88% 8%, #ddd6fe 0%, transparent 30%), linear-gradient(160deg, #f8fbff 0%, #eef4ff 48%, #f3f7ff 100%)',
-    display: 'flex',
-    flexDirection: 'column',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    display: 'flex', flexDirection: 'column',
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     color: '#0f172a',
+    backgroundColor: 'transparent',
   },
   main: {
     flex: 1,
     width: '100%',
-    maxWidth: '1300px',
+    maxWidth: '1280px',
     margin: '0 auto',
-    padding: 'clamp(16px, 3vw, 40px)',
     boxSizing: 'border-box',
+    display: 'flex', flexDirection: 'column',
   },
-  breadcrumb: {
+  backButton: {
+    alignSelf: 'flex-start',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '4px',
-    marginBottom: '24px',
-    flexWrap: 'wrap',
-    background: 'rgba(255,255,255,0.7)',
-    backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(186,230,253,0.8)',
-    borderRadius: '14px',
-    padding: '9px 16px',
-    boxShadow: '0 8px 20px rgba(14,165,233,0.1)',
-  },
-  breadcrumbLink: {
-    background: 'none',
-    border: 'none',
+    gap: '6px',
+    marginBottom: '16px',
+    background: '#ffffff',
+    border: '1px solid #e5e7eb',
+    color: '#4b5563',
+    borderRadius: '999px',
+    padding: '8px 16px',
+    fontSize: '0.9em',
+    fontWeight: 500,
     cursor: 'pointer',
-    color: '#0ea5e9',
-    fontWeight: 600,
-    fontSize: '0.88em',
-    padding: '4px 8px',
-    borderRadius: '8px',
-    transition: 'background 0.15s, color 0.15s',
-    textDecoration: 'none',
+    transition: 'all 0.2s ease',
     fontFamily: 'inherit',
-    letterSpacing: '0.01em',
-  },
-  breadcrumbSep: {
-    color: '#94a3b8',
-    fontWeight: 700,
-    fontSize: '0.75em',
-    lineHeight: 1,
-    userSelect: 'none',
-  },
-  breadcrumbCurrent: {
-    color: '#0f172a',
-    fontWeight: 800,
-    fontSize: '0.88em',
-    padding: '4px 8px',
-    background: 'linear-gradient(135deg, #e0f2fe, #ede9fe)',
-    borderRadius: '8px',
-    border: '1px solid #bae6fd',
-    letterSpacing: '0.01em',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
   },
   section: {
-    background: 'linear-gradient(155deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.88) 100%)',
-    backdropFilter: 'blur(8px)',
-    borderRadius: '18px',
-    padding: 'clamp(16px, 3vw, 36px)',
-    boxShadow: '0 24px 46px rgba(15,23,42,0.1), 0 8px 20px rgba(30,64,175,0.08)',
-    border: '1px solid rgba(186,230,253,0.75)',
+    background: 'transparent',
+    padding: '0',
+    boxShadow: 'none',
+    border: 'none',
   },
   sectionHeader: {
     display: 'flex',
@@ -403,3 +360,7 @@ const styles: { [key: string]: React.CSSProperties } = {
 };
 
 export default PlacasSubtema;
+
+
+
+

@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageUploader from '../components/ImageUploader';
 import { supabase } from '../services/supabase';
 import { uploadToCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
 import Footer from '../components/Footer';
+import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
@@ -422,6 +423,13 @@ const Placas: React.FC = () => {
     setScSaveSuccess(false);
     setScSaveError('');
   };
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
 
   return (
     <div style={p.page}>
@@ -429,28 +437,7 @@ const Placas: React.FC = () => {
 
       <main style={p.main}>
 
-        {/* Breadcrumb */}
-        <nav style={p.breadcrumb}>
-          <button
-            onClick={() => navigate('/')}
-            style={p.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            🏠 Inicio
-          </button>
-          <span style={p.breadcrumbSep}>❯</span>
-          <button
-            onClick={() => navigate('/edicion')}
-            style={p.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            Edición
-          </button>
-          <span style={p.breadcrumbSep}>❯</span>
-          <span style={p.breadcrumbCurrent}>Placas</span>
-        </nav>
+                <BackButton onClick={handleGoBack} />
 
         {/* Encabezado */}
         <div style={p.pageHeader}>
@@ -633,7 +620,7 @@ const Placas: React.FC = () => {
                             style={styles.addBtn}
                             onClick={() => setSenalados(prev => [...prev, ''])}
                           >
-                            ＋ Añadir señalado
+                            ï¼‹ Añadir señalado
                           </button>
                         </div>
                       )}
@@ -857,22 +844,18 @@ const Placas: React.FC = () => {
 const p: { [key: string]: React.CSSProperties } = {
   page: {
     minHeight: '100vh',
-    background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    display: 'flex', flexDirection: 'column',
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     color: '#0f172a',
+    backgroundColor: 'transparent',
   },
   main: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 'clamp(16px, 3vw, 28px)',
-    padding: 'clamp(16px, 4vw, 40px) clamp(12px, 3vw, 24px) clamp(24px, 5vw, 56px)',
+    flex: 1,
     width: '100%',
-    maxWidth: '960px',
+    maxWidth: '1280px',
+    margin: '0 auto',
     boxSizing: 'border-box',
+    display: 'flex', flexDirection: 'column',
   },
   breadcrumb: {
     display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap',
@@ -967,3 +950,8 @@ const p: { [key: string]: React.CSSProperties } = {
 };
 
 export default Placas;
+
+
+
+
+

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
@@ -283,28 +284,20 @@ const GestionUsuarios: React.FC = () => {
     u.username.toLowerCase().includes(busquedaBorrar.toLowerCase()) ||
     u.nombre.toLowerCase().includes(busquedaBorrar.toLowerCase())
   );
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
 
   return (
     <div style={s.page}>
       <Header />
 
       <main style={s.main}>
-        {/* Breadcrumb */}
-        <nav style={s.breadcrumb}>
-          <button style={s.breadBtn} onClick={() => navigate('/')}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-            🏠 Inicio
-          </button>
-          <span style={s.sep}>❯</span>
-          <button style={s.breadBtn} onClick={() => navigate('/edicion')}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-            Edición
-          </button>
-          <span style={s.sep}>❯</span>
-          <span style={s.breadCurrent}>Gestión de usuarios</span>
-        </nav>
+                <BackButton onClick={handleGoBack} />
 
         {/* Encabezado */}
         <div style={s.pageHeader}>
@@ -635,13 +628,7 @@ function getRolStyle(rol: Rol): React.CSSProperties {
 
 const s: { [key: string]: React.CSSProperties } = {
   page: {
-    minHeight: '100vh',
-    background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
-    color: '#0f172a',
+    minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: "'Inter', 'Segoe UI', sans-serif", color: '#0f172a', backgroundColor: 'transparent',
   },
   main: {
     display: 'flex',
@@ -872,3 +859,9 @@ const s: { [key: string]: React.CSSProperties } = {
 };
 
 export default GestionUsuarios;
+
+
+
+
+
+

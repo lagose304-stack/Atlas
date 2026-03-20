@@ -1,21 +1,16 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  BsBook,
-  BsHouse,
-  BsSearch,
-  BsTelephone,
-} from 'react-icons/bs';
+import { BookOpen, GraduationCap, House, Phone, Search } from 'lucide-react';
 
 import logoFacultad from '../assets/logos/facultad.png';
 import microscopioHeader from '../assets/logos/laboratorio.png';
 import fondoHeader from '../assets/imagenes/fondo.webp';
 
 const MENU_ITEMS = [
-  { key: 'inicio', label: 'Inicio', icon: BsHouse, path: '/' },
-  { key: 'temario', label: 'Temario', icon: BsBook, path: '/temario' },
-  { key: 'aprendizaje', label: 'Aprendizaje', icon: BsBook },
-  { key: 'contacto', label: 'Contacto', icon: BsTelephone },
+  { key: 'inicio', label: 'Inicio', icon: House, path: '/' },
+  { key: 'temario', label: 'Temario', icon: BookOpen, path: '/temario' },
+  { key: 'aprendizaje', label: 'Aprendizaje', icon: GraduationCap },
+  { key: 'contacto', label: 'Contacto', icon: Phone },
 ] as const;
 
 const Header: React.FC = () => {
@@ -106,7 +101,7 @@ const Header: React.FC = () => {
                 onClick={(event) => event.preventDefault()}
                 aria-label="Buscar"
               >
-                <BsSearch size={26} color="#e6f5ff" />
+                <Search size={24} color="#e6f5ff" strokeWidth={2.2} />
               </button>
             </div>
           </div>
@@ -123,7 +118,7 @@ const Header: React.FC = () => {
                     className="atlas-header-nav-button"
                     style={styles.navButton}
                     onClick={() => {
-                      if (item.path) navigate(item.path);
+                      if ('path' in item && item.path) navigate(item.path);
                     }}
                   >
                     <Icon size={15} />
@@ -169,7 +164,7 @@ const Header: React.FC = () => {
                   className="atlas-compact-nav-button"
                   style={styles.compactNavButton}
                   onClick={() => {
-                    if (item.path) navigate(item.path);
+                    if ('path' in item && item.path) navigate(item.path);
                   }}
                 >
                   <Icon className="atlas-compact-nav-icon" size={15} />
@@ -397,16 +392,21 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: 0,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: '26px',
+    justifyContent: 'space-between',
+    gap: '12px',
+    width: '100%',
+    flexWrap: 'nowrap',
   },
   navItem: {
     margin: 0,
     padding: 0,
+    flex: '1 1 0',
+    minWidth: 0,
   },
   navButton: {
     display: 'inline-flex',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: '7px',
     border: 'none',
     background: 'transparent',
@@ -418,6 +418,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 500,
     fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     padding: '4px 1px',
+    width: '100%',
+    whiteSpace: 'nowrap',
   },
   compactBar: {
     position: 'fixed',

@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import TestBuilder, { type QuestionBlock } from '../components/TestBuilder.tsx';
@@ -298,33 +299,20 @@ const Pruebas: React.FC = () => {
     setSaveMsg('Prueba eliminada correctamente.');
     await loadTests();
   };
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
 
   return (
     <div style={s.page}>
       <Header />
 
       <main style={s.main}>
-        <nav style={s.breadcrumb}>
-          <button
-            onClick={() => navigate('/')}
-            style={s.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            🏠 Inicio
-          </button>
-          <span style={s.breadcrumbSep}>❯</span>
-          <button
-            onClick={() => navigate('/edicion')}
-            style={s.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            Edicion
-          </button>
-          <span style={s.breadcrumbSep}>❯</span>
-          <span style={s.breadcrumbCurrent}>Pruebas</span>
-        </nav>
+                <BackButton onClick={handleGoBack} />
 
         <section style={s.card}>
           <div style={s.headerWrap}>
@@ -554,13 +542,7 @@ const Pruebas: React.FC = () => {
 
 const s: { [key: string]: React.CSSProperties } = {
   page: {
-    minHeight: '100vh',
-    background: 'radial-gradient(circle at 12% -8%, #bfdbfe 0%, transparent 38%), radial-gradient(circle at 88% 10%, #ddd6fe 0%, transparent 30%), linear-gradient(160deg, #f8fbff 0%, #eef4ff 48%, #f3f7ff 100%)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
-    color: '#0f172a',
+    minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: "'Inter', 'Segoe UI', sans-serif", color: '#0f172a', backgroundColor: 'transparent',
   },
   main: {
     display: 'flex',
@@ -615,12 +597,12 @@ const s: { [key: string]: React.CSSProperties } = {
   },
   card: {
     width: '100%',
-    background: 'linear-gradient(155deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.88) 100%)',
-    backdropFilter: 'blur(8px)',
+    background: 'transparent',
+    backdropFilter: 'none',
     borderRadius: '20px',
     padding: 'clamp(18px, 3vw, 32px)',
-    boxShadow: '0 24px 46px rgba(15,23,42,0.1), 0 8px 20px rgba(30,64,175,0.08)',
-    border: '1px solid rgba(186,230,253,0.75)',
+    boxShadow: 'none',
+    border: 'none',
     boxSizing: 'border-box',
   },
   headerWrap: {
@@ -909,3 +891,9 @@ const s: { [key: string]: React.CSSProperties } = {
 };
 
 export default Pruebas;
+
+
+
+
+
+

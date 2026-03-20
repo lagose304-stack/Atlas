@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import LoadingToast, { LoadingToastType } from '../components/LoadingToast';
 import Footer from '../components/Footer';
+import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import CreateTemaForm from '../components/temario/CreateTemaForm';
 import CreateSubtemaForm, { SubtemaInput } from '../components/temario/CreateSubtemaForm';
@@ -624,6 +625,13 @@ const Temario: React.FC = () => {
 
   const anyFormOpen = isCreatingTema || isCreatingSubtema || isEditingTema || isEditingSubtema || isDeletingTema || isDeletingSubtema;
   const navigate = useNavigate();
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
 
   return (
     <div style={t.page}>
@@ -631,28 +639,7 @@ const Temario: React.FC = () => {
 
       <main style={t.main}>
 
-        {/* Breadcrumb */}
-        <nav style={t.breadcrumb}>
-          <button
-            onClick={() => navigate('/')}
-            style={t.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            🏠 Inicio
-          </button>
-          <span style={t.breadcrumbSep}>❯</span>
-          <button
-            onClick={() => navigate('/edicion')}
-            style={t.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            Edición
-          </button>
-          <span style={t.breadcrumbSep}>❯</span>
-          <span style={t.breadcrumbCurrent}>Temario</span>
-        </nav>
+        <BackButton onClick={handleGoBack} />
 
         {/* Encabezado */}
         <div style={t.pageHeader}>
@@ -886,57 +873,54 @@ const Temario: React.FC = () => {
 const t: { [key: string]: React.CSSProperties } = {
   page: {
     minHeight: '100vh',
-    background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    display: 'flex', flexDirection: 'column',
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     color: '#0f172a',
+    backgroundColor: 'transparent',
   },
   main: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 'clamp(16px, 3vw, 28px)',
-    padding: 'clamp(16px, 4vw, 40px) clamp(12px, 3vw, 24px) clamp(24px, 5vw, 56px)',
+    flex: 1,
     width: '100%',
-    maxWidth: '960px',
+    maxWidth: '1280px',
+    margin: '0 auto',
     boxSizing: 'border-box',
+    display: 'flex', flexDirection: 'column',
   },
-  breadcrumb: {
-    display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap',
-    background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(8px)',
-    border: '1px solid rgba(186,230,253,0.6)', borderRadius: '12px',
-    padding: '8px 16px', boxShadow: '0 2px 8px rgba(14,165,233,0.07)',
+  pageHeader: {
+    marginBottom: 'clamp(24px, 4vw, 40px)',
+    textAlign: 'center',
+    position: 'relative',
+    padding: '0 20px',
   },
-  breadcrumbLink: {
-    background: 'none', border: 'none', cursor: 'pointer', color: '#0ea5e9',
-    fontWeight: 600, fontSize: '0.88em', padding: '4px 8px', borderRadius: '8px',
-    transition: 'background 0.15s', fontFamily: 'inherit', letterSpacing: '0.01em',
-  },
-  breadcrumbSep: { color: '#94a3b8', fontWeight: 700, fontSize: '0.75em', userSelect: 'none' },
-  breadcrumbCurrent: {
-    color: '#0f172a', fontWeight: 800, fontSize: '0.88em', padding: '4px 8px',
-    background: 'linear-gradient(135deg, #e0f2fe, #ede9fe)', borderRadius: '8px',
-    border: '1px solid #bae6fd', letterSpacing: '0.01em',
-  },
-  pageHeader: { width: '100%', display: 'flex', flexDirection: 'column', gap: '6px' },
   pageTitle: {
-    fontSize: 'clamp(1.6em, 4vw, 2.4em)', fontWeight: 900, color: '#0f172a',
-    letterSpacing: '-0.03em', margin: 0,
+    fontSize: 'clamp(2rem, 4vw, 2.75rem)',
+    fontWeight: 800,
+    color: '#0f172a',
+    letterSpacing: '-0.03em',
+    lineHeight: 1.1,
+    margin: '0 0 12px 0',
+    fontFamily: '"Playfair Display", serif',
   },
-  pageSubtitle: { fontSize: 'clamp(0.88em, 2vw, 1em)', color: '#64748b', margin: 0, lineHeight: 1.6 },
+  pageSubtitle: {
+    fontSize: 'clamp(1rem, 1.5vw, 1.15rem)',
+    color: '#64748b',
+    fontWeight: 400,
+    maxWidth: '560px',
+    margin: '0 auto',
+    lineHeight: 1.6,
+  },
   accentLine: {
-    marginTop: '10px', width: '56px', height: '4px',
-    background: 'linear-gradient(90deg, #6366f1, #818cf8)', borderRadius: '4px',
+    width: '60px', height: '4px',
+    background: 'linear-gradient(90deg, #3b82f6, #06b6d4)',
+    borderRadius: '2px', margin: '24px auto 0',
   },
   contentCard: {
     width: '100%',
-    background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+    background: 'transparent',
     borderRadius: '18px',
-    padding: 'clamp(20px, 3vw, 36px)',
-    boxShadow: '0 6px 24px rgba(15,23,42,0.08), 0 2px 6px rgba(15,23,42,0.04)',
-    border: '1px solid rgba(15,23,42,0.05)',
+    padding: '0',
+    boxShadow: 'none',
+    border: 'none',
     boxSizing: 'border-box',
   },
   actionGrid: {
@@ -997,3 +981,8 @@ const t: { [key: string]: React.CSSProperties } = {
 };
 
 export default Temario;
+
+
+
+
+

@@ -1,7 +1,8 @@
-import React from 'react';
+﻿import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Footer from '../components/Footer';
+import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import { hasPermission } from '../security/permissions';
 
@@ -20,6 +21,13 @@ const Edicion: React.FC = () => {
     logout();
     navigate('/');
   };
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
 
   return (
     <div style={s.page}>
@@ -27,19 +35,7 @@ const Edicion: React.FC = () => {
 
       <main style={s.main} className="edicion-main">
 
-        {/* Breadcrumb */}
-        <nav style={s.breadcrumb}>
-          <button
-            onClick={() => navigate('/')}
-            style={s.breadcrumbLink}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e0f2fe')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-          >
-            🏠 Inicio
-          </button>
-          <span style={s.breadcrumbSep}>❯</span>
-          <span style={s.breadcrumbCurrent}>Edición</span>
-        </nav>
+        <BackButton onClick={handleGoBack} />
 
         {/* Encabezado de la sección */}
         <div style={s.pageHeader}>
@@ -315,22 +311,18 @@ const Edicion: React.FC = () => {
 const s: { [key: string]: React.CSSProperties } = {
   page: {
     minHeight: '100vh',
-    background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    display: 'flex', flexDirection: 'column',
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     color: '#0f172a',
+    backgroundColor: 'transparent',
   },
   main: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 'clamp(16px, 3vw, 28px)',
-    padding: 'clamp(16px, 4vw, 40px) clamp(12px, 3vw, 24px) clamp(24px, 5vw, 56px)',
+    flex: 1,
     width: '100%',
-    maxWidth: '960px',
+    maxWidth: '1280px',
+    margin: '0 auto',
     boxSizing: 'border-box',
+    display: 'flex', flexDirection: 'column',
   },
 
   // Breadcrumb
@@ -560,4 +552,9 @@ const s: { [key: string]: React.CSSProperties } = {
 };
 
 export default Edicion;
+
+
+
+
+
 

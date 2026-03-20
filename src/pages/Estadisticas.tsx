@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { supabase } from '../services/supabase';
@@ -306,7 +307,6 @@ const Estadisticas: React.FC = () => {
       void loadAnalytics();
       void loadPlateHistory();
     }, 30000);
-
     return () => window.clearInterval(timerId);
   }, [autoRefresh, range]);
 
@@ -611,28 +611,20 @@ const Estadisticas: React.FC = () => {
     };
   };
 
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
+
   return (
     <div style={s.page}>
       <Header />
 
       <main style={s.main}>
-        <nav style={s.breadcrumb}>
-          <button
-            onClick={() => navigate('/')}
-            style={s.breadcrumbLink}
-          >
-            Inicio
-          </button>
-          <span style={s.breadcrumbSep}>/</span>
-          <button
-            onClick={() => navigate('/edicion')}
-            style={s.breadcrumbLink}
-          >
-            Edicion
-          </button>
-          <span style={s.breadcrumbSep}>/</span>
-          <span style={s.breadcrumbCurrent}>Estadisticas</span>
-        </nav>
+                <BackButton onClick={handleGoBack} />
 
         <section style={s.card}>
           <div style={s.headerRow}>
@@ -1105,7 +1097,7 @@ const s: { [key: string]: React.CSSProperties } = {
     minHeight: '100vh',
     display: 'flex',
     flexDirection: 'column',
-    background: 'radial-gradient(circle at 12% -6%, #dbeafe 0%, transparent 36%), linear-gradient(160deg, #f8fbff 0%, #eef4ff 50%, #f3f7ff 100%)',
+    background: 'transparent',
   },
   main: {
     width: '100%',
@@ -1139,11 +1131,11 @@ const s: { [key: string]: React.CSSProperties } = {
     fontWeight: 700,
   },
   card: {
-    background: 'rgba(255,255,255,0.92)',
-    border: '1px solid #dbeafe',
+    background: 'transparent',
+    border: 'none',
     borderRadius: '16px',
     padding: '20px',
-    boxShadow: '0 16px 34px rgba(15,23,42,0.08)',
+    boxShadow: 'none',
   },
   headerRow: {
     display: 'flex',
@@ -1550,3 +1542,9 @@ const s: { [key: string]: React.CSSProperties } = {
 };
 
 export default Estadisticas;
+
+
+
+
+
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import Header from '../components/Header';
@@ -70,7 +70,7 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
       </div>
 
       <h4
-        className="temario-card-title"
+        className="temario-card-title atlas-typo-card"
         style={{
           margin: '0',
           minHeight: '32px',
@@ -80,12 +80,7 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
           justifyContent: 'center',
           padding: '0 10px',
           background: 'linear-gradient(180deg, #f7fbff 0%, #f1f6fb 100%)',
-          color: '#2a4564',
-          fontSize: '0.86rem',
           lineHeight: 1,
-          fontWeight: 600,
-          letterSpacing: '0.003em',
-          fontFamily: '"Montserrat", "Segoe UI", sans-serif',
         }}
       >
         <span
@@ -134,7 +129,7 @@ const TemarioPublico: React.FC = () => {
   }, []);
 
   return (
-    <div style={styles.container}>
+    <div className="atlas-temario-typography" style={styles.container}>
       <Header />
 
       <main style={styles.main}>
@@ -148,14 +143,14 @@ const TemarioPublico: React.FC = () => {
           <div style={styles.panelTexture} />
 
           <div className="temario-main-header" style={styles.sectionHeader}>
-            <h2 className="temario-title-text" style={styles.temarioHeading}>TEMARIO</h2>
-            <p className="temario-subtitle-text" style={styles.temarioSubtitle}>Selecciona un tema para explorar sus subtemas y placas histologicas</p>
+            <h2 className="temario-title-text atlas-typo-title" style={styles.temarioHeading}>TEMARIO</h2>
+            <p className="temario-subtitle-text atlas-typo-subtitle" style={styles.temarioSubtitle}>Selecciona un tema para explorar sus subtemas y placas histologicas</p>
           </div>
 
           {loading ? (
             <div style={styles.loadingWrap}>
               <div style={styles.spinner} />
-              <p style={styles.loadingText}>Cargando temario...</p>
+              <p className="atlas-typo-body" style={styles.loadingText}>Cargando temario...</p>
             </div>
           ) : (
             <div style={styles.temarioSectionsContainer}>
@@ -167,7 +162,7 @@ const TemarioPublico: React.FC = () => {
                       <span style={styles.parcialIconWrap}>
                         <span style={styles.parcialIconEmoji}>🔬</span>
                       </span>
-                      <h3 className="temario-partial-title" style={styles.parcialTitle}>{label} {num}</h3>
+                      <h3 className="temario-partial-title atlas-typo-section-title" style={styles.parcialTitle}>{label} {num}</h3>
                     </div>
 
                     {temasParcial.length > 0 ? (
@@ -183,7 +178,7 @@ const TemarioPublico: React.FC = () => {
                     ) : (
                       <div style={styles.emptyState}>
                         <span style={styles.emptyIcon}>📋</span>
-                        <p style={styles.noTemasMessage}>Aun no hay temas asignados a este parcial.</p>
+                        <p className="atlas-typo-body" style={styles.noTemasMessage}>Aun no hay temas asignados a este parcial.</p>
                       </div>
                     )}
                   </div>
@@ -205,11 +200,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    background:
-      'radial-gradient(circle at 10% 0%, rgba(191, 219, 254, 0.65) 0%, transparent 40%), linear-gradient(165deg, #f8fbff 0%, #eef4ff 50%, #f3f7ff 100%)',
+    background: 'transparent',
     color: '#0f172a',
     fontFamily: '"Montserrat", "Segoe UI", sans-serif',
-    padding: 'clamp(8px, 2vw, 24px)',
     boxSizing: 'border-box',
   },
   main: {
@@ -236,14 +229,16 @@ const styles: { [key: string]: React.CSSProperties } = {
   temarioCard: {
     position: 'relative',
     width: '100%',
-    maxWidth: '1600px',
-    background: 'linear-gradient(180deg, rgba(241, 246, 251, 0.96) 0%, rgba(236, 242, 248, 0.94) 100%)',
+    maxWidth: '1280px',
+    background: 'transparent',
     borderRadius: 0,
-    padding: 'clamp(18px, 2.4vw, 30px)',
-    boxShadow: '0 18px 34px rgba(8, 29, 58, 0.12)',
-    border: '1px solid rgba(206, 221, 237, 0.92)',
+    padding: 'clamp(8px, 1.2vw, 14px)',
+    boxShadow: 'none',
+    border: 'none',
     borderTop: 'none',
-    marginTop: '-1px',
+    marginTop: 0,
+    marginLeft: 'auto',
+    marginRight: 'auto',
     marginBottom: 0,
     boxSizing: 'border-box',
     overflow: 'hidden',
@@ -251,8 +246,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   panelTexture: {
     position: 'absolute',
     inset: 0,
-    background:
-      'radial-gradient(circle at 15% 85%, rgba(175, 207, 235, 0.14) 0%, transparent 45%), radial-gradient(circle at 82% 26%, rgba(168, 198, 228, 0.18) 0%, transparent 38%), linear-gradient(115deg, rgba(255,255,255,0.24), rgba(255,255,255,0))',
+    background: 'transparent',
     pointerEvents: 'none',
   },
   sectionHeader: {
@@ -265,20 +259,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: 'clamp(14px, 2vw, 20px)',
   },
   temarioHeading: {
-    fontSize: 'clamp(1.2rem, 1.7vw, 1.45rem)',
-    fontWeight: 800,
-    color: '#1d3656',
-    letterSpacing: '0.015em',
     margin: 0,
     textAlign: 'center',
-    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
   },
   temarioSubtitle: {
-    fontSize: 'clamp(0.78rem, 0.95vw, 0.88rem)',
-    color: '#57708f',
     margin: '2px 0 0',
     textAlign: 'center',
-    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
   },
   temarioSectionsContainer: {
     position: 'relative',
@@ -318,12 +304,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
   },
   parcialTitle: {
-    fontSize: 'clamp(0.95rem, 1.15vw, 1.06rem)',
-    fontWeight: 700,
-    color: '#173654',
     margin: 0,
-    letterSpacing: '0.01em',
-    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
   },
   temasGrid: {
     display: 'grid',
@@ -346,9 +327,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1.6em',
   },
   noTemasMessage: {
-    color: '#536b88',
     fontStyle: 'italic',
-    fontSize: '0.9em',
     textAlign: 'center',
     margin: 0,
   },
@@ -368,10 +347,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     animation: 'spin 0.8s linear infinite',
   },
   loadingText: {
-    color: '#4b6584',
-    fontSize: '1em',
-    fontWeight: 500,
+    fontStyle: 'italic',
   },
 };
 
 export default TemarioPublico;
+
+
+

@@ -1,0 +1,113 @@
+/*
+ * Sistema tipografico base tomado de la pagina Temario.
+ * Reutilizar estas clases en nuevas vistas para mantener consistencia.
+ */
+
+:root {
+  --atlas-font-temario: "Montserrat", "Segoe UI", sans-serif;
+
+  --atlas-title-size: clamp(1.2rem, 1.7vw, 1.45rem);
+  --atlas-title-weight: 800;
+  --atlas-title-color: #1d3656;
+  --atlas-title-letter: 0.015em;
+
+  --atlas-subtitle-size: clamp(0.78rem, 0.95vw, 0.88rem);
+  --atlas-subtitle-weight: 400;
+  --atlas-subtitle-color: #57708f;
+
+  --atlas-section-size: clamp(0.95rem, 1.15vw, 1.06rem);
+  --atlas-section-weight: 700;
+  --atlas-section-color: #173654;
+  --atlas-section-letter: 0.01em;
+
+  --atlas-body-size: 0.9em;
+  --atlas-body-weight: 400;
+  --atlas-body-color: #536b88;
+
+  --atlas-card-size: 0.86rem;
+  --atlas-card-weight: 600;
+  --atlas-card-color: #2a4564;
+  --atlas-card-letter: 0.003em;
+}
+
+.atlas-temario-typography {
+  font-family: var(--atlas-font-temario);
+}
+
+/* Aplicacion global para unificar tipografia en todas las paginas */
+:where(html, body, #root) {
+  font-family: var(--atlas-font-temario);
+}
+
+:where(button, input, select, textarea) {
+  font-family: inherit;
+}
+
+:where(h1) {
+  font-family: var(--atlas-font-temario);
+  font-size: var(--atlas-title-size);
+  font-weight: var(--atlas-title-weight);
+  color: var(--atlas-title-color);
+  letter-spacing: var(--atlas-title-letter);
+}
+
+:where(h2) {
+  font-family: var(--atlas-font-temario);
+  font-size: var(--atlas-section-size);
+  font-weight: var(--atlas-section-weight);
+  color: var(--atlas-section-color);
+  letter-spacing: var(--atlas-section-letter);
+}
+
+:where(h3) {
+  font-family: var(--atlas-font-temario);
+  font-size: var(--atlas-card-size);
+  font-weight: var(--atlas-card-weight);
+  color: var(--atlas-card-color);
+  letter-spacing: var(--atlas-card-letter);
+}
+
+:where(p) {
+  font-family: var(--atlas-font-temario);
+  font-size: var(--atlas-body-size);
+  font-weight: var(--atlas-body-weight);
+  color: var(--atlas-body-color);
+}
+
+.atlas-typo-title {
+  font-family: var(--atlas-font-temario);
+  font-size: var(--atlas-title-size);
+  font-weight: var(--atlas-title-weight);
+  color: var(--atlas-title-color);
+  letter-spacing: var(--atlas-title-letter);
+}
+
+.atlas-typo-subtitle {
+  font-family: var(--atlas-font-temario);
+  font-size: var(--atlas-subtitle-size);
+  font-weight: var(--atlas-subtitle-weight);
+  color: var(--atlas-subtitle-color);
+}
+
+.atlas-typo-section-title {
+  font-family: var(--atlas-font-temario);
+  font-size: var(--atlas-section-size);
+  font-weight: var(--atlas-section-weight);
+  color: var(--atlas-section-color);
+  letter-spacing: var(--atlas-section-letter);
+}
+
+.atlas-typo-body {
+  font-family: var(--atlas-font-temario);
+  font-size: var(--atlas-body-size);
+  font-weight: var(--atlas-body-weight);
+  color: var(--atlas-body-color);
+}
+
+.atlas-typo-card {
+  font-family: var(--atlas-font-temario);
+  font-size: var(--atlas-card-size);
+  font-weight: var(--atlas-card-weight);
+  color: var(--atlas-card-color);
+  letter-spacing: var(--atlas-card-letter);
+}

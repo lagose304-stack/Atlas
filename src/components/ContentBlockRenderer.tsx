@@ -127,7 +127,7 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({ blocks }) =
         {blocks.map(block => {
           const normalizedContent = normalizeBlockContent(block.block_type, block.content);
           return (
-          <div key={block.id} style={getBlockShellStyle(normalizedContent)}>
+          <div key={block.id} style={getBlockShellStyle(normalizedContent)} className="cb-shell">
             <BlockItem block={block} onZoom={handleZoom} />
           </div>
           );
@@ -569,8 +569,9 @@ const rs: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     gap: '22px',
-    marginBottom: '36px',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    marginBottom: 0,
+    width: '100%',
+    fontFamily: 'inherit',
   },
 
   // Título principal (H1 editorial)
