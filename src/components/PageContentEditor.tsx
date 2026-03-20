@@ -981,7 +981,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif,.tif,.tiff,.bmp,.avif,.webp"
         style={{ display: 'none' }}
         onChange={handleFileUpload}
       />

@@ -703,7 +703,7 @@ const Placas: React.FC = () => {
                   <input
                     ref={scInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.heic,.heif,.tif,.tiff,.bmp,.avif,.webp"
                     multiple
                     style={{ display: 'none' }}
                     onChange={handleScFilesAdd}

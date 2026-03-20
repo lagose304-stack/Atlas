@@ -1552,6 +1552,20 @@ body {
   width: 100%;
 }
 
+/* Centrado global de miniaturas dentro de sus recuadros */
+:where(.tema-card-img-wrap, .subtema-card-img-wrap, .placa-thumb-wrap, .temaLogoWrap, [class*="thumb-wrap"], [class*="thumbnail"], [class*="img-wrap"]) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+:where(.tema-card-img-wrap, .subtema-card-img-wrap, .placa-thumb-wrap, .temaLogoWrap, [class*="thumb-wrap"], [class*="thumbnail"], [class*="img-wrap"]) > img {
+  display: block;
+  margin: auto;
+  object-position: center center;
+}
+
 @media (min-width: 640px) {
   .subtemas-grid-page {
     grid-template-columns: repeat(3, 1fr);

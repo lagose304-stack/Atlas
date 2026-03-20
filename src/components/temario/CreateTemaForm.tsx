@@ -133,7 +133,7 @@ const CreateTemaForm: React.FC<CreateTemaFormProps> = ({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,.heic,.heif,.tif,.tiff,.bmp,.avif,.webp"
           style={{ display: 'none' }}
           onChange={handleFileChange}
         />
@@ -247,7 +247,7 @@ const CreateTemaForm: React.FC<CreateTemaFormProps> = ({
           <input
             ref={(el) => { subtemaFileInputRefs.current[index] = el; }}
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif,.tif,.tiff,.bmp,.avif,.webp"
             style={{ display: 'none' }}
             onChange={(e) => handleSubtemaFileChange(index, e)}
           />

@@ -7,6 +7,7 @@ import Footer from '../components/Footer';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../components/PageContentEditor';
 import { getRenderableBlocks } from '../services/contentPublication';
+import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { logTemaView } from '../services/analytics';
 
 interface Tema {
@@ -32,6 +33,9 @@ const Subtemas: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [hoveredSubtema, setHoveredSubtema] = useState<number | null>(null);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
+  const [temaLogoFailed, setTemaLogoFailed] = useState(false);
+  const [temaLogoSrc, setTemaLogoSrc] = useState('');
+  const [failedSubtemaLogos, setFailedSubtemaLogos] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -71,6 +75,11 @@ const Subtemas: React.FC = () => {
     fetchData();
   }, [temaId]);
 
+  useEffect(() => {
+    setTemaLogoFailed(false);
+    setTemaLogoSrc(tema?.logo_url ? getCloudinaryImageUrl(tema.logo_url, 'thumb') : '');
+  }, [tema?.logo_url]);
+
   const handleGoBack = () => {
     if (window.history.length > 1) {
       navigate(-1);
@@ -95,9 +104,22 @@ const Subtemas: React.FC = () => {
           <section style={styles.card}>
             {/* Encabezado del tema */}
             <div style={styles.temaHeader}>
-              {tema?.logo_url && (
+              {tema?.logo_url && !temaLogoFailed && (
                 <div style={styles.temaLogoWrap}>
-                  <img src={tema.logo_url} alt={tema.nombre} style={styles.temaLogo} />
+                  <img
+                    src={temaLogoSrc}
+                    alt={tema.nombre}
+                    style={styles.temaLogo}
+                    loading="lazy"
+                    decoding="async"
+                    onError={() => {
+                      if (tema?.logo_url && temaLogoSrc !== tema.logo_url) {
+                        setTemaLogoSrc(tema.logo_url);
+                        return;
+                      }
+                      setTemaLogoFailed(true);
+                    }}
+                  />
                 </div>
               )}
               <div style={styles.temaInfo}>
@@ -137,9 +159,24 @@ const Subtemas: React.FC = () => {
                     onClick={() => navigate(`/ver-placas/${subtema.id}`)}
                   >
                     <div style={styles.subtemaAccent} />
-                    {subtema.logo_url ? (
+                    {subtema.logo_url && !failedSubtemaLogos[subtema.id] ? (
                       <div className="subtema-card-img-wrap" style={styles.subtemaLogoWrap}>
-                        <img src={subtema.logo_url} alt={subtema.nombre} style={styles.subtemaLogo} />
+                        <img
+                          src={getCloudinaryImageUrl(subtema.logo_url, 'thumb')}
+                          alt={subtema.nombre}
+                          style={styles.subtemaLogo}
+                          loading="lazy"
+                          decoding="async"
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            if (img.dataset.fallbackTried !== '1') {
+                              img.dataset.fallbackTried = '1';
+                              img.src = subtema.logo_url as string;
+                              return;
+                            }
+                            setFailedSubtemaLogos((prev) => ({ ...prev, [subtema.id]: true }));
+                          }}
+                        />
                       </div>
                     ) : (
                       <div className="subtema-card-img-wrap" style={styles.subtemaIconFallback}>

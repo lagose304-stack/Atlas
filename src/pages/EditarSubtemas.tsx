@@ -7,6 +7,7 @@ import Footer from '../components/Footer';
 import { useDraggableList } from '../hooks/useDraggableList';
 import PageContentEditor from '../components/PageContentEditor';
 import LoadingToast from '../components/LoadingToast';
+import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 
 interface Tema {
   id: number;
@@ -261,9 +262,11 @@ const EditarSubtemas: React.FC = () => {
                       <div style={s.imgWrap} className="tema-card-img-wrap">
                         {sub.logo_url ? (
                           <img
-                            src={sub.logo_url}
+                            src={getCloudinaryImageUrl(sub.logo_url, 'thumb')}
                             alt={sub.nombre}
                             style={s.img}
+                            loading="lazy"
+                            decoding="async"
                           />
                         ) : (
                           <span style={s.imgFallback}>📄</span>

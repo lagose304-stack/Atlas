@@ -158,7 +158,7 @@ const CreateSubtemaForm: React.FC<CreateSubtemaFormProps> = ({
           <input
             ref={(el) => { fileInputRefs.current[index] = el; }}
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif,.tif,.tiff,.bmp,.avif,.webp"
             style={{ display: 'none' }}
             onChange={(e) => handleFileChange(index, e)}
           />

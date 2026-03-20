@@ -3,7 +3,7 @@ export type CloudinaryImageProfile = 'thumb' | 'view' | 'zoom';
 const UPLOAD_SEGMENT = '/image/upload/';
 
 const profileTransform: Record<CloudinaryImageProfile, string> = {
-  thumb: 'c_fill,g_auto,w_360,h_360,f_auto,q_auto:eco,dpr_auto',
+  thumb: 'c_fill,g_auto,w_380,h_380,f_auto,q_auto:good,dpr_auto',
   view: 'c_limit,w_1800,f_auto,q_auto:good,dpr_auto',
   zoom: 'c_limit,w_3200,f_auto,q_auto:best,dpr_auto',
 };

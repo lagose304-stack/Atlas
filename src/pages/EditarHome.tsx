@@ -7,6 +7,7 @@ import Footer from '../components/Footer';
 import { useDraggableList } from '../hooks/useDraggableList';
 import LoadingToast from '../components/LoadingToast';
 import PageContentEditor from '../components/PageContentEditor';
+import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 
 interface Tema {
   id: number;
@@ -204,7 +205,7 @@ const EditarHome: React.FC = () => {
                             <span style={s.positionBadge}>{realIndex + 1}</span>
                             <div style={s.imgWrap} className="tema-card-img-wrap">
                               {tema.logo_url
-                                ? <img src={tema.logo_url} alt={tema.nombre} style={s.img} />
+                                ? <img src={getCloudinaryImageUrl(tema.logo_url, 'thumb')} alt={tema.nombre} style={s.img} loading="lazy" decoding="async" />
                                 : <span style={s.imgFallback}>??</span>
                               }
                             </div>

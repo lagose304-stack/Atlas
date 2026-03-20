@@ -6,6 +6,7 @@ import Footer from '../components/Footer';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../components/PageContentEditor';
 import { getRenderableBlocks } from '../services/contentPublication';
+import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 
 interface Tema {
   id: number;
@@ -22,6 +23,15 @@ const PARCIALES: { key: 'primer' | 'segundo' | 'tercer'; label: string; num: str
 
 const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick }) => {
   const [hovered, setHovered] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
+  const [logoSrc, setLogoSrc] = useState(() =>
+    tema.logo_url ? getCloudinaryImageUrl(tema.logo_url, 'thumb') : ''
+  );
+
+  useEffect(() => {
+    setLogoFailed(false);
+    setLogoSrc(tema.logo_url ? getCloudinaryImageUrl(tema.logo_url, 'thumb') : '');
+  }, [tema.logo_url]);
 
   return (
     <div
@@ -63,10 +73,24 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
           flexShrink: 0,
         }}
       >
-        {tema.logo_url
-          ? <img src={tema.logo_url} alt={tema.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : <span style={{ fontSize: '1.1em', color: '#1e3a5f' }}>Microscopio</span>
-        }
+        {tema.logo_url && !logoFailed ? (
+          <img
+            src={logoSrc}
+            alt={tema.nombre}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            loading="lazy"
+            decoding="async"
+            onError={() => {
+              if (logoSrc !== tema.logo_url) {
+                setLogoSrc(tema.logo_url);
+                return;
+              }
+              setLogoFailed(true);
+            }}
+          />
+        ) : (
+          <span style={{ fontSize: '1.1em', color: '#1e3a5f' }}>Microscopio</span>
+        )}
       </div>
 
       <h4
