@@ -238,10 +238,41 @@ export const uploadToCloudinary = async (file: File, options?: UploadOptions) =>
   }
 };
 
-export const deleteFromCloudinary = async (publicId: string) => {
-  const response = isUsingEdgeFunctions
-    ? await axios.delete('/api/images-delete', { params: { publicId } })
-    : await axios.delete(backendUrl(`/api/images/${publicId}`));
+type DeleteFromCloudinaryInput =
+  | string
+  | {
+      publicId?: string;
+      imageUrl?: string;
+    };
+
+export const deleteFromCloudinary = async (input: DeleteFromCloudinaryInput) => {
+  const parsed = typeof input === 'string'
+    ? (/^https?:\/\//i.test(input) ? { imageUrl: input } : { publicId: input })
+    : input;
+
+  const publicId = (parsed.publicId || '').trim();
+  const imageUrl = (parsed.imageUrl || '').trim();
+
+  if (!publicId && !imageUrl) {
+    throw new Error('Se requiere publicId o imageUrl para borrar en Cloudinary.');
+  }
+
+  if (isUsingEdgeFunctions) {
+    const response = await axios.delete('/api/images-delete', {
+      params: {
+        ...(publicId ? { publicId } : {}),
+        ...(imageUrl ? { imageUrl } : {}),
+      },
+    });
+    return response.data;
+  }
+
+  const resolvedPublicId = publicId || getCloudinaryPublicId(imageUrl);
+  if (!resolvedPublicId) {
+    throw new Error('No se pudo resolver el publicId para eliminar en backend local.');
+  }
+
+  const response = await axios.delete(backendUrl(`/api/images/${resolvedPublicId}`));
   return response.data;
 };
 

@@ -183,7 +183,7 @@ const EliminarPlacas: React.FC = () => {
         toDelete.map(async placa => {
           const publicId = getCloudinaryPublicId(placa.photo_url);
           if (publicId) {
-            try { await deleteFromCloudinary(publicId); } catch {/* ignorar si falla Cloudinary */}
+            try { await deleteFromCloudinary({ publicId, imageUrl: placa.photo_url }); } catch {/* ignorar si falla Cloudinary */}
           }
           await supabase.from('placas').delete().eq('id', placa.id);
           await logPlateActivity({

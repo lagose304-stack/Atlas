@@ -352,7 +352,7 @@ const Temario: React.FC = () => {
         // Borrar imagen antigua de Cloudinary
         if (editingTemaLogoUrl) {
           const publicId = getCloudinaryPublicId(editingTemaLogoUrl);
-          if (publicId) deleteFromCloudinary(publicId).catch(e => console.warn('No se pudo borrar imagen antigua:', e));
+          if (publicId) deleteFromCloudinary({ publicId, imageUrl: editingTemaLogoUrl }).catch(e => console.warn('No se pudo borrar imagen antigua:', e));
         }
       }
       const { error } = await supabase.from('temas').update(updateData).match({ id: editingTemaId });
@@ -382,7 +382,7 @@ const Temario: React.FC = () => {
         // Borrar imagen antigua de Cloudinary
         if (editingSubtemaLogoUrl) {
           const publicId = getCloudinaryPublicId(editingSubtemaLogoUrl);
-          if (publicId) deleteFromCloudinary(publicId).catch(e => console.warn('No se pudo borrar imagen antigua:', e));
+          if (publicId) deleteFromCloudinary({ publicId, imageUrl: editingSubtemaLogoUrl }).catch(e => console.warn('No se pudo borrar imagen antigua:', e));
         }
       }
       const { error } = await supabase.from('subtemas').update(updateData).match({ id: editingSubtemaId });
@@ -472,26 +472,26 @@ const Temario: React.FC = () => {
       const temaABorrar = temas.find(t => t.id.toString() === deletingTemaId);
       if (temaABorrar?.logo_url) {
         const pid = getCloudinaryPublicId(temaABorrar.logo_url);
-        if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Logo tema:', e)));
+        if (pid) deletePromises.push(deleteFromCloudinary({ publicId: pid, imageUrl: temaABorrar.logo_url }).catch(e => console.warn('Logo tema:', e)));
       }
       for (const s of (subtemasData ?? [])) {
         if (s.logo_url) {
           const pid = getCloudinaryPublicId(s.logo_url);
-          if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Logo subtema:', e)));
+          if (pid) deletePromises.push(deleteFromCloudinary({ publicId: pid, imageUrl: s.logo_url }).catch(e => console.warn('Logo subtema:', e)));
         }
       }
       // Solo fotos de placas que no están protegidas
       for (const p of placasToDelete) {
         if (p.photo_url) {
           const pid = getCloudinaryPublicId(p.photo_url);
-          if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Placa foto:', e)));
+          if (pid) deletePromises.push(deleteFromCloudinary({ publicId: pid, imageUrl: p.photo_url }).catch(e => console.warn('Placa foto:', e)));
         }
       }
       // Imágenes subidas en bloques que no son placas del tema (ya borradas arriba) y no están protegidas
       for (const url of blockUrlsToDelete) {
         if (!placasToDeleteUrlSet.has(url)) {
           const pid = getCloudinaryPublicId(url);
-          if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Bloque imagen:', e)));
+          if (pid) deletePromises.push(deleteFromCloudinary({ publicId: pid, imageUrl: url }).catch(e => console.warn('Bloque imagen:', e)));
         }
       }
       await Promise.allSettled(deletePromises);
@@ -569,20 +569,20 @@ const Temario: React.FC = () => {
       const deletePromises: Promise<any>[] = [];
       if (subtemaABorrar?.logo_url) {
         const pid = getCloudinaryPublicId(subtemaABorrar.logo_url);
-        if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Logo subtema:', e)));
+        if (pid) deletePromises.push(deleteFromCloudinary({ publicId: pid, imageUrl: subtemaABorrar.logo_url }).catch(e => console.warn('Logo subtema:', e)));
       }
       // Solo fotos de placas no protegidas
       for (const p of placasToDelete) {
         if (p.photo_url) {
           const pid = getCloudinaryPublicId(p.photo_url);
-          if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Placa foto:', e)));
+          if (pid) deletePromises.push(deleteFromCloudinary({ publicId: pid, imageUrl: p.photo_url }).catch(e => console.warn('Placa foto:', e)));
         }
       }
       // Imágenes subidas en bloques que no son placas del subtema (ya borradas arriba) y no están protegidas
       for (const url of blockUrlsToDelete) {
         if (!placasToDeleteUrlSet.has(url)) {
           const pid = getCloudinaryPublicId(url);
-          if (pid) deletePromises.push(deleteFromCloudinary(pid).catch(e => console.warn('Bloque imagen:', e)));
+          if (pid) deletePromises.push(deleteFromCloudinary({ publicId: pid, imageUrl: url }).catch(e => console.warn('Bloque imagen:', e)));
         }
       }
       await Promise.allSettled(deletePromises);
