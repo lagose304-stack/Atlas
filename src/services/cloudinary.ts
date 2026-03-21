@@ -8,6 +8,11 @@ const resolveBackendBaseUrl = () => {
   const hostname = window.location.hostname;
   const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
 
+  const configuredIsDisabledMarker = /^(none|null|empty|__empty__|no_aplica|n\/a)$/i.test(configured);
+  if (configuredIsDisabledMarker) {
+    return '';
+  }
+
   if (configured) {
     const normalized = configured.replace(/\/+$/, '');
     const configuredIsLocalhost = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalized);
@@ -253,9 +258,34 @@ export const moveCloudinaryImage = async (fromPublicId: string, toPublicId: stri
 
 export const getCloudinaryPublicId = (url: string): string => {
   try {
-    // URL: https://res.cloudinary.com/CLOUD/image/upload/v123456/folder/file.jpg
-    const match = url.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/);
-    return match ? match[1] : '';
+    const parsed = new URL(url);
+    const pathname = decodeURIComponent(parsed.pathname);
+    const uploadToken = '/upload/';
+    const uploadIndex = pathname.indexOf(uploadToken);
+    if (uploadIndex === -1) return '';
+
+    // Toma la parte posterior a /upload/ para normalizar transformaciones/versiones.
+    const afterUpload = pathname.slice(uploadIndex + uploadToken.length);
+    let segments = afterUpload.split('/').filter(Boolean);
+    if (segments.length === 0) return '';
+
+    // Si existe segmento de versión (v123...), todo lo anterior no es parte del public_id.
+    const versionIndex = segments.findIndex((s) => /^v\d+$/.test(s));
+    if (versionIndex >= 0) {
+      segments = segments.slice(versionIndex + 1);
+    } else {
+      // Sin versión, elimina prefijos de transformación comunes (c_..., f_auto, q_auto, etc.).
+      const isTransformationSegment = (segment: string) =>
+        /^([a-z]{1,3}_[^/]+)(,[a-z]{1,3}_[^/]+)*$/.test(segment);
+      while (segments.length > 1 && isTransformationSegment(segments[0])) {
+        segments.shift();
+      }
+    }
+
+    if (segments.length === 0) return '';
+    const last = segments[segments.length - 1];
+    segments[segments.length - 1] = last.replace(/\.[^.]+$/, '');
+    return segments.join('/');
   } catch {
     return '';
   }
