@@ -28,7 +28,6 @@ const app = express();
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  'https://atlashistolab.netlify.app',
   ...(process.env.FRONTEND_ORIGINS ? process.env.FRONTEND_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : []),
 ];
 

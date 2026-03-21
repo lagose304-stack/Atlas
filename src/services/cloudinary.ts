@@ -10,14 +10,14 @@ const resolveBackendBaseUrl = () => {
   const hostname = window.location.hostname;
   const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
 
-  // En desarrollo local usamos backend local; en producción usamos ruta relativa.
-  // Esto permite usar proxy/rewrite en Netlify sin hardcodear localhost.
+  // En desarrollo local usamos backend local; en producción usamos rutas relativas
+  // para ejecutar Cloudflare Functions en el mismo dominio del frontend.
   return isLocal ? 'http://localhost:3001' : '';
 };
 
 const backendBaseUrl = resolveBackendBaseUrl();
 const backendUrl = (path: string) => (backendBaseUrl ? `${backendBaseUrl}${path}` : path);
-const isUsingNetlifyFunctions = !backendBaseUrl;
+const isUsingEdgeFunctions = !backendBaseUrl;
 
 type UploadOptions = {
   folder?: string;
@@ -224,8 +224,8 @@ export const uploadToCloudinary = async (file: File, options?: UploadOptions) =>
 };
 
 export const deleteFromCloudinary = async (publicId: string) => {
-  const response = isUsingNetlifyFunctions
-    ? await axios.delete('/.netlify/functions/images-delete', { params: { publicId } })
+  const response = isUsingEdgeFunctions
+    ? await axios.delete('/api/images-delete', { params: { publicId } })
     : await axios.delete(backendUrl(`/api/images/${publicId}`));
   return response.data;
 };
@@ -235,8 +235,8 @@ export const moveCloudinaryImage = async (fromPublicId: string, toPublicId: stri
     from_public_id: fromPublicId,
     to_public_id: toPublicId,
   };
-  const response = isUsingNetlifyFunctions
-    ? await axios.post('/.netlify/functions/images-move', payload)
+  const response = isUsingEdgeFunctions
+    ? await axios.post('/api/images-move', payload)
     : await axios.post(backendUrl('/api/images/move'), payload);
   return response.data;
 };

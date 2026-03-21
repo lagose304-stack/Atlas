@@ -1,6 +1,12 @@
 # Atlas
 
-## Deploy frontend (Netlify) + image admin API
+## Deploy frontend (Cloudflare Pages) + image admin API
+
+### Cloudflare Pages build settings
+
+- Build command: `npm ci --include=dev && npm run build`
+- Build output directory: `dist`
+- Root directory: `/` (project root)
 
 ## Content publishing workflow (draft vs published)
 
@@ -28,36 +34,33 @@ This project runs in two environments:
 - Local dev frontend: http://localhost:5173
 - Local dev backend: http://localhost:3001
 
-In production (Netlify), image admin actions (delete/move in Cloudinary) run through Netlify Functions:
+In production (Cloudflare Pages), image admin actions (delete/move in Cloudinary) run through Cloudflare Functions:
 
-- `/.netlify/functions/images-delete`
-- `/.netlify/functions/images-move`
+- `/api/images-delete`
+- `/api/images-move`
 
 Frontend image admin calls are resolved from `src/services/cloudinary.ts`.
 
-### Netlify environment variables
+### Cloudflare Pages environment variables
 
-Set these in Netlify Site settings > Environment variables:
+Set these in Cloudflare Pages > Settings > Environment variables:
 
 - `VITE_SUPABASE_URL`: your Supabase URL
 - `VITE_SUPABASE_ANON_KEY`: your Supabase anon key
 - `VITE_CLOUDINARY_CLOUD_NAME`: your Cloudinary cloud name
 - `VITE_CLOUDINARY_UPLOAD_PRESET`: your upload preset
 
-Also required for Netlify Functions (server-side secrets, no `VITE_` prefix):
+Also required for Cloudflare Functions (server-side secrets, no `VITE_` prefix):
 
 - `CLOUDINARY_CLOUD_NAME`
 - `CLOUDINARY_API_KEY`
 - `CLOUDINARY_API_SECRET`
 
-For this site:
-
-- Frontend URL: https://atlashistolab.netlify.app
-- Example backend URL value: `https://YOUR_BACKEND_DOMAIN`
+Example backend URL value: `https://YOUR_BACKEND_DOMAIN`
 
 ### Optional external backend mode
 
-If you still want to use an external backend API instead of Netlify Functions, set:
+If you still want to use an external backend API instead of Cloudflare Functions, set:
 
 - `VITE_BACKEND_BASE_URL`: public URL of your backend API (no trailing slash)
 
@@ -77,7 +80,8 @@ Current backend CORS already allows:
 
 - `http://localhost:5173`
 - `http://127.0.0.1:5173`
-- `https://atlashistolab.netlify.app`
+
+Add your production frontend domain through `FRONTEND_ORIGINS`.
 
 ### Local .env (frontend)
 
@@ -87,5 +91,5 @@ In local frontend `.env`, keep:
 
 ### Important
 
-Netlify cannot call `localhost` from production.
-If you rely only on Netlify Functions, you do not need a separate backend deployment for image delete/move.
+Cloudflare cannot call `localhost` from production.
+If you rely only on Cloudflare Functions, you do not need a separate backend deployment for image delete/move.

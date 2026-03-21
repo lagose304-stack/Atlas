@@ -2709,7 +2709,7 @@ const BlockCtaLinksEditor: React.FC<BlockCtaLinksEditorProps> = ({ content, allT
       </div>
 
       <p style={{ margin: 0, fontSize: '0.78em', color: '#64748b' }}>
-        Internos: usa rutas como /temario. Externos: usa https://... Esto funciona igual en local y Netlify.
+        Internos: usa rutas como /temario. Externos: usa https://... Esto funciona igual en local y Cloudflare Pages.
       </p>
     </div>
   );
