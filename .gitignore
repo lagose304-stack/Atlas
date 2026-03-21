@@ -32,3 +32,6 @@ lerna-debug.log*
 
 # Vite generated files
 .vite/
+
+# Archivos temporales con secretos
+TEMP_*_PRIVATE.txt

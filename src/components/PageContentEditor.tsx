@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Extension } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -15,8 +16,28 @@ import { BLOCK_TYPES, createDefaultBlockContent, getBlockMeta, normalizeBlockCon
 import { getPublicationInfo, publishBlocksSnapshot, setPublicationDraft } from '../services/contentPublication';
 import { createContentVersion, listContentVersions, restoreContentVersion, type ContentBlockVersionRow } from '../services/contentVersioning';
 import LoadingToast from './LoadingToast';
-import BoldField from './BoldField';
 import ContentBlockRenderer from './ContentBlockRenderer';
+
+const FontSize = Extension.create({
+  name: 'fontSize',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['textStyle'],
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: element => element.style.fontSize || null,
+            renderHTML: attributes => {
+              if (!attributes.fontSize) return {};
+              return { style: `font-size: ${attributes.fontSize}` };
+            },
+          },
+        },
+      },
+    ];
+  },
+});
 
 // ── Tipos exportados (también los usa ContentBlockRenderer) ───────────────────
 
@@ -635,7 +656,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       setBlocks(loaded);
       setSavedIds(new Set(loaded.map(b => b.id)));
       setSelectedBlockIds(new Set());
-      setCollapsedBlockIds(new Set());
+      setCollapsedBlockIds(new Set(loaded.map(b => b.id)));
       setPublicationStatus(publication?.status === 'published' ? 'published' : 'draft');
       setPublishedAt(publication?.published_at ?? null);
       setVersions(versionRows);
@@ -1141,7 +1162,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       setBlocks(loaded);
       setSavedIds(new Set(loaded.map(b => b.id)));
       setSelectedBlockIds(new Set());
-      setCollapsedBlockIds(new Set());
+      setCollapsedBlockIds(new Set(loaded.map(b => b.id)));
       setHasChanges(false);
 
       const publication = await getPublicationInfo(entityType, entityId).catch(() => null);
@@ -1721,8 +1742,14 @@ const MemoBlockContentEditor = React.memo(({
   onInsertSectionTemplateBelow,
   onOpenImageModal,
 }: MemoBlockContentEditorProps) => {
+  const editorSurfaceVars = {
+    ['--atlas-editor-bg' as string]: block.content.style_bg || '#ffffff',
+    ['--atlas-editor-text' as string]: block.content.style_text || 'inherit',
+    ['--atlas-editor-border' as string]: block.content.style_border || '#dbeafe',
+  } as React.CSSProperties;
+
   return (
-    <div style={es.blockContent}>
+    <div style={{ ...es.blockContent, ...editorSurfaceVars }}>
       <BlockStyleEditor
         bgColor={block.content.style_bg ?? ''}
         textColor={block.content.style_text ?? ''}
@@ -1872,9 +1899,15 @@ const MemoBlockContentEditor = React.memo(({
           caption={block.content.caption ?? ''}
           size={(block.content.size as 'small' | 'medium' | 'large') ?? 'large'}
           align={(block.content.align as 'left' | 'center' | 'right') ?? 'center'}
+          imageWidth={block.content.image_width ?? '100'}
+          imageHeight={block.content.image_height ?? ''}
+          imageFit={(block.content.image_fit as 'contain' | 'cover') ?? 'contain'}
           onCaptionChange={caption => onUpdateBlockContent(block.id, { caption })}
           onSizeChange={size => onUpdateBlockContent(block.id, { size })}
           onAlignChange={align => onUpdateBlockContent(block.id, { align })}
+          onImageWidthChange={image_width => onUpdateBlockContent(block.id, { image_width })}
+          onImageHeightChange={image_height => onUpdateBlockContent(block.id, { image_height })}
+          onImageFitChange={image_fit => onUpdateBlockContent(block.id, { image_fit })}
           onPickImage={() => onOpenImageModal(block.id, 'url')}
         />
       )}
@@ -1887,11 +1920,17 @@ const MemoBlockContentEditor = React.memo(({
             (block.content.image_position as 'left' | 'right') ?? 'right'
           }
           imageCaption={block.content.image_caption ?? ''}
-          textAlign={block.content.ti_text_align ?? 'left'}
+          verticalAlign={(block.content.ti_vertical_align as 'start' | 'center' | 'end') ?? 'start'}
+          imageWidth={block.content.ti_image_width ?? '42'}
+          imageHeight={block.content.ti_image_height ?? ''}
+          imageFit={(block.content.ti_image_fit as 'contain' | 'cover') ?? 'cover'}
           onTextChange={text => onUpdateBlockContent(block.id, { text })}
           onPositionChange={pos => onUpdateBlockContent(block.id, { image_position: pos })}
           onCaptionChange={caption => onUpdateBlockContent(block.id, { image_caption: caption })}
-          onTextAlignChange={align => onUpdateBlockContent(block.id, { ti_text_align: align })}
+          onVerticalAlignChange={ti_vertical_align => onUpdateBlockContent(block.id, { ti_vertical_align })}
+          onImageWidthChange={ti_image_width => onUpdateBlockContent(block.id, { ti_image_width })}
+          onImageHeightChange={ti_image_height => onUpdateBlockContent(block.id, { ti_image_height })}
+          onImageFitChange={ti_image_fit => onUpdateBlockContent(block.id, { ti_image_fit })}
           onPickImage={() => onOpenImageModal(block.id, 'image_url')}
         />
       )}
@@ -2003,6 +2042,7 @@ const AutoTextarea: React.FC<{
         types: ['heading', 'paragraph'],
       }),
       TextStyle,
+      FontSize,
       Color,
       Highlight.configure({ multicolor: true }),
     ],
@@ -2040,6 +2080,18 @@ const AutoTextarea: React.FC<{
     }
     if (color === false) chain.unsetHighlight().run();
     else chain.setHighlight({ color }).run();
+  };
+
+  const applySelectionFontSize = (sizePx: string) => {
+    if (!editor) return;
+    const safe = Number(sizePx);
+    if (!Number.isFinite(safe) || safe < 10 || safe > 72) return;
+    editor.chain().focus().setMark('textStyle', { fontSize: `${Math.round(safe)}px` }).run();
+  };
+
+  const clearSelectionFontSize = () => {
+    if (!editor) return;
+    editor.chain().focus().setMark('textStyle', { fontSize: null }).run();
   };
 
   const setLink = () => {
@@ -2088,6 +2140,27 @@ const AutoTextarea: React.FC<{
           Enlace
         </button>
         <label style={es.richQuickLabel}>
+          Tamaño seleccionado
+          <select
+            defaultValue=""
+            onChange={e => {
+              if (!e.currentTarget.value) return;
+              applySelectionFontSize(e.currentTarget.value);
+              e.currentTarget.value = '';
+            }}
+            style={{ ...es.styleSelect, minWidth: '122px' }}
+            title="Cambiar tamaño solo del texto seleccionado"
+          >
+            <option value="">Tamaño...</option>
+            <option value="12">12 px</option>
+            <option value="14">14 px</option>
+            <option value="16">16 px</option>
+            <option value="18">18 px</option>
+            <option value="22">22 px</option>
+            <option value="28">28 px</option>
+          </select>
+        </label>
+        <label style={es.richQuickLabel}>
           Color texto
           <input
             type="color"
@@ -2110,11 +2183,23 @@ const AutoTextarea: React.FC<{
         <button type="button" style={es.richQuickResetBtn} onClick={() => applyColor('text', false)}>
           Limpiar color
         </button>
+        <button type="button" style={es.richQuickResetBtn} onClick={clearSelectionFontSize}>
+          Limpiar tamaño
+        </button>
         <button type="button" style={es.richQuickResetBtn} onClick={() => applyColor('highlight', false)}>
           Limpiar fondo
         </button>
       </div>
-      <EditorContent editor={editor} style={{ ...es.richEditorContent, ...extraStyle }} />
+      <EditorContent
+        editor={editor}
+        style={{
+          ...es.richEditorContent,
+          ...extraStyle,
+          background: 'var(--atlas-editor-bg, #ffffff)',
+          color: 'var(--atlas-editor-text, inherit)',
+          borderColor: 'var(--atlas-editor-border, #dbeafe)',
+        }}
+      />
     </div>
   );
 };
@@ -2603,28 +2688,29 @@ const BlockCtaLinksEditor: React.FC<BlockCtaLinksEditorProps> = ({ content, allT
                   <button type="button" style={es.deleteBtn} onClick={() => removeSlot(slot)}>Quitar</button>
                 )}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr auto', gap: '8px', alignItems: 'center' }}>
-                <BoldField
-                  as="input"
-                  style={es.captionInput}
+              <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px' }}>
+                <AutoTextarea
                   value={content[textKey] ?? ''}
                   onChange={v => onContentChange({ [textKey]: v })}
-                  placeholder="Texto"
+                  placeholder="Texto del botón"
+                  extraStyle={es.captionInput}
                 />
-                <BoldField
-                  as="input"
-                  style={es.captionInput}
-                  value={content[urlKey] ?? ''}
-                  onChange={v => onContentChange({ [urlKey]: v })}
-                  placeholder="/ruta o https://..."
-                />
-                <button
-                  type="button"
-                  style={{ ...es.posBtn, ...(opensNewTab ? es.posBtnActive : {}) }}
-                  onClick={() => onContentChange({ [tabKey]: String(!opensNewTab) })}
-                >
-                  Nueva pestaña
-                </button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    style={es.captionInput}
+                    value={content[urlKey] ?? ''}
+                    onChange={e => onContentChange({ [urlKey]: e.currentTarget.value })}
+                    placeholder="/ruta o https://..."
+                  />
+                  <button
+                    type="button"
+                    style={{ ...es.posBtn, ...(opensNewTab ? es.posBtnActive : {}) }}
+                    onClick={() => onContentChange({ [tabKey]: String(!opensNewTab) })}
+                  >
+                    Nueva pestaña
+                  </button>
+                </div>
               </div>
 
               <details style={{ marginTop: '8px' }}>
@@ -2721,13 +2807,32 @@ interface ImageBlockEditorProps {
   caption: string;
   size: 'small' | 'medium' | 'large';
   align: 'left' | 'center' | 'right';
+  imageWidth: string;
+  imageHeight: string;
+  imageFit: 'contain' | 'cover';
   onCaptionChange: (v: string) => void;
-  onSizeChange: (v: string) => void;
-  onAlignChange: (v: string) => void;
+  onSizeChange: (v: 'small' | 'medium' | 'large') => void;
+  onAlignChange: (v: 'left' | 'center' | 'right') => void;
+  onImageWidthChange: (v: string) => void;
+  onImageHeightChange: (v: string) => void;
+  onImageFitChange: (v: 'contain' | 'cover') => void;
   onPickImage: () => void;
 }
 const ImageBlockEditor: React.FC<ImageBlockEditorProps> = ({
-  url, caption, size, align, onCaptionChange, onSizeChange, onAlignChange, onPickImage,
+  url,
+  caption,
+  size,
+  align,
+  imageWidth,
+  imageHeight,
+  imageFit,
+  onCaptionChange,
+  onSizeChange,
+  onAlignChange,
+  onImageWidthChange,
+  onImageHeightChange,
+  onImageFitChange,
+  onPickImage,
 }) => (
   <div style={es.imageBlockWrap}>
     <div style={es.imageBlockRow}>
@@ -2778,14 +2883,51 @@ const ImageBlockEditor: React.FC<ImageBlockEditorProps> = ({
         </div>
       </div>
     </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginTop: '10px' }}>
+      <label style={es.fieldLabel}>
+        Ancho imagen (%)
+        <input
+          type="number"
+          min={20}
+          max={100}
+          step={1}
+          value={imageWidth || '100'}
+          onChange={e => onImageWidthChange(e.currentTarget.value || '100')}
+          style={{ ...es.captionInput, marginTop: '4px' }}
+        />
+      </label>
+      <label style={es.fieldLabel}>
+        Alto imagen (px)
+        <input
+          type="number"
+          min={0}
+          max={1200}
+          step={10}
+          value={imageHeight || ''}
+          onChange={e => onImageHeightChange(e.currentTarget.value)}
+          style={{ ...es.captionInput, marginTop: '4px' }}
+          placeholder="Auto"
+        />
+      </label>
+      <label style={es.fieldLabel}>
+        Ajuste imagen
+        <select
+          value={imageFit}
+          onChange={e => onImageFitChange(e.currentTarget.value as 'contain' | 'cover')}
+          style={{ ...es.styleSelect, marginTop: '4px' }}
+        >
+          <option value="contain">Contener (sin recorte)</option>
+          <option value="cover">Cubrir (puede recortar)</option>
+        </select>
+      </label>
+    </div>
     <div style={es.captionRow}>
       <label style={es.fieldLabel}>Pie de foto (opcional)</label>
-      <BoldField
-        as="input"
-        style={es.captionInput}
+      <AutoTextarea
         value={caption}
         onChange={onCaptionChange}
         placeholder="Descripción de la imagen..."
+        extraStyle={es.captionInput}
       />
     </div>
   </div>
@@ -2797,11 +2939,17 @@ interface TextImageBlockEditorProps {
   imageUrl: string;
   imagePosition: 'left' | 'right';
   imageCaption: string;
-  textAlign: string;
+  verticalAlign: 'start' | 'center' | 'end';
+  imageWidth: string;
+  imageHeight: string;
+  imageFit: 'contain' | 'cover';
   onTextChange: (v: string) => void;
   onPositionChange: (v: 'left' | 'right') => void;
   onCaptionChange: (v: string) => void;
-  onTextAlignChange: (v: string) => void;
+  onVerticalAlignChange: (v: 'start' | 'center' | 'end') => void;
+  onImageWidthChange: (v: string) => void;
+  onImageHeightChange: (v: string) => void;
+  onImageFitChange: (v: 'contain' | 'cover') => void;
   onPickImage: () => void;
 }
 const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
@@ -2809,11 +2957,17 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
   imageUrl,
   imagePosition,
   imageCaption,
-  textAlign,
+  verticalAlign,
+  imageWidth,
+  imageHeight,
+  imageFit,
   onTextChange,
   onPositionChange,
   onCaptionChange,
-  onTextAlignChange,
+  onVerticalAlignChange,
+  onImageWidthChange,
+  onImageHeightChange,
+  onImageFitChange,
   onPickImage,
 }) => (
   <div style={es.tiEditorWrap}>
@@ -2821,30 +2975,29 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
       {/* Columna de texto */}
       <div style={es.tiCol}>
         <label style={es.fieldLabel}>Texto</label>
-        {/* Controles de alineación */}
-        <div style={es.alignRow}>
-          {(['left', 'center', 'right'] as const).map(align => {
-            const icons = { left: '⇤ Izq', center: '≡ Centro', right: 'Der ⇥' };
-            return (
+        <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' as const }}>
+            {([
+              { key: 'start', label: '↑ Inicio' },
+              { key: 'center', label: '↕ Centro' },
+              { key: 'end', label: '↓ Final' },
+            ] as const).map(v => (
               <button
-                key={align}
-                style={{
-                  ...es.alignBtn,
-                  ...(textAlign === align ? es.alignBtnActive : {}),
-                }}
-                onClick={() => onTextAlignChange(align)}
-                title={icons[align]}
+                key={v.key}
+                style={{ ...es.posBtn, ...(verticalAlign === v.key ? es.posBtnActive : {}) }}
+                onClick={() => onVerticalAlignChange(v.key)}
+                title={`Alineación vertical: ${v.label}`}
               >
-                {icons[align]}
+                {v.label}
               </button>
-            );
-          })}
+            ))}
+          </div>
         </div>
         <AutoTextarea
           value={text}
           onChange={onTextChange}
           placeholder="Escribe el contenido descriptivo aquí..."
-          extraStyle={{ ...es.textareaParagraph, textAlign: textAlign as React.CSSProperties['textAlign'] }}
+          extraStyle={es.textareaParagraph}
         />
       </div>
 
@@ -2881,13 +3034,50 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
             🖼 Seleccionar imagen
           </button>
         )}
-        <BoldField
-          as="input"
-          style={{ ...es.captionInput, marginTop: '6px' }}
+        <AutoTextarea
           value={imageCaption}
           onChange={onCaptionChange}
           placeholder="Pie de foto..."
+          extraStyle={{ ...es.captionInput, marginTop: '6px' }}
         />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '8px', marginTop: '8px' }}>
+          <label style={es.fieldLabel}>
+            Ancho imagen (%)
+            <input
+              type="number"
+              min={20}
+              max={70}
+              step={1}
+              value={imageWidth || '42'}
+              onChange={e => onImageWidthChange(e.currentTarget.value || '42')}
+              style={{ ...es.captionInput, marginTop: '4px' }}
+            />
+          </label>
+          <label style={es.fieldLabel}>
+            Alto imagen (px)
+            <input
+              type="number"
+              min={0}
+              max={1000}
+              step={10}
+              value={imageHeight || ''}
+              onChange={e => onImageHeightChange(e.currentTarget.value)}
+              placeholder="Auto"
+              style={{ ...es.captionInput, marginTop: '4px' }}
+            />
+          </label>
+          <label style={es.fieldLabel}>
+            Ajuste
+            <select
+              value={imageFit}
+              onChange={e => onImageFitChange(e.currentTarget.value as 'contain' | 'cover')}
+              style={{ ...es.styleSelect, marginTop: '4px' }}
+            >
+              <option value="cover">Cubrir</option>
+              <option value="contain">Contener</option>
+            </select>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -2956,12 +3146,11 @@ const TwoImagesBlockEditor: React.FC<TwoImagesBlockEditorProps> = ({
             onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#cbd5e1'; el.style.background = '#f8fafc'; }}
           >🖼 Seleccionar imagen</button>
         )}
-        <BoldField
-          as="input"
-          style={{ ...es.captionInput, marginTop: '6px' }}
+        <AutoTextarea
           value={imageCaptionLeft}
           onChange={onCaptionLeftChange}
           placeholder="Pie de foto izquierda..."
+          extraStyle={{ ...es.captionInput, marginTop: '6px' }}
         />
       </div>
 
@@ -2986,12 +3175,11 @@ const TwoImagesBlockEditor: React.FC<TwoImagesBlockEditorProps> = ({
             onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#cbd5e1'; el.style.background = '#f8fafc'; }}
           >🖼 Seleccionar imagen</button>
         )}
-        <BoldField
-          as="input"
-          style={{ ...es.captionInput, marginTop: '6px' }}
+        <AutoTextarea
           value={imageCaptionRight}
           onChange={onCaptionRightChange}
           placeholder="Pie de foto derecha..."
+          extraStyle={{ ...es.captionInput, marginTop: '6px' }}
         />
       </div>
     </div>
@@ -3026,8 +3214,12 @@ const ThreeImagesBlockEditor: React.FC<ThreeImagesBlockEditorProps> = ({ urls, c
               onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.borderColor = '#cbd5e1'; el.style.background = '#f8fafc'; }}
             >🖼 Seleccionar</button>
           )}
-          <BoldField as="input" style={{ ...es.captionInput, marginTop: '6px' }}
-            value={captions[i]} onChange={v => onCaptionChange(i, v)} placeholder="Pie de foto..." />
+          <AutoTextarea
+            value={captions[i]}
+            onChange={v => onCaptionChange(i, v)}
+            placeholder="Pie de foto..."
+            extraStyle={{ ...es.captionInput, marginTop: '6px' }}
+          />
         </div>
       ))}
     </div>
@@ -3062,7 +3254,12 @@ const SectionBlockEditor: React.FC<SectionBlockEditorProps> = ({
     <p style={{ margin: 0, fontSize: '0.78em', color: '#64748b' }}>
       Los bloques colocados debajo de esta seccion (hasta la siguiente seccion) quedaran agrupados dentro de ella en la vista publica.
     </p>
-    <BoldField as="input" style={es.captionInput} value={title} onChange={onTitleChange} placeholder="Título de sección (opcional)..." />
+    <AutoTextarea
+      value={title}
+      onChange={onTitleChange}
+      placeholder="Título de sección (opcional)..."
+      extraStyle={es.captionInput}
+    />
     <AutoTextarea value={subtitle} onChange={onSubtitleChange} placeholder="Subtítulo o descripción breve de la sección..." extraStyle={es.textareaParagraph} />
   </div>
 );
@@ -3287,7 +3484,12 @@ const CarouselSlotsEditor: React.FC<CarouselSlotsEditorProps> = ({
             loading="lazy"
           />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <BoldField as="input" value={slide.caption} onChange={v => onCaptionChange(idx, v)} placeholder="Pie de foto..." style={es.captionInput} />
+            <AutoTextarea
+              value={slide.caption}
+              onChange={v => onCaptionChange(idx, v)}
+              placeholder="Pie de foto..."
+              extraStyle={es.captionInput}
+            />
           </div>
           <button
             style={{ ...es.deleteBtn, fontSize: '0.78em', padding: '4px 8px' }}

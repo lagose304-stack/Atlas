@@ -452,6 +452,16 @@ const BlockItem: React.FC<{
       };
       const maxW = sizeMap[(c.size as string) ?? 'large'] ?? '100%';
       const align = (c.align as string) ?? 'center';
+      const widthRaw = Number(c.image_width ?? 100);
+      const widthPct = Number.isFinite(widthRaw) ? Math.max(20, Math.min(100, widthRaw)) : 100;
+      const heightRaw = Number(c.image_height ?? 0);
+      const fixedHeight = Number.isFinite(heightRaw) && heightRaw > 0 ? `${Math.min(1200, heightRaw)}px` : undefined;
+      const imageFit = (c.image_fit as 'contain' | 'cover') === 'cover' ? 'cover' : 'contain';
+      const alignSelfMap: Record<'left' | 'center' | 'right', React.CSSProperties['alignSelf']> = {
+        left: 'flex-start',
+        center: 'center',
+        right: 'flex-end',
+      };
       const figureStyle: React.CSSProperties = {
         ...rs.figure,
         maxWidth: maxW,
@@ -472,9 +482,17 @@ const BlockItem: React.FC<{
             title="Ver en grande"
           >
             <BlockImg
-                  src={getCloudinaryImageUrl(c.url, 'view')}
+              src={getCloudinaryImageUrl(c.url, 'view')}
               alt={c.caption || 'Imagen ilustrativa'}
-              style={rs.image}
+              style={{
+                ...rs.image,
+                width: `${widthPct}%`,
+                maxWidth: '100%',
+                height: fixedHeight ?? rs.image.height,
+                objectFit: imageFit,
+                alignSelf: alignSelfMap[(align as 'left' | 'center' | 'right') ?? 'center'],
+                background: imageFit === 'contain' ? '#f8fafc' : undefined,
+              }}
             />
             <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>
           </div>
@@ -490,12 +508,19 @@ const BlockItem: React.FC<{
 
       const isLeft = c.image_position !== 'right';
       const direction: React.CSSProperties['flexDirection'] = isLeft ? 'row' : 'row-reverse';
-      const tiTextAlign = (c.ti_text_align as React.CSSProperties['textAlign']) ?? 'left';
+      const tiVerticalAlign = (c.ti_vertical_align as 'start' | 'center' | 'end') ?? 'start';
+      const tiAlignItems: React.CSSProperties['alignItems'] =
+        tiVerticalAlign === 'center' ? 'center' : tiVerticalAlign === 'end' ? 'flex-end' : 'flex-start';
+      const widthRaw = Number(c.ti_image_width ?? 42);
+      const imageWidth = Number.isFinite(widthRaw) ? Math.max(20, Math.min(70, widthRaw)) : 42;
+      const heightRaw = Number(c.ti_image_height ?? 0);
+      const fixedHeight = Number.isFinite(heightRaw) && heightRaw > 0 ? `${Math.min(1000, heightRaw)}px` : undefined;
+      const tiImageFit = (c.ti_image_fit as 'contain' | 'cover') === 'contain' ? 'contain' : 'cover';
 
       return (
-        <div style={{ ...rs.tiRow, flexDirection: direction }} className="cb-ti-row">
+        <div style={{ ...rs.tiRow, flexDirection: direction, alignItems: tiAlignItems }} className="cb-ti-row">
           {hasImage && (
-            <figure style={rs.tiFigure} className="cb-ti-figure">
+            <figure style={{ ...rs.tiFigure, flex: `0 0 ${imageWidth}%` }} className="cb-ti-figure">
               <div
                 className="cb-zoom-trigger"
                 role="button"
@@ -510,7 +535,12 @@ const BlockItem: React.FC<{
                 <BlockImg
                   src={getCloudinaryImageUrl(c.image_url, 'view')}
                   alt={c.image_caption || 'Imagen ilustrativa'}
-                  style={rs.tiImage}
+                  style={{
+                    ...rs.tiImage,
+                    height: fixedHeight ?? rs.tiImage.height,
+                    objectFit: tiImageFit,
+                    background: tiImageFit === 'contain' ? '#f8fafc' : undefined,
+                  }}
                 />
                 <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>
               </div>
@@ -519,7 +549,7 @@ const BlockItem: React.FC<{
               )}
             </figure>
           )}
-          {hasText && <RichTextValue className="cb-ti-text" style={{ ...rs.tiText, textAlign: tiTextAlign, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }} value={c.text} />}
+          {hasText && <RichTextValue className="cb-ti-text" style={{ ...rs.tiText, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }} value={c.text} />}
         </div>
       );
     }
