@@ -8,6 +8,21 @@
 - Build output directory: `dist`
 - Root directory: `/` (project root)
 
+### Alternative deploy path (recommended if Cloudflare Build Token fails)
+
+If Cloudflare dashboard builds are blocked by a stale build token, deploy from GitHub Actions instead.
+
+Workflow file:
+
+- `.github/workflows/deploy-cloudflare-pages.yml`
+
+Required GitHub repository secrets:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+This bypasses Cloudflare dashboard build tokens and deploys directly with Wrangler on every push to `main`.
+
 ## Content publishing workflow (draft vs published)
 
 The editor now supports publishing snapshots, so public pages can show only published content while you keep editing drafts.
