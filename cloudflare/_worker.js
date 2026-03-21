@@ -1,6 +1,6 @@
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST,DELETE,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,Authorization',
 };
 
@@ -142,6 +142,46 @@ const handleMove = async (request, env) => {
   });
 };
 
+const handleCloudinaryHealth = async (request, env) => {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  if (request.method !== 'GET') {
+    return json(405, { message: 'Method not allowed' });
+  }
+
+  const hasCloudName = Boolean(env.CLOUDINARY_CLOUD_NAME);
+  const hasApiKey = Boolean(env.CLOUDINARY_API_KEY);
+  const hasApiSecret = Boolean(env.CLOUDINARY_API_SECRET);
+
+  if (!hasCloudName || !hasApiKey || !hasApiSecret) {
+    return json(500, {
+      ok: false,
+      message: 'Missing Cloudinary env vars in production',
+      env: {
+        CLOUDINARY_CLOUD_NAME: hasCloudName,
+        CLOUDINARY_API_KEY: hasApiKey,
+        CLOUDINARY_API_SECRET: hasApiSecret,
+      },
+    });
+  }
+
+  const probePublicId = '__atlas_healthcheck__/does-not-exist';
+  const probe = await callCloudinary('destroy', { public_id: probePublicId }, env);
+
+  return json(probe.ok ? 200 : 500, {
+    ok: probe.ok,
+    message: probe.ok ? 'Cloudinary credentials are working' : 'Cloudinary credentials failed',
+    env: {
+      CLOUDINARY_CLOUD_NAME: true,
+      CLOUDINARY_API_KEY: true,
+      CLOUDINARY_API_SECRET: true,
+    },
+    cloudinary: probe.data,
+  });
+};
+
 export default {
   async fetch(request, env) {
     try {
@@ -153,6 +193,10 @@ export default {
 
       if (pathname === '/api/images-move') {
         return await handleMove(request, env);
+      }
+
+      if (pathname === '/api/cloudinary-health') {
+        return await handleCloudinaryHealth(request, env);
       }
 
       return env.ASSETS.fetch(request);
