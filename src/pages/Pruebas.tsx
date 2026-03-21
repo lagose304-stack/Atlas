@@ -1,10 +1,10 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import TestBuilder, { type QuestionBlock } from '../components/TestBuilder.tsx';
 import { supabase } from '../services/supabase';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 type PruebaAction = 'crear' | 'editar' | 'eliminar';
 
@@ -39,7 +39,6 @@ const ACTION_INFO: Record<PruebaAction, { title: string; description: string; hi
 };
 
 const Pruebas: React.FC = () => {
-  const navigate = useNavigate();
   const [selectedAction, setSelectedAction] = useState<PruebaAction>('crear');
   const [accordionOpen, setAccordionOpen] = useState(true);
   const [temas, setTemas] = useState<Array<{ id: number; nombre: string }>>([]);
@@ -299,13 +298,7 @@ const Pruebas: React.FC = () => {
     setSaveMsg('Prueba eliminada correctamente.');
     await loadTests();
   };
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
+  const handleGoBack = useSmartBackNavigation('/edicion');
 
   return (
     <div style={s.page}>

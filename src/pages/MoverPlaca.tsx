@@ -9,6 +9,7 @@ import BoldField from '../components/BoldField';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 interface Tema {
   id: number;
@@ -288,13 +289,7 @@ const MoverPlaca: React.FC = () => {
       JSON.stringify((selectedPlaca.senalados ?? []).filter(sv => sv.trim())) ||
     editTincion !== (selectedPlaca.tincion ?? '')
   );
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
+    const handleGoBack = useSmartBackNavigation('/edicion');
 
   return (
     <div style={s.page}>

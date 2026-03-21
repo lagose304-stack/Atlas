@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { BookOpen, GraduationCap, House, Phone, Search } from 'lucide-react';
 
 import logoFacultad from '../assets/logos/facultad.png';
@@ -15,10 +15,41 @@ const MENU_ITEMS = [
 
 const Header: React.FC = () => {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const headerRef = React.useRef<HTMLElement | null>(null);
   const [isLeftLogoHover, setIsLeftLogoHover] = React.useState(false);
   const [isRightLogoHover, setIsRightLogoHover] = React.useState(false);
   const [showCompactBar, setShowCompactBar] = React.useState(false);
+
+  const isInAdminEditingFlow = React.useMemo(() => {
+    const adminPaths = [
+      '/edicion',
+      '/temario-admin',
+      '/placas',
+      '/editar-home',
+      '/editar-inicio',
+      '/editar-temario',
+      '/editar-subtemas',
+      '/editar-placas',
+      '/eliminar-placas',
+      '/mover-placa',
+      '/lista-espera',
+      '/gestion-usuarios',
+      '/estadisticas',
+      '/pruebas',
+    ];
+
+    return adminPaths.some((basePath) => pathname === basePath || pathname.startsWith(`${basePath}/`));
+  }, [pathname]);
+
+  const navigateFromHeader = React.useCallback((targetPath: string) => {
+    if (isInAdminEditingFlow) {
+      window.location.replace(targetPath);
+      return;
+    }
+
+    navigate(targetPath);
+  }, [isInAdminEditingFlow, navigate]);
 
   React.useEffect(() => {
     const handleScroll = () => {
@@ -59,7 +90,7 @@ const Header: React.FC = () => {
             <div className="atlas-header-left-area" style={styles.leftArea}>
               <button
                 type="button"
-                onClick={() => navigate('/')}
+                onClick={() => navigateFromHeader('/')}
                 className="atlas-header-logo-action-button"
                 style={styles.logoActionButton}
                 onMouseEnter={() => setIsLeftLogoHover(true)}
@@ -82,7 +113,7 @@ const Header: React.FC = () => {
             <div className="atlas-header-right-area" style={styles.rightArea}>
               <button
                 type="button"
-                onClick={() => navigate('/')}
+                onClick={() => navigateFromHeader('/')}
                 className="atlas-header-logo-action-button"
                 style={styles.logoActionButton}
                 onMouseEnter={() => setIsRightLogoHover(true)}
@@ -118,7 +149,7 @@ const Header: React.FC = () => {
                     className="atlas-header-nav-button"
                     style={styles.navButton}
                     onClick={() => {
-                      if ('path' in item && item.path) navigate(item.path);
+                      if ('path' in item && item.path) navigateFromHeader(item.path);
                     }}
                   >
                     <Icon size={15} />
@@ -142,7 +173,7 @@ const Header: React.FC = () => {
           type="button"
           className="atlas-compact-brand-button"
           style={styles.compactBrandButton}
-          onClick={() => navigate('/')}
+          onClick={() => navigateFromHeader('/')}
           aria-label="Ir a inicio"
         >
           <div className="atlas-compact-logo-aura" style={styles.compactLogoAura}>
@@ -164,7 +195,7 @@ const Header: React.FC = () => {
                   className="atlas-compact-nav-button"
                   style={styles.compactNavButton}
                   onClick={() => {
-                    if ('path' in item && item.path) navigate(item.path);
+                    if ('path' in item && item.path) navigateFromHeader(item.path);
                   }}
                 >
                   <Icon className="atlas-compact-nav-icon" size={15} />

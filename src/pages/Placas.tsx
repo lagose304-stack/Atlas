@@ -10,6 +10,7 @@ import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 // --- Interfaces ---
 interface Tema {
@@ -423,13 +424,7 @@ const Placas: React.FC = () => {
     setScSaveSuccess(false);
     setScSaveError('');
   };
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
+  const handleGoBack = useSmartBackNavigation('/edicion');
 
   return (
     <div style={p.page}>

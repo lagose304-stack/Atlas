@@ -1,5 +1,4 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import LoadingToast, { LoadingToastType } from '../components/LoadingToast';
 import Footer from '../components/Footer';
@@ -12,6 +11,7 @@ import EditSubtemaForm from '../components/temario/EditSubtemaForm';
 import DeleteTemaForm from '../components/temario/DeleteTemaForm';
 import DeleteSubtemaForm from '../components/temario/DeleteSubtemaForm';
 import { uploadToCloudinary, deleteFromCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 // --- Interfaces ---
 interface Tema {
@@ -624,14 +624,7 @@ const Temario: React.FC = () => {
   const openDeleteSubtema = () => { resetAllForms(); setIsDeletingSubtema(true); };
 
   const anyFormOpen = isCreatingTema || isCreatingSubtema || isEditingTema || isEditingSubtema || isDeletingTema || isDeletingSubtema;
-  const navigate = useNavigate();
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
+  const handleGoBack = useSmartBackNavigation('/edicion');
 
   return (
     <div style={t.page}>

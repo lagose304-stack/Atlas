@@ -1,5 +1,4 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { deleteFromCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
@@ -9,6 +8,7 @@ import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 interface Tema {
   id: number;
@@ -68,7 +68,6 @@ function extractAllBlockImageUrls(b: { block_type: string; content: Record<strin
 }
 
 const EliminarPlacas: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [temas,    setTemas]    = useState<Tema[]>([]);
@@ -227,13 +226,7 @@ const EliminarPlacas: React.FC = () => {
   const selectedSubtema = subtemas.find(s => s.id === selectedSubtemaId) ?? null;
   const allSelected     = placas.length > 0 && selectedIds.size === placas.length;
   const someSelected    = selectedIds.size > 0;
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
+  const handleGoBack = useSmartBackNavigation('/edicion');
 
   return (
     <div style={s.page}>

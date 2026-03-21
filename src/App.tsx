@@ -10,6 +10,8 @@ import Placas from './pages/Placas';
 import Subtemas from './pages/Subtemas';
 import PlacasSubtema from './pages/PlacasSubtema';
 import EditarHome from './pages/EditarHome';
+import EditarInicio from './pages/EditarInicio';
+import EditarTemario from './pages/EditarTemario';
 import EditarSubtemas from './pages/EditarSubtemas';
 import EditarPlacas from './pages/EditarPlacas';
 import EliminarPlacas from './pages/EliminarPlacas';
@@ -39,12 +41,56 @@ const SiteVisitTracker: React.FC = () => {
   return null;
 };
 
+const SpellcheckEnabler: React.FC = () => {
+  useEffect(() => {
+    const applySpellcheck = () => {
+      const selector = [
+        'textarea',
+        'input:not([type])',
+        'input[type="text"]',
+        'input[type="search"]',
+        'input[type="url"]',
+        'input[type="email"]',
+        'input[type="tel"]',
+        '[contenteditable="true"]',
+        '[contenteditable=""]',
+      ].join(', ');
+
+      document.querySelectorAll<HTMLElement>(selector).forEach(el => {
+        if (el.getAttribute('data-no-spellcheck') === 'true') return;
+        el.setAttribute('spellcheck', 'true');
+        if (!el.getAttribute('lang')) el.setAttribute('lang', 'es');
+        el.setAttribute('autocorrect', 'on');
+        el.setAttribute('autocapitalize', 'sentences');
+      });
+    };
+
+    applySpellcheck();
+
+    const observer = new MutationObserver(() => {
+      applySpellcheck();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['contenteditable', 'type'],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return null;
+};
+
 const App: React.FC = () => {
   return (
     <AuthProvider>
       <Router>
         <ScrollToTop />
         <SiteVisitTracker />
+        <SpellcheckEnabler />
         <Routes>
           {/* Ruta pública */}
           <Route path="/" element={<Home />} />
@@ -80,6 +126,22 @@ const App: React.FC = () => {
             element={
               <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <EditarHome />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/editar-inicio"
+            element={
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
+                <EditarInicio />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/editar-temario"
+            element={
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
+                <EditarTemario />
               </PrivateRoute>
             }
           />

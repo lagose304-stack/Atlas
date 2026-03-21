@@ -1,5 +1,4 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -13,6 +12,7 @@ import {
   type AnalyticsRangePreset,
 } from '../services/analytics';
 import { useAuth } from '../contexts/AuthContext';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 type BucketBy = 'year' | 'month' | 'week' | 'day';
 type EventFilter = 'all' | AnalyticsEventType;
@@ -196,7 +196,6 @@ const aggregateEntityVisits = (
 };
 
 const Estadisticas: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const [range, setRange] = useState<AnalyticsRangePreset>('all');
   const [bucketBy, setBucketBy] = useState<BucketBy>('month');
@@ -611,13 +610,7 @@ const Estadisticas: React.FC = () => {
     };
   };
 
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
+  const handleGoBack = useSmartBackNavigation('/edicion');
 
   return (
     <div style={s.page}>

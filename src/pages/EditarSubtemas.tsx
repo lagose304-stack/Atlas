@@ -1,10 +1,10 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useDraggableList } from '../hooks/useDraggableList';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import PageContentEditor from '../components/PageContentEditor';
 import LoadingToast from '../components/LoadingToast';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
@@ -36,7 +36,7 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
 const LIST_KEY = 'subtemas';
 
 const EditarSubtemas: React.FC = () => {
-  const navigate = useNavigate();
+  const handleGoBack = useSmartBackNavigation('/edicion');
   const drag = useDraggableList();
 
   const [temas, setTemas] = useState<Tema[]>([]);
@@ -121,14 +121,6 @@ const EditarSubtemas: React.FC = () => {
 
   const renderItems = drag.getRenderItems(LIST_KEY, subtemas);
   const accent = 'linear-gradient(90deg, #38bdf8, #818cf8)';
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
-
   return (
     <div style={s.page}>
       <Header />

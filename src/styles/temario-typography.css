@@ -6,28 +6,38 @@
 :root {
   --atlas-font-temario: "Montserrat", "Segoe UI", sans-serif;
 
-  --atlas-title-size: clamp(1.2rem, 1.7vw, 1.45rem);
+  --atlas-title-size: clamp(1.02rem, 1.15vw + 0.62rem, 1.34rem);
   --atlas-title-weight: 800;
   --atlas-title-color: #1d3656;
   --atlas-title-letter: 0.015em;
 
-  --atlas-subtitle-size: clamp(0.78rem, 0.95vw, 0.88rem);
+  --atlas-subtitle-size: clamp(0.74rem, 0.58vw + 0.56rem, 0.86rem);
   --atlas-subtitle-weight: 400;
   --atlas-subtitle-color: #57708f;
 
-  --atlas-section-size: clamp(0.95rem, 1.15vw, 1.06rem);
+  --atlas-section-size: clamp(0.88rem, 0.72vw + 0.58rem, 1rem);
   --atlas-section-weight: 700;
   --atlas-section-color: #173654;
   --atlas-section-letter: 0.01em;
 
-  --atlas-body-size: 0.9em;
+  --atlas-body-size: clamp(0.82rem, 0.5vw + 0.54rem, 0.92rem);
   --atlas-body-weight: 400;
   --atlas-body-color: #536b88;
 
-  --atlas-card-size: 0.86rem;
+  --atlas-card-size: clamp(0.8rem, 0.36vw + 0.56rem, 0.88rem);
   --atlas-card-weight: 600;
   --atlas-card-color: #2a4564;
   --atlas-card-letter: 0.003em;
+}
+
+@media (max-width: 560px) {
+  :root {
+    --atlas-title-size: 1.02rem;
+    --atlas-subtitle-size: 0.76rem;
+    --atlas-section-size: 0.9rem;
+    --atlas-body-size: 0.84rem;
+    --atlas-card-size: 0.8rem;
+  }
 }
 
 .atlas-temario-typography {

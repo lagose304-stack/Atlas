@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
@@ -10,6 +10,7 @@ import type { ContentBlock } from '../components/PageContentEditor';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { logPlacaView, logSubtemaView } from '../services/analytics';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 interface Placa {
   id: number;
@@ -29,7 +30,6 @@ interface SubtemaInfo {
 
 const PlacasSubtema: React.FC = () => {
   const { subtemaId } = useParams<{ subtemaId: string }>();
-  const navigate = useNavigate();
   const [placas, setPlacas] = useState<Placa[]>([]);
   const [subtema, setSubtema] = useState<SubtemaInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,13 +78,7 @@ const PlacasSubtema: React.FC = () => {
     fetchData();
   }, [subtemaId]);
 
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
+  const handleGoBack = useSmartBackNavigation('/');
 
   const temaNombre = Array.isArray(subtema?.temas)
     ? (subtema?.temas[0]?.nombre ?? '')

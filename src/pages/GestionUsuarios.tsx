@@ -1,9 +1,9 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 type Rol = 'Instructor' | 'Microscopía' | 'Administrador';
 
@@ -29,7 +29,6 @@ const panelColor: Record<NonNullable<Panel>, string> = {
 };
 
 const GestionUsuarios: React.FC = () => {
-  const navigate = useNavigate();
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const [toast, setToast]   = useState<{ msg: string; ok: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -284,13 +283,7 @@ const GestionUsuarios: React.FC = () => {
     u.username.toLowerCase().includes(busquedaBorrar.toLowerCase()) ||
     u.nombre.toLowerCase().includes(busquedaBorrar.toLowerCase())
   );
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
+  const handleGoBack = useSmartBackNavigation('/edicion');
 
   return (
     <div style={s.page}>

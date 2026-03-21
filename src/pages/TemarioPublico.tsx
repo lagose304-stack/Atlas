@@ -25,12 +25,22 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
   const [hovered, setHovered] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoSrc, setLogoSrc] = useState(() =>
-    tema.logo_url ? getCloudinaryImageUrl(tema.logo_url, 'thumb') : ''
+    tema.logo_url ? getCloudinaryImageUrl(tema.logo_url, 'cardWide') : ''
+  );
+  const [logoSrcSet, setLogoSrcSet] = useState(() =>
+    tema.logo_url
+      ? `${getCloudinaryImageUrl(tema.logo_url, 'cardWideSmall')} 640w, ${getCloudinaryImageUrl(tema.logo_url, 'cardWide')} 960w`
+      : undefined
   );
 
   useEffect(() => {
     setLogoFailed(false);
-    setLogoSrc(tema.logo_url ? getCloudinaryImageUrl(tema.logo_url, 'thumb') : '');
+    setLogoSrc(tema.logo_url ? getCloudinaryImageUrl(tema.logo_url, 'cardWide') : '');
+    setLogoSrcSet(
+      tema.logo_url
+        ? `${getCloudinaryImageUrl(tema.logo_url, 'cardWideSmall')} 640w, ${getCloudinaryImageUrl(tema.logo_url, 'cardWide')} 960w`
+        : undefined
+    );
   }, [tema.logo_url]);
 
   return (
@@ -76,6 +86,8 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
         {tema.logo_url && !logoFailed ? (
           <img
             src={logoSrc}
+            srcSet={logoSrcSet}
+            sizes="(max-width: 760px) 50vw, (max-width: 1100px) 33vw, 420px"
             alt={tema.nombre}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             loading="lazy"
@@ -83,6 +95,7 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
             onError={() => {
               if (logoSrc !== tema.logo_url) {
                 setLogoSrc(tema.logo_url);
+                setLogoSrcSet(undefined);
                 return;
               }
               setLogoFailed(true);
@@ -141,7 +154,7 @@ const TemarioPublico: React.FC = () => {
 
     const fetchBlocks = async () => {
       try {
-        const blocks = await getRenderableBlocks('home_page', 0);
+        const blocks = await getRenderableBlocks('subtemas_page', 0);
         setContentBlocks(blocks as ContentBlock[]);
       } catch (error) {
         console.error('Error fetching content blocks:', error);
@@ -243,11 +256,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   auxContentCard: {
     width: '100%',
     maxWidth: '1280px',
-    background: 'rgba(255, 255, 255, 0.76)',
-    borderRadius: '20px',
-    border: '1px solid rgba(214, 228, 240, 0.9)',
-    boxShadow: '0 12px 26px rgba(18, 45, 74, 0.08)',
-    padding: 'clamp(14px, 2vw, 22px)',
+    background: 'transparent',
+    borderRadius: 0,
+    border: 'none',
+    boxShadow: 'none',
+    padding: 0,
     boxSizing: 'border-box',
   },
   temarioCard: {

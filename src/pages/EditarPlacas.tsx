@@ -1,10 +1,10 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useDraggableList } from '../hooks/useDraggableList';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import PageContentEditor from '../components/PageContentEditor';
 import LoadingToast from '../components/LoadingToast';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
@@ -39,7 +39,7 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
 const LIST_KEY = 'placas';
 
 const EditarPlacas: React.FC = () => {
-  const navigate = useNavigate();
+  const handleGoBack = useSmartBackNavigation('/edicion');
   const drag = useDraggableList();
 
   const [temas, setTemas] = useState<Tema[]>([]);
@@ -150,14 +150,6 @@ const EditarPlacas: React.FC = () => {
   const selectedTema = temas.find(t => t.id === selectedTemaId) ?? null;
   const selectedSubtema = subtemas.find(s => s.id === selectedSubtemaId) ?? null;
   const renderItems = drag.getRenderItems(LIST_KEY, placas);
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
-
   return (
     <div style={s.page}>
       <Header />

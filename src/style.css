@@ -130,18 +130,74 @@ body {
 }
 
 .cb-shell {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  border: none;
+  border-radius: 0;
+  margin: 0;
+  box-shadow: none;
+}
+
+/* Evita que los dropdowns de Quill (color/fondo) queden ocultos por stacking/overflow */
+.ql-container,
+.ql-toolbar {
+  overflow: visible;
+}
+
+.ql-snow .ql-picker-options {
+  z-index: 12000;
+}
+
+/* TipTap rich editor */
+.tiptap-editor-content {
+  min-height: 100px;
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tiptap-editor-content p {
+  margin: 0 0 0.55em;
+}
+
+.tiptap-editor-content p:last-child {
+  margin-bottom: 0;
+}
+
+.tiptap-editor-content ul,
+.tiptap-editor-content ol {
+  padding-left: 1.2em;
+  margin: 0.45em 0;
+}
+
+.tiptap-editor-content a {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+@media (max-width: 1260px) {
+  .block-editor-builder-layout {
+    grid-template-columns: clamp(210px, 28vw, 270px) minmax(0, 1fr) !important;
+    gap: 8px !important;
+  }
+}
+
+@media (max-width: 980px) {
+  .block-editor-builder-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .block-editor-sidebar {
+    position: static !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
 }
 
 /* Ajustes para el editor de contenido para que se vea bien en el nuevo layout */
 .page-content-editor-container {
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 1rem;
-  background-color: #f9fafb;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background-color: transparent;
 }
 
 /* ========================================
@@ -2097,100 +2153,120 @@ body {
   line-height: 1.8 !important;
 }
 
-/* ── Bloque texto + imagen lado a lado ── */
-/* Valor base en desktop ya viene del estilo inline (flexWrap: nowrap, gap: 28px) */
+.cb-zoom-trigger:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
+}
 
-/* Tablet (768px y menos) */
-@media (max-width: 768px) {
+/* ── Bloque texto + imagen lado a lado ── */
+@media (max-width: 900px) {
   .cb-ti-row {
-    gap: 18px !important;
+    gap: 16px !important;
   }
   .cb-ti-figure {
-    width: 40% !important;
+    flex-basis: clamp(200px, 45%, 320px) !important;
   }
   .cb-ti-text {
-    font-size: 0.95em !important;
+    font-size: 0.92em !important;
     line-height: 1.75 !important;
   }
 }
 
-/* Móvil (560px y menos) */
-@media (max-width: 560px) {
+@media (max-width: 640px) {
   .cb-container {
     gap: 14px !important;
   }
   .cb-ti-row {
+    flex-direction: column !important;
     gap: 12px !important;
+    align-items: stretch !important;
   }
   .cb-ti-figure {
-    width: 38% !important;
+    width: 100% !important;
+    flex-basis: auto !important;
+    max-width: 100% !important;
   }
   .cb-ti-text {
-    font-size: 0.88em !important;
-    line-height: 1.65 !important;
+    font-size: 0.9em !important;
+    line-height: 1.72 !important;
   }
   .cb-paragraph {
-    font-size: 0.88em !important;
-    line-height: 1.7 !important;
+    font-size: 0.9em !important;
+    line-height: 1.72 !important;
   }
 }
 
-/* Móvil pequeño (480px y menos) */
-@media (max-width: 480px) {
-  .cb-ti-row {
-    gap: 9px !important;
-    align-items: flex-start !important;
-  }
-  .cb-ti-figure {
-    width: 36% !important;
-  }
+@media (max-width: 420px) {
   .cb-ti-text {
-    font-size: 0.82em !important;
-    line-height: 1.6 !important;
+    font-size: 0.88em !important;
+    line-height: 1.68 !important;
   }
   .cb-paragraph {
-    font-size: 0.84em !important;
-  }
-}
-
-/* Móvil muy pequeño (380px y menos) */
-@media (max-width: 380px) {
-  .cb-ti-row {
-    gap: 7px !important;
-  }
-  .cb-ti-figure {
-    width: 34% !important;
-  }
-  .cb-ti-text {
-    font-size: 0.76em !important;
-    line-height: 1.55 !important;
-  }
-  .cb-paragraph {
-    font-size: 0.78em !important;
+    font-size: 0.88em !important;
   }
 }
 
 /* ── Bloques de imágenes múltiples responsive ── */
-
-/* Dos imágenes: apila en columna en móvil muy pequeño */
-@media (max-width: 440px) {
-  .cb-two-img-row {
-    flex-direction: column !important;
+@media (max-width: 900px) {
+  .cb-three-img-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 12px !important;
   }
 }
 
-/* Tres imágenes: 2 cols en tablet, 1 col en móvil */
-@media (max-width: 620px) {
-  .cb-three-img-row {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 10px !important;
-  }
-}
-@media (max-width: 380px) {
+@media (max-width: 560px) {
+  .cb-two-img-row,
   .cb-three-img-row {
     grid-template-columns: 1fr !important;
-    gap: 10px !important;
+    gap: 12px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .cb-columns-row {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ========================================
+   RESPONSIVE - Editor de bloques
+   ======================================== */
+@media (max-width: 760px) {
+  .block-editor-root .block-editor-header-left {
+    width: 100%;
+  }
+
+  .block-editor-root .block-editor-header-actions {
+    width: 100%;
+    justify-content: flex-start !important;
+  }
+
+  .block-editor-root .block-editor-template-manager {
+    width: 100%;
+    margin-left: 0 !important;
+    padding-left: 0 !important;
+    border-left: none !important;
+  }
+
+  .block-editor-root .block-editor-version-actions {
+    width: 100%;
+  }
+
+  .block-editor-root .block-editor-save-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .block-editor-root .block-editor-selection-actions {
+    width: 100%;
+  }
+
+  .block-editor-root .block-editor-selection-actions > button,
+  .block-editor-root .block-editor-template-manager > button,
+  .block-editor-root .block-editor-version-actions > button,
+  .block-editor-root .block-editor-save-actions > button {
+    width: 100%;
   }
 }

@@ -1,5 +1,4 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { deleteFromCloudinary } from '../services/cloudinary';
 import BackButton from '../components/BackButton';
@@ -10,6 +9,7 @@ import BoldField from '../components/BoldField';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 interface Tema {
   id: number;
@@ -39,8 +39,9 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
   { key: 'tercer',  label: 'Tercer parcial'  },
 ];
 
+const ITEMS_PER_PAGE = 15;
+
 const ListaEspera: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
 
   // ── Datos ─────────────────────────────────────────────────────────────
@@ -48,6 +49,8 @@ const ListaEspera: React.FC = () => {
   const [temas,    setTemas]    = useState<Tema[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const [miniPage, setMiniPage] = useState(1);
 
   // ── Placa seleccionada ────────────────────────────────────────────────
   const [selected, setSelected] = useState<PlacaSinClasificar | null>(null);
@@ -114,9 +117,11 @@ const ListaEspera: React.FC = () => {
     if (selected?.id === placa.id) {
       setSelected(null);
       resetForm();
+      setMiniPage(1);
     } else {
       setSelected(placa);
       resetForm();
+      setMiniPage(1);
     }
   };
 
@@ -241,13 +246,26 @@ const ListaEspera: React.FC = () => {
   const temaSeleccionado  = temas.find(t => t.id === temaId) ?? null;
   const subSeleccionado   = subtemas.find(s => s.id === subtemaId) ?? null;
   const canSave           = !!temaId && !!subtemaId && !isSaving;
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
+  const handleGoBack = useSmartBackNavigation('/edicion');
+
+  const totalPages = Math.max(1, Math.ceil(placas.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+  const paginatedPlacas = placas.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  const remainingPlacas = selected ? placas.filter(p => p.id !== selected.id) : [];
+  const miniTotalPages = Math.max(1, Math.ceil(remainingPlacas.length / ITEMS_PER_PAGE));
+  const safeMiniPage = Math.min(miniPage, miniTotalPages);
+  const miniStart = (safeMiniPage - 1) * ITEMS_PER_PAGE;
+  const miniPaginatedPlacas = remainingPlacas.slice(miniStart, miniStart + ITEMS_PER_PAGE);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  useEffect(() => {
+    if (miniPage > miniTotalPages) setMiniPage(miniTotalPages);
+  }, [miniPage, miniTotalPages]);
 
   return (
     <div style={s.page}>
@@ -298,6 +316,11 @@ const ListaEspera: React.FC = () => {
                   {placas.length === 1 ? 'imagen pendiente' : 'imágenes pendientes de clasificar'}
                 </span>
                 <span style={s.countHint}>— Haz clic en una para clasificarla</span>
+                {placas.length > 0 && (
+                  <span style={s.pageHint}>
+                    Mostrando {startIndex + 1}-{Math.min(startIndex + ITEMS_PER_PAGE, placas.length)}
+                  </span>
+                )}
               </div>
             )}
 
@@ -305,8 +328,9 @@ const ListaEspera: React.FC = () => {
             {!selected && (
               <div style={s.card}>
                 <div className="placas-gallery-grid">
-                  {placas.map((placa, idx) => {
+                  {paginatedPlacas.map((placa, idx) => {
                     const isHov = hoveredCard === placa.id;
+                    const absoluteIndex = startIndex + idx;
                     return (
                       <div
                         key={placa.id}
@@ -325,7 +349,7 @@ const ListaEspera: React.FC = () => {
                         onMouseLeave={() => setHoveredCard(null)}
                       >
                         <div style={s.cardAccent} />
-                        <span style={s.positionBadge}>{idx + 1}</span>
+                        <span style={s.positionBadge}>{absoluteIndex + 1}</span>
                         {/* Botón borrar */}
                         <button
                           type="button"
@@ -338,9 +362,12 @@ const ListaEspera: React.FC = () => {
                         <div style={s.imgWrap}>
                           <img
                             src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
-                            alt={`Sin clasificar ${idx + 1}`}
+                            srcSet={`${getCloudinaryImageUrl(placa.photo_url, 'thumbSmall')} 320w, ${getCloudinaryImageUrl(placa.photo_url, 'thumb')} 560w`}
+                            sizes="(max-width: 560px) 45vw, (max-width: 980px) 30vw, 220px"
+                            alt={`Sin clasificar ${absoluteIndex + 1}`}
                             style={s.img}
                             loading="lazy"
+                            decoding="async"
                             draggable={false}
                           />
                         </div>
@@ -357,6 +384,44 @@ const ListaEspera: React.FC = () => {
                     );
                   })}
                 </div>
+
+                {totalPages > 1 && (
+                  <div style={s.paginationBar}>
+                    <button
+                      type="button"
+                      style={safePage > 1 ? s.pageBtn : s.pageBtnDisabled}
+                      disabled={safePage <= 1}
+                      onClick={() => setPage(1)}
+                    >
+                      « Primera
+                    </button>
+                    <button
+                      type="button"
+                      style={safePage > 1 ? s.pageBtn : s.pageBtnDisabled}
+                      disabled={safePage <= 1}
+                      onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                    >
+                      ← Anterior
+                    </button>
+                    <span style={s.pageInfo}>Página {safePage} de {totalPages}</span>
+                    <button
+                      type="button"
+                      style={safePage < totalPages ? s.pageBtn : s.pageBtnDisabled}
+                      disabled={safePage >= totalPages}
+                      onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+                    >
+                      Siguiente →
+                    </button>
+                    <button
+                      type="button"
+                      style={safePage < totalPages ? s.pageBtn : s.pageBtnDisabled}
+                      disabled={safePage >= totalPages}
+                      onClick={() => setPage(totalPages)}
+                    >
+                      Última »
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -392,7 +457,7 @@ const ListaEspera: React.FC = () => {
                       <div style={{ marginTop: '20px' }}>
                         <p style={s.restLabel}>Otras imágenes en espera — clic para cambiar selección</p>
                         <div style={s.miniGrid}>
-                          {placas.filter(p => p.id !== selected.id).map((placa, idx) => {
+                          {miniPaginatedPlacas.map((placa, idx) => {
                             const isHov = hoveredCard === placa.id;
                             return (
                               <div
@@ -407,13 +472,57 @@ const ListaEspera: React.FC = () => {
                                 onMouseEnter={() => setHoveredCard(placa.id)}
                                 onMouseLeave={() => setHoveredCard(null)}
                               >
-                                <img src={getCloudinaryImageUrl(placa.photo_url, 'thumb')} alt={`Mini ${idx}`}
+                                <img
+                                  src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+                                  srcSet={`${getCloudinaryImageUrl(placa.photo_url, 'thumbSmall')} 320w, ${getCloudinaryImageUrl(placa.photo_url, 'thumb')} 560w`}
+                                  sizes="80px"
+                                  alt={`Mini ${miniStart + idx + 1}`}
                                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                                  loading="lazy" draggable={false} />
+                                  loading="lazy"
+                                  decoding="async"
+                                  draggable={false}
+                                />
                               </div>
                             );
                           })}
                         </div>
+                        {miniTotalPages > 1 && (
+                          <div style={{ ...s.paginationBar, marginTop: '12px' }}>
+                            <button
+                              type="button"
+                              style={safeMiniPage > 1 ? s.pageBtn : s.pageBtnDisabled}
+                              disabled={safeMiniPage <= 1}
+                              onClick={() => setMiniPage(1)}
+                            >
+                              « Primera
+                            </button>
+                            <button
+                              type="button"
+                              style={safeMiniPage > 1 ? s.pageBtn : s.pageBtnDisabled}
+                              disabled={safeMiniPage <= 1}
+                              onClick={() => setMiniPage(prev => Math.max(1, prev - 1))}
+                            >
+                              ← Anterior
+                            </button>
+                            <span style={s.pageInfo}>Página {safeMiniPage} de {miniTotalPages}</span>
+                            <button
+                              type="button"
+                              style={safeMiniPage < miniTotalPages ? s.pageBtn : s.pageBtnDisabled}
+                              disabled={safeMiniPage >= miniTotalPages}
+                              onClick={() => setMiniPage(prev => Math.min(miniTotalPages, prev + 1))}
+                            >
+                              Siguiente →
+                            </button>
+                            <button
+                              type="button"
+                              style={safeMiniPage < miniTotalPages ? s.pageBtn : s.pageBtnDisabled}
+                              disabled={safeMiniPage >= miniTotalPages}
+                              onClick={() => setMiniPage(miniTotalPages)}
+                            >
+                              Última »
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -761,6 +870,50 @@ const s: { [key: string]: React.CSSProperties } = {
   },
   countLabel: { fontWeight: 700, color: '#0f172a', fontSize: '0.95em' },
   countHint: { color: '#94a3b8', fontSize: '0.88em' },
+  pageHint: {
+    color: '#475569',
+    fontSize: '0.84em',
+    fontWeight: 600,
+    background: '#eef2ff',
+    border: '1px solid #c7d2fe',
+    borderRadius: '999px',
+    padding: '2px 10px',
+  },
+  paginationBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    marginTop: '14px',
+    flexWrap: 'wrap',
+  },
+  pageBtn: {
+    border: '1px solid #c7d2fe',
+    background: '#eef2ff',
+    color: '#4338ca',
+    borderRadius: '8px',
+    padding: '6px 12px',
+    fontSize: '0.84em',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  pageBtnDisabled: {
+    border: '1px solid #e2e8f0',
+    background: '#f8fafc',
+    color: '#94a3b8',
+    borderRadius: '8px',
+    padding: '6px 12px',
+    fontSize: '0.84em',
+    fontWeight: 700,
+    cursor: 'not-allowed',
+    fontFamily: 'inherit',
+  },
+  pageInfo: {
+    fontSize: '0.84em',
+    color: '#334155',
+    fontWeight: 700,
+  },
   card: {
     background: 'transparent',
     borderRadius: '20px',

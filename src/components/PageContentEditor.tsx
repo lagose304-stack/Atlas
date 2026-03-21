@@ -1,16 +1,26 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import ReactQuill from 'react-quill';
+import { EditorContent, useEditor } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Underline from '@tiptap/extension-underline';
+import Link from '@tiptap/extension-link';
+import Placeholder from '@tiptap/extension-placeholder';
+import TextAlign from '@tiptap/extension-text-align';
+import { TextStyle } from '@tiptap/extension-text-style';
+import Color from '@tiptap/extension-color';
+import Highlight from '@tiptap/extension-highlight';
 import { supabase } from '../services/supabase';
 import { deleteFromCloudinary, getCloudinaryPublicId, uploadToCloudinary } from '../services/cloudinary';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { BLOCK_TYPES, createDefaultBlockContent, getBlockMeta, normalizeBlockContent } from './blocks/blockRegistry';
 import { getPublicationInfo, publishBlocksSnapshot, setPublicationDraft } from '../services/contentPublication';
+import { createContentVersion, listContentVersions, restoreContentVersion, type ContentBlockVersionRow } from '../services/contentVersioning';
 import LoadingToast from './LoadingToast';
 import BoldField from './BoldField';
+import ContentBlockRenderer from './ContentBlockRenderer';
 
 // ── Tipos exportados (también los usa ContentBlockRenderer) ───────────────────
 
-export type BlockType = 'heading' | 'subheading' | 'paragraph' | 'image' | 'text_image' | 'two_images' | 'three_images' | 'callout' | 'list' | 'divider' | 'carousel' | 'text_carousel' | 'double_carousel';
+export type BlockType = 'heading' | 'subheading' | 'paragraph' | 'image' | 'text_image' | 'two_images' | 'three_images' | 'callout' | 'list' | 'divider' | 'carousel' | 'text_carousel' | 'double_carousel' | 'section' | 'columns_2';
 
 export interface ContentBlock {
   id: string;
@@ -23,6 +33,27 @@ export interface ContentBlock {
 
 // ── Tipo interno del editor (añade flag de bloque nuevo) ─────────────────────
 type EditorBlock = ContentBlock & { _isNew: boolean };
+
+const getSortedContentRecord = (content: Record<string, string>): Record<string, string> => {
+  return Object.keys(content)
+    .sort()
+    .reduce<Record<string, string>>((acc, key) => {
+      acc[key] = content[key] ?? '';
+      return acc;
+    }, {});
+};
+
+const getBlocksFingerprint = (list: EditorBlock[]): string => {
+  const normalized = list.map(block => ({
+    id: block.id,
+    entity_type: block.entity_type,
+    entity_id: block.entity_id,
+    block_type: block.block_type,
+    sort_order: block.sort_order,
+    content: getSortedContentRecord(block.content),
+  }));
+  return JSON.stringify(normalized);
+};
 
 interface PickerPlaca {
   id: number;
@@ -41,29 +72,6 @@ interface AllSubtema {
 }
 
 const ATLAS_CONTENT_PREFIX = 'atlas-content/';
-const RICH_TEXT_HEADINGS = [{ header: [1, 2, 3, false] }];
-const RICH_TEXT_LISTS = [{ list: 'ordered' }, { list: 'bullet' }];
-const RICH_TEXT_ALIGN = [{ align: [] }];
-const RICH_TEXT_COLORS = [{ color: [] }, { background: [] }];
-const RICH_TEXT_LINK = ['link', 'clean'];
-
-const RICH_TEXT_MODULES = {
-  toolbar: [
-    RICH_TEXT_HEADINGS,
-    ['bold', 'italic', 'underline', 'strike'],
-    RICH_TEXT_COLORS,
-    RICH_TEXT_ALIGN,
-    RICH_TEXT_LISTS,
-    ['blockquote', 'code-block'],
-    RICH_TEXT_LINK,
-  ],
-};
-
-const RICH_TEXT_FORMATS = [
-  'header', 'bold', 'italic', 'underline', 'strike',
-  'color', 'background', 'align', 'list', 'bullet',
-  'blockquote', 'code-block', 'link',
-];
 
 const STYLE_CONTENT_KEYS = [
   'style_bg',
@@ -79,12 +87,38 @@ const STYLE_CONTENT_KEYS = [
 ] as const;
 
 const STYLE_PRESETS_STORAGE_KEY = 'atlas-style-presets-v1';
+const SECTION_TEMPLATES_STORAGE_KEY = 'atlas-section-templates-v1';
 
 interface StylePreset {
   id: string;
   name: string;
   style: Record<string, string>;
 }
+
+interface SectionTemplateBlock {
+  block_type: BlockType;
+  content: Record<string, string>;
+}
+
+interface SectionTemplate {
+  id: string;
+  name: string;
+  blocks: SectionTemplateBlock[];
+}
+
+const sanitizeImportedContent = (raw: unknown): Record<string, string> => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return Object.entries(raw as Record<string, unknown>).reduce<Record<string, string>>((acc, [key, value]) => {
+    if (typeof value === 'string') {
+      acc[key] = value;
+      return acc;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      acc[key] = String(value);
+    }
+    return acc;
+  }, {});
+};
 
 const pickStyleContent = (content: Record<string, string>): Record<string, string> => {
   return STYLE_CONTENT_KEYS.reduce<Record<string, string>>((acc, key) => {
@@ -108,6 +142,45 @@ interface PageContentEditorProps {
   entityId: number;
 }
 
+const BLOCK_TOOLBAR_GROUPS: Array<{ title: string; types: BlockType[] }> = [
+  {
+    title: 'Texto',
+    types: ['heading', 'subheading', 'paragraph', 'list', 'callout'],
+  },
+  {
+    title: 'Imagenes y galerias',
+    types: ['image', 'text_image', 'two_images', 'three_images', 'carousel', 'text_carousel', 'double_carousel'],
+  },
+  {
+    title: 'Estructura',
+    types: ['section', 'columns_2', 'divider'],
+  },
+];
+
+const BLOCK_GROUP_META: Record<string, { icon: string; accent: string }> = {
+  Texto: { icon: 'Aa', accent: '#0ea5e9' },
+  'Imagenes y galerias': { icon: 'IMG', accent: '#8b5cf6' },
+  Estructura: { icon: 'LAY', accent: '#14b8a6' },
+};
+
+const BLOCK_TYPE_VISUAL_ICON: Record<BlockType, string> = {
+  heading: 'T',
+  subheading: 'ST',
+  paragraph: 'TXT',
+  image: 'IMG',
+  text_image: 'T+I',
+  two_images: '2IMG',
+  three_images: '3IMG',
+  callout: 'TIP',
+  list: 'LIST',
+  divider: 'SEP',
+  carousel: 'GAL',
+  text_carousel: 'T+GAL',
+  double_carousel: '2GAL',
+  section: 'SEC',
+  columns_2: 'COL',
+};
+
 // ── Componente principal ─────────────────────────────────────────────────────
 const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entityId }) => {
   const [blocks, setBlocks] = useState<EditorBlock[]>([]);
@@ -120,10 +193,19 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   const [styleClipboard, setStyleClipboard] = useState<Record<string, string> | null>(null);
   const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
   const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
+  const [sectionTemplates, setSectionTemplates] = useState<SectionTemplate[]>([]);
+  const [selectedSectionTemplateId, setSelectedSectionTemplateId] = useState<string>('');
   const [publicationStatus, setPublicationStatus] = useState<'draft' | 'published'>('draft');
   const [publishedAt, setPublishedAt] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isSwitchingToDraft, setIsSwitchingToDraft] = useState(false);
+  const [versions, setVersions] = useState<ContentBlockVersionRow[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string>('');
+  const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [isCreatingVersion, setIsCreatingVersion] = useState(false);
+  const [isRestoringVersion, setIsRestoringVersion] = useState(false);
+  const [collapsedToolbarGroups, setCollapsedToolbarGroups] = useState<Set<string>>(new Set());
+  const [compactToolbar, setCompactToolbar] = useState(false);
 
   // Modal selector de imagen
   const [imageModal, setImageModal] = useState<{
@@ -135,6 +217,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   const [loadingPlacas, setLoadingPlacas] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const templateFileInputRef = useRef<HTMLInputElement>(null);
 
   // Estados para "Todas las placas"
   const [allTemas, setAllTemas] = useState<AllTema[]>([]);
@@ -147,10 +230,26 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   // Drag-and-drop de bloques (por índice, no por id numérico)
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropIdx, setDropIdx] = useState<number | null>(null);
+  const [collapsedBlockIds, setCollapsedBlockIds] = useState<Set<string>>(new Set());
+  const blocksRef = useRef<EditorBlock[]>([]);
   const pendingAssetDeleteIdsRef = useRef<Set<string>>(new Set());
+  const persistedBlocksFingerprintRef = useRef<string>('[]');
 
   // Guard contra respuestas de peticiones obsoletas
   const reqIdRef = useRef(0);
+
+  const hasPendingChangesFor = useCallback((list: EditorBlock[]) => {
+    return getBlocksFingerprint(list) !== persistedBlocksFingerprintRef.current;
+  }, []);
+
+  const toggleToolbarGroup = (groupTitle: string) => {
+    setCollapsedToolbarGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupTitle)) next.delete(groupTitle);
+      else next.add(groupTitle);
+      return next;
+    });
+  };
 
   // ── Carga de bloques ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -165,6 +264,53 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
     }
   }, []);
 
+  const refreshVersions = useCallback(async () => {
+    setIsLoadingVersions(true);
+    try {
+      const rows = await listContentVersions(entityType, entityId, 30);
+      setVersions(rows);
+      setSelectedVersionId(prev => (prev && rows.some(r => String(r.id) === prev) ? prev : ''));
+    } catch (error) {
+      console.warn('No se pudo cargar historial de versiones.', error);
+      setVersions([]);
+      setSelectedVersionId('');
+    } finally {
+      setIsLoadingVersions(false);
+    }
+  }, [entityId, entityType]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SECTION_TEMPLATES_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as SectionTemplate[];
+      if (!Array.isArray(parsed)) return;
+      setSectionTemplates(parsed);
+    } catch (error) {
+      console.warn('No se pudieron cargar plantillas de seccion.', error);
+    }
+  }, [sectionTemplates]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadRouteReferences = async () => {
+      const [{ data: temasData }, { data: subtemasData }] = await Promise.all([
+        supabase.from('temas').select('id, nombre').order('nombre', { ascending: true }),
+        supabase.from('subtemas').select('id, nombre, tema_id').order('nombre', { ascending: true }),
+      ]);
+
+      if (!active) return;
+      setAllTemas(temasData ?? []);
+      setAllSubtemas(subtemasData ?? []);
+    };
+
+    void loadRouteReferences();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   useEffect(() => {
     try {
       localStorage.setItem(STYLE_PRESETS_STORAGE_KEY, JSON.stringify(stylePresets));
@@ -172,6 +318,288 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       console.warn('No se pudieron guardar presets de estilo.', error);
     }
   }, [stylePresets]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SECTION_TEMPLATES_STORAGE_KEY, JSON.stringify(sectionTemplates));
+    } catch (error) {
+      console.warn('No se pudieron guardar plantillas de seccion.', error);
+    }
+  }, [sectionTemplates]);
+
+  const getSectionRangeById = useCallback((list: EditorBlock[], sectionId: string) => {
+    const start = list.findIndex(b => b.id === sectionId && b.block_type === 'section');
+    if (start === -1) return null;
+    let endExclusive = list.length;
+    for (let i = start + 1; i < list.length; i++) {
+      if (list[i].block_type === 'section') {
+        endExclusive = i;
+        break;
+      }
+    }
+    return { start, endExclusive };
+  }, []);
+
+  const saveSectionTemplate = useCallback((sectionId: string) => {
+    const name = window.prompt('Nombre de la plantilla de seccion:');
+    if (!name || !name.trim()) return;
+    const range = getSectionRangeById(blocks, sectionId);
+    if (!range) return;
+
+    const templateBlocks = blocks.slice(range.start, range.endExclusive).map(block => ({
+      block_type: block.block_type,
+      content: { ...block.content },
+    }));
+
+    const template: SectionTemplate = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      blocks: templateBlocks,
+    };
+    setSectionTemplates(prev => [template, ...prev].slice(0, 30));
+  }, [blocks, getSectionRangeById]);
+
+  const renameSectionTemplate = useCallback((templateId: string) => {
+    const template = sectionTemplates.find(t => t.id === templateId);
+    if (!template) return;
+    const nextName = window.prompt('Nuevo nombre de la plantilla:', template.name);
+    if (!nextName || !nextName.trim()) return;
+    setSectionTemplates(prev => prev.map(t => (t.id === templateId ? { ...t, name: nextName.trim() } : t)));
+  }, [sectionTemplates]);
+
+  const deleteSectionTemplate = useCallback((templateId: string) => {
+    const template = sectionTemplates.find(t => t.id === templateId);
+    if (!template) return;
+    if (!window.confirm(`Eliminar plantilla "${template.name}"?`)) return;
+    setSectionTemplates(prev => prev.filter(t => t.id !== templateId));
+    setSelectedSectionTemplateId(prev => (prev === templateId ? '' : prev));
+  }, [sectionTemplates]);
+
+  const applySectionTemplate = useCallback((sectionId: string, templateId: string) => {
+    const template = sectionTemplates.find(t => t.id === templateId);
+    if (!template || template.blocks.length === 0) return;
+
+    setBlocks(prev => {
+      const range = getSectionRangeById(prev, sectionId);
+      if (!range) return prev;
+
+      const sectionRef = prev[range.start];
+      const inserted: EditorBlock[] = template.blocks.map((tb, idx) => ({
+        id: crypto.randomUUID(),
+        entity_type: sectionRef.entity_type,
+        entity_id: sectionRef.entity_id,
+        block_type: tb.block_type,
+        sort_order: range.start + idx,
+        content: normalizeBlockContent(tb.block_type, tb.content),
+        _isNew: true,
+      }));
+
+      const next = [...prev.slice(0, range.start), ...inserted, ...prev.slice(range.endExclusive)];
+      return next.map((b, i) => ({ ...b, sort_order: i }));
+    });
+    setHasChanges(true);
+  }, [getSectionRangeById, sectionTemplates]);
+
+  const insertSectionTemplateAtEnd = useCallback((templateId: string) => {
+    const template = sectionTemplates.find(t => t.id === templateId);
+    if (!template || template.blocks.length === 0) return;
+    setBlocks(prev => {
+      const inserted: EditorBlock[] = template.blocks.map((tb, idx) => ({
+        id: crypto.randomUUID(),
+        entity_type: entityType,
+        entity_id: entityId,
+        block_type: tb.block_type,
+        sort_order: prev.length + idx,
+        content: normalizeBlockContent(tb.block_type, tb.content),
+        _isNew: true,
+      }));
+      const next = [...prev, ...inserted];
+      return next.map((b, i) => ({ ...b, sort_order: i }));
+    });
+    setHasChanges(true);
+  }, [entityId, entityType, sectionTemplates]);
+
+  const insertSectionTemplateBelow = useCallback((sectionId: string, templateId: string) => {
+    const template = sectionTemplates.find(t => t.id === templateId);
+    if (!template || template.blocks.length === 0) return;
+    setBlocks(prev => {
+      const range = getSectionRangeById(prev, sectionId);
+      if (!range) return prev;
+
+      const sectionRef = prev[range.start];
+      const insertAt = range.endExclusive;
+      const inserted: EditorBlock[] = template.blocks.map((tb, idx) => ({
+        id: crypto.randomUUID(),
+        entity_type: sectionRef.entity_type,
+        entity_id: sectionRef.entity_id,
+        block_type: tb.block_type,
+        sort_order: insertAt + idx,
+        content: normalizeBlockContent(tb.block_type, tb.content),
+        _isNew: true,
+      }));
+
+      const next = [...prev.slice(0, insertAt), ...inserted, ...prev.slice(insertAt)];
+      return next.map((b, i) => ({ ...b, sort_order: i }));
+    });
+    setHasChanges(true);
+  }, [getSectionRangeById, sectionTemplates]);
+
+  const exportSectionTemplates = useCallback(() => {
+    if (sectionTemplates.length === 0) {
+      window.alert('No hay plantillas para exportar.');
+      return;
+    }
+
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      templates: sectionTemplates,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'atlas-section-templates.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [sectionTemplates]);
+
+  const handleImportSectionTemplates = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as unknown;
+      const sourceTemplates =
+        Array.isArray(parsed)
+          ? parsed
+          : (parsed as { templates?: unknown })?.templates;
+
+      if (!Array.isArray(sourceTemplates)) {
+        throw new Error('Formato invalido de archivo');
+      }
+
+      const validTemplates: SectionTemplate[] = [];
+      let invalidSectionRootCount = 0;
+      sourceTemplates.forEach((rawTemplate, index) => {
+        if (!rawTemplate || typeof rawTemplate !== 'object') return;
+        const candidate = rawTemplate as { name?: unknown; blocks?: unknown };
+        const name = typeof candidate.name === 'string' && candidate.name.trim()
+          ? candidate.name.trim()
+          : `Plantilla importada ${index + 1}`;
+        if (!Array.isArray(candidate.blocks)) return;
+
+        const blocks = candidate.blocks
+          .map(rawBlock => {
+            if (!rawBlock || typeof rawBlock !== 'object') return null;
+            const block = rawBlock as { block_type?: unknown; content?: unknown };
+            if (typeof block.block_type !== 'string') return null;
+            if (!(BLOCK_TYPES as ReadonlyArray<string>).includes(block.block_type)) return null;
+            const safeContent = sanitizeImportedContent(block.content);
+            return {
+              block_type: block.block_type as BlockType,
+              content: normalizeBlockContent(block.block_type as BlockType, safeContent),
+            };
+          })
+          .filter((b): b is SectionTemplateBlock => Boolean(b));
+
+        if (blocks.length === 0) return;
+        if (blocks[0].block_type !== 'section') {
+          invalidSectionRootCount += 1;
+          return;
+        }
+        validTemplates.push({
+          id: crypto.randomUUID(),
+          name,
+          blocks,
+        });
+      });
+
+      if (validTemplates.length === 0) {
+        const reason = invalidSectionRootCount > 0
+          ? ' Todas deben iniciar con un bloque de tipo Seccion.'
+          : '';
+        window.alert(`No se encontraron plantillas validas en el archivo.${reason}`);
+      } else {
+        const maxTemplates = 30;
+        const currentCount = sectionTemplates.length;
+        const droppedByCap = Math.max(0, currentCount + validTemplates.length - maxTemplates);
+        if (droppedByCap > 0) {
+          const proceed = window.confirm(
+            `Se importaran ${validTemplates.length} plantillas y se descartaran ${droppedByCap} antiguas por el limite de ${maxTemplates}. Continuar?`
+          );
+          if (!proceed) return;
+        }
+        setSectionTemplates(prev => [...validTemplates, ...prev].slice(0, maxTemplates));
+
+        const extraMsg = invalidSectionRootCount > 0
+          ? ` ${invalidSectionRootCount} plantillas fueron omitidas por no iniciar con Seccion.`
+          : '';
+        window.alert(`Se importaron ${validTemplates.length} plantillas.${extraMsg}`);
+      }
+    } catch (error) {
+      console.error('Error al importar plantillas de seccion:', error);
+      window.alert('No se pudo importar el archivo JSON de plantillas.');
+    } finally {
+      e.currentTarget.value = '';
+    }
+  }, [sectionTemplates]);
+
+  const moveBlockToAdjacentSection = useCallback((blockId: string, direction: 'prev' | 'next') => {
+    setBlocks(prev => {
+      const blockIdx = prev.findIndex(b => b.id === blockId);
+      if (blockIdx === -1) return prev;
+      if (prev[blockIdx].block_type === 'section') return prev;
+
+      const sectionIndexes = prev
+        .map((b, i) => (b.block_type === 'section' ? i : -1))
+        .filter(i => i !== -1);
+
+      if (sectionIndexes.length === 0) return prev;
+
+      let currentSectionPos = -1;
+      for (let i = 0; i < sectionIndexes.length; i++) {
+        if (sectionIndexes[i] < blockIdx) currentSectionPos = i;
+      }
+
+      let targetSectionPos: number;
+      if (direction === 'prev') {
+        if (currentSectionPos <= 0) return prev;
+        targetSectionPos = currentSectionPos - 1;
+      } else {
+        if (currentSectionPos === -1) {
+          targetSectionPos = 0;
+        } else {
+          if (currentSectionPos >= sectionIndexes.length - 1) return prev;
+          targetSectionPos = currentSectionPos + 1;
+        }
+      }
+
+      const targetSectionId = prev[sectionIndexes[targetSectionPos]].id;
+
+      const next = [...prev];
+      const [moved] = next.splice(blockIdx, 1);
+
+      const targetStart = next.findIndex(b => b.id === targetSectionId);
+      if (targetStart === -1) return prev;
+
+      let targetEnd = next.length;
+      for (let i = targetStart + 1; i < next.length; i++) {
+        if (next[i].block_type === 'section') {
+          targetEnd = i;
+          break;
+        }
+      }
+
+      next.splice(targetEnd, 0, moved);
+      return next.map((b, i) => ({ ...b, sort_order: i }));
+    });
+    setHasChanges(true);
+  }, []);
 
   useEffect(() => {
     const reqId = ++reqIdRef.current;
@@ -183,7 +611,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       setSaveSuccess(false);
       setSaveError(null);
 
-      const [{ data, error }, publication] = await Promise.all([
+      const [{ data, error }, publication, versionRows] = await Promise.all([
         supabase
           .from('content_blocks')
           .select('*')
@@ -191,6 +619,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
           .eq('entity_id', entityId)
           .order('sort_order', { ascending: true }),
         getPublicationInfo(entityType, entityId).catch(() => null),
+        listContentVersions(entityType, entityId, 30).catch(() => []),
       ]);
 
       if (reqId !== reqIdRef.current) return;
@@ -201,30 +630,46 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
         content: normalizeBlockContent(b.block_type, b.content),
         _isNew: false,
       }));
+      persistedBlocksFingerprintRef.current = getBlocksFingerprint(loaded);
+      blocksRef.current = loaded;
       setBlocks(loaded);
       setSavedIds(new Set(loaded.map(b => b.id)));
       setSelectedBlockIds(new Set());
+      setCollapsedBlockIds(new Set());
       setPublicationStatus(publication?.status === 'published' ? 'published' : 'draft');
       setPublishedAt(publication?.published_at ?? null);
+      setVersions(versionRows);
+      setSelectedVersionId('');
       setLoading(false);
     };
 
     load();
   }, [entityType, entityId]);
 
+  useEffect(() => {
+    blocksRef.current = blocks;
+    const currentFingerprint = getBlocksFingerprint(blocks);
+    setHasChanges(currentFingerprint !== persistedBlocksFingerprintRef.current);
+  }, [blocks]);
+
   // ── Operaciones sobre bloques ────────────────────────────────────────────
   const addBlock = useCallback(
-    (type: BlockType) => {
+    (type: BlockType, insertAt?: number) => {
       const newBlock: EditorBlock = {
         id: crypto.randomUUID(),
         entity_type: entityType,
         entity_id: entityId,
         block_type: type,
-        sort_order: blocks.length,
+        sort_order: insertAt ?? blocks.length,
         content: createDefaultBlockContent(type),
         _isNew: true,
       };
-      setBlocks(prev => [...prev, newBlock]);
+      setBlocks(prev => {
+        const index = Math.max(0, Math.min(insertAt ?? prev.length, prev.length));
+        const next = [...prev];
+        next.splice(index, 0, newBlock);
+        return next.map((b, i) => ({ ...b, sort_order: i }));
+      });
       setHasChanges(true);
     },
     [blocks.length, entityType, entityId]
@@ -272,7 +717,29 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       next.delete(blockId);
       return next;
     });
+    setCollapsedBlockIds(prev => {
+      const next = new Set(prev);
+      next.delete(blockId);
+      return next;
+    });
     setHasChanges(true);
+  }, []);
+
+  const toggleBlockCollapsed = useCallback((blockId: string) => {
+    setCollapsedBlockIds(prev => {
+      const next = new Set(prev);
+      if (next.has(blockId)) next.delete(blockId);
+      else next.add(blockId);
+      return next;
+    });
+  }, []);
+
+  const collapseAllBlocks = useCallback(() => {
+    setCollapsedBlockIds(new Set(blocks.map(b => b.id)));
+  }, [blocks]);
+
+  const expandAllBlocks = useCallback(() => {
+    setCollapsedBlockIds(new Set());
   }, []);
 
   const toggleBlockSelection = useCallback((blockId: string, checked: boolean) => {
@@ -347,7 +814,10 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   };
 
   const handleBlockDragOver = (e: React.DragEvent, idx: number) => {
-    if (dragIdx === null) return;
+    const paletteType = e.dataTransfer.getData('application/x-atlas-block-type');
+    const isPaletteDrag = (BLOCK_TYPES as ReadonlyArray<string>).includes(paletteType);
+    if (dragIdx === null && !isPaletteDrag) return;
+
     e.preventDefault();
     e.stopPropagation();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -357,6 +827,17 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
 
   const handleBlockDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    const paletteType = e.dataTransfer.getData('application/x-atlas-block-type');
+    const isPaletteDrag = (BLOCK_TYPES as ReadonlyArray<string>).includes(paletteType);
+
+    if (isPaletteDrag) {
+      const insertIndex = dropIdx ?? blocks.length;
+      addBlock(paletteType as BlockType, insertIndex);
+      setDragIdx(null);
+      setDropIdx(null);
+      return;
+    }
+
     if (dragIdx === null || dropIdx === null) {
       setDragIdx(null);
       setDropIdx(null);
@@ -381,7 +862,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   };
 
   // ── Selector de imagen ───────────────────────────────────────────────────
-  const openImageModal = (blockId: string, fieldKey: string) => {
+  const openImageModal = useCallback((blockId: string, fieldKey: string) => {
     setImageModal({ blockId, fieldKey });
     setPickerTab('upload');
     setAvailablePlacas([]);
@@ -415,7 +896,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       .select('id, nombre, tema_id')
       .order('nombre', { ascending: true })
       .then(({ data }) => setAllSubtemas(data ?? []));
-  };
+  }, [entityId, entityType]);
 
   // Cargar placas cuando cambia el filtro de la pestaña "Todas"
   const handleAllFilterTema = (temaId: string) => {
@@ -485,11 +966,17 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
 
   // ── Guardar ──────────────────────────────────────────────────────────────
   const handleSave = async () => {
+    const blocksToSave = blocksRef.current;
+    if (!hasPendingChangesFor(blocksToSave)) {
+      setHasChanges(false);
+      return;
+    }
+
     setIsSaving(true);
     setSaveError(null);
     try {
       // 1. Eliminar bloques que ya no existen en la lista local
-      const currentIds = new Set(blocks.map(b => b.id));
+      const currentIds = new Set(blocksToSave.map(b => b.id));
       const idsToDelete = [...savedIds].filter(id => !currentIds.has(id));
       if (idsToDelete.length > 0) {
         const { error } = await supabase
@@ -500,8 +987,8 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       }
 
       // 2. Upsert de todos los bloques actuales con sort_order correcto
-      if (blocks.length > 0) {
-        const rows = blocks.map((b, i) => ({
+      if (blocksToSave.length > 0) {
+        const rows = blocksToSave.map((b, i) => ({
           id: b.id,
           entity_type: entityType,
           entity_id: entityId,
@@ -519,29 +1006,36 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
         const { data: allBlocks, error: allBlocksError } = await supabase
           .from('content_blocks')
           .select('content');
-        if (allBlocksError) throw allBlocksError;
 
-        const stillReferenced = new Set<string>();
-        (allBlocks ?? []).forEach(row => {
-          const content = (row as { content: Record<string, string> }).content ?? {};
-          const ids = getAtlasContentPublicIdsFromBlock({ content });
-          ids.forEach(pid => stillReferenced.add(pid));
-        });
+        // No bloquear el guardado si la verificacion global de referencias falla.
+        if (allBlocksError) {
+          console.warn('No se pudo verificar referencias globales de assets. Se omite limpieza en este guardado.', allBlocksError);
+        } else {
+          const stillReferenced = new Set<string>();
+          (allBlocks ?? []).forEach(row => {
+            const content = (row as { content: Record<string, string> }).content ?? {};
+            const ids = getAtlasContentPublicIdsFromBlock({ content });
+            ids.forEach(pid => stillReferenced.add(pid));
+          });
 
-        for (const publicId of pendingAssetDeletes) {
-          if (!stillReferenced.has(publicId)) {
-            try {
-              await deleteFromCloudinary(publicId);
-            } catch (cleanupError) {
-              console.warn('No se pudo limpiar asset huérfano en Cloudinary:', publicId, cleanupError);
+          for (const publicId of pendingAssetDeletes) {
+            if (!stillReferenced.has(publicId)) {
+              try {
+                await deleteFromCloudinary(publicId);
+              } catch (cleanupError) {
+                console.warn('No se pudo limpiar asset huérfano en Cloudinary:', publicId, cleanupError);
+              }
             }
           }
         }
       }
 
       // 4. Actualizar estado local
-      setSavedIds(new Set(blocks.map(b => b.id)));
-      setBlocks(prev => prev.map((b, i) => ({ ...b, sort_order: i, _isNew: false })));
+      const persistedBlocks = blocksToSave.map((b, i) => ({ ...b, sort_order: i, _isNew: false }));
+      persistedBlocksFingerprintRef.current = getBlocksFingerprint(persistedBlocks);
+      blocksRef.current = persistedBlocks;
+      setSavedIds(new Set(persistedBlocks.map(b => b.id)));
+      setBlocks(persistedBlocks);
       pendingAssetDeleteIdsRef.current.clear();
       setHasChanges(false);
       setSaveSuccess(true);
@@ -555,7 +1049,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   };
 
   const handlePublish = async () => {
-    if (hasChanges) {
+    if (hasPendingChangesFor(blocksRef.current)) {
       setSaveError('Guarda primero los cambios antes de publicar.');
       return;
     }
@@ -563,7 +1057,14 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
     setIsPublishing(true);
     setSaveError(null);
     try {
-      const payload = blocks.map((b, idx) => ({
+      try {
+        await createContentVersion(entityType, entityId, 'Pre-publicacion automatica', 'Auto pre-publicacion');
+      } catch (versionError) {
+        console.warn('No se pudo crear snapshot previo a publicar.', versionError);
+      }
+
+      const currentBlocks = blocksRef.current;
+      const payload = currentBlocks.map((b, idx) => ({
         id: b.id,
         entity_type: entityType,
         entity_id: entityId,
@@ -575,6 +1076,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       const publishedIso = await publishBlocksSnapshot(entityType, entityId, payload);
       setPublicationStatus('published');
       setPublishedAt(publishedIso);
+      await refreshVersions();
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err) {
@@ -582,6 +1084,78 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       setSaveError('No se pudo publicar. Verifica el script de publicaciones en Supabase.');
     } finally {
       setIsPublishing(false);
+    }
+  };
+
+  const handleCreateVersion = async () => {
+    setIsCreatingVersion(true);
+    setSaveError(null);
+    try {
+      const name = window.prompt('Nombre opcional de la version:', 'Snapshot manual') ?? '';
+      const reason = window.prompt('Motivo opcional de la version:', 'Respaldo manual antes de cambios') ?? '';
+      await createContentVersion(entityType, entityId, reason.trim() || undefined, name.trim() || undefined);
+      await refreshVersions();
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2500);
+    } catch (err) {
+      console.error('Error al crear version:', err);
+      setSaveError('No se pudo crear la version. Verifica el script setup_content_block_versions.sql en Supabase.');
+    } finally {
+      setIsCreatingVersion(false);
+    }
+  };
+
+  const handleRestoreVersion = async () => {
+    if (!selectedVersionId) return;
+    if (hasPendingChangesFor(blocksRef.current)) {
+      const proceed = window.confirm('Tienes cambios sin guardar. Restaurar version los sobrescribira. Continuar?');
+      if (!proceed) return;
+    }
+
+    const versionNum = Number(selectedVersionId);
+    if (!Number.isFinite(versionNum)) return;
+
+    const proceed = window.confirm('Se restaurara la version seleccionada y se reemplazara el contenido actual. La pagina quedara en borrador. Deseas continuar?');
+    if (!proceed) return;
+
+    setIsRestoringVersion(true);
+    setSaveError(null);
+    try {
+      await restoreContentVersion(versionNum, true);
+
+      const { data, error } = await supabase
+        .from('content_blocks')
+        .select('*')
+        .eq('entity_type', entityType)
+        .eq('entity_id', entityId)
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+
+      const loaded: EditorBlock[] = (data ?? []).map((b: ContentBlock) => ({
+        ...b,
+        content: normalizeBlockContent(b.block_type, b.content),
+        _isNew: false,
+      }));
+
+      persistedBlocksFingerprintRef.current = getBlocksFingerprint(loaded);
+      setBlocks(loaded);
+      setSavedIds(new Set(loaded.map(b => b.id)));
+      setSelectedBlockIds(new Set());
+      setCollapsedBlockIds(new Set());
+      setHasChanges(false);
+
+      const publication = await getPublicationInfo(entityType, entityId).catch(() => null);
+      setPublicationStatus(publication?.status === 'published' ? 'published' : 'draft');
+      setPublishedAt(publication?.published_at ?? null);
+
+      await refreshVersions();
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Error al restaurar version:', err);
+      setSaveError('No se pudo restaurar la version seleccionada.');
+    } finally {
+      setIsRestoringVersion(false);
     }
   };
 
@@ -605,7 +1179,6 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   if (loading) {
     return (
       <div style={es.sectionCard}>
-        <SectionHeader />
         <div style={es.loadingWrap}>
           <div style={es.spinner} />
           <p style={es.loadingText}>Cargando bloques de contenido...</p>
@@ -614,327 +1187,415 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
     );
   }
 
+  const hasPendingChanges = hasPendingChangesFor(blocks) || hasChanges;
+
+  const sectionIndexes = blocks
+    .map((b, i) => (b.block_type === 'section' ? i : -1))
+    .filter(i => i !== -1);
+
+  const getSectionPosForIndex = (idx: number) => {
+    let sectionPos = -1;
+    for (let i = 0; i < sectionIndexes.length; i++) {
+      if (sectionIndexes[i] < idx) sectionPos = i;
+    }
+    return sectionPos;
+  };
+
+  const selectedTemplate = sectionTemplates.find(t => t.id === selectedSectionTemplateId) ?? null;
+
   return (
-    <div style={es.sectionCard}>
-      <SectionHeader />
-
-      {blocks.length > 0 && (
-        <div style={es.selectionBar}>
-          <span style={es.selectionBarText}>Seleccionados: {selectedBlockIds.size}</span>
-          <div style={es.selectionBarActions}>
-            <button type="button" style={es.selectionBtn} onClick={selectAllBlocks}>Seleccionar todos</button>
-            <button type="button" style={es.selectionBtn} onClick={clearBlockSelection}>Limpiar selección</button>
-          </div>
+    <div style={es.sectionCard} className="block-editor-root">
+      <div style={es.builderLayout} className="block-editor-builder-layout">
+        <aside style={es.toolbar} className="block-editor-sidebar">
+        <div style={es.toolbarTopRow}>
+          <span style={es.toolbarLabel}>Componentes</span>
+          <button
+            type="button"
+            style={{ ...es.toolbarModeToggle, ...(compactToolbar ? es.toolbarModeToggleActive : {}) }}
+            onClick={() => setCompactToolbar(v => !v)}
+            title={compactToolbar ? 'Cambiar a vista expandida' : 'Cambiar a vista compacta'}
+            aria-pressed={compactToolbar}
+          >
+            {compactToolbar ? 'Vista compacta: activada' : 'Vista compacta: desactivada'}
+          </button>
         </div>
-      )}
+        <div style={es.toolbarGroupsWrap}>
+          {BLOCK_TOOLBAR_GROUPS.map(group => (
+            <div key={group.title} style={es.toolbarGroup}>
+              <button
+                type="button"
+                style={{
+                  ...es.toolbarGroupHeader,
+                  borderColor: BLOCK_GROUP_META[group.title]?.accent ?? '#dbeafe',
+                }}
+                onClick={() => toggleToolbarGroup(group.title)}
+                aria-expanded={!collapsedToolbarGroups.has(group.title)}
+                title={`Mostrar u ocultar grupo ${group.title}`}
+              >
+                <span style={es.toolbarGroupHeaderLeft}>
+                  <span
+                    style={{
+                      ...es.toolbarGroupIcon,
+                      background: BLOCK_GROUP_META[group.title]?.accent ?? '#334155',
+                    }}
+                  >
+                    {BLOCK_GROUP_META[group.title]?.icon ?? 'GR'}
+                  </span>
+                  <span style={es.toolbarGroupTitle}>{group.title}</span>
+                  <span style={es.toolbarGroupCount}>{group.types.length} tipos</span>
+                </span>
+                <span style={es.toolbarGroupChevron}>{collapsedToolbarGroups.has(group.title) ? '+' : '-'}</span>
+              </button>
 
-      {/* Lista de bloques */}
-      <div
-        style={es.blockList}
-        onDragOver={e => {
-          if (dragIdx !== null) {
-            e.preventDefault();
-            setDropIdx(blocks.length);
-          }
-        }}
-        onDrop={handleBlockDrop}
-      >
-        {blocks.length === 0 && (
-          <div style={es.emptyBlocks}>
-            <span style={es.emptyBlocksIcon}>📄</span>
-            <p style={es.emptyBlocksText}>
-              Aún no hay bloques. Usa los botones de abajo para añadir contenido.
-            </p>
+              {!collapsedToolbarGroups.has(group.title) && (
+                <div style={es.toolbarGroupButtons}>
+                  {group.types.map(type => {
+                    const meta = getBlockMeta(type);
+                    return (
+                      <button
+                        key={type}
+                        draggable
+                        style={{ ...es.toolbarBtn, ...(compactToolbar ? es.toolbarBtnCompact : {}) }}
+                        onClick={() => addBlock(type)}
+                        onDragStart={e => {
+                          e.dataTransfer.effectAllowed = 'copy';
+                          e.dataTransfer.setData('application/x-atlas-block-type', type);
+                          const ghost = document.createElement('div');
+                          ghost.style.position = 'fixed';
+                          ghost.style.top = '-9999px';
+                          document.body.appendChild(ghost);
+                          e.dataTransfer.setDragImage(ghost, 0, 0);
+                          setTimeout(() => document.body.removeChild(ghost), 0);
+                        }}
+                        onMouseEnter={e => {
+                          const el = e.currentTarget as HTMLButtonElement;
+                          el.style.background = meta.color;
+                          el.style.color = '#fff';
+                          el.style.borderColor = meta.color;
+                          el.style.transform = 'translateY(-2px)';
+                          el.style.boxShadow = '0 8px 18px rgba(15,23,42,0.16)';
+                        }}
+                        onMouseLeave={e => {
+                          const el = e.currentTarget as HTMLButtonElement;
+                          el.style.background = '#f8fafc';
+                          el.style.color = '#475569';
+                          el.style.borderColor = '#e2e8f0';
+                          el.style.transform = 'translateY(0)';
+                          el.style.boxShadow = 'none';
+                        }}
+                        title={`Añadir ${meta.label}. ${meta.description}`}
+                        aria-label={`Añadir ${meta.label}. ${meta.description}`}
+                      >
+                        <span style={es.toolbarBtnTopRow}>
+                          <span style={es.toolbarBtnIconPill}>{BLOCK_TYPE_VISUAL_ICON[type]}</span>
+                          <span>{meta.label}</span>
+                        </span>
+                        {!compactToolbar && <span style={es.toolbarBtnDescription}>{meta.description}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <p style={es.toolbarHint}>Arrastra un componente al área de edición o haz clic para añadirlo al final.</p>
+
+        <div style={es.templateManagerRow} className="block-editor-template-manager">
+          <select
+            style={es.styleSelect}
+            value={selectedSectionTemplateId}
+            onChange={e => setSelectedSectionTemplateId(e.target.value)}
+          >
+            <option value="">Plantilla de seccion...</option>
+            {sectionTemplates.map(template => (
+              <option key={template.id} value={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            style={selectedSectionTemplateId ? es.selectionBtn : es.saveBtnDisabled}
+            disabled={!selectedSectionTemplateId}
+            onClick={() => insertSectionTemplateAtEnd(selectedSectionTemplateId)}
+            title="Inserta al final una seccion completa desde plantilla"
+          >
+            Insertar plantilla
+          </button>
+          <button
+            type="button"
+            style={selectedSectionTemplateId ? es.selectionBtn : es.saveBtnDisabled}
+            disabled={!selectedSectionTemplateId}
+            onClick={() => renameSectionTemplate(selectedSectionTemplateId)}
+            title="Renombrar plantilla seleccionada"
+          >
+            Renombrar
+          </button>
+          <button
+            type="button"
+            style={selectedSectionTemplateId ? es.templateDeleteBtn : es.saveBtnDisabled}
+            disabled={!selectedSectionTemplateId}
+            onClick={() => deleteSectionTemplate(selectedSectionTemplateId)}
+            title="Eliminar plantilla seleccionada"
+          >
+            Eliminar
+          </button>
+          <button
+            type="button"
+            style={sectionTemplates.length > 0 ? es.selectionBtn : es.saveBtnDisabled}
+            disabled={sectionTemplates.length === 0}
+            onClick={exportSectionTemplates}
+            title="Exportar plantillas a archivo JSON"
+          >
+            Exportar JSON
+          </button>
+          <button
+            type="button"
+            style={es.selectionBtn}
+            onClick={() => templateFileInputRef.current?.click()}
+            title="Importar plantillas desde archivo JSON"
+          >
+            Importar JSON
+          </button>
+        </div>
+
+        {selectedTemplate && (
+          <div style={es.templatePreviewPanel}>
+            <div style={es.templatePreviewTitleRow}>
+              <strong style={es.templatePreviewTitle}>Vista previa</strong>
+              <span style={es.templatePreviewMeta}>{selectedTemplate.blocks.length} bloques</span>
+            </div>
+            <div style={es.templatePreviewChips}>
+              {selectedTemplate.blocks.slice(0, 10).map((tb, index) => (
+                <span key={`${selectedTemplate.id}-${index}`} style={es.templatePreviewChip}>
+                  {getBlockMeta(tb.block_type).label}
+                </span>
+              ))}
+              {selectedTemplate.blocks.length > 10 && (
+                <span style={es.templatePreviewMore}>+{selectedTemplate.blocks.length - 10}</span>
+              )}
+            </div>
           </div>
         )}
+        </aside>
 
-        {blocks.map((block, idx) => {
-          const meta = getBlockMeta(block.block_type);
-          const isDragging = dragIdx === idx;
-          const isDropBefore = dropIdx === idx;
-          const isDropAfterLast = idx === blocks.length - 1 && dropIdx === blocks.length;
-
-          return (
-            <React.Fragment key={block.id}>
-              {isDropBefore && <div style={es.dropIndicator} />}
-              <div
-                draggable
-                style={{
-                  ...es.blockCard,
-                  borderLeft: `4px solid ${meta.color}`,
-                  opacity: isDragging ? 0.3 : 1,
-                  transform: isDragging ? 'scale(0.98)' : 'scale(1)',
-                }}
-                onDragStart={e => handleBlockDragStart(e, idx)}
-                onDragOver={e => handleBlockDragOver(e, idx)}
-                onDragEnd={handleBlockDragEnd}
-              >
-                {/* Barra de cabecera del bloque */}
-                <div style={es.blockHeader}>
-                  <div style={es.blockHeaderLeft}>
-                    <label style={es.selectBlockLabel} title="Seleccionar bloque para aplicar estilo en lote">
-                      <input
-                        type="checkbox"
-                        checked={selectedBlockIds.has(block.id)}
-                        onChange={e => toggleBlockSelection(block.id, e.target.checked)}
-                      />
-                      Sel
-                    </label>
-                    <span style={es.dragHandle} title="Arrastra para reordenar">⠿</span>
-                    <span style={{ ...es.typeBadge, background: meta.color }}>
-                      {meta.icon}
-                    </span>
-                    <span style={es.typeLabel}>{meta.label}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                    <button
-                      style={es.duplicateBtn}
-                      onClick={() => duplicateBlock(block.id)}
-                      title="Duplicar bloque"
-                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#e0f2fe')}
-                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
-                    >
-                      ⧉
-                    </button>
-                    <button
-                      style={es.deleteBtn}
-                      onClick={() => deleteBlock(block.id)}
-                      title="Eliminar bloque"
-                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#fee2e2')}
-                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-
-                {/* Área de edición según tipo */}
-                <div style={es.blockContent}>
-                  <BlockStyleEditor
-                    bgColor={block.content.style_bg ?? ''}
-                    textColor={block.content.style_text ?? ''}
-                    borderColor={block.content.style_border ?? ''}
-                    radius={block.content.style_radius ?? '0'}
-                    padding={block.content.style_padding ?? '0'}
-                    maxWidth={block.content.style_max_width ?? 'full'}
-                    alignSelf={block.content.style_align ?? 'left'}
-                    shadow={block.content.style_shadow ?? 'none'}
-                    fontSize={block.content.style_font_size ?? 'default'}
-                    fontWeight={block.content.style_font_weight ?? 'default'}
-                    onChange={updates => updateBlockContent(block.id, updates)}
-                    onCopyStyle={() => setStyleClipboard(pickStyleContent(block.content))}
-                    onPasteStyle={() => {
-                      if (!styleClipboard) return;
-                      updateBlockContent(block.id, styleClipboard);
-                    }}
-                    canPasteStyle={Boolean(styleClipboard)}
-                    onPasteStyleToSelection={() => {
-                      if (!styleClipboard) return;
-                      applyStyleToBlockSelection(styleClipboard);
-                    }}
-                    canPasteStyleToSelection={Boolean(styleClipboard) && selectedBlockIds.size > 0}
-                    selectedCount={selectedBlockIds.size}
-                    presets={stylePresets}
-                    onSavePreset={() => saveStylePreset(pickStyleContent(block.content))}
-                    onApplyPreset={presetId => {
-                      const preset = stylePresets.find(p => p.id === presetId);
-                      if (!preset) return;
-                      updateBlockContent(block.id, preset.style);
-                    }}
-                    onDeletePreset={deleteStylePreset}
-                  />
-
-                  {(block.block_type === 'heading' ||
-                    block.block_type === 'subheading' ||
-                    block.block_type === 'paragraph') && (
-                    <>
-                      {/* Controles de alineación */}
-                      <div style={es.alignRow}>
-                        {(['left', 'center', 'right'] as const).map(align => {
-                          const current = block.content.text_align ?? 'left';
-                          const icons = { left: '⇤ Izq', center: '≡ Centro', right: 'Der ⇥' };
-                          return (
-                            <button
-                              key={align}
-                              style={{
-                                ...es.alignBtn,
-                                ...(current === align ? es.alignBtnActive : {}),
-                              }}
-                              onClick={() => updateBlockContent(block.id, { text_align: align })}
-                              title={icons[align]}
-                            >
-                              {icons[align]}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <AutoTextarea
-                        value={block.content.text ?? ''}
-                        onChange={text => updateBlockContent(block.id, { text })}
-                        placeholder={
-                          block.block_type === 'heading'
-                            ? 'Escribe el título...'
-                            : block.block_type === 'subheading'
-                            ? 'Escribe el subtítulo...'
-                            : 'Escribe el párrafo de texto descriptivo...'
-                        }
-                        extraStyle={{
-                          ...(block.block_type === 'heading'
-                            ? es.textareaHeading
-                            : block.block_type === 'subheading'
-                            ? es.textareaSubheading
-                            : es.textareaParagraph),
-                          textAlign: (block.content.text_align as React.CSSProperties['textAlign']) ?? 'left',
-                        }}
-                      />
-                    </>
-                  )}
-
-                  {block.block_type === 'image' && (
-                    <ImageBlockEditor
-                      url={block.content.url ?? ''}
-                      caption={block.content.caption ?? ''}
-                      size={(block.content.size as 'small' | 'medium' | 'large') ?? 'large'}
-                      align={(block.content.align as 'left' | 'center' | 'right') ?? 'center'}
-                      onCaptionChange={caption => updateBlockContent(block.id, { caption })}
-                      onSizeChange={size => updateBlockContent(block.id, { size })}
-                      onAlignChange={align => updateBlockContent(block.id, { align })}
-                      onPickImage={() => openImageModal(block.id, 'url')}
-                    />
-                  )}
-
-                  {block.block_type === 'text_image' && (
-                    <TextImageBlockEditor
-                      text={block.content.text ?? ''}
-                      imageUrl={block.content.image_url ?? ''}
-                      imagePosition={
-                        (block.content.image_position as 'left' | 'right') ?? 'right'
-                      }
-                      imageCaption={block.content.image_caption ?? ''}
-                      textAlign={block.content.ti_text_align ?? 'left'}
-                      onTextChange={text => updateBlockContent(block.id, { text })}
-                      onPositionChange={pos =>
-                        updateBlockContent(block.id, { image_position: pos })
-                      }
-                      onCaptionChange={caption =>
-                        updateBlockContent(block.id, { image_caption: caption })
-                      }
-                      onTextAlignChange={align =>
-                        updateBlockContent(block.id, { ti_text_align: align })
-                      }
-                      onPickImage={() => openImageModal(block.id, 'image_url')}
-                    />
-                  )}
-
-                  {block.block_type === 'two_images' && (
-                    <TwoImagesBlockEditor
-                      imageUrlLeft={block.content.image_url_left ?? ''}
-                      imageCaptionLeft={block.content.image_caption_left ?? ''}
-                      imageUrlRight={block.content.image_url_right ?? ''}
-                      imageCaptionRight={block.content.image_caption_right ?? ''}
-                      onPickLeft={() => openImageModal(block.id, 'image_url_left')}
-                      onPickRight={() => openImageModal(block.id, 'image_url_right')}
-                      onCaptionLeftChange={v => updateBlockContent(block.id, { image_caption_left: v })}
-                      onCaptionRightChange={v => updateBlockContent(block.id, { image_caption_right: v })}
-                    />
-                  )}
-
-                  {block.block_type === 'three_images' && (
-                    <ThreeImagesBlockEditor
-                      urls={[block.content.image_url_1 ?? '', block.content.image_url_2 ?? '', block.content.image_url_3 ?? '']}
-                      captions={[block.content.image_caption_1 ?? '', block.content.image_caption_2 ?? '', block.content.image_caption_3 ?? '']}
-                      onPick={i => openImageModal(block.id, `image_url_${i + 1}`)}
-                      onCaptionChange={(i, v) => updateBlockContent(block.id, { [`image_caption_${i + 1}`]: v })}
-                    />
-                  )}
-
-                  {block.block_type === 'callout' && (
-                    <CalloutBlockEditor
-                      text={block.content.text ?? ''}
-                      variant={(block.content.variant as CalloutVariant) ?? 'info'}
-                      onTextChange={text => updateBlockContent(block.id, { text })}
-                      onVariantChange={variant => updateBlockContent(block.id, { variant })}
-                    />
-                  )}
-
-                  {block.block_type === 'list' && (
-                    <ListBlockEditor
-                      items={block.content.items ?? ''}
-                      style={(block.content.style as 'bullet' | 'numbered') ?? 'bullet'}
-                      onItemsChange={items => updateBlockContent(block.id, { items })}
-                      onStyleChange={style => updateBlockContent(block.id, { style })}
-                    />
-                  )}
-
-                  {block.block_type === 'divider' && (
-                    <DividerBlockEditor
-                      style={(block.content.style as DividerStyle) ?? 'gradient'}
-                      onStyleChange={style => updateBlockContent(block.id, { style })}
-                    />
-                  )}
-
-                  {block.block_type === 'carousel' && (
-                    <CarouselBlockEditor
-                      content={block.content as Record<string, unknown>}
-                      onContentChange={changes => updateBlockContent(block.id, changes as Record<string, string>)}
-                      onPickImage={field => openImageModal(block.id, field)}
-                    />
-                  )}
-
-                  {block.block_type === 'text_carousel' && (
-                    <TextCarouselBlockEditor
-                      content={block.content as Record<string, unknown>}
-                      onContentChange={changes => updateBlockContent(block.id, changes as Record<string, string>)}
-                      onPickImage={field => openImageModal(block.id, field)}
-                    />
-                  )}
-
-                  {block.block_type === 'double_carousel' && (
-                    <DoubleCarouselBlockEditor
-                      content={block.content as Record<string, unknown>}
-                      onContentChange={changes => updateBlockContent(block.id, changes as Record<string, string>)}
-                      onPickImage={field => openImageModal(block.id, field)}
-                    />
-                  )}
-                </div>
+        <div style={es.builderMain} className="block-editor-main">
+          {blocks.length > 0 && (
+            <div style={es.selectionBar}>
+              <span style={es.selectionBarText}>Seleccionados: {selectedBlockIds.size}</span>
+              <div style={es.selectionBarActions} className="block-editor-selection-actions">
+                <button type="button" style={es.selectionBtn} onClick={selectAllBlocks}>Seleccionar todos</button>
+                <button type="button" style={es.selectionBtn} onClick={clearBlockSelection}>Limpiar selección</button>
+                <button type="button" style={es.selectionBtn} onClick={collapseAllBlocks}>Contraer todos</button>
+                <button type="button" style={es.selectionBtn} onClick={expandAllBlocks}>Expandir todos</button>
               </div>
-              {isDropAfterLast && <div style={es.dropIndicator} />}
-            </React.Fragment>
-          );
-        })}
+            </div>
+          )}
+
+          {/* Lista de bloques */}
+          <div
+            style={es.blockList}
+            onDragOver={e => {
+              const paletteType = e.dataTransfer.getData('application/x-atlas-block-type');
+              const isPaletteDrag = (BLOCK_TYPES as ReadonlyArray<string>).includes(paletteType);
+              if (dragIdx !== null || isPaletteDrag) {
+                e.preventDefault();
+                setDropIdx(blocks.length);
+              }
+            }}
+            onDrop={handleBlockDrop}
+          >
+            {blocks.length === 0 && (
+              <div style={es.emptyBlocks}>
+                <span style={es.emptyBlocksIcon}>📄</span>
+                <p style={es.emptyBlocksText}>
+                  Aún no hay bloques. Arrastra componentes desde el menú lateral.
+                </p>
+              </div>
+            )}
+
+            {blocks.map((block, idx) => {
+              const meta = getBlockMeta(block.block_type);
+              const isDragging = dragIdx === idx;
+              const isDropBefore = dropIdx === idx;
+              const isDropAfterLast = idx === blocks.length - 1 && dropIdx === blocks.length;
+              const isCollapsed = collapsedBlockIds.has(block.id);
+              const currentSectionPos = getSectionPosForIndex(idx);
+              const canMoveToPrevSection =
+                block.block_type !== 'section' && sectionIndexes.length > 0 && currentSectionPos > 0;
+              const canMoveToNextSection =
+                block.block_type !== 'section' &&
+                sectionIndexes.length > 0 &&
+                (currentSectionPos === -1 || currentSectionPos < sectionIndexes.length - 1);
+
+              return (
+                <React.Fragment key={block.id}>
+                  {isDropBefore && <div style={es.dropIndicator} />}
+                  <div
+                    style={{
+                      ...es.blockCard,
+                      borderLeft: `4px solid ${meta.color}`,
+                      opacity: isDragging ? 0.3 : 1,
+                      transform: isDragging ? 'scale(0.98)' : 'scale(1)',
+                    }}
+                    onDragOver={e => handleBlockDragOver(e, idx)}
+                  >
+                    {/* Barra de cabecera del bloque */}
+                    <div style={es.blockHeader}>
+                      <div style={es.blockHeaderLeft} className="block-editor-header-left">
+                        <label style={es.selectBlockLabel} title="Seleccionar bloque para aplicar estilo en lote">
+                          <input
+                            type="checkbox"
+                            checked={selectedBlockIds.has(block.id)}
+                            onChange={e => toggleBlockSelection(block.id, e.target.checked)}
+                          />
+                          Sel
+                        </label>
+                        <span
+                          draggable
+                          style={es.dragHandle}
+                          title="Arrastra para reordenar"
+                          onDragStart={e => handleBlockDragStart(e, idx)}
+                          onDragEnd={handleBlockDragEnd}
+                        >
+                          ⠿
+                        </span>
+                        <span style={{ ...es.typeBadge, background: meta.color }}>
+                          {meta.icon}
+                        </span>
+                        <span style={es.typeLabel}>{meta.label}</span>
+                      </div>
+                      <div className="block-editor-header-actions" style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {isCollapsed && <span style={es.previewStateBadge}>Vista previa</span>}
+                        <button
+                          type="button"
+                          style={es.collapseBtn}
+                          onClick={() => toggleBlockCollapsed(block.id)}
+                          title={isCollapsed ? 'Expandir bloque' : 'Contraer bloque'}
+                        >
+                          {isCollapsed ? 'Editar' : 'Listo'}
+                        </button>
+                        <button
+                          type="button"
+                          style={canMoveToPrevSection ? es.sectionMoveBtn : es.sectionMoveBtnDisabled}
+                          onClick={() => moveBlockToAdjacentSection(block.id, 'prev')}
+                          title="Mover a la seccion anterior"
+                          disabled={!canMoveToPrevSection}
+                        >
+                          ↑ Sec
+                        </button>
+                        <button
+                          type="button"
+                          style={canMoveToNextSection ? es.sectionMoveBtn : es.sectionMoveBtnDisabled}
+                          onClick={() => moveBlockToAdjacentSection(block.id, 'next')}
+                          title="Mover a la seccion siguiente"
+                          disabled={!canMoveToNextSection}
+                        >
+                          ↓ Sec
+                        </button>
+                        <button
+                          style={es.duplicateBtn}
+                          onClick={() => duplicateBlock(block.id)}
+                          title="Duplicar bloque"
+                          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#e0f2fe')}
+                          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
+                        >
+                          ⧉
+                        </button>
+                        <button
+                          style={es.deleteBtn}
+                          onClick={() => deleteBlock(block.id)}
+                          title="Eliminar bloque"
+                          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#fee2e2')}
+                          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Área de edición según tipo */}
+                    {!isCollapsed && (
+                      <MemoBlockContentEditor
+                        block={block}
+                        styleClipboard={styleClipboard}
+                        selectedCount={selectedBlockIds.size}
+                        stylePresets={stylePresets}
+                        sectionTemplates={sectionTemplates}
+                        allTemas={allTemas}
+                        allSubtemas={allSubtemas}
+                        onUpdateBlockContent={updateBlockContent}
+                        onSetStyleClipboard={setStyleClipboard}
+                        onApplyStyleToSelection={applyStyleToBlockSelection}
+                        onSaveStylePreset={saveStylePreset}
+                        onDeleteStylePreset={deleteStylePreset}
+                        onSaveSectionTemplate={saveSectionTemplate}
+                        onApplySectionTemplate={applySectionTemplate}
+                        onInsertSectionTemplateBelow={insertSectionTemplateBelow}
+                        onOpenImageModal={openImageModal}
+                      />
+                    )}
+
+                    {isCollapsed && (
+                      <div style={es.collapsedPreviewWrap}>
+                        <ContentBlockRenderer blocks={[block]} />
+                      </div>
+                    )}
+                  </div>
+                  {isDropAfterLast && <div style={es.dropIndicator} />}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      {/* Toolbar para añadir bloques */}
-      <div style={es.toolbar}>
-        <span style={es.toolbarLabel}>Añadir:</span>
-        {BLOCK_TYPES.map(type => {
-          const meta = getBlockMeta(type);
-          return (
-            <button
-              key={type}
-              style={es.toolbarBtn}
-              onClick={() => addBlock(type)}
-              onMouseEnter={e => {
-                const el = e.currentTarget as HTMLButtonElement;
-                el.style.background = meta.color;
-                el.style.color = '#fff';
-                el.style.borderColor = meta.color;
-                el.style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget as HTMLButtonElement;
-                el.style.background = '#f8fafc';
-                el.style.color = '#475569';
-                el.style.borderColor = '#e2e8f0';
-                el.style.transform = 'translateY(0)';
-              }}
-              title={`Añadir ${meta.label}`}
-            >
-              <span style={es.toolbarBtnIcon}>{meta.icon}</span>
-              {meta.label}
-            </button>
-          );
-        })}
+      <div style={es.versionPanel}>
+        <div style={es.versionPanelHeader}>
+          <strong style={es.versionPanelTitle}>Versiones de contenido</strong>
+          <span style={es.versionPanelMeta}>{versions.length} registradas</span>
+        </div>
+        <div style={es.versionPanelActions} className="block-editor-version-actions">
+          <button
+            type="button"
+            style={!isCreatingVersion ? es.selectionBtn : es.saveBtnDisabled}
+            disabled={isCreatingVersion}
+            onClick={handleCreateVersion}
+          >
+            {isCreatingVersion ? 'Creando version...' : 'Crear version'}
+          </button>
+          <button
+            type="button"
+            style={!isLoadingVersions ? es.selectionBtn : es.saveBtnDisabled}
+            disabled={isLoadingVersions}
+            onClick={refreshVersions}
+          >
+            {isLoadingVersions ? 'Actualizando...' : 'Refrescar historial'}
+          </button>
+          <select
+            style={es.versionSelect}
+            value={selectedVersionId}
+            onChange={e => setSelectedVersionId(e.target.value)}
+          >
+            <option value="">Selecciona una version...</option>
+            {versions.map(v => (
+              <option key={v.id} value={String(v.id)}>
+                #{v.id} · {new Date(v.created_at).toLocaleString()} · {v.blocks_count} bloques
+                {v.snapshot_name ? ` · ${v.snapshot_name}` : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            style={selectedVersionId && !isRestoringVersion ? es.templateDeleteBtn : es.saveBtnDisabled}
+            disabled={!selectedVersionId || isRestoringVersion}
+            onClick={handleRestoreVersion}
+          >
+            {isRestoringVersion ? 'Restaurando...' : 'Restaurar version'}
+          </button>
+        </div>
       </div>
 
       {/* Barra de guardado */}
@@ -942,28 +1603,28 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
         <div style={es.saveBarLeft}>
           {saveError && <p style={es.saveError}>⚠️ {saveError}</p>}
           {saveSuccess && <p style={es.saveSuccess}>✅ Contenido guardado correctamente</p>}
-          {hasChanges && !saveError && !saveSuccess && (
+          {hasPendingChanges && !saveError && !saveSuccess && (
             <p style={es.pendingMsg}>• Cambios pendientes de guardar</p>
           )}
-          {!hasChanges && !saveError && !saveSuccess && (
+          {!hasPendingChanges && !saveError && !saveSuccess && (
             <p style={es.publicationMsg}>
               Estado: {publicationStatus === 'published' ? 'Publicado' : 'Borrador'}
               {publishedAt ? ` • Ultima publicacion: ${new Date(publishedAt).toLocaleString()}` : ''}
             </p>
           )}
         </div>
-        <div style={es.saveBarActions}>
+        <div style={es.saveBarActions} className="block-editor-save-actions">
           <button
-            style={hasChanges && !isSaving ? es.saveBtn : es.saveBtnDisabled}
+            style={hasPendingChanges && !isSaving ? es.saveBtn : es.saveBtnDisabled}
             onClick={handleSave}
-            disabled={!hasChanges || isSaving}
+            disabled={!hasPendingChanges || isSaving}
           >
-            {isSaving ? 'Guardando...' : hasChanges ? 'Guardar contenido' : 'Sin cambios'}
+            {isSaving ? 'Guardando...' : hasPendingChanges ? 'Guardar contenido' : 'Sin cambios'}
           </button>
           <button
-            style={!hasChanges && !isPublishing && !isSaving ? es.publishBtn : es.saveBtnDisabled}
+            style={!hasPendingChanges && !isPublishing && !isSaving ? es.publishBtn : es.saveBtnDisabled}
             onClick={handlePublish}
-            disabled={hasChanges || isPublishing || isSaving}
+            disabled={hasPendingChanges || isPublishing || isSaving}
           >
             {isPublishing ? 'Publicando...' : 'Publicar'}
           </button>
@@ -984,6 +1645,13 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
         accept="image/*,.heic,.heif,.tif,.tiff,.bmp,.avif,.webp"
         style={{ display: 'none' }}
         onChange={handleFileUpload}
+      />
+      <input
+        ref={templateFileInputRef}
+        type="file"
+        accept="application/json,.json"
+        style={{ display: 'none' }}
+        onChange={handleImportSectionTemplates}
       />
 
       {/* Modal selector de imagen */}
@@ -1016,16 +1684,299 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
 
 // ── Sub-componentes ───────────────────────────────────────────────────────────
 
-const SectionHeader: React.FC = () => (
-  <div style={es.sectionHeader}>
-    <h3 style={es.sectionTitle}>✏️ Contenido de la página</h3>
-    <p style={es.sectionSubtitle}>
-      Añade títulos, párrafos, imágenes y bloques de texto con imagen. Arrastra{' '}
-      <strong>⠿</strong> para reordenar.
-    </p>
-    <div style={es.divider} />
-  </div>
-);
+interface MemoBlockContentEditorProps {
+  block: EditorBlock;
+  styleClipboard: Record<string, string> | null;
+  selectedCount: number;
+  stylePresets: StylePreset[];
+  sectionTemplates: SectionTemplate[];
+  allTemas: AllTema[];
+  allSubtemas: AllSubtema[];
+  onUpdateBlockContent: (blockId: string, updates: Record<string, string>) => void;
+  onSetStyleClipboard: React.Dispatch<React.SetStateAction<Record<string, string> | null>>;
+  onApplyStyleToSelection: (style: Record<string, string>) => void;
+  onSaveStylePreset: (style: Record<string, string>) => void;
+  onDeleteStylePreset: (presetId: string) => void;
+  onSaveSectionTemplate: (sectionId: string) => void;
+  onApplySectionTemplate: (sectionId: string, templateId: string) => void;
+  onInsertSectionTemplateBelow: (sectionId: string, templateId: string) => void;
+  onOpenImageModal: (blockId: string, fieldKey: string) => void;
+}
+
+const MemoBlockContentEditor = React.memo(({
+  block,
+  styleClipboard,
+  selectedCount,
+  stylePresets,
+  sectionTemplates,
+  allTemas,
+  allSubtemas,
+  onUpdateBlockContent,
+  onSetStyleClipboard,
+  onApplyStyleToSelection,
+  onSaveStylePreset,
+  onDeleteStylePreset,
+  onSaveSectionTemplate,
+  onApplySectionTemplate,
+  onInsertSectionTemplateBelow,
+  onOpenImageModal,
+}: MemoBlockContentEditorProps) => {
+  return (
+    <div style={es.blockContent}>
+      <BlockStyleEditor
+        bgColor={block.content.style_bg ?? ''}
+        textColor={block.content.style_text ?? ''}
+        borderColor={block.content.style_border ?? ''}
+        radius={block.content.style_radius ?? '0'}
+        padding={block.content.style_padding ?? '0'}
+        maxWidth={block.content.style_max_width ?? 'full'}
+        alignSelf={block.content.style_align ?? 'left'}
+        shadow={block.content.style_shadow ?? 'none'}
+        fontSize={block.content.style_font_size ?? 'default'}
+        fontWeight={block.content.style_font_weight ?? 'default'}
+        onChange={updates => onUpdateBlockContent(block.id, updates)}
+        onCopyStyle={() => onSetStyleClipboard(pickStyleContent(block.content))}
+        onPasteStyle={() => {
+          if (!styleClipboard) return;
+          onUpdateBlockContent(block.id, styleClipboard);
+        }}
+        canPasteStyle={Boolean(styleClipboard)}
+        onPasteStyleToSelection={() => {
+          if (!styleClipboard) return;
+          onApplyStyleToSelection(styleClipboard);
+        }}
+        canPasteStyleToSelection={Boolean(styleClipboard) && selectedCount > 0}
+        selectedCount={selectedCount}
+        presets={stylePresets}
+        onSavePreset={() => onSaveStylePreset(pickStyleContent(block.content))}
+        onApplyPreset={presetId => {
+          const preset = stylePresets.find(p => p.id === presetId);
+          if (!preset) return;
+          onUpdateBlockContent(block.id, preset.style);
+        }}
+        onDeletePreset={onDeleteStylePreset}
+      />
+
+      {(block.block_type === 'heading' ||
+        block.block_type === 'subheading' ||
+        block.block_type === 'paragraph') && (
+        <>
+          <div style={es.alignRow}>
+            {(['left', 'center', 'right'] as const).map(align => {
+              const current = block.content.text_align ?? 'left';
+              const icons = { left: '⇤ Izq', center: '≡ Centro', right: 'Der ⇥' };
+              return (
+                <button
+                  key={align}
+                  style={{
+                    ...es.alignBtn,
+                    ...(current === align ? es.alignBtnActive : {}),
+                  }}
+                  onClick={() => onUpdateBlockContent(block.id, { text_align: align })}
+                  title={icons[align]}
+                >
+                  {icons[align]}
+                </button>
+              );
+            })}
+          </div>
+          <AutoTextarea
+            value={block.content.text ?? ''}
+            onChange={text => onUpdateBlockContent(block.id, { text })}
+            placeholder={
+              block.block_type === 'heading'
+                ? 'Escribe el título...'
+                : block.block_type === 'subheading'
+                ? 'Escribe el subtítulo...'
+                : 'Escribe el párrafo de texto descriptivo...'
+            }
+            extraStyle={{
+              ...(block.block_type === 'heading'
+                ? es.textareaHeading
+                : block.block_type === 'subheading'
+                ? es.textareaSubheading
+                : es.textareaParagraph),
+              textAlign: (block.content.text_align as React.CSSProperties['textAlign']) ?? 'left',
+            }}
+          />
+        </>
+      )}
+
+      {block.block_type === 'section' && (
+        <>
+          <div style={es.sectionTemplateRow}>
+            <button
+              type="button"
+              style={es.selectionBtn}
+              onClick={() => onSaveSectionTemplate(block.id)}
+            >
+              Guardar plantilla de seccion
+            </button>
+            <select
+              style={es.styleSelect}
+              defaultValue=""
+              onChange={e => {
+                const templateId = e.target.value;
+                if (!templateId) return;
+                onApplySectionTemplate(block.id, templateId);
+                e.currentTarget.value = '';
+              }}
+            >
+              <option value="">Aplicar plantilla...</option>
+              {sectionTemplates.map(template => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+            <select
+              style={es.styleSelect}
+              defaultValue=""
+              onChange={e => {
+                const templateId = e.target.value;
+                if (!templateId) return;
+                onInsertSectionTemplateBelow(block.id, templateId);
+                e.currentTarget.value = '';
+              }}
+            >
+              <option value="">Insertar plantilla debajo...</option>
+              {sectionTemplates.map(template => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <SectionBlockEditor
+            title={block.content.title ?? ''}
+            subtitle={block.content.subtitle ?? ''}
+            tone={(block.content.tone as 'neutral' | 'info' | 'accent') ?? 'neutral'}
+            onTitleChange={title => onUpdateBlockContent(block.id, { title })}
+            onSubtitleChange={subtitle => onUpdateBlockContent(block.id, { subtitle })}
+            onToneChange={tone => onUpdateBlockContent(block.id, { tone })}
+          />
+        </>
+      )}
+
+      {block.block_type === 'columns_2' && (
+        <ColumnsBlockEditor
+          content={block.content}
+          onContentChange={changes => onUpdateBlockContent(block.id, changes)}
+        />
+      )}
+
+      {block.block_type === 'image' && (
+        <ImageBlockEditor
+          url={block.content.url ?? ''}
+          caption={block.content.caption ?? ''}
+          size={(block.content.size as 'small' | 'medium' | 'large') ?? 'large'}
+          align={(block.content.align as 'left' | 'center' | 'right') ?? 'center'}
+          onCaptionChange={caption => onUpdateBlockContent(block.id, { caption })}
+          onSizeChange={size => onUpdateBlockContent(block.id, { size })}
+          onAlignChange={align => onUpdateBlockContent(block.id, { align })}
+          onPickImage={() => onOpenImageModal(block.id, 'url')}
+        />
+      )}
+
+      {block.block_type === 'text_image' && (
+        <TextImageBlockEditor
+          text={block.content.text ?? ''}
+          imageUrl={block.content.image_url ?? ''}
+          imagePosition={
+            (block.content.image_position as 'left' | 'right') ?? 'right'
+          }
+          imageCaption={block.content.image_caption ?? ''}
+          textAlign={block.content.ti_text_align ?? 'left'}
+          onTextChange={text => onUpdateBlockContent(block.id, { text })}
+          onPositionChange={pos => onUpdateBlockContent(block.id, { image_position: pos })}
+          onCaptionChange={caption => onUpdateBlockContent(block.id, { image_caption: caption })}
+          onTextAlignChange={align => onUpdateBlockContent(block.id, { ti_text_align: align })}
+          onPickImage={() => onOpenImageModal(block.id, 'image_url')}
+        />
+      )}
+
+      {block.block_type === 'two_images' && (
+        <TwoImagesBlockEditor
+          imageUrlLeft={block.content.image_url_left ?? ''}
+          imageCaptionLeft={block.content.image_caption_left ?? ''}
+          imageUrlRight={block.content.image_url_right ?? ''}
+          imageCaptionRight={block.content.image_caption_right ?? ''}
+          onPickLeft={() => onOpenImageModal(block.id, 'image_url_left')}
+          onPickRight={() => onOpenImageModal(block.id, 'image_url_right')}
+          onCaptionLeftChange={v => onUpdateBlockContent(block.id, { image_caption_left: v })}
+          onCaptionRightChange={v => onUpdateBlockContent(block.id, { image_caption_right: v })}
+        />
+      )}
+
+      {block.block_type === 'three_images' && (
+        <ThreeImagesBlockEditor
+          urls={[block.content.image_url_1 ?? '', block.content.image_url_2 ?? '', block.content.image_url_3 ?? '']}
+          captions={[block.content.image_caption_1 ?? '', block.content.image_caption_2 ?? '', block.content.image_caption_3 ?? '']}
+          onPick={i => onOpenImageModal(block.id, `image_url_${i + 1}`)}
+          onCaptionChange={(i, v) => onUpdateBlockContent(block.id, { [`image_caption_${i + 1}`]: v })}
+        />
+      )}
+
+      {block.block_type === 'callout' && (
+        <CalloutBlockEditor
+          text={block.content.text ?? ''}
+          variant={(block.content.variant as CalloutVariant) ?? 'info'}
+          onTextChange={text => onUpdateBlockContent(block.id, { text })}
+          onVariantChange={variant => onUpdateBlockContent(block.id, { variant })}
+        />
+      )}
+
+      {block.block_type === 'list' && (
+        <ListBlockEditor
+          items={block.content.items ?? ''}
+          style={(block.content.style as 'bullet' | 'numbered') ?? 'bullet'}
+          onItemsChange={items => onUpdateBlockContent(block.id, { items })}
+          onStyleChange={style => onUpdateBlockContent(block.id, { style })}
+        />
+      )}
+
+      {block.block_type === 'divider' && (
+        <DividerBlockEditor
+          style={(block.content.style as DividerStyle) ?? 'gradient'}
+          onStyleChange={style => onUpdateBlockContent(block.id, { style })}
+        />
+      )}
+
+      {block.block_type === 'carousel' && (
+        <CarouselBlockEditor
+          content={block.content as Record<string, unknown>}
+          onContentChange={changes => onUpdateBlockContent(block.id, changes as Record<string, string>)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'text_carousel' && (
+        <TextCarouselBlockEditor
+          content={block.content as Record<string, unknown>}
+          onContentChange={changes => onUpdateBlockContent(block.id, changes as Record<string, string>)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'double_carousel' && (
+        <DoubleCarouselBlockEditor
+          content={block.content as Record<string, unknown>}
+          onContentChange={changes => onUpdateBlockContent(block.id, changes as Record<string, string>)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      <BlockCtaLinksEditor
+        content={block.content}
+        allTemas={allTemas}
+        allSubtemas={allSubtemas}
+        onContentChange={changes => onUpdateBlockContent(block.id, changes)}
+      />
+
+    </div>
+  );
+});
 
 // Editor de texto enriquecido
 const AutoTextarea: React.FC<{
@@ -1034,17 +1985,136 @@ const AutoTextarea: React.FC<{
   placeholder?: string;
   extraStyle?: React.CSSProperties;
 }> = ({ value, onChange, placeholder, extraStyle }) => {
-  const html = value || '';
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3] },
+      }),
+      Underline,
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        defaultProtocol: 'https',
+      }),
+      Placeholder.configure({
+        placeholder: placeholder ?? 'Escribe aquí...',
+      }),
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+      }),
+      TextStyle,
+      Color,
+      Highlight.configure({ multicolor: true }),
+    ],
+    content: value || '',
+    editorProps: {
+      attributes: {
+        class: 'tiptap-editor-content',
+        spellcheck: 'true',
+        lang: 'es',
+        autocorrect: 'on',
+        autocapitalize: 'sentences',
+      },
+    },
+    onUpdate: ({ editor: currentEditor }) => {
+      onChange(currentEditor.getHTML());
+    },
+  });
+
+  useEffect(() => {
+    if (!editor) return;
+    const incoming = value || '';
+    const current = editor.getHTML();
+    if (incoming !== current) {
+      editor.commands.setContent(incoming || '<p></p>', { emitUpdate: false });
+    }
+  }, [editor, value]);
+
+  const applyColor = (format: 'text' | 'highlight', color: string | false) => {
+    if (!editor) return;
+    const chain = editor.chain().focus();
+    if (format === 'text') {
+      if (color === false) chain.unsetColor().run();
+      else chain.setColor(color).run();
+      return;
+    }
+    if (color === false) chain.unsetHighlight().run();
+    else chain.setHighlight({ color }).run();
+  };
+
+  const setLink = () => {
+    if (!editor) return;
+    const previousUrl = editor.getAttributes('link').href as string | undefined;
+    const url = window.prompt('URL del enlace:', previousUrl ?? 'https://');
+    if (url === null) return;
+    if (url.trim() === '') {
+      editor.chain().focus().unsetLink().run();
+      return;
+    }
+    editor.chain().focus().setLink({ href: url.trim() }).run();
+  };
+
   return (
-    <div style={{ ...es.richTextWrap, ...extraStyle }}>
-      <ReactQuill
-        theme="snow"
-        value={html}
-        onChange={onChange}
-        modules={RICH_TEXT_MODULES}
-        formats={RICH_TEXT_FORMATS}
-        placeholder={placeholder}
-      />
+    <div style={es.richTextWrap}>
+      <div style={es.richQuickToolbar}>
+        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleBold().run()}>
+          Negrita
+        </button>
+        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleItalic().run()}>
+          Cursiva
+        </button>
+        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleUnderline().run()}>
+          Subrayado
+        </button>
+        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleStrike().run()}>
+          Tachado
+        </button>
+        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleBulletList().run()}>
+          Lista
+        </button>
+        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
+          Numerada
+        </button>
+        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().setTextAlign('left').run()}>
+          Izq
+        </button>
+        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().setTextAlign('center').run()}>
+          Centro
+        </button>
+        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().setTextAlign('right').run()}>
+          Der
+        </button>
+        <button type="button" style={es.richQuickActionBtn} onClick={setLink}>
+          Enlace
+        </button>
+        <label style={es.richQuickLabel}>
+          Color texto
+          <input
+            type="color"
+            defaultValue="#1e293b"
+            onChange={e => applyColor('text', e.currentTarget.value)}
+            style={es.richQuickColorInput}
+            title="Aplicar color al texto seleccionado"
+          />
+        </label>
+        <label style={es.richQuickLabel}>
+          Fondo texto
+          <input
+            type="color"
+            defaultValue="#fff59d"
+            onChange={e => applyColor('highlight', e.currentTarget.value)}
+            style={es.richQuickColorInput}
+            title="Aplicar resaltado al texto seleccionado"
+          />
+        </label>
+        <button type="button" style={es.richQuickResetBtn} onClick={() => applyColor('text', false)}>
+          Limpiar color
+        </button>
+        <button type="button" style={es.richQuickResetBtn} onClick={() => applyColor('highlight', false)}>
+          Limpiar fondo
+        </button>
+      </div>
+      <EditorContent editor={editor} style={{ ...es.richEditorContent, ...extraStyle }} />
     </div>
   );
 };
@@ -1316,6 +2386,332 @@ const BlockStyleEditor: React.FC<BlockStyleEditorProps> = ({
       </button>
     </div>
   </div>
+  );
+};
+
+interface BlockCtaLinksEditorProps {
+  content: Record<string, string>;
+  allTemas: AllTema[];
+  allSubtemas: AllSubtema[];
+  onContentChange: (changes: Record<string, string>) => void;
+}
+
+const BlockCtaLinksEditor: React.FC<BlockCtaLinksEditorProps> = ({ content, allTemas, allSubtemas, onContentChange }) => {
+  const position = (content.cta_position as 'before' | 'after') ?? 'after';
+  const layout = (content.cta_layout as 'row' | 'column') ?? 'row';
+  const align = (content.cta_align as 'left' | 'center' | 'right') ?? 'left';
+  const gap = content.cta_gap ?? '12';
+  const style = (content.cta_style as 'solid' | 'outline' | 'soft') ?? 'solid';
+  const size = (content.cta_size as 'sm' | 'md' | 'lg') ?? 'md';
+  const shape = (content.cta_shape as 'rounded' | 'pill' | 'square') ?? 'rounded';
+  const hasAnyCta = CTA_SLOTS.some(slot => {
+    const text = (content[`cta_${slot}_text`] ?? '').trim();
+    const url = (content[`cta_${slot}_url`] ?? '').trim();
+    return text.length > 0 || url.length > 0;
+  });
+  const highestConfiguredSlot = CTA_SLOTS.reduce((max, slot) => {
+    const text = (content[`cta_${slot}_text`] ?? '').trim();
+    const url = (content[`cta_${slot}_url`] ?? '').trim();
+    return text.length > 0 || url.length > 0 ? slot : max;
+  }, 0);
+  const [enabled, setEnabled] = useState(hasAnyCta);
+  const [visibleSlots, setVisibleSlots] = useState<number>(Math.max(1, highestConfiguredSlot || 1));
+
+  useEffect(() => {
+    if (hasAnyCta && !enabled) {
+      setEnabled(true);
+    }
+    if (highestConfiguredSlot > visibleSlots) {
+      setVisibleSlots(highestConfiguredSlot);
+    }
+  }, [enabled, hasAnyCta, highestConfiguredSlot, visibleSlots]);
+
+  const clearAllCtas = () => {
+    const updates: Record<string, string> = {};
+    CTA_SLOTS.forEach(slot => {
+      updates[`cta_${slot}_text`] = '';
+      updates[`cta_${slot}_url`] = '';
+      updates[`cta_${slot}_new_tab`] = 'false';
+    });
+    onContentChange(updates);
+    setEnabled(false);
+    setVisibleSlots(1);
+  };
+
+  const removeSlot = (slot: number) => {
+    const updates: Record<string, string> = {};
+    const lastSlot = CTA_SLOTS.length;
+
+    // Compacta slots: al eliminar uno, sube los siguientes para evitar huecos.
+    for (let i = slot; i <= lastSlot; i++) {
+      const textKey = `cta_${i}_text`;
+      const urlKey = `cta_${i}_url`;
+      const tabKey = `cta_${i}_new_tab`;
+
+      if (i < lastSlot) {
+        updates[textKey] = content[`cta_${i + 1}_text`] ?? '';
+        updates[urlKey] = content[`cta_${i + 1}_url`] ?? '';
+        updates[tabKey] = content[`cta_${i + 1}_new_tab`] ?? 'false';
+      } else {
+        updates[textKey] = '';
+        updates[urlKey] = '';
+        updates[tabKey] = 'false';
+      }
+    }
+
+    onContentChange(updates);
+    setVisibleSlots(prev => Math.max(1, prev - 1));
+  };
+
+  const temaNameById = allTemas.reduce<Record<number, string>>((acc, tema) => {
+    acc[tema.id] = tema.nombre;
+    return acc;
+  }, {});
+
+  if (!enabled) {
+    return (
+      <div style={{ ...es.tiEditorWrap, border: '1px dashed #bfdbfe', background: '#f8fbff' }}>
+        <button
+          type="button"
+          style={es.selectionBtn}
+          onClick={() => {
+            setEnabled(true);
+            setVisibleSlots(Math.max(1, highestConfiguredSlot || 1));
+          }}
+        >
+          + Agregar botones
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...es.tiEditorWrap, border: '1px solid #dbeafe', background: '#f8fbff' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' as const }}>
+        <p style={{ margin: 0, fontWeight: 800, color: '#1e3a8a', fontSize: '0.88em' }}>
+          Botones del bloque
+        </p>
+        <button type="button" style={es.deleteBtn} onClick={clearAllCtas}>Ocultar botones</button>
+      </div>
+
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' as const }}>
+        <span style={es.fieldLabel}>Posición en el bloque:</span>
+        {(['before', 'after'] as const).map(v => (
+          <button
+            key={v}
+            type="button"
+            style={{ ...es.posBtn, ...(position === v ? es.posBtnActive : {}) }}
+            onClick={() => onContentChange({ cta_position: v })}
+          >
+            {v === 'before' ? 'Antes del contenido' : 'Al final del contenido'}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '12px', marginTop: '6px' }}>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' as const }}>
+          <span style={es.fieldLabel}>Distribución:</span>
+          {(['row', 'column'] as const).map(v => (
+            <button key={v} style={{ ...es.posBtn, ...(layout === v ? es.posBtnActive : {}) }} onClick={() => onContentChange({ cta_layout: v })}>
+              {v === 'row' ? 'Fila' : 'Columna'}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' as const }}>
+          <span style={es.fieldLabel}>Alineación:</span>
+          {(['left', 'center', 'right'] as const).map(v => (
+            <button key={v} style={{ ...es.posBtn, ...(align === v ? es.posBtnActive : {}) }} onClick={() => onContentChange({ cta_align: v })}>
+              {v === 'left' ? '⇤ Izq' : v === 'center' ? '≡ Centro' : 'Der ⇥'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px' }}>
+        <label style={es.fieldLabel}>
+          Espaciado
+          <input
+            type="number"
+            min={0}
+            max={32}
+            step={1}
+            value={gap}
+            onChange={e => onContentChange({ cta_gap: e.currentTarget.value || '12' })}
+            style={{ ...es.captionInput, marginTop: '4px' }}
+          />
+        </label>
+        <label style={es.fieldLabel}>
+          Estilo
+          <select value={style} onChange={e => onContentChange({ cta_style: e.currentTarget.value })} style={{ ...es.styleSelect, marginTop: '4px' }}>
+            <option value="solid">Sólido</option>
+            <option value="outline">Borde</option>
+            <option value="soft">Suave</option>
+          </select>
+        </label>
+        <label style={es.fieldLabel}>
+          Tamaño
+          <select value={size} onChange={e => onContentChange({ cta_size: e.currentTarget.value })} style={{ ...es.styleSelect, marginTop: '4px' }}>
+            <option value="sm">Pequeño</option>
+            <option value="md">Mediano</option>
+            <option value="lg">Grande</option>
+          </select>
+        </label>
+        <label style={es.fieldLabel}>
+          Forma
+          <select value={shape} onChange={e => onContentChange({ cta_shape: e.currentTarget.value })} style={{ ...es.styleSelect, marginTop: '4px' }}>
+            <option value="rounded">Redondeado</option>
+            <option value="pill">Píldora</option>
+            <option value="square">Recto</option>
+          </select>
+        </label>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px' }}>
+        <label style={es.fieldLabel}>
+          Color del botón
+          <input
+            type="color"
+            value={content.cta_color ?? '#2563eb'}
+            onChange={e => onContentChange({ cta_color: e.currentTarget.value })}
+            style={{ ...es.colorInput, marginTop: '4px' }}
+          />
+        </label>
+        <label style={es.fieldLabel}>
+          Color del texto
+          <input
+            type="color"
+            value={content.cta_text_color ?? '#ffffff'}
+            onChange={e => onContentChange({ cta_text_color: e.currentTarget.value })}
+            style={{ ...es.colorInput, marginTop: '4px' }}
+          />
+        </label>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '10px' }}>
+        {CTA_SLOTS.slice(0, visibleSlots).map(slot => {
+          const textKey = `cta_${slot}_text`;
+          const urlKey = `cta_${slot}_url`;
+          const tabKey = `cta_${slot}_new_tab`;
+          const opensNewTab = (content[tabKey] ?? 'false') === 'true';
+
+          return (
+            <div key={slot} style={{ border: '1px solid #dbeafe', borderRadius: '10px', padding: '10px', background: '#ffffff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <p style={{ ...es.fieldLabel, margin: 0 }}>Botón {slot}</p>
+                {visibleSlots > 1 && (
+                  <button type="button" style={es.deleteBtn} onClick={() => removeSlot(slot)}>Quitar</button>
+                )}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr auto', gap: '8px', alignItems: 'center' }}>
+                <BoldField
+                  as="input"
+                  style={es.captionInput}
+                  value={content[textKey] ?? ''}
+                  onChange={v => onContentChange({ [textKey]: v })}
+                  placeholder="Texto"
+                />
+                <BoldField
+                  as="input"
+                  style={es.captionInput}
+                  value={content[urlKey] ?? ''}
+                  onChange={v => onContentChange({ [urlKey]: v })}
+                  placeholder="/ruta o https://..."
+                />
+                <button
+                  type="button"
+                  style={{ ...es.posBtn, ...(opensNewTab ? es.posBtnActive : {}) }}
+                  onClick={() => onContentChange({ [tabKey]: String(!opensNewTab) })}
+                >
+                  Nueva pestaña
+                </button>
+              </div>
+
+              <details style={{ marginTop: '8px' }}>
+                <summary style={{ cursor: 'pointer', color: '#1d4ed8', fontWeight: 600, fontSize: '0.82em' }}>
+                  Rutas internas sugeridas
+                </summary>
+                <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px', marginTop: '8px' }}>
+                  {INTERNAL_ROUTE_OPTIONS.map(route => (
+                    <button
+                      key={`${slot}-${route.path}`}
+                      type="button"
+                      style={es.selectionBtn}
+                      onClick={() => onContentChange({ [urlKey]: route.path })}
+                    >
+                      {route.label}: {route.path}
+                    </button>
+                  ))}
+
+                  {allTemas.length > 0 && (
+                    <details>
+                      <summary style={{ cursor: 'pointer', color: '#334155', fontWeight: 600, fontSize: '0.8em' }}>
+                        Temas
+                      </summary>
+                      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '6px', marginTop: '6px' }}>
+                        {allTemas.map(tema => {
+                          const route = `/subtemas/${tema.id}`;
+                          return (
+                            <button
+                              key={`${slot}-tema-${tema.id}`}
+                              type="button"
+                              style={es.selectionBtn}
+                              onClick={() => onContentChange({ [urlKey]: route })}
+                              title={route}
+                            >
+                              {tema.nombre}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  )}
+
+                  {allSubtemas.length > 0 && (
+                    <details>
+                      <summary style={{ cursor: 'pointer', color: '#334155', fontWeight: 600, fontSize: '0.8em' }}>
+                        Subtemas
+                      </summary>
+                      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '6px', marginTop: '6px' }}>
+                        {allSubtemas.map(subtema => {
+                          const route = `/ver-placas/${subtema.id}`;
+                          const temaName = temaNameById[subtema.tema_id] ?? 'Tema';
+                          return (
+                            <button
+                              key={`${slot}-subtema-${subtema.id}`}
+                              type="button"
+                              style={es.selectionBtn}
+                              onClick={() => onContentChange({ [urlKey]: route })}
+                              title={route}
+                            >
+                              {temaName} / {subtema.nombre}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              </details>
+            </div>
+          );
+        })}
+
+        {visibleSlots < CTA_SLOTS.length && (
+          <button
+            type="button"
+            style={es.selectionBtn}
+            onClick={() => setVisibleSlots(prev => Math.min(CTA_SLOTS.length, prev + 1))}
+          >
+            + Añadir otro botón
+          </button>
+        )}
+      </div>
+
+      <p style={{ margin: 0, fontSize: '0.78em', color: '#64748b' }}>
+        Internos: usa rutas como /temario. Externos: usa https://... Esto funciona igual en local y Netlify.
+      </p>
+    </div>
   );
 };
 
@@ -1612,7 +3008,7 @@ interface ThreeImagesBlockEditorProps {
 const LABEL_3 = ['Imagen izquierda', 'Imagen central', 'Imagen derecha'];
 const ThreeImagesBlockEditor: React.FC<ThreeImagesBlockEditorProps> = ({ urls, captions, onPick, onCaptionChange }) => (
   <div style={es.tiEditorWrap}>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
       {[0, 1, 2].map(i => (
         <div key={i} style={es.tiCol}>
           <label style={es.fieldLabel}>{LABEL_3[i]}</label>
@@ -1637,6 +3033,102 @@ const ThreeImagesBlockEditor: React.FC<ThreeImagesBlockEditorProps> = ({ urls, c
     </div>
   </div>
 );
+
+interface SectionBlockEditorProps {
+  title: string;
+  subtitle: string;
+  tone: 'neutral' | 'info' | 'accent';
+  onTitleChange: (v: string) => void;
+  onSubtitleChange: (v: string) => void;
+  onToneChange: (v: 'neutral' | 'info' | 'accent') => void;
+}
+const SectionBlockEditor: React.FC<SectionBlockEditorProps> = ({
+  title,
+  subtitle,
+  tone,
+  onTitleChange,
+  onSubtitleChange,
+  onToneChange,
+}) => (
+  <div style={es.tiEditorWrap}>
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' as const }}>
+      <span style={es.fieldLabel}>Tono visual:</span>
+      {(['neutral', 'info', 'accent'] as const).map(v => (
+        <button key={v} style={{ ...es.posBtn, ...(tone === v ? es.posBtnActive : {}) }} onClick={() => onToneChange(v)}>
+          {v === 'neutral' ? 'Neutro' : v === 'info' ? 'Informativo' : 'Acento'}
+        </button>
+      ))}
+    </div>
+    <p style={{ margin: 0, fontSize: '0.78em', color: '#64748b' }}>
+      Los bloques colocados debajo de esta seccion (hasta la siguiente seccion) quedaran agrupados dentro de ella en la vista publica.
+    </p>
+    <BoldField as="input" style={es.captionInput} value={title} onChange={onTitleChange} placeholder="Título de sección (opcional)..." />
+    <AutoTextarea value={subtitle} onChange={onSubtitleChange} placeholder="Subtítulo o descripción breve de la sección..." extraStyle={es.textareaParagraph} />
+  </div>
+);
+
+interface ColumnsBlockEditorProps {
+  content: Record<string, string>;
+  onContentChange: (changes: Record<string, string>) => void;
+}
+const ColumnsBlockEditor: React.FC<ColumnsBlockEditorProps> = ({ content, onContentChange }) => {
+  const columns = (() => {
+    const raw = Number(content.columns ?? 2);
+    if (!Number.isFinite(raw)) return 2;
+    return Math.max(2, Math.min(4, raw));
+  })();
+
+  const values = [
+    content.col_1 ?? content.left ?? '',
+    content.col_2 ?? content.right ?? '',
+    content.col_3 ?? '',
+    content.col_4 ?? '',
+  ];
+
+  const ratio = (content.ratio as '1:1' | '2:1' | '1:2') ?? '1:1';
+
+  return (
+    <div style={es.tiEditorWrap}>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' as const, justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' as const }}>
+          <span style={es.fieldLabel}>Columnas:</span>
+          {[2, 3, 4].map(v => (
+            <button
+              key={v}
+              style={{ ...es.posBtn, ...(columns === v ? es.posBtnActive : {}) }}
+              onClick={() => onContentChange({ columns: String(v) })}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+        {columns === 2 && (
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' as const }}>
+            <span style={es.fieldLabel}>Proporción:</span>
+            {(['1:1', '2:1', '1:2'] as const).map(v => (
+              <button key={v} style={{ ...es.posBtn, ...(ratio === v ? es.posBtnActive : {}) }} onClick={() => onContentChange({ ratio: v })}>
+                {v}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: '12px' }}>
+        {Array.from({ length: columns }).map((_, idx) => (
+          <div key={idx} style={es.tiCol}>
+            <label style={es.fieldLabel}>Columna {idx + 1}</label>
+            <AutoTextarea
+              value={values[idx]}
+              onChange={v => onContentChange({ [`col_${idx + 1}`]: v })}
+              placeholder={`Contenido columna ${idx + 1}...`}
+              extraStyle={es.textareaParagraph}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 // Editor de bloque callout
 type CalloutVariant = 'info' | 'tip' | 'warning' | 'clinical';
@@ -1734,6 +3226,14 @@ const DividerBlockEditor: React.FC<DividerBlockEditorProps> = ({ style, onStyleC
 // ── Utilidades para bloques de carrusel ────────────────────────────────────────
 const MAX_CAROUSEL_SLIDES = 8;
 const MAX_HALF_SLIDES = 5;
+const CTA_SLOTS = [1, 2, 3, 4] as const;
+
+const INTERNAL_ROUTE_OPTIONS: Array<{ label: string; path: string }> = [
+  { label: 'Inicio', path: '/' },
+  { label: 'Temario público', path: '/temario' },
+  { label: 'Subtemas (ejemplo)', path: '/subtemas/1' },
+  { label: 'Placas por subtema (ejemplo)', path: '/ver-placas/1' },
+];
 
 function getSlidesFromContent(
   content: Record<string, unknown>,
@@ -1763,7 +3263,6 @@ function slidesToContent(
   return obj;
 }
 
-// Editor de slots de carrusel (reutilizable)
 interface CarouselSlotsEditorProps {
   slides: { url: string; caption: string }[];
   maxSlides: number;
@@ -1781,10 +3280,11 @@ const CarouselSlotsEditor: React.FC<CarouselSlotsEditorProps> = ({
       {slides.map((slide, idx) => (
         <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '8px 10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
           <img
-            src={slide.url} alt="Vista previa"
+            src={getCloudinaryImageUrl(slide.url, 'thumbSmall')} alt="Vista previa"
             style={{ width: '64px', height: '48px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0, cursor: 'pointer' }}
             onClick={() => onPickSlot(idx)}
             title="Cambiar imagen"
+            loading="lazy"
           />
           <div style={{ flex: 1, minWidth: 0 }}>
             <BoldField as="input" value={slide.caption} onChange={v => onCaptionChange(idx, v)} placeholder="Pie de foto..." style={es.captionInput} />
@@ -1933,7 +3433,7 @@ const DoubleCarouselBlockEditor: React.FC<DoubleCarouselBlockEditorProps> = ({ c
   const rightSlides = getSlidesFromContent(content, 'right_image_', MAX_HALF_SLIDES);
   return (
     <div style={es.tiEditorWrap}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
         <CarouselSlotsEditor
           label="Galería izquierda"
           slides={leftSlides}
@@ -2220,12 +3720,12 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
 const es: Record<string, React.CSSProperties> = {
   // Tarjeta contenedora (igual que las demás cards de edición)
   sectionCard: {
-    background: 'linear-gradient(155deg, rgba(255,255,255,0.94) 0%, rgba(248,250,252,0.9) 100%)',
-    backdropFilter: 'blur(8px)',
-    borderRadius: '22px',
-    padding: 'clamp(16px, 3vw, 36px)',
-    boxShadow: '0 26px 48px rgba(15,23,42,0.1), 0 10px 22px rgba(30,64,175,0.08)',
-    border: '1px solid rgba(186,230,253,0.8)',
+    background: 'transparent',
+    borderRadius: 0,
+    padding: 'clamp(6px, 1vw, 12px) 0',
+    boxShadow: 'none',
+    border: 'none',
+    width: '100%',
   },
   sectionHeader: {
     display: 'flex',
@@ -2260,6 +3760,7 @@ const es: Record<string, React.CSSProperties> = {
     gap: '10px',
     marginBottom: '20px',
     minHeight: '20px',
+    width: '100%',
   },
   selectionBar: {
     display: 'flex',
@@ -2320,7 +3821,7 @@ const es: Record<string, React.CSSProperties> = {
     background: 'linear-gradient(155deg, #ffffff 0%, #f8fafc 100%)',
     borderRadius: '14px',
     border: '1px solid #dbeafe',
-    overflow: 'hidden',
+    overflow: 'visible',
     transition: 'opacity 0.2s, transform 0.2s, box-shadow 0.2s',
     boxShadow: '0 10px 20px rgba(15,23,42,0.07)',
     userSelect: 'none',
@@ -2329,6 +3830,9 @@ const es: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    rowGap: '8px',
+    columnGap: '10px',
     padding: '10px 14px',
     background: 'linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%)',
     borderBottom: '1px solid #dbeafe',
@@ -2337,6 +3841,8 @@ const es: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
+    flexWrap: 'wrap',
+    minWidth: 0,
   },
   selectBlockLabel: {
     display: 'inline-flex',
@@ -2397,9 +3903,69 @@ const es: Record<string, React.CSSProperties> = {
     lineHeight: 1,
     transition: 'background 0.15s',
   },
+  collapseBtn: {
+    background: '#f8fafc',
+    border: '1px solid #dbeafe',
+    cursor: 'pointer',
+    color: '#0f172a',
+    fontSize: '0.78em',
+    fontWeight: 700,
+    padding: '4px 7px',
+    borderRadius: '6px',
+    lineHeight: 1,
+    transition: 'background 0.15s',
+  },
+  previewStateBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '3px 8px',
+    borderRadius: '999px',
+    border: '1px solid #bfdbfe',
+    background: '#eff6ff',
+    color: '#1d4ed8',
+    fontSize: '0.72em',
+    fontWeight: 700,
+    lineHeight: 1,
+  },
+  sectionMoveBtn: {
+    border: '1px solid #cbd5e1',
+    background: '#f8fafc',
+    color: '#334155',
+    borderRadius: '6px',
+    fontSize: '0.72em',
+    fontWeight: 700,
+    padding: '4px 8px',
+    cursor: 'pointer',
+    transition: 'background 0.15s',
+  },
+  sectionMoveBtnDisabled: {
+    border: '1px solid #e2e8f0',
+    background: '#f8fafc',
+    color: '#94a3b8',
+    borderRadius: '6px',
+    fontSize: '0.72em',
+    fontWeight: 700,
+    padding: '4px 8px',
+    cursor: 'not-allowed',
+    opacity: 0.8,
+  },
   blockContent: {
     padding: '14px 16px',
     userSelect: 'text',
+  },
+  collapsedPreviewWrap: {
+    padding: '12px 14px 14px',
+    borderTop: '1px solid #e2e8f0',
+    background: '#ffffff',
+    borderBottomLeftRadius: '14px',
+    borderBottomRightRadius: '14px',
+  },
+  sectionTemplateRow: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+    marginBottom: '10px',
+    flexWrap: 'wrap',
   },
 
   stylePanel: {
@@ -2526,6 +4092,63 @@ const es: Record<string, React.CSSProperties> = {
     borderRadius: '10px',
     background: '#fff',
     boxShadow: 'inset 0 1px 1px rgba(15,23,42,0.03)',
+    overflow: 'visible',
+  },
+  richQuickToolbar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    flexWrap: 'wrap',
+    padding: '7px 10px',
+    borderBottom: '1px solid #e2e8f0',
+    background: '#f8fbff',
+    borderRadius: '10px 10px 0 0',
+  },
+  richQuickLabel: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '0.75em',
+    fontWeight: 700,
+    color: '#475569',
+  },
+  richQuickColorInput: {
+    width: '30px',
+    height: '22px',
+    border: '1px solid #cbd5e1',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    background: '#fff',
+    padding: '0',
+  },
+  richQuickActionBtn: {
+    border: '1px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#334155',
+    borderRadius: '8px',
+    padding: '4px 8px',
+    fontSize: '0.72em',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  richQuickResetBtn: {
+    border: '1px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#334155',
+    borderRadius: '999px',
+    padding: '4px 10px',
+    fontSize: '0.72em',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  richEditorContent: {
+    minHeight: '110px',
+    padding: '10px 12px',
+    fontSize: '0.95em',
+    lineHeight: 1.65,
+    color: '#1e293b',
   },
 
   // Textareas
@@ -2607,6 +4230,7 @@ const es: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'flex-start',
     gap: '12px',
+    flexWrap: 'wrap',
   },
   imagePreviewWrap: {
     display: 'flex',
@@ -2615,7 +4239,7 @@ const es: Record<string, React.CSSProperties> = {
     alignItems: 'flex-start',
   },
   imagePreview: {
-    maxWidth: '420px',
+    maxWidth: 'min(100%, 420px)',
     maxHeight: '280px',
     width: '100%',
     objectFit: 'contain',
@@ -2679,7 +4303,7 @@ const es: Record<string, React.CSSProperties> = {
   },
   tiEditorGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
     gap: '16px',
     alignItems: 'start',
   },
@@ -2735,16 +4359,39 @@ const es: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
   },
 
+  builderLayout: {
+    display: 'grid',
+    gridTemplateColumns: 'clamp(220px, 22vw, 290px) minmax(0, 1fr)',
+    gap: '10px',
+    alignItems: 'start',
+    marginBottom: '14px',
+    width: '100%',
+  },
+  builderMain: {
+    minWidth: 0,
+    width: '100%',
+  },
+
   // Toolbar
   toolbar: {
     display: 'flex',
-    flexWrap: 'wrap',
-    gap: '8px',
-    alignItems: 'center',
-    padding: '16px 0',
-    borderTop: '1.5px solid #dbeafe',
-    borderBottom: '1.5px solid #dbeafe',
-    marginBottom: '16px',
+    flexDirection: 'column',
+    gap: '10px',
+    alignItems: 'stretch',
+    padding: '12px 10px',
+    border: '1.5px solid #dbeafe',
+    borderRadius: '14px',
+    background: 'linear-gradient(135deg, rgba(239,246,255,0.65) 0%, rgba(248,250,252,0.88) 100%)',
+    position: 'sticky',
+    top: '10px',
+    maxHeight: '78vh',
+    overflowY: 'auto',
+  },
+  toolbarHint: {
+    margin: '0',
+    fontSize: '0.75em',
+    color: '#475569',
+    lineHeight: 1.35,
   },
   toolbarLabel: {
     fontSize: '0.78em',
@@ -2754,11 +4401,113 @@ const es: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
     marginRight: '4px',
   },
+  toolbarTopRow: {
+    width: '100%',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  toolbarModeToggle: {
+    border: '1px solid #bfdbfe',
+    background: '#eff6ff',
+    color: '#1e3a8a',
+    borderRadius: '999px',
+    padding: '5px 11px',
+    fontSize: '0.74em',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  toolbarModeToggleActive: {
+    border: '1px solid #93c5fd',
+    background: '#dbeafe',
+    color: '#1d4ed8',
+  },
+  toolbarGroupsWrap: {
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  toolbarGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    padding: '10px',
+    border: '1px solid #dbeafe',
+    borderRadius: '12px',
+    background: '#ffffff',
+  },
+  toolbarGroupHeader: {
+    width: '100%',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '8px 10px',
+    border: '1px solid #dbeafe',
+    borderRadius: '10px',
+    background: '#f8fbff',
+    cursor: 'pointer',
+  },
+  toolbarGroupHeaderLeft: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  toolbarGroupIcon: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '34px',
+    height: '22px',
+    padding: '0 6px',
+    borderRadius: '999px',
+    color: '#ffffff',
+    fontSize: '0.66em',
+    fontWeight: 800,
+    letterSpacing: '0.04em',
+  },
+  toolbarGroupTitle: {
+    margin: 0,
+    color: '#334155',
+    fontSize: '0.8em',
+    fontWeight: 800,
+    letterSpacing: '0.03em',
+    textTransform: 'uppercase',
+  },
+  toolbarGroupCount: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '2px 7px',
+    borderRadius: '999px',
+    border: '1px solid #dbeafe',
+    background: '#eff6ff',
+    color: '#1e3a8a',
+    fontSize: '0.7em',
+    fontWeight: 700,
+  },
+  toolbarGroupChevron: {
+    fontSize: '1.1em',
+    color: '#1e3a8a',
+    fontWeight: 800,
+    lineHeight: 1,
+  },
+  toolbarGroupButtons: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    alignItems: 'stretch',
+  },
   toolbarBtn: {
     display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '7px 14px',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '4px',
+    padding: '8px 12px',
+    minWidth: '182px',
     border: '1.5px solid #dbeafe',
     borderRadius: '8px',
     cursor: 'pointer',
@@ -2769,9 +4518,156 @@ const es: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     transition: 'all 0.15s',
   },
+  toolbarBtnCompact: {
+    minWidth: '132px',
+    padding: '7px 10px',
+    gap: '2px',
+    fontSize: '0.8em',
+  },
   toolbarBtnIcon: {
     fontSize: '0.95em',
     lineHeight: 1,
+  },
+  toolbarBtnIconPill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '38px',
+    height: '22px',
+    borderRadius: '999px',
+    border: '1px solid rgba(148,163,184,0.4)',
+    background: 'rgba(255,255,255,0.55)',
+    color: 'inherit',
+    fontSize: '0.66em',
+    fontWeight: 800,
+    letterSpacing: '0.03em',
+  },
+  toolbarBtnTopRow: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  toolbarBtnDescription: {
+    fontSize: '0.72em',
+    fontWeight: 500,
+    lineHeight: 1.2,
+    opacity: 0.9,
+    textAlign: 'left',
+  },
+  templateManagerRow: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginLeft: 0,
+    paddingLeft: 0,
+    borderLeft: 'none',
+    borderTop: '1px solid #dbeafe',
+    paddingTop: '10px',
+  },
+  templateDeleteBtn: {
+    border: '1px solid #fecaca',
+    background: '#fff1f2',
+    color: '#b91c1c',
+    borderRadius: '999px',
+    padding: '6px 11px',
+    fontSize: '0.78em',
+    fontWeight: 700,
+    cursor: 'pointer',
+    transition: 'all 0.16s ease',
+  },
+  templatePreviewPanel: {
+    width: '100%',
+    border: '1px dashed #cbd5e1',
+    borderRadius: '10px',
+    background: '#f8fbff',
+    padding: '10px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    marginTop: '4px',
+  },
+  templatePreviewTitleRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  templatePreviewTitle: {
+    fontSize: '0.82em',
+    color: '#334155',
+  },
+  templatePreviewMeta: {
+    fontSize: '0.78em',
+    color: '#64748b',
+  },
+  templatePreviewChips: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '6px',
+  },
+  templatePreviewChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '4px 8px',
+    borderRadius: '999px',
+    border: '1px solid #dbeafe',
+    background: '#ffffff',
+    color: '#0f172a',
+    fontSize: '0.75em',
+    fontWeight: 600,
+  },
+  templatePreviewMore: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '4px 8px',
+    borderRadius: '999px',
+    border: '1px solid #cbd5e1',
+    color: '#64748b',
+    fontSize: '0.74em',
+    fontWeight: 700,
+  },
+  versionPanel: {
+    border: '1px solid #dbeafe',
+    borderRadius: '12px',
+    background: 'linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%)',
+    padding: '10px 12px',
+    marginBottom: '14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  versionPanelHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  versionPanelTitle: {
+    fontSize: '0.84em',
+    color: '#0f172a',
+  },
+  versionPanelMeta: {
+    fontSize: '0.76em',
+    color: '#64748b',
+  },
+  versionPanelActions: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    alignItems: 'center',
+  },
+  versionSelect: {
+    minWidth: 0,
+    maxWidth: '100%',
+    flex: 1,
+    padding: '6px 8px',
+    borderRadius: '8px',
+    border: '1px solid #cbd5e1',
+    background: '#fff',
+    color: '#1e293b',
+    fontSize: '0.82em',
+    fontFamily: 'inherit',
   },
 
   // Controles de alineación de texto

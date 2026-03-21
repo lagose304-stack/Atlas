@@ -9,6 +9,7 @@ import type { ContentBlock } from '../components/PageContentEditor';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { logTemaView } from '../services/analytics';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 interface Tema {
   id: number;
@@ -80,13 +81,7 @@ const Subtemas: React.FC = () => {
     setTemaLogoSrc(tema?.logo_url ? getCloudinaryImageUrl(tema.logo_url, 'thumb') : '');
   }, [tema?.logo_url]);
 
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
+  const handleGoBack = useSmartBackNavigation('/');
 
   return (
     <div className="atlas-temario-typography" style={styles.container}>
@@ -163,6 +158,8 @@ const Subtemas: React.FC = () => {
                       <div className="subtema-card-img-wrap" style={styles.subtemaLogoWrap}>
                         <img
                           src={getCloudinaryImageUrl(subtema.logo_url, 'thumb')}
+                          srcSet={`${getCloudinaryImageUrl(subtema.logo_url, 'thumbSmall')} 320w, ${getCloudinaryImageUrl(subtema.logo_url, 'thumb')} 560w`}
+                          sizes="(max-width: 640px) 70px, (max-width: 900px) 86px, (max-width: 1200px) 100px, 115px"
                           alt={subtema.nombre}
                           style={styles.subtemaLogo}
                           loading="lazy"
@@ -171,6 +168,8 @@ const Subtemas: React.FC = () => {
                             const img = e.currentTarget;
                             if (img.dataset.fallbackTried !== '1') {
                               img.dataset.fallbackTried = '1';
+                              img.srcset = '';
+                              img.sizes = '';
                               img.src = subtema.logo_url as string;
                               return;
                             }

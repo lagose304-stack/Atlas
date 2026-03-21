@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
@@ -25,7 +25,7 @@ const PARCIALES: { key: ParcialKey; label: string; color: string; accent: string
   { key: 'tercer',  label: 'Tercer parcial',  color: '#dcfce7', accent: 'linear-gradient(90deg, #34d399, #38bdf8)' },
 ];
 
-const EditarHome: React.FC = () => {
+const EditarTemario: React.FC = () => {
   const handleGoBack = useSmartBackNavigation('/edicion');
   const drag = useDraggableList();
 
@@ -86,35 +86,36 @@ const EditarHome: React.FC = () => {
       setIsSaving(false);
     }
   }, [temasMap]);
+
   return (
     <div style={s.page}>
       <Header />
       <main style={s.main}>
-                <BackButton onClick={handleGoBack} />
+        <BackButton onClick={handleGoBack} />
 
         <div style={s.editBanner}>
-          <span style={s.editBannerIcon}>??</span>
+          <span style={s.editBannerIcon}>📚</span>
           <div>
-            <strong>Modo ediciï¿½n ï¿½ Pï¿½gina principal</strong>
+            <strong>Modo edición — Página Temario</strong>
             <p style={s.editBannerHint}>
-              Arrastra las tarjetas desde el handle <strong>? Arrastra</strong> para cambiar el orden dentro de cada parcial. Los cambios no se aplican hasta que pulses <strong>Guardar orden</strong>.
+              Aquí puedes editar el contenido (bloques) de la página y reorganizar el orden de los temas.
             </p>
           </div>
         </div>
 
         <div style={s.card}>
           <div style={s.cardHeader}>
-            <h2 style={s.cardTitle}>Contenido de la pï¿½gina</h2>
-            <p style={s.cardSubtitle}>Bloques de contenido que se muestran encima del temario en la pï¿½gina principal</p>
+            <h2 style={s.cardTitle}>Contenido de la página</h2>
+            <p style={s.cardSubtitle}>Bloques de contenido que se muestran en la página de temario</p>
             <div style={s.divider} />
           </div>
-          <PageContentEditor entityType="home_page" entityId={0} />
+          <PageContentEditor entityType="subtemas_page" entityId={0} />
         </div>
 
         <div style={s.card}>
           <div style={s.cardHeader}>
             <h2 style={s.cardTitle}>Temario</h2>
-            <p style={s.cardSubtitle}>Orden actual de los temas en la pï¿½gina principal</p>
+            <p style={s.cardSubtitle}>Orden actual de los temas en el atlas. Arrastra desde <strong>⋮ Arrastra</strong> para reordenar.</p>
             <div style={s.divider} />
           </div>
 
@@ -128,7 +129,8 @@ const EditarHome: React.FC = () => {
               {PARCIALES.map(({ key, label, color, accent }) => {
                 const items = temasMap[key];
                 const isActiveParcial = drag.dragKey === key;
-                const renderItems = drag.getRenderItems(key, items);return (
+                const renderItems = drag.getRenderItems(key, items);
+                return (
                   <div
                     key={key}
                     style={{
@@ -143,7 +145,7 @@ const EditarHome: React.FC = () => {
                         {items.length} {items.length === 1 ? 'tema' : 'temas'}
                       </span>
                       {isActiveParcial && (
-                        <span style={s.draggingHint}>? Arrastrando...</span>
+                        <span style={s.draggingHint}>⋮ Arrastrando...</span>
                       )}
                     </div>
 
@@ -160,14 +162,15 @@ const EditarHome: React.FC = () => {
                         if (item.type === 'placeholder') {
                           return (
                             <div key={item.key} style={s.placeholder}>
-                              <span style={s.placeholderIcon}>?</span>
+                              <span style={s.placeholderIcon}>📌</span>
                             </div>
                           );
                         }
 
                         const { item: tema, realIndex } = item;
                         const isBeingDragged = drag.dragId === tema.id;
-                        const isHovered = hoveredCard === tema.id && !drag.dragId;return (
+                        const isHovered = hoveredCard === tema.id && !drag.dragId;
+                        return (
                           <div
                             key={tema.id}
                             draggable
@@ -198,7 +201,7 @@ const EditarHome: React.FC = () => {
                             <div style={s.imgWrap} className="tema-card-img-wrap">
                               {tema.logo_url
                                 ? <img src={getCloudinaryImageUrl(tema.logo_url, 'thumb')} alt={tema.nombre} style={s.img} loading="lazy" decoding="async" />
-                                : <span style={s.imgFallback}>??</span>
+                                : <span style={s.imgFallback}>📘</span>
                               }
                             </div>
                             <h4 className="tema-card-label" style={s.cardName}>{tema.nombre}</h4>
@@ -209,7 +212,7 @@ const EditarHome: React.FC = () => {
                                 : '#f8fafc',
                               borderColor: isHovered ? '#7dd3fc' : '#e2e8f0',
                             }}>
-                              <span style={s.dragHandleDots}>?</span>
+                              <span style={s.dragHandleDots}>⋮</span>
                               <span style={s.dragHandleText}>Arrastra</span>
                             </div>
                           </div>
@@ -226,7 +229,7 @@ const EditarHome: React.FC = () => {
         {!loading && (
           <div style={s.fab}>
             {saveSuccess && (
-              <div style={s.fabToast}>? Guardado correctamente</div>
+              <div style={s.fabToast}>✓ Guardado correctamente</div>
             )}
             <button
               style={hasChanges && !isSaving ? s.fabBtn : s.fabBtnDisabled}
@@ -234,7 +237,7 @@ const EditarHome: React.FC = () => {
               disabled={!hasChanges || isSaving}
               title="Guardar orden"
             >
-              {isSaving ? '? Guardando...' : hasChanges ? '?? Guardar orden' : '? Sin cambios'}
+              {isSaving ? '⏳ Guardando...' : hasChanges ? '💾 Guardar orden' : '✓ Sin cambios'}
             </button>
           </div>
         )}
@@ -413,48 +416,6 @@ const s: { [key: string]: React.CSSProperties } = {
     letterSpacing: '0.05em',
     textTransform: 'uppercase',
   },
-  breadcrumb: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    flexWrap: 'wrap',
-    background: 'rgba(255,255,255,0.75)',
-    backdropFilter: 'blur(8px)',
-    border: '1px solid rgba(186,230,253,0.6)',
-    borderRadius: '12px',
-    padding: '8px 16px',
-    marginBottom: '24px',
-    boxShadow: '0 2px 8px rgba(14,165,233,0.07)',
-  },
-  breadcrumbLink: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    color: '#0ea5e9',
-    fontWeight: 600,
-    fontSize: '0.88em',
-    padding: '4px 8px',
-    borderRadius: '8px',
-    transition: 'background 0.15s',
-    fontFamily: 'inherit',
-    letterSpacing: '0.01em',
-  },
-  breadcrumbSep: {
-    color: '#94a3b8',
-    fontWeight: 700,
-    fontSize: '0.75em',
-    userSelect: 'none',
-  },
-  breadcrumbCurrent: {
-    color: '#0f172a',
-    fontWeight: 800,
-    fontSize: '0.88em',
-    padding: '4px 8px',
-    background: 'linear-gradient(135deg, #e0f2fe, #ede9fe)',
-    borderRadius: '8px',
-    border: '1px solid #bae6fd',
-    letterSpacing: '0.01em',
-  },
   fab: {
     position: 'fixed',
     bottom: '32px',
@@ -519,9 +480,4 @@ const s: { [key: string]: React.CSSProperties } = {
   loadingText: { color: '#64748b', fontSize: '1em', fontWeight: 500 },
 };
 
-export default EditarHome;
-
-
-
-
-
+export default EditarTemario;

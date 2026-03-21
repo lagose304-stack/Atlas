@@ -5,6 +5,7 @@ import Footer from '../components/Footer';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import { hasPermission } from '../security/permissions';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 const Edicion: React.FC = () => {
   const { logout, user } = useAuth();
@@ -21,13 +22,7 @@ const Edicion: React.FC = () => {
     logout();
     navigate('/');
   };
-  const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
+  const handleGoBack = useSmartBackNavigation('/');
 
   return (
     <div style={s.page}>
@@ -144,7 +139,7 @@ const Edicion: React.FC = () => {
               <button
                 style={s.pagesBtn}
                 className="edicion-pages-btn"
-                onClick={() => navigate('/editar-home')}
+                onClick={() => navigate('/editar-inicio')}
                 onMouseEnter={e => {
                   e.currentTarget.style.background = 'linear-gradient(135deg, #f59e0b, #fbbf24)';
                   e.currentTarget.style.color = '#fff';
@@ -156,7 +151,24 @@ const Edicion: React.FC = () => {
                   e.currentTarget.style.borderColor = '#fde68a';
                 }}
               >
-                🏠 Página principal
+                🏠 Editar Inicio
+              </button>
+              <button
+                style={s.pagesBtn}
+                className="edicion-pages-btn"
+                onClick={() => navigate('/editar-temario')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #f59e0b, #fbbf24)';
+                  e.currentTarget.style.color = '#fff';
+                  e.currentTarget.style.borderColor = 'transparent';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = '#fffbeb';
+                  e.currentTarget.style.color = '#b45309';
+                  e.currentTarget.style.borderColor = '#fde68a';
+                }}
+              >
+                📚 Editar Temario
               </button>
               <button
                 style={s.pagesBtn}
@@ -173,7 +185,7 @@ const Edicion: React.FC = () => {
                   e.currentTarget.style.borderColor = '#fde68a';
                 }}
               >
-                📂 Página de subtemas
+                📂 Editar Subtemas
               </button>
               <button
                 style={s.pagesBtn}
@@ -190,7 +202,7 @@ const Edicion: React.FC = () => {
                   e.currentTarget.style.borderColor = '#fde68a';
                 }}
               >
-                🔬 Página de placas
+                🔬 Editar Placas
               </button>
             </div>
           </div>}
