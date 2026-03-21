@@ -64,6 +64,11 @@ If you still want to use an external backend API instead of Cloudflare Functions
 
 - `VITE_BACKEND_BASE_URL`: public URL of your backend API (no trailing slash)
 
+Important for production:
+
+- Do not set `VITE_BACKEND_BASE_URL` to `localhost` or `127.0.0.1`.
+- If you do not have an external backend deployed, leave it empty to use Cloudflare Functions.
+
 Then frontend will call that URL for `/api/images/*`.
 
 ### Backend environment variables (only if you deploy backend)

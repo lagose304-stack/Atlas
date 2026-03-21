@@ -5,10 +5,20 @@ const cloudinaryUploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
 const resolveBackendBaseUrl = () => {
   const configured = (import.meta.env.VITE_BACKEND_BASE_URL || '').trim();
-  if (configured) return configured.replace(/\/+$/, '');
-
   const hostname = window.location.hostname;
   const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+
+  if (configured) {
+    const normalized = configured.replace(/\/+$/, '');
+    const configuredIsLocalhost = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalized);
+
+    // En producción ignoramos localhost para evitar dependencia de una PC encendida.
+    if (!isLocal && configuredIsLocalhost) {
+      return '';
+    }
+
+    return normalized;
+  }
 
   // En desarrollo local usamos backend local; en producción usamos rutas relativas
   // para ejecutar Cloudflare Functions en el mismo dominio del frontend.
