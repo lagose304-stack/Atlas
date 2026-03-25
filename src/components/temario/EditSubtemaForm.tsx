@@ -59,16 +59,16 @@ const EditSubtemaForm: React.FC<EditSubtemaFormProps> = ({
 
   return (
     <form onSubmit={onSubmit} style={styles.form}>
-      {/* Seleccionar tema */}
+      {/* Tema */}
       <div style={styles.formGroup}>
-        <label style={styles.label}>Seleccionar Tema:</label>
+        <label style={styles.label}>Tema</label>
         <select
           style={styles.select}
           value={selectedTemaId}
           onChange={(e) => onChangeSelectedTema(e.target.value)}
           required
         >
-          <option value="" disabled>Selecciona un tema</option>
+          <option value="" disabled>— Elige un tema —</option>
           {temas.map((t) => (
             <option key={t.id} value={t.id}>{t.nombre}</option>
           ))}
@@ -82,16 +82,16 @@ const EditSubtemaForm: React.FC<EditSubtemaFormProps> = ({
 
       {selectedTemaId && subtemasOfSelectedTema.length > 0 && (
         <>
-          {/* Seleccionar subtema */}
+          {/* Subtema */}
           <div style={styles.formGroup}>
-            <label style={styles.label}>Seleccionar Subtema:</label>
+            <label style={styles.label}>Subtema</label>
             <select
               style={styles.select}
               value={editingSubtemaId}
               onChange={(e) => onChangeEditingSubtemaId(e.target.value)}
               required
             >
-              <option value="" disabled>Selecciona un subtema</option>
+              <option value="" disabled>— Elige un subtema —</option>
               {subtemasOfSelectedTema.map((s) => (
                 <option key={s.id} value={s.id}>{s.nombre}</option>
               ))}

@@ -432,7 +432,7 @@ const MoverPlaca: React.FC = () => {
         {/* Encabezado */}
         <div style={{ ...s.pageHeader, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ flex: 1 }}>
-            <h1 style={s.pageTitle}>Mover placa</h1>
+            <h1 style={s.pageTitle}>Editar placas</h1>
             <p style={s.pageSubtitle}>Selecciona un tema y subtema para ver sus placas, haz clic en una para reasignarla a otro tema o subtema.</p>
             <div style={s.accentLine} />
           </div>

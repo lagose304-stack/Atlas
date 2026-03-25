@@ -48,14 +48,14 @@ const EditTemaForm: React.FC<EditTemaFormProps> = ({
   return (
     <form onSubmit={onSubmit} style={styles.form}>
       <div style={styles.formGroup}>
-        <label style={styles.label}>Seleccionar Tema:</label>
+        <label style={styles.label}>Tema</label>
         <select
           style={styles.select}
           value={editingTemaId}
           onChange={(e) => onChangeEditingTemaId(e.target.value)}
           required
         >
-          <option value="" disabled>Selecciona un tema</option>
+          <option value="" disabled>— Elige un tema —</option>
           {temas.map((t) => (
             <option key={t.id} value={t.id}>{t.nombre}</option>
           ))}

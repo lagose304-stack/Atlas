@@ -24,7 +24,7 @@ const DeleteTemaForm: React.FC<DeleteTemaFormProps> = ({
 }) => (
   <form onSubmit={onSubmit} style={styles.form}>
     <div style={styles.formGroup}>
-      <label style={styles.label}>Seleccionar Tema a Borrar:</label>
+      <label style={styles.label}>Tema a borrar</label>
       <select
         style={styles.select}
         value={deletingTemaId}
@@ -32,7 +32,7 @@ const DeleteTemaForm: React.FC<DeleteTemaFormProps> = ({
         required
       >
         <option value="" disabled>
-          Selecciona un tema
+          — Elige un tema —
         </option>
         {temas.map((t) => (
           <option key={t.id} value={t.id}>

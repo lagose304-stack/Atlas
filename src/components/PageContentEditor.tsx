@@ -3846,7 +3846,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
                 value={allFilterTema}
                 onChange={e => onAllFilterTema(e.target.value)}
               >
-                <option value="">— Selecciona un tema —</option>
+                <option value="">— Elige un tema —</option>
                 {allTemas.map(t => (
                   <option key={t.id} value={String(t.id)}>{t.nombre}</option>
                 ))}
@@ -3870,7 +3870,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
 
             {/* Resultados */}
             {!allFilterTema ? (
-              <p style={es.noPlacasText}>Selecciona un tema para ver sus placas.</p>
+              <p style={es.noPlacasText}>Elige un tema para ver sus placas.</p>
             ) : loadingAll ? (
               <div style={es.uploadingState}>
                 <div style={es.spinner} />
@@ -5172,16 +5172,17 @@ const es: Record<string, React.CSSProperties> = {
   },
   allSelect: {
     flex: '1 1 180px',
-    padding: '8px 12px',
-    borderRadius: '8px',
-    border: '1.5px solid #e2e8f0',
+    padding: '12px 16px',
+    borderRadius: '10px',
+    border: '1.5px solid #cbd5e1',
     background: '#f8fafc',
-    color: '#1e293b',
-    fontSize: '0.88em',
-    fontFamily: 'inherit',
+    color: '#0f172a',
+    fontSize: '1em',
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     fontWeight: 500,
     outline: 'none',
     cursor: 'pointer',
+    boxSizing: 'border-box',
   },
 };
 

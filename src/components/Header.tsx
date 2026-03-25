@@ -34,6 +34,7 @@ const Header: React.FC = () => {
       '/eliminar-placas',
       '/mover-placa',
       '/lista-espera',
+      '/mapas-interactivos',
       '/gestion-usuarios',
       '/estadisticas',
       '/pruebas',

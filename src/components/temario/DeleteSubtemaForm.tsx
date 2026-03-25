@@ -36,7 +36,7 @@ const DeleteSubtemaForm: React.FC<DeleteSubtemaFormProps> = ({
 }) => (
   <form onSubmit={onSubmit} style={styles.form}>
     <div style={styles.formGroup}>
-      <label style={styles.label}>Seleccionar Tema:</label>
+      <label style={styles.label}>Tema</label>
       <select
         style={styles.select}
         value={deletingTemaId}
@@ -44,7 +44,7 @@ const DeleteSubtemaForm: React.FC<DeleteSubtemaFormProps> = ({
         required
       >
         <option value="" disabled>
-          Selecciona un tema
+          — Elige un tema —
         </option>
         {temas.map((t) => (
           <option key={t.id} value={t.id}>
@@ -61,7 +61,7 @@ const DeleteSubtemaForm: React.FC<DeleteSubtemaFormProps> = ({
 
     {deletingTemaId && subtemasOfSelectedTema.length > 0 && (
       <div style={styles.formGroup}>
-        <label style={styles.label}>Seleccionar Subtema a Borrar:</label>
+        <label style={styles.label}>Subtema a borrar</label>
         <select
           style={styles.select}
           value={deletingSubtemaId}
@@ -69,7 +69,7 @@ const DeleteSubtemaForm: React.FC<DeleteSubtemaFormProps> = ({
           required
         >
           <option value="" disabled>
-            Selecciona un subtema
+            — Elige un subtema —
           </option>
           {subtemasOfSelectedTema.map((s) => (
             <option key={s.id} value={s.id}>

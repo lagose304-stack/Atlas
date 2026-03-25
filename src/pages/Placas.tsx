@@ -117,15 +117,29 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#b91c1c', fontWeight: 600, textAlign: 'center',
   },
   select: {
-    width: '100%', padding: '15px', fontSize: '1em',
-    border: '2px solid #bdc3c7', borderRadius: '8px',
-    backgroundColor: '#fff', cursor: 'pointer',
-    transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
-    outline: 'none', color: '#2c3e50', fontWeight: 500,
+    width: '100%',
+    padding: '12px 16px',
+    fontSize: '1em',
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
+    borderRadius: '10px',
+    border: '1.5px solid #cbd5e1',
+    background: '#f8fafc',
+    color: '#0f172a',
+    cursor: 'pointer',
+    outline: 'none',
+    boxSizing: 'border-box' as const,
   },
   accordionLabel: {
-    display: 'block', fontSize: '0.875em', fontWeight: 700,
-    color: '#475569', letterSpacing: '0.03em', marginBottom: '8px',
+    display: 'block',
+    fontSize: '0.875em',
+    fontWeight: 700,
+    color: '#475569',
+    letterSpacing: '0.03em',
+    marginBottom: '8px',
+  },
+  selectDisabled: {
+    opacity: 0.55,
+    cursor: 'not-allowed',
   },
   editFieldGroup: {
     display: 'flex', flexDirection: 'column' as const, gap: '8px',
@@ -574,11 +588,7 @@ const Placas: React.FC = () => {
                       <div style={styles.editFieldGroup}>
                         <label style={styles.accordionLabel}>Tema</label>
                         <select
-                          style={{
-                            ...styles.select,
-                            borderColor: selectedTema ? '#818cf8' : '#fca5a5',
-                            background: selectedTema ? '#f5f3ff' : '#fff1f2',
-                          }}
+                          style={styles.select}
                           value={selectedTema}
                           onChange={handleTemaChange}
                         >
@@ -599,13 +609,10 @@ const Placas: React.FC = () => {
                         <div style={styles.editFieldGroup}>
                           <label style={styles.accordionLabel}>Subtema</label>
                           <select
-                            style={{
-                              ...styles.select,
-                              borderColor: selectedSubtema ? '#818cf8' : '#fca5a5',
-                              background: selectedSubtema ? '#f5f3ff' : '#fff1f2',
-                            }}
+                            style={{ ...styles.select, ...(subtemas.length === 0 ? styles.selectDisabled : {}) }}
                             value={selectedSubtema}
                             onChange={handleSubtemaChange}
+                            disabled={subtemas.length === 0}
                           >
                             <option value="">— Elige un subtema —</option>
                             {subtemas.map(subtema => (
@@ -894,7 +901,7 @@ const Placas: React.FC = () => {
                 onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#6366f1,#818cf8)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.color = '#6366f1'; e.currentTarget.style.borderColor = '#c7d2fe'; }}
               >
-                📂 Mover placa
+                📂 Editar placas
               </button>
               <button
                 style={{ ...p.actionBtn, color: '#6366f1', background: '#f5f3ff', borderColor: '#c7d2fe' }}
@@ -903,6 +910,43 @@ const Placas: React.FC = () => {
                 onMouseLeave={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.color = '#6366f1'; e.currentTarget.style.borderColor = '#c7d2fe'; }}
               >
                 ⏳ Lista de espera
+              </button>
+            </div>
+          </div>
+
+          {/* Mapas interactivos */}
+          <div style={p.card}>
+            <div style={{ ...p.cardAccent, background: 'linear-gradient(135deg, #0ea5e9, #22d3ee)' }} />
+            <div style={p.cardIcon}>🗺️</div>
+            <div style={p.cardBody}>
+              <h2 style={p.cardTitle}>Crea mapas interactivos</h2>
+              <p style={p.cardDesc}>Sección preparada para gestionar mapas interactivos de forma visual.</p>
+            </div>
+            <div style={p.btnGroup}>
+              <button
+                type="button"
+                style={{ ...p.actionBtn, color: '#0369a1', background: '#ecfeff', borderColor: '#a5f3fc' }}
+                onClick={() => navigate('/mapas-interactivos')}
+                onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#0ea5e9,#22d3ee)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#ecfeff'; e.currentTarget.style.color = '#0369a1'; e.currentTarget.style.borderColor = '#a5f3fc'; }}
+              >
+                ➕ Crear
+              </button>
+              <button
+                type="button"
+                style={{ ...p.actionBtn, color: '#0369a1', background: '#ecfeff', borderColor: '#a5f3fc', opacity: 0.8, cursor: 'not-allowed' }}
+                title="Próximamente"
+                disabled
+              >
+                ✏️ Editar
+              </button>
+              <button
+                type="button"
+                style={{ ...p.actionBtn, color: '#0369a1', background: '#ecfeff', borderColor: '#a5f3fc', opacity: 0.8, cursor: 'not-allowed' }}
+                title="Próximamente"
+                disabled
+              >
+                🗑️ Borrar
               </button>
             </div>
           </div>

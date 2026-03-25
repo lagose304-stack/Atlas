@@ -51,7 +51,7 @@ const CreateSubtemaForm: React.FC<CreateSubtemaFormProps> = ({
   return (
     <form onSubmit={onSubmit} style={styles.form}>
       <div style={styles.formGroup}>
-        <label style={styles.label}>Seleccionar Tema:</label>
+        <label style={styles.label}>Tema</label>
         <select
           style={styles.select}
           value={selectedTemaId}
@@ -59,7 +59,7 @@ const CreateSubtemaForm: React.FC<CreateSubtemaFormProps> = ({
           required
         >
           <option value="" disabled>
-            Selecciona un tema
+            — Elige un tema —
           </option>
           {temas.map((t) => (
             <option key={t.id} value={t.id}>

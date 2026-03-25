@@ -366,7 +366,7 @@ const Pruebas: React.FC = () => {
                             }}
                             style={s.formSelect}
                           >
-                            <option value="">Selecciona un tema...</option>
+                            <option value="">— Elige un tema —</option>
                             {temas.map(tema => (
                               <option key={tema.id} value={String(tema.id)}>{tema.nombre}</option>
                             ))}
@@ -378,7 +378,7 @@ const Pruebas: React.FC = () => {
                           <select
                             value={subtemaId}
                             onChange={e => setSubtemaId(e.target.value)}
-                            style={s.formSelect}
+                            style={{ ...s.formSelect, ...(!temaId ? s.formSelectDisabled : {}) }}
                             disabled={!temaId}
                           >
                             <option value="">Sin subtema</option>
@@ -696,9 +696,10 @@ const s: { [key: string]: React.CSSProperties } = {
   },
   accordionWrap: {
     marginTop: '10px',
-    border: '1px solid #dbeafe',
-    borderRadius: '12px',
-    background: '#ffffff',
+    border: 'none',
+    borderRadius: '20px',
+    background: 'transparent',
+    boxShadow: 'none',
     overflow: 'hidden',
   },
   accordionHeader: {
@@ -706,20 +707,25 @@ const s: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '10px 12px',
+    padding: '14px 16px',
     border: 'none',
-    background: 'linear-gradient(180deg, #f8fbff 0%, #eff6ff 100%)',
-    color: '#1e293b',
+    borderRadius: '12px',
+    background: 'linear-gradient(135deg, #f5f3ff, #eef2ff)',
+    color: '#0f172a',
     fontWeight: 800,
-    fontSize: '0.88em',
+    fontSize: '0.9em',
+    letterSpacing: '0.01em',
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
   accordionBody: {
-    padding: '12px',
+    marginTop: '10px',
+    padding: '16px',
+    background: 'transparent',
+    borderRadius: '14px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
+    gap: '12px',
   },
   formGrid: {
     display: 'grid',
@@ -729,10 +735,11 @@ const s: { [key: string]: React.CSSProperties } = {
   formLabel: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '5px',
-    fontSize: '0.8em',
+    gap: '8px',
+    fontSize: '0.875em',
     color: '#475569',
     fontWeight: 700,
+    letterSpacing: '0.03em',
   },
   formInput: {
     width: '100%',
@@ -747,13 +754,19 @@ const s: { [key: string]: React.CSSProperties } = {
   },
   formSelect: {
     width: '100%',
-    padding: '8px 10px',
-    borderRadius: '8px',
-    border: '1px solid #dbeafe',
-    background: '#fff',
+    padding: '12px 16px',
+    borderRadius: '10px',
+    border: '1.5px solid #cbd5e1',
+    background: '#f8fafc',
     color: '#0f172a',
-    fontSize: '0.9em',
-    fontFamily: 'inherit',
+    fontSize: '1em',
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
+    boxSizing: 'border-box',
+    cursor: 'pointer',
+  },
+  formSelectDisabled: {
+    opacity: 0.55,
+    cursor: 'not-allowed',
   },
   formTextarea: {
     width: '100%',

@@ -608,11 +608,7 @@ const ListaEspera: React.FC = () => {
                         Tema <span style={{ color: '#ef4444' }}>*</span>
                       </label>
                       <select
-                        style={{
-                          ...s.select,
-                          borderColor: temaId ? '#818cf8' : '#fca5a5',
-                          background: temaId ? '#f5f3ff' : '#fff1f2',
-                        }}
+                        style={s.select}
                         value={temaId ?? ''}
                         onChange={e => handleTemaChange(e.target.value ? Number(e.target.value) : null)}
                       >
@@ -641,8 +637,6 @@ const ListaEspera: React.FC = () => {
                           style={{
                             ...s.select,
                             ...(!temaId ? s.selectDisabled : {}),
-                            borderColor: subtemaId ? '#818cf8' : temaId ? '#fca5a5' : undefined,
-                            background: subtemaId ? '#f5f3ff' : temaId ? '#fff1f2' : undefined,
                           }}
                           value={subtemaId ?? ''}
                           disabled={!temaId || subtemas.length === 0}
@@ -1170,12 +1164,16 @@ const s: { [key: string]: React.CSSProperties } = {
     color: '#475569', letterSpacing: '0.03em', marginBottom: '8px',
   },
   select: {
-    width: '100%', padding: '11px 14px', fontSize: '1em',
-    fontFamily: "'Inter', 'Segoe UI', sans-serif",
-    borderRadius: '10px', border: '1.5px solid #c7d2fe',
-    background: '#f8fafc', color: '#0f172a', cursor: 'pointer',
+    width: '100%',
+    padding: '12px 16px',
+    fontSize: '1em',
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
+    borderRadius: '10px',
+    border: '1.5px solid #cbd5e1',
+    background: '#f8fafc',
+    color: '#0f172a',
+    cursor: 'pointer',
     outline: 'none', boxSizing: 'border-box' as const,
-    transition: 'border-color 0.2s',
   },
   selectDisabled: { opacity: 0.55, cursor: 'not-allowed' },
   destInfo: {
