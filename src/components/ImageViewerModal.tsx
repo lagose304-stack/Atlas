@@ -494,6 +494,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               }}
               style={{
                 maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
+                objectPosition: 'center center',
                 userSelect: 'none', display: 'block',
               }}
             />

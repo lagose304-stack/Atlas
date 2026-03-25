@@ -10,7 +10,8 @@
     "dev:all": "npm run dev:backend",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "publish:github": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"git add -A; git diff --cached --quiet; if ($LASTEXITCODE -eq 0) { Write-Host 'No hay cambios para publicar.'; exit 0 }; $msg = 'chore: publish ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'); git commit -m $msg; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git push origin main\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",

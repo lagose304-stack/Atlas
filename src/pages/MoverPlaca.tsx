@@ -1157,6 +1157,7 @@ const s: { [key: string]: React.CSSProperties } = {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
+    objectPosition: 'center center',
     display: 'block',
     pointerEvents: 'none',
     transition: 'filter 0.2s',
@@ -1209,6 +1210,7 @@ const s: { [key: string]: React.CSSProperties } = {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
+    objectPosition: 'center center',
     display: 'block',
   },
   editPhotoHint: {

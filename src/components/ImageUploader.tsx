@@ -161,6 +161,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect }) => {
       display: 'block',
       cursor: 'pointer',
       objectFit: 'contain',
+      objectPosition: 'center center',
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
     },
     expandIcon: {
@@ -205,6 +206,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect }) => {
       maxWidth: '100%',
       maxHeight: '100%',
       objectFit: 'contain',
+      objectPosition: 'center center',
       transition: 'transform 0.3s ease',
       userSelect: 'none',
     },

@@ -307,6 +307,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '166px',
     height: '166px',
     objectFit: 'contain',
+    objectPosition: 'center center',
     filter: 'drop-shadow(0 12px 20px rgba(7, 38, 83, 0.42))',
   },
   centerArea: {
@@ -378,6 +379,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '104px',
     height: '104px',
     objectFit: 'contain',
+    objectPosition: 'center center',
     borderRadius: '50%',
     boxShadow: '0 7px 16px rgba(8, 24, 58, 0.35)',
   },
@@ -514,6 +516,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '31px',
     height: '31px',
     objectFit: 'contain',
+    objectPosition: 'center center',
   },
   compactBrandText: {
     color: '#143768',

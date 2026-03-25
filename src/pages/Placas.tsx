@@ -817,7 +817,7 @@ const Placas: React.FC = () => {
                       }}>
                         {scPreviews.map((src, idx) => (
                           <div key={idx} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1.5px solid #fde68a' }}>
-                            <img src={src} alt={`preview-${idx}`} style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', display: 'block' }} />
+                            <img src={src} alt={`preview-${idx}`} style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', objectPosition: 'center center', display: 'block' }} />
                             <button
                               type="button"
                               onClick={() => handleScRemoveFile(idx)}

@@ -3478,7 +3478,7 @@ const CarouselSlotsEditor: React.FC<CarouselSlotsEditorProps> = ({
         <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '8px 10px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
           <img
             src={getCloudinaryImageUrl(slide.url, 'thumbSmall')} alt="Vista previa"
-            style={{ width: '64px', height: '48px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0, cursor: 'pointer' }}
+            style={{ width: '64px', height: '48px', objectFit: 'cover', objectPosition: 'center center', borderRadius: '6px', flexShrink: 0, cursor: 'pointer' }}
             onClick={() => onPickSlot(idx)}
             title="Cambiar imagen"
             loading="lazy"
@@ -4445,6 +4445,7 @@ const es: Record<string, React.CSSProperties> = {
     maxHeight: '280px',
     width: '100%',
     objectFit: 'contain',
+    objectPosition: 'center center',
     borderRadius: '10px',
     border: '1px solid #e2e8f0',
     background: '#f1f5f9',
@@ -4518,6 +4519,7 @@ const es: Record<string, React.CSSProperties> = {
     width: '100%',
     maxHeight: '200px',
     objectFit: 'contain',
+    objectPosition: 'center center',
     borderRadius: '8px',
     border: '1px solid #e2e8f0',
     background: '#f1f5f9',
@@ -5158,6 +5160,7 @@ const es: Record<string, React.CSSProperties> = {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
+    objectPosition: 'center center',
     display: 'block',
   },
   // Estilos para "Todas las placas"

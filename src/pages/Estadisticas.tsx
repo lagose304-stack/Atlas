@@ -1429,6 +1429,7 @@ const s: { [key: string]: React.CSSProperties } = {
     maxWidth: '190px',
     aspectRatio: '1 / 1',
     objectFit: 'cover',
+    objectPosition: 'center center',
     borderRadius: '8px',
     border: '1px solid #cbd5e1',
     marginTop: '6px',

@@ -89,7 +89,7 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
             srcSet={logoSrcSet}
             sizes="(max-width: 760px) 50vw, (max-width: 1100px) 33vw, 420px"
             alt={tema.nombre}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center' }}
             loading="lazy"
             decoding="async"
             onError={() => {

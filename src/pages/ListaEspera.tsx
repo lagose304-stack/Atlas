@@ -540,7 +540,7 @@ const ListaEspera: React.FC = () => {
                                   srcSet={`${getCloudinaryImageUrl(placa.photo_url, 'thumbSmall')} 320w, ${getCloudinaryImageUrl(placa.photo_url, 'thumb')} 560w`}
                                   sizes="80px"
                                   alt={`Mini ${miniStart + idx + 1}`}
-                                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center', display: 'block' }}
                                   loading="lazy"
                                   decoding="async"
                                   draggable={false}
@@ -1091,6 +1091,7 @@ const s: { [key: string]: React.CSSProperties } = {
   },
   img: {
     width: '100%', height: '100%', objectFit: 'cover',
+    objectPosition: 'center center',
     display: 'block', pointerEvents: 'none',
   },
   cardFooter: {
@@ -1133,6 +1134,7 @@ const s: { [key: string]: React.CSSProperties } = {
   } as React.CSSProperties,
   bigImg: {
     width: '100%', height: '100%', objectFit: 'cover',
+    objectPosition: 'center center',
     display: 'block', pointerEvents: 'none',
   },
   restLabel: {

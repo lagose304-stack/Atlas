@@ -391,7 +391,7 @@ const s: { [key: string]: React.CSSProperties } = {
     marginTop: '8px',
     flexShrink: 0,
   },
-  img: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
+  img: { width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center', display: 'block' },
   imgFallback: { fontSize: 'clamp(1.4em, 3vw, 2em)' },
   cardName: { margin: 0, color: '#0f172a', fontWeight: 700, lineHeight: 1.3, textAlign: 'center' },
   dragHandle: {

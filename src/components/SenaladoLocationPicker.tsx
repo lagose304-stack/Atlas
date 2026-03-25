@@ -242,6 +242,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                 maxWidth: 'min(920px, 100%)',
                 maxHeight: '66vh',
                 objectFit: 'contain',
+                objectPosition: 'center center',
                 borderRadius: '10px',
                 cursor: 'crosshair',
                 boxShadow: '0 8px 24px rgba(15, 23, 42, 0.25)',
