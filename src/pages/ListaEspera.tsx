@@ -6,6 +6,8 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
+import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
+import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
@@ -39,6 +41,62 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
   { key: 'tercer',  label: 'Tercer parcial'  },
 ];
 
+interface MarkerLocation {
+  x: number;
+  y: number;
+}
+
+interface SenaladoMetaItem {
+  label: string;
+  x: number | null;
+  y: number | null;
+}
+
+const buildSenaladosPayload = (
+  names: string[],
+  locations: Array<MarkerLocation | null>
+): { labels: string[]; meta: SenaladoMetaItem[]; error?: string } => {
+  const labels: string[] = [];
+  const meta: SenaladoMetaItem[] = [];
+
+  const total = Math.max(names.length, locations.length);
+  for (let index = 0; index < total; index++) {
+    const name = names[index] ?? '';
+    const label = name.trim();
+    const location = locations[index] ?? null;
+
+    const hasLabel = label !== '';
+    const hasLocation = location !== null;
+
+    if (!hasLabel && !hasLocation) continue;
+
+    if (!hasLocation) {
+      return {
+        labels: [],
+        meta: [],
+        error: `Debes ubicar el señalado ${index + 1} antes de guardar.`,
+      };
+    }
+
+    if (!hasLabel) {
+      return {
+        labels: [],
+        meta: [],
+        error: `Debes escribir el nombre del señalado ${index + 1}.`,
+      };
+    }
+
+    labels.push(label);
+    meta.push({
+      label,
+      x: location?.x ?? null,
+      y: location?.y ?? null,
+    });
+  }
+
+  return { labels, meta };
+};
+
 const ITEMS_PER_PAGE = 15;
 
 const ListaEspera: React.FC = () => {
@@ -62,6 +120,9 @@ const ListaEspera: React.FC = () => {
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
   const [aumento,         setAumento]         = useState('');
   const [senalados,       setSenalados]       = useState<string[]>([]);
+  const [senaladosPos,    setSenaladosPos]    = useState<Array<MarkerLocation | null>>([]);
+  const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
+  const [namingSenaladoIndex, setNamingSenaladoIndex] = useState<number | null>(null);
   const [comentario,      setComentario]      = useState('');
   const [showComentario,  setShowComentario]  = useState(false);
   const [tincion,         setTincion]         = useState('');
@@ -105,6 +166,9 @@ const ListaEspera: React.FC = () => {
     setSubtemas([]);
     setAumento('');
     setSenalados([]);
+    setSenaladosPos([]);
+    setEditingSenaladoIndex(null);
+    setNamingSenaladoIndex(null);
     setComentario('');
     setShowComentario(false);
     setTincion('');
@@ -148,35 +212,34 @@ const ListaEspera: React.FC = () => {
     const subObj = subtemas.find(s => s.id === subtemaId);
     if (!temaObj || !subObj) return;
 
+    const senaladosPayload = buildSenaladosPayload(senalados, senaladosPos);
+    if (senaladosPayload.error) {
+      setSaveError(senaladosPayload.error);
+      return;
+    }
+
     setIsSaving(true);
     setSaveError('');
     setSaveSuccess(false);
 
     try {
-      const senalados_filtrados = senalados.filter(sv => sv.trim() !== '');
-      const { error } = await supabase.rpc('classify_waiting_plate', {
+      const { labels: senalados_filtrados, meta: senalados_meta } = senaladosPayload;
+      const { data: createdPlacaId, error } = await supabase.rpc('classify_waiting_plate', {
         p_waiting_id: selected.id,
         p_tema_id: temaId,
         p_subtema_id: subtemaId,
         p_aumento: aumento || null,
         p_senalados: senalados_filtrados.length > 0 ? senalados_filtrados : null,
+        p_senalados_meta: senalados_meta.length > 0 ? senalados_meta : null,
         p_comentario: comentario.trim() || null,
         p_tincion: tincion.trim() || null,
       });
       if (error) throw error;
 
-      const { data: recentlyCreated } = await supabase
-        .from('placas')
-        .select('id')
-        .eq('photo_url', selected.photo_url)
-        .order('id', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
       await logPlateActivity({
         actionType: 'classify_waiting_plate',
         targetTable: 'placas',
-        placaId: recentlyCreated?.id ?? null,
+        placaId: typeof createdPlacaId === 'number' ? createdPlacaId : null,
         waitingPlateId: selected.id,
         actor: {
           id: user?.id ?? null,
@@ -202,7 +265,7 @@ const ListaEspera: React.FC = () => {
       setIsSaving(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, temaId, subtemaId, aumento, senalados, comentario, tincion, temas, subtemas]);
+  }, [selected, temaId, subtemaId, aumento, senalados, senaladosPos, comentario, tincion, temas, subtemas]);
 
   const handleDeletePlaca = async () => {
     if (!deleteTarget) return;
@@ -675,12 +738,27 @@ const ListaEspera: React.FC = () => {
                             onBlur={e => (e.currentTarget.style.borderColor = '#cbd5e1')}
                           />
                           <button type="button" style={s.senalRemBtn}
-                            onClick={() => setSenalados(prev => prev.filter((_, i) => i !== idx))}>✕</button>
+                            onClick={() => {
+                              setSenalados(prev => prev.filter((_, i) => i !== idx));
+                              setSenaladosPos(prev => prev.filter((_, i) => i !== idx));
+                            }}>✕</button>
+                          <button
+                            type="button"
+                            style={{ ...s.addSenalBtn, padding: '6px 10px' }}
+                            onClick={() => setEditingSenaladoIndex(idx)}
+                          >
+                            {senaladosPos[idx] ? '📍 Editar ubicación' : '📍 Ubicar'}
+                          </button>
                         </div>
                       ))}
                       <button type="button" style={s.addSenalBtn}
-                        onClick={() => setSenalados(prev => [...prev, ''])}>
-                        ï¼‹ Añadir señalado
+                        onClick={() => {
+                          const nextIndex = senalados.length;
+                          setSenalados(prev => [...prev, '']);
+                          setSenaladosPos(prev => [...prev, null]);
+                          setEditingSenaladoIndex(nextIndex);
+                        }}>
+                        + Añadir señalado
                       </button>
                     </div>
 
@@ -738,6 +816,60 @@ const ListaEspera: React.FC = () => {
 
       <Footer />
       <LoadingToast visible={isSaving} type="saving" message="Clasificando placa" />
+
+      {editingSenaladoIndex !== null && selected && (
+        <SenaladoLocationPicker
+          imageSrc={getCloudinaryImageUrl(selected.photo_url, 'view')}
+          senaladoLabel={senalados[editingSenaladoIndex] ?? ''}
+          initialLocation={senaladosPos[editingSenaladoIndex] ?? null}
+          onCancel={() => setEditingSenaladoIndex(null)}
+          onRemove={() => {
+            const targetIndex = editingSenaladoIndex;
+            setSenalados(prev => prev.filter((_, i) => i !== targetIndex));
+            setSenaladosPos(prev => prev.filter((_, i) => i !== targetIndex));
+            setEditingSenaladoIndex(null);
+            setNamingSenaladoIndex(null);
+          }}
+          onSave={(location) => {
+            const targetIndex = editingSenaladoIndex;
+            setSenaladosPos(prev => {
+              const next = [...prev];
+              next[targetIndex] = location;
+              return next;
+            });
+
+            const currentLabel = (senalados[targetIndex] ?? '').trim();
+            if (!currentLabel) {
+              setNamingSenaladoIndex(targetIndex);
+            }
+
+            setEditingSenaladoIndex(null);
+          }}
+        />
+      )}
+
+      {namingSenaladoIndex !== null && (
+        <RequiredTextPromptModal
+          title="Nombre del señalado"
+          description="Después de ubicar el señalado, debes escribir su nombre para continuar."
+          placeholder="Ej: Membrana basal"
+          required
+          cancelLabel="Cancelar y señalar de nuevo"
+          onCancel={() => {
+            const targetIndex = namingSenaladoIndex;
+            setNamingSenaladoIndex(null);
+            setEditingSenaladoIndex(targetIndex);
+          }}
+          onSubmit={(value) => {
+            setSenalados(prev => {
+              const next = [...prev];
+              next[namingSenaladoIndex] = value;
+              return next;
+            });
+            setNamingSenaladoIndex(null);
+          }}
+        />
+      )}
 
       {/* Modal confirmación borrar placa de espera */}
       {deleteTarget && (

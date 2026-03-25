@@ -17,6 +17,7 @@ interface Placa {
   photo_url: string;
   aumento?: string | null;
   senalados?: string[] | null;
+  senalados_meta?: Array<{ label: string; x: number | null; y: number | null }> | null;
   comentario?: string | null;
   tincion?: string | null;
 }
@@ -57,7 +58,7 @@ const PlacasSubtema: React.FC = () => {
       // Cargar placas de este subtema
       const { data: placasData, error: placasError } = await supabase
         .from('placas')
-        .select('id, photo_url, aumento, senalados, comentario, tincion')
+        .select('id, photo_url, aumento, senalados, senalados_meta, comentario, tincion')
         .eq('subtema_id', subtemaId)
         .order('sort_order', { ascending: true });
 
@@ -175,6 +176,7 @@ const PlacasSubtema: React.FC = () => {
           subtemaNombre={subtema?.nombre}
           aumento={selectedPlaca.aumento}
           senalados={selectedPlaca.senalados}
+          senaladosMeta={selectedPlaca.senalados_meta}
           comentario={selectedPlaca.comentario}
           tincion={selectedPlaca.tincion}
         />

@@ -7,6 +7,7 @@ CREATE OR REPLACE FUNCTION public.classify_waiting_plate(
   p_subtema_id INTEGER,
   p_aumento TEXT DEFAULT NULL,
   p_senalados TEXT[] DEFAULT NULL,
+  p_senalados_meta JSONB DEFAULT NULL,
   p_comentario TEXT DEFAULT NULL,
   p_tincion TEXT DEFAULT NULL
 )
@@ -48,6 +49,7 @@ BEGIN
     subtema_id,
     aumento,
     senalados,
+    senalados_meta,
     comentario,
     tincion,
     sort_order
@@ -57,6 +59,7 @@ BEGIN
     p_subtema_id,
     p_aumento,
     p_senalados,
+    p_senalados_meta,
     p_comentario,
     p_tincion,
     v_next_sort_order
@@ -70,5 +73,5 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.classify_waiting_plate(BIGINT, INTEGER, INTEGER, TEXT, TEXT[], TEXT, TEXT)
+GRANT EXECUTE ON FUNCTION public.classify_waiting_plate(BIGINT, INTEGER, INTEGER, TEXT, TEXT[], JSONB, TEXT, TEXT)
 TO anon, authenticated;

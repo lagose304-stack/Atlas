@@ -1,5 +1,11 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { renderBoldText } from './BoldField';
+
+interface SenaladoMetaItem {
+  label: string;
+  x: number | null;
+  y: number | null;
+}
 
 interface ImageViewerModalProps {
   src: string;
@@ -9,6 +15,7 @@ interface ImageViewerModalProps {
   subtemaNombre?: string;
   aumento?: string | null;
   senalados?: string[] | null;
+  senaladosMeta?: SenaladoMetaItem[] | null;
   comentario?: string | null;
   tincion?: string | null;
 }
@@ -17,6 +24,94 @@ const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 4;
 const SIDEBAR_BREAKPOINT = 900;
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+type PointerEdge = 'left' | 'right' | 'top' | 'bottom';
+
+const getPointerStartPx = (x: number, y: number, width: number, height: number) => {
+  const distances = [
+    { edge: 'left', value: x },
+    { edge: 'right', value: width - x },
+    { edge: 'top', value: y },
+    { edge: 'bottom', value: height - y },
+  ] as const;
+
+  const nearest = distances.reduce((prev, curr) => (curr.value < prev.value ? curr : prev));
+
+  switch (nearest.edge) {
+    case 'left':
+      return { x: 0, y, edge: 'left' as PointerEdge };
+    case 'right':
+      return { x: width, y, edge: 'right' as PointerEdge };
+    case 'top':
+      return { x, y: 0, edge: 'top' as PointerEdge };
+    default:
+      return { x, y: height, edge: 'bottom' as PointerEdge };
+  }
+};
+
+const enforceMinimumInclination = (
+  start: { x: number; y: number; edge: PointerEdge },
+  end: { x: number; y: number },
+  width: number,
+  height: number,
+  minAngleDeg: number
+) => {
+  const tanMin = Math.tan((minAngleDeg * Math.PI) / 180);
+
+  if (start.edge === 'left' || start.edge === 'right') {
+    const dx = Math.abs(end.x - start.x);
+    const currentDy = Math.abs(end.y - start.y);
+    const minDy = dx * tanMin;
+    if (currentDy < minDy) {
+      const sign = end.y < height / 2 ? 1 : -1;
+      return { ...start, y: clamp(end.y - sign * minDy, 0, height) };
+    }
+    return start;
+  }
+
+  const dy = Math.abs(end.y - start.y);
+  const currentDx = Math.abs(end.x - start.x);
+  const minDx = dy * tanMin;
+  if (currentDx < minDx) {
+    const sign = end.x < width / 2 ? 1 : -1;
+    return { ...start, x: clamp(end.x - sign * minDx, 0, width) };
+  }
+  return start;
+};
+
+const getPointerPolygon = (
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  bodyWidth: number,
+  taperDistance: number
+) => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const nx = -dy / len;
+  const ny = dx / len;
+  const half = bodyWidth / 2;
+  const taper = Math.min(taperDistance, len * 0.6);
+  const neck = {
+    x: end.x - ux * taper,
+    y: end.y - uy * taper,
+  };
+
+  return [
+    { x: start.x + nx * half, y: start.y + ny * half },
+    { x: start.x - nx * half, y: start.y - ny * half },
+    { x: neck.x - nx * half, y: neck.y - ny * half },
+    end,
+    { x: neck.x + nx * half, y: neck.y + ny * half },
+  ] as const;
+};
+
+const POINTER_CORE_WIDTH_PX = 6;
+const POINTER_TAPER_PX = 26;
+const POINTER_MIN_ANGLE_DEG = 7;
+const MARKER_FADE_OUT_MS = 180;
+const MARKER_FADE_IN_MS = 200;
 
 const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   src,
@@ -26,11 +121,28 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   subtemaNombre,
   aumento,
   senalados,
+  senaladosMeta,
   comentario,
   tincion,
 }) => {
+  const senaladosItems = useMemo<SenaladoMetaItem[]>(() => {
+    if (senaladosMeta && senaladosMeta.length > 0) {
+      return senaladosMeta.map(item => ({
+        label: item.label,
+        x: item.x,
+        y: item.y,
+      }));
+    }
+
+    return (senalados ?? []).map(item => ({
+      label: item,
+      x: null,
+      y: null,
+    }));
+  }, [senalados, senaladosMeta]);
+
   const hasInfo = !!(
-    (senalados && senalados.length > 0) ||
+    senaladosItems.length > 0 ||
     comentario ||
     tincion
   );
@@ -43,14 +155,22 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const [zoomLevel, setZoomLevel]   = useState(1);
   const [position, setPosition]     = useState({ x: 0, y: 0 });
+  const [activeMarkerIndex, setActiveMarkerIndex] = useState<number | null>(null);
+  const [displayedMarkerIndex, setDisplayedMarkerIndex] = useState<number | null>(null);
+  const [markerVisible, setMarkerVisible] = useState(false);
+  const [hoveredMarkerIndex, setHoveredMarkerIndex] = useState<number | null>(null);
+  const [focusedMarkerIndex, setFocusedMarkerIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isPinching, setIsPinching] = useState(false);
+  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
 
   const containerRef   = useRef<HTMLDivElement>(null);
+  const imageRef       = useRef<HTMLImageElement>(null);
   const stateRef       = useRef({ zoom: 1, pos: { x: 0, y: 0 } });
   const dragStartRef   = useRef({ x: 0, y: 0 });
   const isDraggingRef  = useRef(false);
   const pinchRef       = useRef<{ dist: number } | null>(null);
+  const markerSwapTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => { stateRef.current.zoom = zoomLevel; }, [zoomLevel]);
   useEffect(() => { stateRef.current.pos  = position;  }, [position]);
@@ -70,6 +190,83 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       setUseZoomSource(true);
     }
   }, [zoomLevel, srcZoom, zoomSourceFailed]);
+
+  useEffect(() => {
+    setActiveMarkerIndex(null);
+    setDisplayedMarkerIndex(null);
+    setMarkerVisible(false);
+    setHoveredMarkerIndex(null);
+    setFocusedMarkerIndex(null);
+  }, [src, senaladosMeta, senalados]);
+
+  useEffect(() => {
+    if (markerSwapTimeoutRef.current !== null) {
+      window.clearTimeout(markerSwapTimeoutRef.current);
+      markerSwapTimeoutRef.current = null;
+    }
+
+    if (activeMarkerIndex === null) {
+      setMarkerVisible(false);
+      markerSwapTimeoutRef.current = window.setTimeout(() => {
+        setDisplayedMarkerIndex(null);
+      }, MARKER_FADE_OUT_MS);
+      return;
+    }
+
+    if (displayedMarkerIndex === null) {
+      setDisplayedMarkerIndex(activeMarkerIndex);
+      requestAnimationFrame(() => setMarkerVisible(true));
+      return;
+    }
+
+    if (displayedMarkerIndex === activeMarkerIndex) {
+      setMarkerVisible(true);
+      return;
+    }
+
+    setMarkerVisible(false);
+    markerSwapTimeoutRef.current = window.setTimeout(() => {
+      setDisplayedMarkerIndex(activeMarkerIndex);
+      requestAnimationFrame(() => setMarkerVisible(true));
+    }, MARKER_FADE_OUT_MS);
+
+    return () => {
+      if (markerSwapTimeoutRef.current !== null) {
+        window.clearTimeout(markerSwapTimeoutRef.current);
+        markerSwapTimeoutRef.current = null;
+      }
+    };
+  }, [activeMarkerIndex, displayedMarkerIndex]);
+
+  useEffect(() => {
+    return () => {
+      if (markerSwapTimeoutRef.current !== null) {
+        window.clearTimeout(markerSwapTimeoutRef.current);
+        markerSwapTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  const updateImageSize = () => {
+    const imageEl = imageRef.current;
+    if (!imageEl) return;
+    setImageSize({ width: imageEl.clientWidth, height: imageEl.clientHeight });
+  };
+
+  useEffect(() => {
+    updateImageSize();
+    const imageEl = imageRef.current;
+    if (!imageEl) return;
+
+    const observer = new ResizeObserver(() => updateImageSize());
+    observer.observe(imageEl);
+
+    window.addEventListener('resize', updateImageSize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateImageSize);
+    };
+  }, [src, useZoomSource, srcZoom]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -208,6 +405,22 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         fontFamily: "'Inter', 'Segoe UI', sans-serif",
       }}
     >
+      <style>
+        {`@keyframes senaladoCardIn {
+          0% { opacity: 0; transform: translateY(6px) scale(0.985); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes senaladoBadgePulse {
+          0%, 100% {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.28);
+            transform: scale(1);
+          }
+          50% {
+            box-shadow: 0 0 0 5px rgba(59, 130, 246, 0);
+            transform: scale(1.03);
+          }
+        }`}
+      </style>
       <div style={{
         flex: 1, position: 'relative', background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
         overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -258,25 +471,85 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
-          <img
-            src={useZoomSource && srcZoom ? srcZoom : src}
-            alt="Vista ampliada"
-            draggable={false}
-            onError={() => {
-              // Fallback: algunas URLs de zoom pueden no resolver para ciertos recursos.
-              if (useZoomSource) {
-                setUseZoomSource(false);
-                setZoomSourceFailed(true);
-              }
-            }}
+          <div
             style={{
-              maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
-              userSelect: 'none',
+              position: 'relative',
+              display: 'inline-block',
               transform: `translate(${position.x}px, ${position.y}px) scale(${zoomLevel})`,
               cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
               transition: (isDragging || isPinching) ? 'none' : 'transform 0.3s ease',
             }}
-          />
+          >
+            <img
+              ref={imageRef}
+              src={useZoomSource && srcZoom ? srcZoom : src}
+              alt="Vista ampliada"
+              draggable={false}
+              onLoad={updateImageSize}
+              onError={() => {
+                if (useZoomSource) {
+                  setUseZoomSource(false);
+                  setZoomSourceFailed(true);
+                }
+              }}
+              style={{
+                maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
+                userSelect: 'none', display: 'block',
+              }}
+            />
+
+            {displayedMarkerIndex !== null && imageSize && (() => {
+              const marker = senaladosItems[displayedMarkerIndex];
+              if (!marker || marker.x == null || marker.y == null) return null;
+              const endPx = {
+                x: marker.x * imageSize.width,
+                y: marker.y * imageSize.height,
+              };
+              const baseStart = getPointerStartPx(endPx.x, endPx.y, imageSize.width, imageSize.height);
+              const startPx = enforceMinimumInclination(
+                baseStart,
+                endPx,
+                imageSize.width,
+                imageSize.height,
+                POINTER_MIN_ANGLE_DEG
+              );
+              const core = getPointerPolygon(startPx, endPx, POINTER_CORE_WIDTH_PX, POINTER_TAPER_PX);
+              return (
+                <svg
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    pointerEvents: 'none',
+                    zIndex: 4,
+                    overflow: 'visible',
+                    opacity: markerVisible ? 1 : 0,
+                    transform: markerVisible ? 'translateY(0px) scale(1)' : 'translateY(2px) scale(0.992)',
+                    transformOrigin: `${endPx.x}px ${endPx.y}px`,
+                    filter: markerVisible ? 'blur(0px)' : 'blur(0.4px)',
+                    transition: `opacity ${MARKER_FADE_IN_MS}ms ease, transform ${MARKER_FADE_IN_MS}ms ease, filter ${MARKER_FADE_IN_MS}ms ease`,
+                  }}
+                  width={imageSize.width}
+                  height={imageSize.height}
+                  viewBox={`0 0 ${imageSize.width} ${imageSize.height}`}
+                >
+                  <defs>
+                    <filter id="marker-halo-filter" x="-25%" y="-25%" width="150%" height="150%">
+                      <feDropShadow dx="0" dy="0" stdDeviation="1.2" floodColor="#ffffff" floodOpacity="0.42" />
+                    </filter>
+                  </defs>
+                  <polygon
+                    points={`${core[0].x},${core[0].y} ${core[1].x},${core[1].y} ${core[2].x},${core[2].y} ${core[3].x},${core[3].y} ${core[4].x},${core[4].y}`}
+                    fill="#0a0a0a"
+                    stroke="rgba(255,255,255,0.52)"
+                    strokeWidth="1.35"
+                    strokeLinejoin="round"
+                    filter="url(#marker-halo-filter)"
+                    shapeRendering="geometricPrecision"
+                  />
+                </svg>
+              );
+            })()}
+          </div>
         </div>
 
         <div
@@ -353,17 +626,134 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 <p style={{ margin: 0, color: '#334155', fontSize: '0.88em', lineHeight: 1.65, background: '#f1f5f9', borderRadius: '10px', padding: '10px 14px', border: '1px solid #e2e8f0' }}>{renderBoldText(comentario)}</p>
               </div>
             )}
-            {senalados && senalados.length > 0 && (
+            {senaladosItems.length > 0 && (
               <div>
                 <span style={labelStyle}>📌 Señalados</span>
                 <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {senalados.map((item, i) => (
-                    <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', background: '#f8fafc', borderRadius: '8px', padding: '8px 10px', border: '1px solid #e2e8f0' }}>
-                      <span style={{ minWidth: '22px', height: '22px', borderRadius: '50%', background: 'linear-gradient(135deg, #818cf8, #6366f1)', color: '#fff', fontWeight: 700, fontSize: '0.72em', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
-                      <span style={{ color: '#1e293b', fontSize: '0.88em', lineHeight: 1.55 }}>{renderBoldText(item)}</span>
+                  {senaladosItems.map((item, i) => {
+                    const hasMarker = item.x != null && item.y != null;
+                    const isActive = activeMarkerIndex === i;
+                    const isHovered = hoveredMarkerIndex === i;
+                    const isFocused = focusedMarkerIndex === i;
+                    return (
+                    <li key={i} style={{
+                      display: 'flex',
+                      alignItems: 'stretch',
+                      gap: '10px',
+                      background: isActive ? 'linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%)' : '#f8fafc',
+                      borderRadius: '12px',
+                      padding: '8px 10px',
+                      border: isActive ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                      boxShadow: isActive ? '0 8px 18px rgba(37,99,235,0.12)' : '0 1px 0 rgba(148,163,184,0.12)',
+                      transition: 'all 0.2s ease',
+                      animation: 'senaladoCardIn 320ms ease both',
+                      animationDelay: `${i * 45}ms`,
+                    }}>
+                      <span style={{
+                        minWidth: '24px',
+                        height: '24px',
+                        borderRadius: '999px',
+                        background: isActive
+                          ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
+                          : hasMarker
+                            ? 'linear-gradient(135deg, #818cf8, #6366f1)'
+                            : 'linear-gradient(135deg, #cbd5e1, #94a3b8)',
+                        color: '#fff',
+                        fontWeight: 800,
+                        fontSize: '0.72em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        marginTop: '6px',
+                        boxShadow: isActive ? '0 4px 10px rgba(37,99,235,0.35)' : 'none',
+                      }}>{i + 1}</span>
+                      <button
+                        type="button"
+                        disabled={!hasMarker}
+                        onClick={() => { if (hasMarker) setActiveMarkerIndex(i); }}
+                        onMouseEnter={() => { if (hasMarker) setHoveredMarkerIndex(i); }}
+                        onMouseLeave={() => setHoveredMarkerIndex(null)}
+                        onFocus={() => setFocusedMarkerIndex(i)}
+                        onBlur={() => setFocusedMarkerIndex(null)}
+                        aria-pressed={isActive}
+                        style={{
+                          width: '100%',
+                          border: isActive ? '1px solid #93c5fd' : isHovered ? '1px solid #bfdbfe' : '1px solid #cbd5e1',
+                          background: isActive
+                            ? 'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)'
+                            : isHovered
+                              ? 'linear-gradient(135deg, #f0f9ff 0%, #f8fafc 100%)'
+                            : hasMarker
+                              ? 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)'
+                              : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                          color: hasMarker ? '#1e3a8a' : '#64748b',
+                          fontSize: '0.88em',
+                          lineHeight: 1.4,
+                          cursor: hasMarker ? 'pointer' : 'not-allowed',
+                          fontWeight: isActive ? 700 : 600,
+                          borderRadius: '10px',
+                          padding: '8px 10px',
+                          textAlign: 'left',
+                          fontFamily: 'inherit',
+                          transition: 'all 0.18s ease',
+                          boxShadow: isActive ? '0 4px 12px rgba(59,130,246,0.16)' : isHovered ? '0 2px 10px rgba(14,165,233,0.12)' : 'none',
+                          opacity: hasMarker ? 1 : 0.82,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '10px',
+                          transform: hasMarker && isHovered && !isActive ? 'translateY(-1px)' : 'none',
+                          outline: isFocused ? '2px solid #38bdf8' : 'none',
+                          outlineOffset: '1px',
+                        }}
+                      >
+                        <span style={{ flex: 1, minWidth: 0, letterSpacing: '0.01em' }}>{renderBoldText(item.label)}</span>
+                        <span style={{
+                          fontSize: '0.7em',
+                          fontWeight: 700,
+                          borderRadius: '999px',
+                          padding: '3px 8px',
+                          border: hasMarker
+                            ? isActive
+                              ? '1px solid #93c5fd'
+                              : '1px solid #bae6fd'
+                            : '1px solid #d1d5db',
+                          background: hasMarker
+                            ? isActive
+                              ? '#dbeafe'
+                              : '#ecfeff'
+                            : '#f1f5f9',
+                          color: hasMarker ? '#0c4a6e' : '#6b7280',
+                          whiteSpace: 'nowrap',
+                          animation: hasMarker && isActive ? 'senaladoBadgePulse 1.7s ease-in-out infinite' : 'none',
+                        }}>
+                          {hasMarker ? (isActive ? 'Visible' : 'Ver') : 'Sin ubicacion'}
+                        </span>
+                      </button>
                     </li>
-                  ))}
+                  );})}
                 </ol>
+                <button
+                  type="button"
+                  onClick={() => setActiveMarkerIndex(null)}
+                  style={{
+                    marginTop: '10px',
+                    border: '1px solid #bfdbfe',
+                    background: 'linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)',
+                    color: '#1e3a8a',
+                    borderRadius: '10px',
+                    padding: '8px 12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: '0.82em',
+                    boxShadow: '0 2px 10px rgba(14,165,233,0.12)',
+                    transition: 'all 0.18s ease',
+                  }}
+                >
+                  Ocultar señalador
+                </button>
               </div>
             )}
           </div>

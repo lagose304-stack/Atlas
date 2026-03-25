@@ -6,6 +6,8 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
+import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
+import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
@@ -32,8 +34,20 @@ interface Placa {
   subtema_id: number;
   aumento?: string | null;
   senalados?: string[] | null;
+  senalados_meta?: SenaladoMetaItem[] | null;
   comentario?: string | null;
   tincion?: string | null;
+}
+
+interface MarkerLocation {
+  x: number;
+  y: number;
+}
+
+interface SenaladoMetaItem {
+  label: string;
+  x: number | null;
+  y: number | null;
 }
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
@@ -43,6 +57,77 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
   { key: 'segundo', label: 'Segundo parcial' },
   { key: 'tercer',  label: 'Tercer parcial'  },
 ];
+
+const normalizeLocations = (values: Array<MarkerLocation | null>): Array<MarkerLocation | null> => {
+  return values.map(value => {
+    if (!value) return null;
+    const x = Number(value.x);
+    const y = Number(value.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return {
+      x: Math.min(Math.max(x, 0), 1),
+      y: Math.min(Math.max(y, 0), 1),
+    };
+  });
+};
+
+const buildSenaladosPayload = (
+  names: string[],
+  locations: Array<MarkerLocation | null>
+): { labels: string[]; meta: SenaladoMetaItem[]; error?: string; firstMissingLocationIndex?: number } => {
+  const labels: string[] = [];
+  const meta: SenaladoMetaItem[] = [];
+  const safeLocations = normalizeLocations(locations);
+
+  const total = Math.max(names.length, safeLocations.length);
+  for (let index = 0; index < total; index++) {
+    const name = names[index] ?? '';
+    const label = name.trim();
+    const location = safeLocations[index] ?? null;
+
+    const hasLabel = label !== '';
+    const hasLocation = location !== null;
+
+    if (!hasLabel && !hasLocation) continue;
+
+    if (!hasLocation) {
+      return {
+        labels: [],
+        meta: [],
+        error: `Debes ubicar el señalado ${index + 1} antes de guardar.`,
+        firstMissingLocationIndex: index,
+      };
+    }
+
+    if (!hasLabel) {
+      return {
+        labels: [],
+        meta: [],
+        error: `Debes escribir el nombre del señalado ${index + 1}.`,
+      };
+    }
+
+    labels.push(label);
+    meta.push({
+      label,
+      x: location?.x ?? null,
+      y: location?.y ?? null,
+    });
+  }
+
+  return { labels, meta };
+};
+
+const deriveLocations = (
+  names: string[],
+  meta: SenaladoMetaItem[] | null | undefined
+): Array<MarkerLocation | null> => {
+  return names.map((_, index) => {
+    const item = meta?.[index];
+    if (!item || item.x == null || item.y == null) return null;
+    return { x: item.x, y: item.y };
+  });
+};
 
 const MoverPlaca: React.FC = () => {
   const navigate = useNavigate();
@@ -77,6 +162,10 @@ const MoverPlaca: React.FC = () => {
   // ── Campos editables adicionales ─────────────────────────────────────
   const [editAumento,       setEditAumento]       = useState('');
   const [editSenalados,     setEditSenalados]     = useState<string[]>([]);
+  const [editSenaladosPos,  setEditSenaladosPos]  = useState<Array<MarkerLocation | null>>([]);
+  const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
+  const [namingSenaladoIndex, setNamingSenaladoIndex] = useState<number | null>(null);
+  const [forceLocationAssignment, setForceLocationAssignment] = useState(false);
   const [editComentario,    setEditComentario]    = useState('');
   const [showEditComentario, setShowEditComentario] = useState(false);
   const [editTincion,       setEditTincion]       = useState('');
@@ -132,7 +221,7 @@ const MoverPlaca: React.FC = () => {
       setLoadingPlacas(true);
       const { data } = await supabase
         .from('placas')
-        .select('id, photo_url, sort_order, tema_id, subtema_id, aumento, senalados, comentario, tincion')
+        .select('id, photo_url, sort_order, tema_id, subtema_id, aumento, senalados, senalados_meta, comentario, tincion')
         .eq('subtema_id', selectedSubtemaId)
         .order('sort_order', { ascending: true });
       if (data) setPlacas(data);
@@ -149,6 +238,10 @@ const MoverPlaca: React.FC = () => {
       setEditSubtemas([]);
       setEditAumento('');
       setEditSenalados([]);
+      setEditSenaladosPos([]);
+      setEditingSenaladoIndex(null);
+      setNamingSenaladoIndex(null);
+      setForceLocationAssignment(false);
       setEditComentario('');
       setShowEditComentario(false);
       setEditTincion('');
@@ -158,7 +251,22 @@ const MoverPlaca: React.FC = () => {
     setEditTemaId(selectedPlaca.tema_id);
     setEditSubtemaId(selectedPlaca.subtema_id);
     setEditAumento(selectedPlaca.aumento ?? '');
-    setEditSenalados(selectedPlaca.senalados ? [...selectedPlaca.senalados] : []);
+    const nextNames = selectedPlaca.senalados ? [...selectedPlaca.senalados] : [];
+    const nextLocations = deriveLocations(nextNames, selectedPlaca.senalados_meta ?? null);
+    setEditSenalados(nextNames);
+    setEditSenaladosPos(nextLocations);
+
+    const firstMissingLocationIndex = nextNames.findIndex((label, index) => {
+      return label.trim() !== '' && !nextLocations[index];
+    });
+    if (firstMissingLocationIndex >= 0) {
+      setEditingSenaladoIndex(firstMissingLocationIndex);
+      setForceLocationAssignment(true);
+      setSaveError('Esta placa tiene señalados sin ubicación. Debes ubicarlos para continuar.');
+    } else {
+      setForceLocationAssignment(false);
+    }
+
     setEditComentario(selectedPlaca.comentario ?? '');
     setShowEditComentario(!!(selectedPlaca.comentario));
     setEditTincion(selectedPlaca.tincion ?? '');
@@ -196,10 +304,20 @@ const MoverPlaca: React.FC = () => {
   // ── Guardar cambios ───────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     if (!selectedPlaca || !editTemaId || !editSubtemaId) return;
+    const senaladosPayload = buildSenaladosPayload(editSenalados, editSenaladosPos);
+    if (senaladosPayload.error) {
+      setSaveError(senaladosPayload.error);
+      if (senaladosPayload.firstMissingLocationIndex != null) {
+        setEditingSenaladoIndex(senaladosPayload.firstMissingLocationIndex);
+        setForceLocationAssignment(true);
+      }
+      return;
+    }
+
     setIsSaving(true);
     setSaveError('');
     setSaveSuccess(false);
-    const senalados_filtrados = editSenalados.filter(sv => sv.trim() !== '');
+    const { labels: senalados_filtrados, meta: senalados_meta } = senaladosPayload;
     try {
       const { error } = await supabase
         .from('placas')
@@ -208,6 +326,7 @@ const MoverPlaca: React.FC = () => {
           subtema_id:  editSubtemaId,
           aumento:     editAumento || null,
           senalados:   senalados_filtrados.length > 0 ? senalados_filtrados : null,
+          senalados_meta: senalados_meta.length > 0 ? senalados_meta : null,
           comentario:  editComentario.trim() || null,
           tincion:     editTincion.trim() || null,
         })
@@ -219,6 +338,7 @@ const MoverPlaca: React.FC = () => {
         subtema_id: editSubtemaId,
         aumento:    editAumento || null,
         senalados:  senalados_filtrados.length > 0 ? senalados_filtrados : null,
+        senalados_meta: senalados_meta.length > 0 ? senalados_meta : null,
         comentario: editComentario.trim() || null,
         tincion:    editTincion.trim() || null,
       };
@@ -259,7 +379,18 @@ const MoverPlaca: React.FC = () => {
     } finally {
       setIsSaving(false);
     }
-  }, [selectedPlaca, editTemaId, editSubtemaId]);
+  }, [
+    selectedPlaca,
+    editTemaId,
+    editSubtemaId,
+    editAumento,
+    editSenalados,
+    editSenaladosPos,
+    editComentario,
+    editTincion,
+    user?.id,
+    user?.username,
+  ]);
 
   const temasByParcial: Record<ParcialKey, Tema[]> = { primer: [], segundo: [], tercer: [] };
   temas.forEach(t => {
@@ -285,8 +416,8 @@ const MoverPlaca: React.FC = () => {
     editSubtemaId !== selectedPlaca.subtema_id ||
     editAumento   !== (selectedPlaca.aumento ?? '') ||
     editComentario !== (selectedPlaca.comentario ?? '') ||
-    JSON.stringify(editSenalados.filter(sv => sv.trim())) !==
-      JSON.stringify((selectedPlaca.senalados ?? []).filter(sv => sv.trim())) ||
+    JSON.stringify(buildSenaladosPayload(editSenalados, editSenaladosPos).meta) !==
+      JSON.stringify(selectedPlaca.senalados_meta ?? buildSenaladosPayload(selectedPlaca.senalados ?? [], []).meta) ||
     editTincion !== (selectedPlaca.tincion ?? '')
   );
     const handleGoBack = useSmartBackNavigation('/edicion');
@@ -639,16 +770,35 @@ const MoverPlaca: React.FC = () => {
                         type="button"
                         style={s.senalRemoveBtn}
                         title="Eliminar señalado"
-                        onClick={() => setEditSenalados(prev => prev.filter((_, i) => i !== idx))}
+                        onClick={() => {
+                          setEditSenalados(prev => prev.filter((_, i) => i !== idx));
+                          setEditSenaladosPos(prev => prev.filter((_, i) => i !== idx));
+                        }}
                       >✕</button>
+                      <button
+                        type="button"
+                        style={{ ...s.addSenalBtn, padding: '6px 10px' }}
+                        onClick={() => {
+                          setForceLocationAssignment(false);
+                          setEditingSenaladoIndex(idx);
+                        }}
+                      >
+                        {editSenaladosPos[idx] ? '📍 Editar ubicación' : '📍 Ubicar'}
+                      </button>
                     </div>
                   ))}
                   <button
                     type="button"
                     style={s.addSenalBtn}
-                    onClick={() => setEditSenalados(prev => [...prev, ''])}
+                    onClick={() => {
+                      const nextIndex = editSenalados.length;
+                      setEditSenalados(prev => [...prev, '']);
+                      setEditSenaladosPos(prev => [...prev, null]);
+                      setForceLocationAssignment(true);
+                      setEditingSenaladoIndex(nextIndex);
+                    }}
                   >
-                    ï¼‹ Añadir señalado
+                    + Añadir señalado
                   </button>
                 </div>
 
@@ -725,6 +875,63 @@ const MoverPlaca: React.FC = () => {
 
       <Footer />
       <LoadingToast visible={isSaving} type="updating" message="Actualizando placa" />
+
+      {editingSenaladoIndex !== null && selectedPlaca && (
+        <SenaladoLocationPicker
+          imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
+          senaladoLabel={editSenalados[editingSenaladoIndex] ?? ''}
+          initialLocation={editSenaladosPos[editingSenaladoIndex] ?? null}
+          onCancel={() => setEditingSenaladoIndex(null)}
+          onRemove={() => {
+            const targetIndex = editingSenaladoIndex;
+            setEditSenalados(prev => prev.filter((_, i) => i !== targetIndex));
+            setEditSenaladosPos(prev => prev.filter((_, i) => i !== targetIndex));
+            setEditingSenaladoIndex(null);
+            setNamingSenaladoIndex(null);
+            setForceLocationAssignment(false);
+          }}
+          onSave={(location) => {
+            const targetIndex = editingSenaladoIndex;
+            setEditSenaladosPos(prev => {
+              const next = [...prev];
+              next[targetIndex] = location;
+              return next;
+            });
+
+            const currentLabel = (editSenalados[targetIndex] ?? '').trim();
+            if (!currentLabel) {
+              setNamingSenaladoIndex(targetIndex);
+            }
+
+            setForceLocationAssignment(false);
+            setEditingSenaladoIndex(null);
+          }}
+        />
+      )}
+
+      {namingSenaladoIndex !== null && (
+        <RequiredTextPromptModal
+          title="Nombre del señalado"
+          description="Después de ubicar el señalado, debes escribir su nombre para continuar."
+          placeholder="Ej: Luz del túbulo"
+          required
+          cancelLabel="Cancelar y señalar de nuevo"
+          onCancel={() => {
+            const targetIndex = namingSenaladoIndex;
+            setNamingSenaladoIndex(null);
+            setForceLocationAssignment(true);
+            setEditingSenaladoIndex(targetIndex);
+          }}
+          onSubmit={(value) => {
+            setEditSenalados(prev => {
+              const next = [...prev];
+              next[namingSenaladoIndex] = value;
+              return next;
+            });
+            setNamingSenaladoIndex(null);
+          }}
+        />
+      )}
     </div>
   );
 };
