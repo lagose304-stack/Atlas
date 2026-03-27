@@ -22,6 +22,8 @@ interface ImageViewerModalProps {
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 4;
+const MIN_DYNAMIC_MAX_ZOOM = 1.2;
+const ZOOM_OVERSHOOT_FACTOR = 1.1;
 const SIDEBAR_BREAKPOINT = 900;
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 type PointerEdge = 'left' | 'right' | 'top' | 'bottom';
@@ -113,6 +115,21 @@ const POINTER_MIN_ANGLE_DEG = 7;
 const MARKER_FADE_OUT_MS = 180;
 const MARKER_FADE_IN_MS = 200;
 
+const computeDynamicMaxZoom = (
+  displayedSize: { width: number; height: number } | null,
+  naturalSize: { width: number; height: number } | null
+) => {
+  if (!displayedSize || !naturalSize || displayedSize.width <= 0 || displayedSize.height <= 0) {
+    return ZOOM_MAX;
+  }
+
+  const ratioX = naturalSize.width / displayedSize.width;
+  const ratioY = naturalSize.height / displayedSize.height;
+  const nativeDetailRatio = Math.min(ratioX, ratioY);
+  const recommendedMax = nativeDetailRatio * ZOOM_OVERSHOOT_FACTOR;
+  return clamp(recommendedMax, MIN_DYNAMIC_MAX_ZOOM, ZOOM_MAX);
+};
+
 const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   src,
   srcZoom,
@@ -163,6 +180,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isPinching, setIsPinching] = useState(false);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
+  const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(null);
 
   const containerRef   = useRef<HTMLDivElement>(null);
   const imageRef       = useRef<HTMLImageElement>(null);
@@ -251,7 +269,33 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     const imageEl = imageRef.current;
     if (!imageEl) return;
     setImageSize({ width: imageEl.clientWidth, height: imageEl.clientHeight });
+    setImageNaturalSize({ width: imageEl.naturalWidth, height: imageEl.naturalHeight });
   };
+
+  const effectiveMaxZoom = useMemo(() => {
+    return computeDynamicMaxZoom(imageSize, imageNaturalSize);
+  }, [imageSize, imageNaturalSize]);
+
+  const perceptualEnhanceLevel = useMemo(() => {
+    if (zoomLevel <= 1.35) return 0;
+    const span = Math.max(0.001, effectiveMaxZoom - 1.35);
+    return clamp((zoomLevel - 1.35) / span, 0, 1);
+  }, [zoomLevel, effectiveMaxZoom]);
+
+  const imageFilterStyle = useMemo(() => {
+    if (perceptualEnhanceLevel <= 0) return 'none';
+    const boosted = Math.pow(perceptualEnhanceLevel, 1.25);
+    const contrast = 1 + boosted * 0.14;
+    const saturate = 1 + boosted * 0.06;
+    const brightness = 1 + boosted * 0.018;
+    return `contrast(${contrast.toFixed(3)}) saturate(${saturate.toFixed(3)}) brightness(${brightness.toFixed(3)}) drop-shadow(0 0 0.35px rgba(0,0,0,0.45))`;
+  }, [perceptualEnhanceLevel]);
+
+  const grainOpacity = useMemo(() => {
+    if (perceptualEnhanceLevel <= 0) return 0;
+    const boosted = Math.pow(perceptualEnhanceLevel, 1.2);
+    return 0.018 + boosted * 0.034;
+  }, [perceptualEnhanceLevel]);
 
   useEffect(() => {
     updateImageSize();
@@ -281,7 +325,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, []);
 
   const applyZoom = (newZoom: number, newPos?: { x: number; y: number }) => {
-    const z = clamp(newZoom, ZOOM_MIN, ZOOM_MAX);
+    const z = clamp(newZoom, ZOOM_MIN, effectiveMaxZoom);
     stateRef.current.zoom = z;
     setZoomLevel(z);
     if (z <= 1) {
@@ -329,7 +373,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         const newDist = getPinchDist(e.touches);
         const scale   = newDist / pinchRef.current.dist;
         pinchRef.current.dist = newDist;
-        const newZoom = clamp(stateRef.current.zoom * scale, ZOOM_MIN, ZOOM_MAX);
+        const newZoom = clamp(stateRef.current.zoom * scale, ZOOM_MIN, effectiveMaxZoom);
         stateRef.current.zoom = newZoom;
         setZoomLevel(newZoom);
         if (newZoom <= 1) {
@@ -360,7 +404,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       el.removeEventListener('touchmove',  onTouchMove);
       el.removeEventListener('touchend',   onTouchEnd);
     };
-  }, []);
+  }, [effectiveMaxZoom]);
 
   const handleZoomIn  = () => applyZoom(stateRef.current.zoom + 0.25);
   const handleZoomOut = () => applyZoom(stateRef.current.zoom - 0.25);
@@ -496,8 +540,25 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
                 objectPosition: 'center center',
                 userSelect: 'none', display: 'block',
+                filter: imageFilterStyle,
               }}
             />
+
+            {grainOpacity > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  pointerEvents: 'none',
+                  zIndex: 2,
+                  mixBlendMode: 'soft-light',
+                  opacity: grainOpacity,
+                  backgroundImage:
+                    'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.28) 0 1px, rgba(0,0,0,0) 1px), radial-gradient(circle at 80% 60%, rgba(0,0,0,0.22) 0 1px, rgba(0,0,0,0) 1px), radial-gradient(circle at 40% 80%, rgba(255,255,255,0.2) 0 1px, rgba(0,0,0,0) 1px)',
+                  backgroundSize: '3px 3px, 4px 4px, 5px 5px',
+                }}
+              />
+            )}
 
             {displayedMarkerIndex !== null && imageSize && (() => {
               const marker = senaladosItems[displayedMarkerIndex];

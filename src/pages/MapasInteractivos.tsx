@@ -57,6 +57,8 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
 const MIN_POINT_DISTANCE_LASSO = 6;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
+const MIN_DYNAMIC_MAX_ZOOM = 1.2;
+const ZOOM_OVERSHOOT_FACTOR = 1.1;
 const ZOOM_DRAG_SENSITIVITY: Record<ZoomSensitivity, number> = {
   suave: 0.0012,
   media: 0.0019,
@@ -232,6 +234,17 @@ const fitRect = (containerWidth: number, containerHeight: number, imageWidth: nu
   const x = (containerWidth - width) / 2;
   const y = (containerHeight - height) / 2;
   return { x, y, width, height };
+};
+
+const computeDynamicMaxZoom = (baseRect: RectBox | null, image: HTMLImageElement | null): number => {
+  if (!baseRect || !image || baseRect.width <= 0 || baseRect.height <= 0) return MAX_ZOOM;
+
+  const ratioX = image.width / baseRect.width;
+  const ratioY = image.height / baseRect.height;
+  const nativeDetailRatio = Math.min(ratioX, ratioY);
+  const recommendedMax = nativeDetailRatio * ZOOM_OVERSHOOT_FACTOR;
+
+  return clamp(recommendedMax, MIN_DYNAMIC_MAX_ZOOM, MAX_ZOOM);
 };
 
 const MapasInteractivos: React.FC = () => {
@@ -485,10 +498,35 @@ const MapasInteractivos: React.FC = () => {
     };
   }, [baseImageRect, zoomScale, panOffset]);
 
+  const effectiveMaxZoom = useMemo(() => {
+    return computeDynamicMaxZoom(baseImageRect, imageElement);
+  }, [baseImageRect, imageElement]);
+
+  const perceptualEnhanceLevel = useMemo(() => {
+    if (zoomScale <= 1.35) return 0;
+    const span = Math.max(0.001, effectiveMaxZoom - 1.35);
+    return clamp((zoomScale - 1.35) / span, 0, 1);
+  }, [zoomScale, effectiveMaxZoom]);
+
+  const canvasFilterStyle = useMemo(() => {
+    if (perceptualEnhanceLevel <= 0) return 'none';
+    const boosted = Math.pow(perceptualEnhanceLevel, 1.25);
+    const contrast = 1 + boosted * 0.14;
+    const saturate = 1 + boosted * 0.06;
+    const brightness = 1 + boosted * 0.018;
+    return `contrast(${contrast.toFixed(3)}) saturate(${saturate.toFixed(3)}) brightness(${brightness.toFixed(3)}) drop-shadow(0 0 0.35px rgba(0,0,0,0.45))`;
+  }, [perceptualEnhanceLevel]);
+
+  const grainOpacity = useMemo(() => {
+    if (perceptualEnhanceLevel <= 0) return 0;
+    const boosted = Math.pow(perceptualEnhanceLevel, 1.2);
+    return 0.018 + boosted * 0.034;
+  }, [perceptualEnhanceLevel]);
+
   const applyZoomCenteredOnAnchor = (nextScale: number) => {
     if (!baseImageRect || !zoomAnchorUVRef.current) return;
 
-    const clampedScale = clamp(nextScale, MIN_ZOOM, MAX_ZOOM);
+    const clampedScale = clamp(nextScale, MIN_ZOOM, effectiveMaxZoom);
 
     if (clampedScale <= 1) {
       targetZoomRef.current = clampedScale;
@@ -754,7 +792,7 @@ const MapasInteractivos: React.FC = () => {
     const nextScale = clamp(
       zoomDragStartScaleRef.current * Math.exp(deltaX * sensitivity),
       MIN_ZOOM,
-      MAX_ZOOM
+      effectiveMaxZoom
     );
     applyZoomCenteredOnAnchor(nextScale);
   };
@@ -1057,6 +1095,7 @@ const MapasInteractivos: React.FC = () => {
                   ref={canvasFrameRef}
                   style={{
                     ...s.canvasFrame,
+                    filter: canvasFilterStyle,
                     cursor:
                       selectedTool === 'zoom'
                         ? (isZoomDragging ? 'ew-resize' : 'zoom-in')
@@ -1328,6 +1367,15 @@ const MapasInteractivos: React.FC = () => {
                     </Stage>
                   ) : (
                     <div style={s.canvasLoading}>Cargando imagen...</div>
+                  )}
+
+                  {grainOpacity > 0 && (
+                    <div
+                      style={{
+                        ...s.perceptualNoiseOverlay,
+                        opacity: grainOpacity,
+                      }}
+                    />
                   )}
                 </div>
               </div>
@@ -1872,6 +1920,7 @@ const s: { [key: string]: React.CSSProperties } = {
   canvasFrame: {
     width: '100%',
     height: '100%',
+    position: 'relative',
     borderRadius: '12px',
     overflow: 'hidden',
     border: '1px solid #cbd5e1',
@@ -1881,6 +1930,16 @@ const s: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     touchAction: 'none',
     cursor: 'default',
+  },
+  perceptualNoiseOverlay: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    mixBlendMode: 'soft-light',
+    backgroundImage:
+      'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.28) 0 1px, rgba(0,0,0,0) 1px), radial-gradient(circle at 80% 60%, rgba(0,0,0,0.22) 0 1px, rgba(0,0,0,0) 1px), radial-gradient(circle at 40% 80%, rgba(255,255,255,0.2) 0 1px, rgba(0,0,0,0) 1px)',
+    backgroundSize: '3px 3px, 4px 4px, 5px 5px',
+    zIndex: 3,
   },
   canvasLoading: {
     color: '#64748b',
