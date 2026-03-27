@@ -279,6 +279,7 @@ const MapasInteractivos: React.FC = () => {
   const isPinchZoomingRef = useRef(false);
   const pinchStartDistanceRef = useRef(0);
   const pinchStartScaleRef = useRef(1);
+  const isPointerGestureActiveRef = useRef(false);
   const targetZoomRef = useRef(1);
   const targetPanRef = useRef<Point2D>({ x: 0, y: 0 });
   const animationFrameRef = useRef<number | null>(null);
@@ -773,6 +774,7 @@ const MapasInteractivos: React.FC = () => {
 
   const handleStageTouchStart = (e: any) => {
     e?.evt?.preventDefault?.();
+    if (isPointerGestureActiveRef.current) return;
 
     const touches = e?.evt?.touches;
     const touchCount = touches?.length ?? 0;
@@ -789,6 +791,7 @@ const MapasInteractivos: React.FC = () => {
 
   const handleStageTouchMove = (e: any) => {
     e?.evt?.preventDefault?.();
+    if (isPointerGestureActiveRef.current) return;
 
     const touches = e?.evt?.touches;
     const touchCount = touches?.length ?? 0;
@@ -805,6 +808,7 @@ const MapasInteractivos: React.FC = () => {
 
   const handleStageTouchEnd = (e: any) => {
     e?.evt?.preventDefault?.();
+    if (isPointerGestureActiveRef.current) return;
 
     const touches = e?.evt?.touches;
     const touchCount = touches?.length ?? 0;
@@ -817,6 +821,40 @@ const MapasInteractivos: React.FC = () => {
 
     if (touchCount > 0) return;
 
+    handleStageMouseUp();
+  };
+
+  const isStylusLikePointerEvent = (evt: any): boolean => {
+    const pointerType = evt?.pointerType;
+    if (pointerType === 'pen') return true;
+    // Algunos navegadores/drivers reportan el lápiz como touch o unknown.
+    if (pointerType === 'touch') return true;
+    if (pointerType === '' || pointerType === 'unknown' || pointerType == null) {
+      return typeof evt?.pressure === 'number' && evt.pressure > 0;
+    }
+    return false;
+  };
+
+  const handleStagePointerDown = (e: any) => {
+    const evt = e?.evt;
+    if (!isStylusLikePointerEvent(evt)) return;
+    isPointerGestureActiveRef.current = true;
+    evt?.preventDefault?.();
+    handleStageMouseDown();
+  };
+
+  const handleStagePointerMove = (e: any) => {
+    const evt = e?.evt;
+    if (!isStylusLikePointerEvent(evt)) return;
+    evt?.preventDefault?.();
+    handleStageMouseMove();
+  };
+
+  const handleStagePointerUp = (e: any) => {
+    const evt = e?.evt;
+    if (!isStylusLikePointerEvent(evt)) return;
+    isPointerGestureActiveRef.current = false;
+    evt?.preventDefault?.();
     handleStageMouseUp();
   };
 
@@ -1038,6 +1076,10 @@ const MapasInteractivos: React.FC = () => {
                       onTouchMove={handleStageTouchMove}
                       onTouchEnd={handleStageTouchEnd}
                       onTouchCancel={handleStageTouchEnd}
+                      onPointerDown={handleStagePointerDown}
+                      onPointerMove={handleStagePointerMove}
+                      onPointerUp={handleStagePointerUp}
+                      onPointerCancel={handleStagePointerUp}
                     >
                       <Layer>
                         <KonvaImage
