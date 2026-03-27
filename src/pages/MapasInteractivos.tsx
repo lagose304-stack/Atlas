@@ -42,6 +42,7 @@ interface InsertHintState {
   visible: boolean;
   x: number;
   y: number;
+  snapped: boolean;
 }
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
@@ -64,6 +65,14 @@ const ZOOM_DRAG_SENSITIVITY: Record<ZoomSensitivity, number> = {
 const ZOOM_EASE = 0.2;
 const PAN_EASE = 0.18;
 const INSERT_HINT_RADIUS = 7;
+const TOUCH_LINE_HIT_STROKE = 28;
+const MOUSE_LINE_HIT_STROKE = 18;
+const TOUCH_HANDLE_RADIUS = 8;
+const MOUSE_HANDLE_RADIUS = 5;
+const TOUCH_SAVED_HANDLE_RADIUS = 8.5;
+const MOUSE_SAVED_HANDLE_RADIUS = 5.5;
+const TOUCH_INSERT_SNAP_DISTANCE = 26;
+const MOUSE_INSERT_SNAP_DISTANCE = 14;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const POINT_HIT_RADIUS = 10;
@@ -136,23 +145,61 @@ const simplifyLassoPoints = (flatPoints: number[]): number[] => {
   return simplified.flatMap(p => [p.x, p.y]);
 };
 
-const distancePointToSegment = (
+const projectPointToSegment = (
   px: number,
   py: number,
   ax: number,
   ay: number,
   bx: number,
   by: number
-): number => {
+): { x: number; y: number; distance: number } => {
   const dx = bx - ax;
   const dy = by - ay;
 
-  if (dx === 0 && dy === 0) return Math.hypot(px - ax, py - ay);
+  if (dx === 0 && dy === 0) {
+    const distance = Math.hypot(px - ax, py - ay);
+    return { x: ax, y: ay, distance };
+  }
 
   const t = clamp(((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy), 0, 1);
-  const projX = ax + t * dx;
-  const projY = ay + t * dy;
-  return Math.hypot(px - projX, py - projY);
+  const x = ax + t * dx;
+  const y = ay + t * dy;
+  const distance = Math.hypot(px - x, py - y);
+  return { x, y, distance };
+};
+
+const findClosestSegmentProjection = (
+  flatPoints: number[],
+  x: number,
+  y: number
+): { segmentStartIndex: number; x: number; y: number; distance: number } | null => {
+  if (flatPoints.length < 6) return null;
+
+  const pairs = pointsToPairs(flatPoints);
+  let closestSegmentStartIndex = 0;
+  let closestX = x;
+  let closestY = y;
+  let minDistance = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < pairs.length; i++) {
+    const a = pairs[i];
+    const b = pairs[(i + 1) % pairs.length];
+    const projected = projectPointToSegment(x, y, a.x, a.y, b.x, b.y);
+
+    if (projected.distance < minDistance) {
+      minDistance = projected.distance;
+      closestSegmentStartIndex = i;
+      closestX = projected.x;
+      closestY = projected.y;
+    }
+  }
+
+  return {
+    segmentStartIndex: closestSegmentStartIndex,
+    x: closestX,
+    y: closestY,
+    distance: minDistance,
+  };
 };
 
 const pointInPolygonFlat = (x: number, y: number, flatPoints: number[]): boolean => {
@@ -209,6 +256,7 @@ const MapasInteractivos: React.FC = () => {
 
   const [workspaceSize, setWorkspaceSize] = useState({ width: 0, height: 0 });
   const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
+  const [isCoarsePointer, setIsCoarsePointer] = useState(false);
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [activeLassoPoints, setActiveLassoPoints] = useState<number[]>([]);
@@ -216,7 +264,7 @@ const MapasInteractivos: React.FC = () => {
   const [savedSelections, setSavedSelections] = useState<number[][]>([]);
   const [activeSavedSelectionIndex, setActiveSavedSelectionIndex] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [insertHint, setInsertHint] = useState<InsertHintState>({ visible: false, x: 0, y: 0 });
+  const [insertHint, setInsertHint] = useState<InsertHintState>({ visible: false, x: 0, y: 0, snapped: false });
   const [showPendingReplaceConfirm, setShowPendingReplaceConfirm] = useState(false);
   const [pendingLassoStartPoint, setPendingLassoStartPoint] = useState<Point2D | null>(null);
   const [dashOffset, setDashOffset] = useState(0);
@@ -228,9 +276,29 @@ const MapasInteractivos: React.FC = () => {
   const zoomDragStartXRef = useRef(0);
   const zoomDragStartScaleRef = useRef(1);
   const zoomAnchorUVRef = useRef<{ u: number; v: number } | null>(null);
+  const isPinchZoomingRef = useRef(false);
+  const pinchStartDistanceRef = useRef(0);
+  const pinchStartScaleRef = useRef(1);
   const targetZoomRef = useRef(1);
   const targetPanRef = useRef<Point2D>({ x: 0, y: 0 });
   const animationFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+
+    const media = window.matchMedia('(pointer: coarse)');
+    const updatePointerType = () => setIsCoarsePointer(media.matches);
+
+    updatePointerType();
+
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', updatePointerType);
+      return () => media.removeEventListener('change', updatePointerType);
+    }
+
+    media.addListener(updatePointerType);
+    return () => media.removeListener(updatePointerType);
+  }, []);
 
   useEffect(() => {
     const fetchTemas = async () => {
@@ -525,14 +593,14 @@ const MapasInteractivos: React.FC = () => {
     setSavedSelections([]);
     setActiveSavedSelectionIndex(null);
     setShowDeleteConfirm(false);
-    setInsertHint({ visible: false, x: 0, y: 0 });
+    setInsertHint({ visible: false, x: 0, y: 0, snapped: false });
     setShowPendingReplaceConfirm(false);
     setPendingLassoStartPoint(null);
   };
 
   const discardPendingSelection = () => {
     setSelectionPoints([]);
-    setInsertHint({ visible: false, x: 0, y: 0 });
+    setInsertHint({ visible: false, x: 0, y: 0, snapped: false });
   };
 
   const confirmPendingSelection = () => {
@@ -543,7 +611,7 @@ const MapasInteractivos: React.FC = () => {
       return next;
     });
     setSelectionPoints([]);
-    setInsertHint({ visible: false, x: 0, y: 0 });
+    setInsertHint({ visible: false, x: 0, y: 0, snapped: false });
   };
 
   const deleteActiveSavedSelection = () => {
@@ -579,6 +647,58 @@ const MapasInteractivos: React.FC = () => {
     if (!isZoomDraggingRef.current) return;
     isZoomDraggingRef.current = false;
     setIsZoomDragging(false);
+  };
+
+  const getStagePointFromTouch = (touch: Touch): Point2D | null => {
+    if (!stageRef.current) return null;
+    const container = stageRef.current.container?.();
+    if (!container) return null;
+
+    const rect = container.getBoundingClientRect();
+    return {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top,
+    };
+  };
+
+  const startPinchZoom = (firstTouch: Touch, secondTouch: Touch) => {
+    if (selectedTool !== 'zoom' || !imageRect) return;
+
+    const p1 = getStagePointFromTouch(firstTouch);
+    const p2 = getStagePointFromTouch(secondTouch);
+    if (!p1 || !p2) return;
+
+    const centerX = (p1.x + p2.x) / 2;
+    const centerY = (p1.y + p2.y) / 2;
+    if (!pointInsideRect(centerX, centerY, imageRect)) return;
+
+    const startDistance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    if (startDistance < 8) return;
+
+    isPinchZoomingRef.current = true;
+    stopZoomDrag();
+
+    pinchStartDistanceRef.current = startDistance;
+    pinchStartScaleRef.current = zoomScale;
+
+    const u = clamp((centerX - imageRect.x) / imageRect.width, 0, 1);
+    const v = clamp((centerY - imageRect.y) / imageRect.height, 0, 1);
+    zoomAnchorUVRef.current = { u, v };
+  };
+
+  const updatePinchZoom = (firstTouch: Touch, secondTouch: Touch) => {
+    if (!isPinchZoomingRef.current) return;
+
+    const p1 = getStagePointFromTouch(firstTouch);
+    const p2 = getStagePointFromTouch(secondTouch);
+    if (!p1 || !p2) return;
+
+    const currentDistance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    if (currentDistance < 2 || pinchStartDistanceRef.current <= 0) return;
+
+    const distanceRatio = currentDistance / pinchStartDistanceRef.current;
+    const nextScale = pinchStartScaleRef.current * distanceRatio;
+    applyZoomCenteredOnAnchor(nextScale);
   };
 
   const handleStageMouseDown = () => {
@@ -651,6 +771,55 @@ const MapasInteractivos: React.FC = () => {
     stopZoomDrag();
   };
 
+  const handleStageTouchStart = (e: any) => {
+    e?.evt?.preventDefault?.();
+
+    const touches = e?.evt?.touches;
+    const touchCount = touches?.length ?? 0;
+
+    if (selectedTool === 'zoom' && touchCount >= 2) {
+      startPinchZoom(touches[0], touches[1]);
+      return;
+    }
+
+    if (touchCount > 1) return;
+
+    handleStageMouseDown();
+  };
+
+  const handleStageTouchMove = (e: any) => {
+    e?.evt?.preventDefault?.();
+
+    const touches = e?.evt?.touches;
+    const touchCount = touches?.length ?? 0;
+
+    if (selectedTool === 'zoom' && isPinchZoomingRef.current && touchCount >= 2) {
+      updatePinchZoom(touches[0], touches[1]);
+      return;
+    }
+
+    if (touchCount > 1) return;
+
+    handleStageMouseMove();
+  };
+
+  const handleStageTouchEnd = (e: any) => {
+    e?.evt?.preventDefault?.();
+
+    const touches = e?.evt?.touches;
+    const touchCount = touches?.length ?? 0;
+
+    if (isPinchZoomingRef.current && touchCount < 2) {
+      isPinchZoomingRef.current = false;
+      pinchStartDistanceRef.current = 0;
+      pinchStartScaleRef.current = zoomScale;
+    }
+
+    if (touchCount > 0) return;
+
+    handleStageMouseUp();
+  };
+
   const moveSelectionPoint = (pointIndex: number, x: number, y: number) => {
     if (!imageRect) return;
 
@@ -697,11 +866,29 @@ const MapasInteractivos: React.FC = () => {
   };
 
   const hideInsertHint = () => {
-    setInsertHint({ visible: false, x: 0, y: 0 });
+    setInsertHint({ visible: false, x: 0, y: 0, snapped: false });
   };
 
-  const showInsertHintAt = (x: number, y: number) => {
-    setInsertHint({ visible: true, x, y });
+  const showInsertHintAt = (x: number, y: number, snapped = false) => {
+    setInsertHint({ visible: true, x, y, snapped });
+  };
+
+  const resolveInsertHint = (flatPoints: number[], x: number, y: number): InsertHintState | null => {
+    if (!imageRect || flatPoints.length < 6) return null;
+
+    const clampedX = clamp(x, imageRect.x, imageRect.x + imageRect.width);
+    const clampedY = clamp(y, imageRect.y, imageRect.y + imageRect.height);
+    const projection = findClosestSegmentProjection(flatPoints, clampedX, clampedY);
+    if (!projection) return null;
+
+    const snapDistance = isCoarsePointer ? TOUCH_INSERT_SNAP_DISTANCE : MOUSE_INSERT_SNAP_DISTANCE;
+    const snapped = projection.distance <= snapDistance;
+    const hintX = snapped ? projection.x : clampedX;
+    const hintY = snapped ? projection.y : clampedY;
+
+    if (!canInsertPointIntoSelection(flatPoints, hintX, hintY)) return null;
+
+    return { visible: true, x: hintX, y: hintY, snapped };
   };
 
   const insertSavedSelectionPoint = (selectionIndex: number, x: number, y: number) => {
@@ -716,25 +903,18 @@ const MapasInteractivos: React.FC = () => {
       const currentSelection = prev[selectionIndex];
       if (currentSelection.length < 6) return prev;
 
-      const pairs = pointsToPairs(currentSelection);
-      if (!canInsertPointIntoSelection(currentSelection, clampedX, clampedY)) return prev;
+      const projection = findClosestSegmentProjection(currentSelection, clampedX, clampedY);
+      if (!projection) return prev;
 
-      let closestSegmentStartIndex = 0;
-      let minDistance = Number.POSITIVE_INFINITY;
+      const snapDistance = isCoarsePointer ? TOUCH_INSERT_SNAP_DISTANCE : MOUSE_INSERT_SNAP_DISTANCE;
+      const insertX = projection.distance <= snapDistance ? projection.x : clampedX;
+      const insertY = projection.distance <= snapDistance ? projection.y : clampedY;
 
-      for (let i = 0; i < pairs.length; i++) {
-        const a = pairs[i];
-        const b = pairs[(i + 1) % pairs.length];
-        const distance = distancePointToSegment(clampedX, clampedY, a.x, a.y, b.x, b.y);
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestSegmentStartIndex = i;
-        }
-      }
+      if (!canInsertPointIntoSelection(currentSelection, insertX, insertY)) return prev;
 
-      const insertAt = (closestSegmentStartIndex + 1) * 2;
+      const insertAt = (projection.segmentStartIndex + 1) * 2;
       const nextSelection = [...currentSelection];
-      nextSelection.splice(insertAt, 0, clampedX, clampedY);
+      nextSelection.splice(insertAt, 0, insertX, insertY);
 
       const next = [...prev];
       next[selectionIndex] = nextSelection;
@@ -750,25 +930,19 @@ const MapasInteractivos: React.FC = () => {
 
     setSelectionPoints(prev => {
       if (prev.length < 6) return prev;
-      if (!canInsertPointIntoSelection(prev, clampedX, clampedY)) return prev;
 
-      const pairs = pointsToPairs(prev);
-      let closestSegmentStartIndex = 0;
-      let minDistance = Number.POSITIVE_INFINITY;
+      const projection = findClosestSegmentProjection(prev, clampedX, clampedY);
+      if (!projection) return prev;
 
-      for (let i = 0; i < pairs.length; i++) {
-        const a = pairs[i];
-        const b = pairs[(i + 1) % pairs.length];
-        const distance = distancePointToSegment(clampedX, clampedY, a.x, a.y, b.x, b.y);
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestSegmentStartIndex = i;
-        }
-      }
+      const snapDistance = isCoarsePointer ? TOUCH_INSERT_SNAP_DISTANCE : MOUSE_INSERT_SNAP_DISTANCE;
+      const insertX = projection.distance <= snapDistance ? projection.x : clampedX;
+      const insertY = projection.distance <= snapDistance ? projection.y : clampedY;
 
-      const insertAt = (closestSegmentStartIndex + 1) * 2;
+      if (!canInsertPointIntoSelection(prev, insertX, insertY)) return prev;
+
+      const insertAt = (projection.segmentStartIndex + 1) * 2;
       const next = [...prev];
-      next.splice(insertAt, 0, clampedX, clampedY);
+      next.splice(insertAt, 0, insertX, insertY);
       return next;
     });
   };
@@ -860,6 +1034,10 @@ const MapasInteractivos: React.FC = () => {
                       onMouseMove={handleStageMouseMove}
                       onMouseUp={handleStageMouseUp}
                       onMouseLeave={handleStageMouseUp}
+                      onTouchStart={handleStageTouchStart}
+                      onTouchMove={handleStageTouchMove}
+                      onTouchEnd={handleStageTouchEnd}
+                      onTouchCancel={handleStageTouchEnd}
                     >
                       <Layer>
                         <KonvaImage
@@ -901,7 +1079,7 @@ const MapasInteractivos: React.FC = () => {
                               points={points}
                               closed
                               listening={selectedTool === 'lasso'}
-                              hitStrokeWidth={18}
+                              hitStrokeWidth={isCoarsePointer ? TOUCH_LINE_HIT_STROKE : MOUSE_LINE_HIT_STROKE}
                               onMouseDown={e => {
                                 e.cancelBubble = true;
                                 if (selectedTool !== 'lasso') return;
@@ -923,11 +1101,12 @@ const MapasInteractivos: React.FC = () => {
                                 const pointer = e.target.getStage()?.getPointerPosition();
                                 if (!pointer) return;
 
-                                if (canInsertPointIntoSelection(points, pointer.x, pointer.y)) {
-                                  showInsertHintAt(pointer.x, pointer.y);
-                                } else {
+                                const hint = resolveInsertHint(points, pointer.x, pointer.y);
+                                if (!hint) {
                                   hideInsertHint();
+                                  return;
                                 }
+                                showInsertHintAt(hint.x, hint.y, hint.snapped);
                               }}
                               onMouseLeave={() => {
                                 hideInsertHint();
@@ -965,7 +1144,7 @@ const MapasInteractivos: React.FC = () => {
                               key={`saved-handle-${activeSavedSelectionIndex}-${point.index}`}
                               x={point.x}
                               y={point.y}
-                              radius={5.5}
+                              radius={isCoarsePointer ? TOUCH_SAVED_HANDLE_RADIUS : MOUSE_SAVED_HANDLE_RADIUS}
                               fill="#ffffff"
                               stroke="#0f172a"
                               strokeWidth={2}
@@ -995,7 +1174,7 @@ const MapasInteractivos: React.FC = () => {
                               points={selectionPoints}
                               closed
                               listening={selectedTool === 'lasso'}
-                              hitStrokeWidth={18}
+                              hitStrokeWidth={isCoarsePointer ? TOUCH_LINE_HIT_STROKE : MOUSE_LINE_HIT_STROKE}
                               onMouseDown={e => {
                                 e.cancelBubble = true;
                                 hideInsertHint();
@@ -1005,11 +1184,12 @@ const MapasInteractivos: React.FC = () => {
                                 const pointer = e.target.getStage()?.getPointerPosition();
                                 if (!pointer) return;
 
-                                if (canInsertPointIntoSelection(selectionPoints, pointer.x, pointer.y)) {
-                                  showInsertHintAt(pointer.x, pointer.y);
-                                } else {
+                                const hint = resolveInsertHint(selectionPoints, pointer.x, pointer.y);
+                                if (!hint) {
                                   hideInsertHint();
+                                  return;
                                 }
+                                showInsertHintAt(hint.x, hint.y, hint.snapped);
                               }}
                               onMouseLeave={() => {
                                 hideInsertHint();
@@ -1043,7 +1223,7 @@ const MapasInteractivos: React.FC = () => {
                                 key={`handle-${point.index}`}
                                 x={point.x}
                                 y={point.y}
-                                radius={5}
+                                radius={isCoarsePointer ? TOUCH_HANDLE_RADIUS : MOUSE_HANDLE_RADIUS}
                                 fill="#ffffff"
                                 stroke="#0369a1"
                                 strokeWidth={2}
@@ -1084,19 +1264,19 @@ const MapasInteractivos: React.FC = () => {
                               y={insertHint.y}
                               radius={INSERT_HINT_RADIUS}
                               fill="#ffffff"
-                              stroke="#0ea5e9"
+                              stroke={insertHint.snapped ? '#16a34a' : '#0ea5e9'}
                               strokeWidth={2}
                               listening={false}
                             />
                             <Line
                               points={[insertHint.x - 4, insertHint.y, insertHint.x + 4, insertHint.y]}
-                              stroke="#0284c7"
+                              stroke={insertHint.snapped ? '#15803d' : '#0284c7'}
                               strokeWidth={2}
                               listening={false}
                             />
                             <Line
                               points={[insertHint.x, insertHint.y - 4, insertHint.x, insertHint.y + 4]}
-                              stroke="#0284c7"
+                              stroke={insertHint.snapped ? '#15803d' : '#0284c7'}
                               strokeWidth={2}
                               listening={false}
                             />
@@ -1657,6 +1837,7 @@ const s: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    touchAction: 'none',
     cursor: 'default',
   },
   canvasLoading: {
