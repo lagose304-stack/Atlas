@@ -280,6 +280,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return false;
       }
 
+      if (/\s/.test(username) || /\s/.test(password)) {
+        void logSecurityEvent('login_failed', {
+          username: normalizedUsername || null,
+          details: { reason: 'credentials_with_whitespace' },
+        });
+        setIsLoading(false);
+        return false;
+      }
+
       if (isLockedOut(normalizedUsername)) {
         void logSecurityEvent('login_locked', {
           username: normalizedUsername,

@@ -16,6 +16,8 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  const removeWhitespaces = (value: string) => value.replace(/\s+/g, '');
+
   // Validación básica del formulario
   const validateForm = (): string | null => {
     if (!username.trim()) {
@@ -23,6 +25,12 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
     }
     if (!password.trim()) {
       return 'La contraseña es obligatoria';
+    }
+    if (/\s/.test(username)) {
+      return 'El usuario no puede contener espacios en blanco';
+    }
+    if (/\s/.test(password)) {
+      return 'La contraseña no puede contener espacios en blanco';
     }
     return null;
   };
@@ -91,12 +99,15 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
             <input
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => setUsername(removeWhitespaces(e.target.value))}
               required
               style={styles.input}
               disabled={loading}
               placeholder="Ingresa tu usuario"
               autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
             />
           </div>
           <div style={styles.formGroup}>
@@ -105,12 +116,13 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => setPassword(removeWhitespaces(e.target.value))}
                 required
                 style={{ ...styles.input, ...styles.passwordInput }}
                 disabled={loading}
                 placeholder="Ingresa tu contraseña"
                 autoComplete="current-password"
+                spellCheck={false}
               />
               <button
                 type="button"
