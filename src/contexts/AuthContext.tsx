@@ -29,53 +29,72 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<AuthUser | null>(null);
 
   const SESSION_CHECK_INTERVAL_MS = 60 * 1000;
-  const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000;
+  const SESSION_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000;
   const MAX_LOGIN_ATTEMPTS = 5;
   const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
-  const FAILED_ATTEMPTS_KEY = 'atlas_failed_attempts';
-  const LOCKOUT_UNTIL_KEY = 'atlas_lockout_until';
+  const LEGACY_FAILED_ATTEMPTS_KEY = 'atlas_failed_attempts';
+  const LEGACY_LOCKOUT_UNTIL_KEY = 'atlas_lockout_until';
+
+  const normalizeUsername = (raw: string) => raw.trim().toLowerCase();
+
+  const getFailedAttemptsKey = (normalizedUsername: string) =>
+    `atlas_failed_attempts_${normalizedUsername || 'global'}`;
+
+  const getLockoutUntilKey = (normalizedUsername: string) =>
+    `atlas_lockout_until_${normalizedUsername || 'global'}`;
 
   const persistSession = (nextUser: AuthUser) => {
     localStorage.setItem('atlas_user', JSON.stringify(nextUser));
     localStorage.setItem('atlas_auth', 'true');
   };
 
-  const isLockedOut = (): boolean => {
-    const lockoutUntilRaw = localStorage.getItem(LOCKOUT_UNTIL_KEY);
+  const clearLegacyLockoutKeys = () => {
+    localStorage.removeItem(LEGACY_FAILED_ATTEMPTS_KEY);
+    localStorage.removeItem(LEGACY_LOCKOUT_UNTIL_KEY);
+  };
+
+  const isLockedOut = (normalizedUsername: string): boolean => {
+    const lockoutUntilKey = getLockoutUntilKey(normalizedUsername);
+    const failedAttemptsKey = getFailedAttemptsKey(normalizedUsername);
+    const lockoutUntilRaw = localStorage.getItem(lockoutUntilKey);
     if (!lockoutUntilRaw) {
       return false;
     }
 
     const lockoutUntil = Number(lockoutUntilRaw);
     if (Number.isNaN(lockoutUntil)) {
-      localStorage.removeItem(LOCKOUT_UNTIL_KEY);
-      localStorage.removeItem(FAILED_ATTEMPTS_KEY);
+      localStorage.removeItem(lockoutUntilKey);
+      localStorage.removeItem(failedAttemptsKey);
       return false;
     }
 
     if (Date.now() >= lockoutUntil) {
-      localStorage.removeItem(LOCKOUT_UNTIL_KEY);
-      localStorage.removeItem(FAILED_ATTEMPTS_KEY);
+      localStorage.removeItem(lockoutUntilKey);
+      localStorage.removeItem(failedAttemptsKey);
       return false;
     }
 
     return true;
   };
 
-  const incrementFailedAttempts = () => {
-    const attempts = Number(localStorage.getItem(FAILED_ATTEMPTS_KEY) ?? '0');
+  const incrementFailedAttempts = (normalizedUsername: string) => {
+    const failedAttemptsKey = getFailedAttemptsKey(normalizedUsername);
+    const lockoutUntilKey = getLockoutUntilKey(normalizedUsername);
+    const attempts = Number(localStorage.getItem(failedAttemptsKey) ?? '0');
     const nextAttempts = Number.isNaN(attempts) ? 1 : attempts + 1;
 
-    localStorage.setItem(FAILED_ATTEMPTS_KEY, String(nextAttempts));
+    localStorage.setItem(failedAttemptsKey, String(nextAttempts));
     if (nextAttempts >= MAX_LOGIN_ATTEMPTS) {
       const lockoutUntil = Date.now() + LOCKOUT_DURATION_MS;
-      localStorage.setItem(LOCKOUT_UNTIL_KEY, String(lockoutUntil));
+      localStorage.setItem(lockoutUntilKey, String(lockoutUntil));
     }
   };
 
-  const clearFailedAttempts = () => {
-    localStorage.removeItem(FAILED_ATTEMPTS_KEY);
-    localStorage.removeItem(LOCKOUT_UNTIL_KEY);
+  const clearFailedAttempts = (normalizedUsername: string) => {
+    const failedAttemptsKey = getFailedAttemptsKey(normalizedUsername);
+    const lockoutUntilKey = getLockoutUntilKey(normalizedUsername);
+    localStorage.removeItem(failedAttemptsKey);
+    localStorage.removeItem(lockoutUntilKey);
   };
 
   const clearSession = () => {
@@ -85,7 +104,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.removeItem('atlas_auth');
   };
 
-  const getUserById = async (userId: number): Promise<AuthUser | null> => {
+  const getUserById = async (
+    userId: number
+  ): Promise<{ user: AuthUser | null; fetchError: boolean }> => {
     const primaryQuery = await supabase
       .from('usuarios')
       .select('id, username, rol, activo, session_version, is_protected')
@@ -93,7 +114,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       .single();
 
     if (!primaryQuery.error && primaryQuery.data) {
-      return primaryQuery.data as AuthUser;
+      return { user: primaryQuery.data as AuthUser, fetchError: false };
+    }
+
+    if (primaryQuery.error && primaryQuery.error.code && primaryQuery.error.code !== 'PGRST116') {
+      return { user: null, fetchError: true };
     }
 
     const fallbackQuery = await supabase
@@ -102,16 +127,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       .eq('id', userId)
       .single();
 
-    if (fallbackQuery.error || !fallbackQuery.data) {
-      return null;
+    if (fallbackQuery.error) {
+      if (fallbackQuery.error.code === 'PGRST116') {
+        return { user: null, fetchError: false };
+      }
+      return { user: null, fetchError: true };
+    }
+
+    if (!fallbackQuery.data) {
+      return { user: null, fetchError: false };
     }
 
     const fallbackUser = fallbackQuery.data as AuthUser;
     return {
-      ...fallbackUser,
-      activo: true,
-      session_version: 1,
-      is_protected: fallbackUser.is_protected ?? false,
+      user: {
+        ...fallbackUser,
+        activo: true,
+        session_version: 1,
+        is_protected: fallbackUser.is_protected ?? false,
+      },
+      fetchError: false,
     };
   };
 
@@ -154,7 +189,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return false;
       }
 
-      const dbUser = await getUserById(parsedUser.id);
+      const userLookup = await getUserById(parsedUser.id);
+      if (userLookup.fetchError) {
+        // Mantener la sesión local ante fallos transitorios de red o backend.
+        const optimisticUser: AuthUser = {
+          ...parsedUser,
+          activo: true,
+          session_version: parsedUser.session_version ?? 1,
+          is_protected: parsedUser.is_protected ?? false,
+          auth_time: authTime,
+        };
+        setUser(optimisticUser);
+        setIsAuthenticated(true);
+        persistSession(optimisticUser);
+        return true;
+      }
+
+      const dbUser = userLookup.user;
       if (!dbUser) {
         void logSecurityEvent('session_invalidated', {
           userId: parsedUser.id,
@@ -196,7 +247,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ...dbUser,
         activo: true,
         session_version: currentSessionVersion,
-        auth_time: authTime,
+        // Sesión deslizante: si el usuario sigue activo se renueva el tiempo de autenticación.
+        auth_time: Date.now(),
       };
 
       setUser(normalizedUser);
@@ -216,21 +268,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
       setIsLoading(true);
+      const normalizedUsername = normalizeUsername(username);
 
       // Validación básica
       if (!username || !password) {
-        incrementFailedAttempts();
         void logSecurityEvent('login_failed', {
-          username: username?.trim().toLowerCase() || null,
+          username: normalizedUsername || null,
           details: { reason: 'missing_credentials' },
         });
         setIsLoading(false);
         return false;
       }
 
-      if (isLockedOut()) {
+      if (isLockedOut(normalizedUsername)) {
         void logSecurityEvent('login_locked', {
-          username: username.trim().toLowerCase(),
+          username: normalizedUsername,
           details: { reason: 'lockout_active' },
         });
         setIsLoading(false);
@@ -241,36 +293,56 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { data, error } = await supabase
         .from('usuarios')
         .select('id, username, rol, activo, session_version, is_protected')
-        .eq('username', username.trim().toLowerCase())
-        .eq('password', password) // En producción usar bcrypt
-        .single();
+        .ilike('username', normalizedUsername)
+        .eq('password', password)
+        .order('id', { ascending: true })
+        .limit(1);
 
       let authUser: AuthUser | null = null;
+      let backendAuthError = false;
 
-      if (!error && data) {
-        authUser = data as AuthUser;
+      if (!error && data && data.length > 0) {
+        authUser = data[0] as AuthUser;
       } else {
+        if (error) {
+          backendAuthError = true;
+        }
+
         const fallback = await supabase
           .from('usuarios')
           .select('id, username, rol, is_protected')
-          .eq('username', username.trim().toLowerCase())
+          .ilike('username', normalizedUsername)
           .eq('password', password)
-          .single();
+          .order('id', { ascending: true })
+          .limit(1);
 
-        if (!fallback.error && fallback.data) {
+        if (!fallback.error && fallback.data && fallback.data.length > 0) {
+          const fallbackRecord = fallback.data[0] as AuthUser;
           authUser = {
-            ...(fallback.data as AuthUser),
+            ...fallbackRecord,
             activo: true,
             session_version: 1,
-            is_protected: (fallback.data as AuthUser).is_protected ?? false,
+            is_protected: fallbackRecord.is_protected ?? false,
           };
+          backendAuthError = false;
+        } else if (fallback.error) {
+          backendAuthError = true;
         }
       }
 
       if (!authUser) {
-        incrementFailedAttempts();
+        if (backendAuthError) {
+          void logSecurityEvent('login_failed', {
+            username: normalizedUsername,
+            details: { reason: 'auth_backend_unavailable' },
+          });
+          setIsLoading(false);
+          return false;
+        }
+
+        incrementFailedAttempts(normalizedUsername);
         void logSecurityEvent('login_failed', {
-          username: username.trim().toLowerCase(),
+          username: normalizedUsername,
           details: { reason: 'invalid_credentials' },
         });
         setIsLoading(false);
@@ -278,7 +350,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (authUser.activo === false) {
-        incrementFailedAttempts();
+        incrementFailedAttempts(normalizedUsername);
         void logSecurityEvent('login_failed', {
           userId: authUser.id,
           username: authUser.username,
@@ -289,7 +361,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       // Login exitoso
-      clearFailedAttempts();
+      clearFailedAttempts(normalizedUsername);
       const normalizedUser: AuthUser = {
         ...authUser,
         activo: true,
@@ -313,9 +385,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return true;
     } catch (error) {
       console.error('Error en login:', error);
-      incrementFailedAttempts();
+      const normalizedUsername = normalizeUsername(username);
+      incrementFailedAttempts(normalizedUsername);
       void logSecurityEvent('login_failed', {
-        username: username?.trim().toLowerCase() || null,
+        username: normalizedUsername || null,
         details: { reason: 'login_exception' },
       });
       setIsLoading(false);
@@ -333,6 +406,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Verificar sesión al iniciar
   React.useEffect(() => {
+    clearLegacyLockoutKeys();
+
     const checkAuth = async () => {
       await validatePersistedSession();
       setIsLoading(false);

@@ -72,7 +72,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
   };
 
   return (
-    <div style={styles.overlay} onClick={(e) => e.target === e.currentTarget && handleClose()}>
+    <div style={styles.overlay}>
       <div style={styles.modal}>
         <div style={styles.header}>
           <h2 style={styles.title}>🔐 Iniciar Sesión</h2>
