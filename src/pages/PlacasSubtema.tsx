@@ -17,7 +17,7 @@ interface Placa {
   photo_url: string;
   aumento?: string | null;
   senalados?: string[] | null;
-  senalados_meta?: Array<{ label: string; x: number | null; y: number | null }> | null;
+  senalados_meta?: Array<{ label: string; x: number | null; y: number | null; startX?: number | null; startY?: number | null }> | null;
   comentario?: string | null;
   tincion?: string | null;
 }

@@ -10,6 +10,7 @@ import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
 import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
 import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
+import TincionAccordionSelector from '../components/TincionAccordionSelector';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
@@ -32,12 +33,16 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
 interface MarkerLocation {
   x: number;
   y: number;
+  startX?: number | null;
+  startY?: number | null;
 }
 
 interface SenaladoMetaItem {
   label: string;
   x: number | null;
   y: number | null;
+  startX?: number | null;
+  startY?: number | null;
 }
 
 const buildSenaladosPayload = (
@@ -79,6 +84,8 @@ const buildSenaladosPayload = (
       label,
       x: location?.x ?? null,
       y: location?.y ?? null,
+      startX: location?.startX ?? null,
+      startY: location?.startY ?? null,
     });
   }
 
@@ -655,20 +662,7 @@ const Placas: React.FC = () => {
                           ) : (
                             <>
                               <label style={{ ...styles.accordionLabel, color: '#b45309' }}>🧪 Tinción</label>
-                              <BoldField
-                                as="input"
-                                style={styles.tincionField}
-                                value={tincion}
-                                placeholder="Ej: H&E, PAS, Azul de toluidina..."
-                                onChange={setTincion}
-                              />
-                              <button
-                                type="button"
-                                style={styles.clearTincionBtn}
-                                onClick={() => { setTincion(''); setShowTincion(false); }}
-                              >
-                                ✕ Quitar tinción
-                              </button>
+                              <TincionAccordionSelector value={tincion} onChange={setTincion} />
                             </>
                           )}
                         </div>
@@ -947,6 +941,27 @@ const Placas: React.FC = () => {
                 disabled
               >
                 🗑️ Borrar
+              </button>
+            </div>
+          </div>
+
+          {/* Tinciones */}
+          <div style={p.card}>
+            <div style={{ ...p.cardAccent, background: 'linear-gradient(135deg, #f59e0b, #fbbf24)' }} />
+            <div style={p.cardIcon}>🧪</div>
+            <div style={p.cardBody}>
+              <h2 style={p.cardTitle}>Tinciones</h2>
+              <p style={p.cardDesc}>Administra el catalogo de tinciones: crear, editar y eliminar.</p>
+            </div>
+            <div style={p.btnGroup}>
+              <button
+                type="button"
+                style={{ ...p.actionBtn, color: '#b45309', background: '#fffbeb', borderColor: '#fde68a' }}
+                onClick={() => navigate('/gestion-tinciones')}
+                onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#f59e0b,#fbbf24)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#fffbeb'; e.currentTarget.style.color = '#b45309'; e.currentTarget.style.borderColor = '#fde68a'; }}
+              >
+                ⚙️ Gestionar tinciones
               </button>
             </div>
           </div>

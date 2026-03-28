@@ -1,8 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 
 interface MarkerLocation {
   x: number;
   y: number;
+  startX?: number | null;
+  startY?: number | null;
 }
 
 interface SenaladoLocationPickerProps {
@@ -17,6 +19,7 @@ interface SenaladoLocationPickerProps {
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 type PointerEdge = 'left' | 'right' | 'top' | 'bottom';
+type PointerStartPoint = { x: number; y: number; edge: PointerEdge };
 
 const getPointerStartPx = (x: number, y: number, width: number, height: number) => {
   const distances = [
@@ -38,6 +41,12 @@ const getPointerStartPx = (x: number, y: number, width: number, height: number) 
     default:
       return { x, y: height, edge: 'bottom' as PointerEdge };
   }
+};
+
+const clampPointToNearestEdge = (x: number, y: number, width: number, height: number): PointerStartPoint => {
+  const clampedX = clamp(x, 0, width);
+  const clampedY = clamp(y, 0, height);
+  return getPointerStartPx(clampedX, clampedY, width, height);
 };
 
 const enforceMinimumInclination = (
@@ -100,8 +109,11 @@ const getPointerPolygon = (
 };
 
 const POINTER_CORE_WIDTH_PX = 6;
-const POINTER_TAPER_PX = 26;
+const POINTER_OUTLINE_WIDTH_PX = 8.2;
+const POINTER_TAPER_PX = 18;
 const POINTER_MIN_ANGLE_DEG = 7;
+const POINTER_OUTLINE_TIP_BACKOFF_PX = 1.1;
+const POINTER_BASE_OUTSET_PX = 3;
 
 const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   imageSrc,
@@ -115,6 +127,8 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   const [location, setLocation] = useState<MarkerLocation | null>(initialLocation);
   const imageRef = useRef<HTMLImageElement>(null);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
+  const [draggingPointerStart, setDraggingPointerStart] = useState(false);
+  const pointerClipId = useId();
 
   const updateImageSize = () => {
     const imageEl = imageRef.current;
@@ -146,11 +160,85 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onCancel]);
 
+  const updatePointerTipFromClient = (clientX: number, clientY: number) => {
+    const imageEl = imageRef.current;
+    if (!imageEl) return;
+    const rect = imageEl.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const x = clamp((clientX - rect.left) / rect.width, 0, 1);
+    const y = clamp((clientY - rect.top) / rect.height, 0, 1);
+    setLocation(prev => ({
+      x,
+      y,
+      startX: prev?.startX ?? null,
+      startY: prev?.startY ?? null,
+    }));
+  };
+
   const handleImageClick = (event: React.MouseEvent<HTMLImageElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-    const y = clamp((event.clientY - rect.top) / rect.height, 0, 1);
-    setLocation({ x, y });
+    updatePointerTipFromClient(event.clientX, event.clientY);
+  };
+
+  const updatePointerStartFromClient = (clientX: number, clientY: number) => {
+    if (!imageRef.current || !imageSize) return;
+
+    const rect = imageRef.current.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const relX = clamp((clientX - rect.left) / rect.width, 0, 1);
+    const relY = clamp((clientY - rect.top) / rect.height, 0, 1);
+    const startPx = clampPointToNearestEdge(
+      relX * imageSize.width,
+      relY * imageSize.height,
+      imageSize.width,
+      imageSize.height
+    );
+
+    setLocation(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        startX: startPx.x / imageSize.width,
+        startY: startPx.y / imageSize.height,
+      };
+    });
+  };
+
+  useEffect(() => {
+    if (!draggingPointerStart) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      event.preventDefault();
+      updatePointerStartFromClient(event.clientX, event.clientY);
+    };
+
+    const handlePointerUp = () => {
+      setDraggingPointerStart(false);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [draggingPointerStart, imageSize]);
+
+  const handlePointerStartDown = (event: React.PointerEvent<SVGCircleElement>) => {
+    if (!location) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDraggingPointerStart(true);
+    updatePointerStartFromClient(event.clientX, event.clientY);
+  };
+
+  const handleOverlayPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
+    const target = event.target as Element;
+    if (target.tagName.toLowerCase() === 'circle') return;
+    event.preventDefault();
+    updatePointerTipFromClient(event.clientX, event.clientY);
   };
 
   return (
@@ -196,6 +284,9 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
             </p>
             <p style={{ margin: '4px 0 0', color: '#475569', fontSize: '0.86em' }}>
               Haz clic sobre la imagen para ubicar: <strong>{senaladoLabel || 'Señalado'}</strong>
+            </p>
+            <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.8em' }}>
+              Arrastra el punto azul del borde para cambiar la dirección del puntero.
             </p>
           </div>
           <button
@@ -253,9 +344,11 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                 style={{
                   position: 'absolute',
                   inset: 0,
-                  pointerEvents: 'none',
+                  pointerEvents: 'auto',
                   overflow: 'visible',
+                  cursor: 'crosshair',
                 }}
+                onPointerDown={handleOverlayPointerDown}
                 width={imageSize.width}
                 height={imageSize.height}
                 viewBox={`0 0 ${imageSize.width} ${imageSize.height}`}
@@ -265,21 +358,66 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                     x: location.x * imageSize.width,
                     y: location.y * imageSize.height,
                   };
-                  const baseStart = getPointerStartPx(endPx.x, endPx.y, imageSize.width, imageSize.height);
-                  const startPx = enforceMinimumInclination(
-                    baseStart,
-                    endPx,
-                    imageSize.width,
-                    imageSize.height,
-                    POINTER_MIN_ANGLE_DEG
-                  );
-                  const core = getPointerPolygon(startPx, endPx, POINTER_CORE_WIDTH_PX, POINTER_TAPER_PX);
+                  const hasManualStart = location.startX != null && location.startY != null;
+                  const manualStart = hasManualStart
+                    ? clampPointToNearestEdge(
+                      (location.startX ?? 0) * imageSize.width,
+                      (location.startY ?? 0) * imageSize.height,
+                      imageSize.width,
+                      imageSize.height
+                    )
+                    : null;
+                  const autoStart = getPointerStartPx(endPx.x, endPx.y, imageSize.width, imageSize.height);
+                  const startPx = manualStart
+                    ? manualStart
+                    : enforceMinimumInclination(
+                      autoStart,
+                      endPx,
+                      imageSize.width,
+                      imageSize.height,
+                      POINTER_MIN_ANGLE_DEG
+                    );
+                  const directionLen = Math.hypot(endPx.x - startPx.x, endPx.y - startPx.y) || 1;
+                  const drawStartPx = {
+                    x: startPx.x - ((endPx.x - startPx.x) / directionLen) * POINTER_BASE_OUTSET_PX,
+                    y: startPx.y - ((endPx.y - startPx.y) / directionLen) * POINTER_BASE_OUTSET_PX,
+                  };
+                  const tipInsetPoint = {
+                    x: endPx.x - ((endPx.x - startPx.x) / directionLen) * POINTER_OUTLINE_TIP_BACKOFF_PX,
+                    y: endPx.y - ((endPx.y - startPx.y) / directionLen) * POINTER_OUTLINE_TIP_BACKOFF_PX,
+                  };
+                  const outline = getPointerPolygon(drawStartPx, tipInsetPoint, POINTER_OUTLINE_WIDTH_PX, POINTER_TAPER_PX);
+                  const core = getPointerPolygon(drawStartPx, endPx, POINTER_CORE_WIDTH_PX, POINTER_TAPER_PX);
                   return (
                     <>
-                      <polygon
-                        points={`${core[0].x},${core[0].y} ${core[1].x},${core[1].y} ${core[2].x},${core[2].y} ${core[3].x},${core[3].y} ${core[4].x},${core[4].y}`}
-                        fill="#0a0a0a"
-                        shapeRendering="geometricPrecision"
+                      <defs>
+                        <clipPath id={pointerClipId}>
+                          <rect x="0" y="0" width={imageSize.width} height={imageSize.height} />
+                        </clipPath>
+                      </defs>
+                      <g clipPath={`url(#${pointerClipId})`}>
+                        <polygon
+                          points={`${outline[0].x},${outline[0].y} ${outline[1].x},${outline[1].y} ${outline[2].x},${outline[2].y} ${outline[3].x},${outline[3].y} ${outline[4].x},${outline[4].y}`}
+                          fill="rgba(255,255,255,0.6)"
+                          pointerEvents="none"
+                          shapeRendering="geometricPrecision"
+                        />
+                        <polygon
+                          points={`${core[0].x},${core[0].y} ${core[1].x},${core[1].y} ${core[2].x},${core[2].y} ${core[3].x},${core[3].y} ${core[4].x},${core[4].y}`}
+                          fill="#0a0a0a"
+                          pointerEvents="none"
+                          shapeRendering="geometricPrecision"
+                        />
+                      </g>
+                      <circle
+                        cx={startPx.x}
+                        cy={startPx.y}
+                        r={8}
+                        fill={draggingPointerStart ? '#2563eb' : '#0ea5e9'}
+                        stroke="#ffffff"
+                        strokeWidth={2}
+                        onPointerDown={handlePointerStartDown}
+                        style={{ cursor: draggingPointerStart ? 'grabbing' : 'grab' }}
                       />
                     </>
                   );

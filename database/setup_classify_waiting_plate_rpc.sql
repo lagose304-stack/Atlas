@@ -75,3 +75,4 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.classify_waiting_plate(BIGINT, INTEGER, INTEGER, TEXT, TEXT[], JSONB, TEXT, TEXT)
 TO anon, authenticated;
+c

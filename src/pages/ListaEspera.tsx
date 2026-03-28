@@ -8,6 +8,7 @@ import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
 import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
 import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
+import TincionAccordionSelector from '../components/TincionAccordionSelector';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
@@ -44,12 +45,16 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
 interface MarkerLocation {
   x: number;
   y: number;
+  startX?: number | null;
+  startY?: number | null;
 }
 
 interface SenaladoMetaItem {
   label: string;
   x: number | null;
   y: number | null;
+  startX?: number | null;
+  startY?: number | null;
 }
 
 const buildSenaladosPayload = (
@@ -91,6 +96,8 @@ const buildSenaladosPayload = (
       label,
       x: location?.x ?? null,
       y: location?.y ?? null,
+      startX: location?.startX ?? null,
+      startY: location?.startY ?? null,
     });
   }
 
@@ -694,19 +701,7 @@ const ListaEspera: React.FC = () => {
                       ) : (
                         <>
                           <label style={{ ...s.label, color: '#b45309' }}>🧪 Tinción</label>
-                          <BoldField
-                            as="input"
-                            style={s.tincionField}
-                            value={tincion}
-                            placeholder="Ej: H&E, PAS, Azul de toluidina..."
-                            onChange={setTincion}
-                          />
-                          {tincion && (
-                            <button type="button" style={s.clearOptBtn}
-                              onClick={() => { setTincion(''); setShowTincion(false); }}>
-                              🗑️ Quitar tinción
-                            </button>
-                          )}
+                          <TincionAccordionSelector value={tincion} onChange={setTincion} />
                         </>
                       )}
                     </div>

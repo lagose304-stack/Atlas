@@ -8,6 +8,7 @@ import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
 import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
 import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
+import TincionAccordionSelector from '../components/TincionAccordionSelector';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
@@ -42,12 +43,16 @@ interface Placa {
 interface MarkerLocation {
   x: number;
   y: number;
+  startX?: number | null;
+  startY?: number | null;
 }
 
 interface SenaladoMetaItem {
   label: string;
   x: number | null;
   y: number | null;
+  startX?: number | null;
+  startY?: number | null;
 }
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
@@ -64,9 +69,15 @@ const normalizeLocations = (values: Array<MarkerLocation | null>): Array<MarkerL
     const x = Number(value.x);
     const y = Number(value.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const rawStartX = value.startX == null ? null : Number(value.startX);
+    const rawStartY = value.startY == null ? null : Number(value.startY);
+    const startX = rawStartX != null && Number.isFinite(rawStartX) ? Math.min(Math.max(rawStartX, 0), 1) : null;
+    const startY = rawStartY != null && Number.isFinite(rawStartY) ? Math.min(Math.max(rawStartY, 0), 1) : null;
     return {
       x: Math.min(Math.max(x, 0), 1),
       y: Math.min(Math.max(y, 0), 1),
+      startX,
+      startY,
     };
   });
 };
@@ -112,6 +123,8 @@ const buildSenaladosPayload = (
       label,
       x: location?.x ?? null,
       y: location?.y ?? null,
+      startX: location?.startX ?? null,
+      startY: location?.startY ?? null,
     });
   }
 
@@ -125,7 +138,12 @@ const deriveLocations = (
   return names.map((_, index) => {
     const item = meta?.[index];
     if (!item || item.x == null || item.y == null) return null;
-    return { x: item.x, y: item.y };
+    return {
+      x: item.x,
+      y: item.y,
+      startX: item.startX ?? null,
+      startY: item.startY ?? null,
+    };
   });
 };
 
@@ -726,22 +744,7 @@ const MoverPlaca: React.FC = () => {
                   ) : (
                     <>
                       <label style={{ ...s.selectLabel, color: '#b45309' }}>🧪 Tinción</label>
-                      <BoldField
-                        as="input"
-                        style={s.tincionField}
-                        value={editTincion}
-                        placeholder="Ej: H&E, PAS, Azul de toluidina..."
-                        onChange={setEditTincion}
-                      />
-                      {editTincion && (
-                        <button
-                          type="button"
-                          style={s.clearTincionBtn}
-                          onClick={() => { setEditTincion(''); setShowEditTincion(false); }}
-                        >
-                          🗑️ Eliminar tinción
-                        </button>
-                      )}
+                      <TincionAccordionSelector value={editTincion} onChange={setEditTincion} />
                     </>
                   )}
                 </div>

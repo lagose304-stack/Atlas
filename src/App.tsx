@@ -17,6 +17,7 @@ import EditarPlacas from './pages/EditarPlacas';
 import EliminarPlacas from './pages/EliminarPlacas';
 import MoverPlaca from './pages/MoverPlaca';
 import ListaEspera from './pages/ListaEspera';
+import GestionTinciones from './pages/GestionTinciones';
 import MapasInteractivos from './pages/MapasInteractivos';
 import GestionUsuarios from './pages/GestionUsuarios';
 import Pruebas from './pages/Pruebas';
@@ -183,6 +184,14 @@ const App: React.FC = () => {
             element={
               <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <ListaEspera />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/gestion-tinciones"
+            element={
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
+                <GestionTinciones />
               </PrivateRoute>
             }
           />
