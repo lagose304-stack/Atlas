@@ -1,5 +1,6 @@
 ﻿import React, { useId, useState, useEffect, useMemo, useRef } from 'react';
 import { renderBoldText } from './BoldField';
+import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 
 interface SenaladoMetaItem {
   label: string;
@@ -249,6 +250,22 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = 'unset'; };
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent<ImageViewerVisibilityDetail>(IMAGE_VIEWER_VISIBILITY_EVENT, {
+        detail: { delta: 1 },
+      })
+    );
+
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent<ImageViewerVisibilityDetail>(IMAGE_VIEWER_VISIBILITY_EVENT, {
+          detail: { delta: -1 },
+        })
+      );
+    };
   }, []);
 
   useEffect(() => {

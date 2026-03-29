@@ -13,10 +13,27 @@ interface AuthUser {
   auth_time?: number;
 }
 
+export type LoginStatus =
+  | 'success'
+  | 'missing_credentials'
+  | 'credentials_with_whitespace'
+  | 'locked'
+  | 'backend_unavailable'
+  | 'invalid_credentials'
+  | 'user_deactivated'
+  | 'login_exception';
+
+export interface LoginResult {
+  ok: boolean;
+  status: LoginStatus;
+  message: string;
+  lockoutRemainingMs?: number;
+}
+
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string) => Promise<LoginResult>;
   logout: () => void;
   user: AuthUser | null;
 }
@@ -53,28 +70,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.removeItem(LEGACY_LOCKOUT_UNTIL_KEY);
   };
 
-  const isLockedOut = (normalizedUsername: string): boolean => {
+  const formatLockoutRemaining = (remainingMs: number): string => {
+    const totalSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    if (minutes <= 0) {
+      return `${seconds} segundos`;
+    }
+
+    if (seconds === 0) {
+      return `${minutes} min`;
+    }
+
+    return `${minutes} min ${seconds} s`;
+  };
+
+  const getLockoutState = (normalizedUsername: string): { isLocked: boolean; remainingMs: number } => {
     const lockoutUntilKey = getLockoutUntilKey(normalizedUsername);
     const failedAttemptsKey = getFailedAttemptsKey(normalizedUsername);
     const lockoutUntilRaw = localStorage.getItem(lockoutUntilKey);
     if (!lockoutUntilRaw) {
-      return false;
+      return { isLocked: false, remainingMs: 0 };
     }
 
     const lockoutUntil = Number(lockoutUntilRaw);
     if (Number.isNaN(lockoutUntil)) {
       localStorage.removeItem(lockoutUntilKey);
       localStorage.removeItem(failedAttemptsKey);
-      return false;
+      return { isLocked: false, remainingMs: 0 };
     }
 
-    if (Date.now() >= lockoutUntil) {
+    const remainingMs = lockoutUntil - Date.now();
+    if (remainingMs <= 0) {
       localStorage.removeItem(lockoutUntilKey);
       localStorage.removeItem(failedAttemptsKey);
-      return false;
+      return { isLocked: false, remainingMs: 0 };
     }
 
-    return true;
+    return { isLocked: true, remainingMs };
   };
 
   const incrementFailedAttempts = (normalizedUsername: string) => {
@@ -265,7 +299,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string): Promise<LoginResult> => {
     try {
       setIsLoading(true);
       const normalizedUsername = normalizeUsername(username);
@@ -277,7 +311,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           details: { reason: 'missing_credentials' },
         });
         setIsLoading(false);
-        return false;
+        return {
+          ok: false,
+          status: 'missing_credentials',
+          message: 'Debes ingresar usuario y contraseña.',
+        };
       }
 
       if (/\s/.test(username) || /\s/.test(password)) {
@@ -286,16 +324,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           details: { reason: 'credentials_with_whitespace' },
         });
         setIsLoading(false);
-        return false;
+        return {
+          ok: false,
+          status: 'credentials_with_whitespace',
+          message: 'Usuario y contraseña no pueden contener espacios en blanco.',
+        };
       }
 
-      if (isLockedOut(normalizedUsername)) {
+      const lockoutState = getLockoutState(normalizedUsername);
+      if (lockoutState.isLocked) {
         void logSecurityEvent('login_locked', {
           username: normalizedUsername,
-          details: { reason: 'lockout_active' },
+          details: {
+            reason: 'lockout_active',
+            remainingMs: lockoutState.remainingMs,
+          },
         });
         setIsLoading(false);
-        return false;
+        return {
+          ok: false,
+          status: 'locked',
+          message: `Acceso temporalmente bloqueado. Intenta de nuevo en ${formatLockoutRemaining(lockoutState.remainingMs)}.`,
+          lockoutRemainingMs: lockoutState.remainingMs,
+        };
       }
 
       // Consultar la base de datos
@@ -346,16 +397,42 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             details: { reason: 'auth_backend_unavailable' },
           });
           setIsLoading(false);
-          return false;
+          return {
+            ok: false,
+            status: 'backend_unavailable',
+            message: 'No se pudo conectar con el servicio de autenticacion. Intenta de nuevo en unos segundos.',
+          };
         }
 
         incrementFailedAttempts(normalizedUsername);
+        const nextLockout = getLockoutState(normalizedUsername);
+        if (nextLockout.isLocked) {
+          void logSecurityEvent('login_locked', {
+            username: normalizedUsername,
+            details: {
+              reason: 'lockout_triggered',
+              remainingMs: nextLockout.remainingMs,
+            },
+          });
+        }
         void logSecurityEvent('login_failed', {
           username: normalizedUsername,
           details: { reason: 'invalid_credentials' },
         });
         setIsLoading(false);
-        return false;
+        if (nextLockout.isLocked) {
+          return {
+            ok: false,
+            status: 'locked',
+            message: `Acceso temporalmente bloqueado por multiples intentos fallidos. Intenta de nuevo en ${formatLockoutRemaining(nextLockout.remainingMs)}.`,
+            lockoutRemainingMs: nextLockout.remainingMs,
+          };
+        }
+        return {
+          ok: false,
+          status: 'invalid_credentials',
+          message: 'Usuario o contraseña incorrectos.',
+        };
       }
 
       if (authUser.activo === false) {
@@ -366,7 +443,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           details: { reason: 'user_deactivated' },
         });
         setIsLoading(false);
-        return false;
+        return {
+          ok: false,
+          status: 'user_deactivated',
+          message: 'Tu cuenta esta desactivada. Contacta al administrador.',
+        };
       }
 
       // Login exitoso
@@ -391,17 +472,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       
       setIsLoading(false);
-      return true;
+      return {
+        ok: true,
+        status: 'success',
+        message: 'Inicio de sesion exitoso.',
+      };
     } catch (error) {
       console.error('Error en login:', error);
       const normalizedUsername = normalizeUsername(username);
-      incrementFailedAttempts(normalizedUsername);
       void logSecurityEvent('login_failed', {
         username: normalizedUsername || null,
         details: { reason: 'login_exception' },
       });
       setIsLoading(false);
-      return false;
+      return {
+        ok: false,
+        status: 'login_exception',
+        message: 'Error de conexion al intentar iniciar sesion. Revisa tu red e intenta de nuevo.',
+      };
     }
   };
 

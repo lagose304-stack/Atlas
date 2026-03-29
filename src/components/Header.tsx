@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BookOpen, GraduationCap, House, Phone, Search } from 'lucide-react';
+import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 
 import logoFacultad from '../assets/logos/facultad.png';
 import microscopioHeader from '../assets/logos/laboratorio.png';
@@ -20,6 +21,8 @@ const Header: React.FC = () => {
   const [isLeftLogoHover, setIsLeftLogoHover] = React.useState(false);
   const [isRightLogoHover, setIsRightLogoHover] = React.useState(false);
   const [showCompactBar, setShowCompactBar] = React.useState(false);
+  const [openImageViewerCount, setOpenImageViewerCount] = React.useState(0);
+  const isImageViewerOpen = openImageViewerCount > 0;
 
   const isInAdminEditingFlow = React.useMemo(() => {
     const adminPaths = [
@@ -70,6 +73,25 @@ const Header: React.FC = () => {
     return () => {
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('resize', handleScroll);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const handleImageViewerVisibility = (event: Event) => {
+      const customEvent = event as CustomEvent<ImageViewerVisibilityDetail>;
+      const delta = customEvent.detail?.delta;
+
+      if (delta !== 1 && delta !== -1) {
+        return;
+      }
+
+      setOpenImageViewerCount((prev) => Math.max(0, prev + delta));
+    };
+
+    window.addEventListener(IMAGE_VIEWER_VISIBILITY_EVENT, handleImageViewerVisibility as EventListener);
+
+    return () => {
+      window.removeEventListener(IMAGE_VIEWER_VISIBILITY_EVENT, handleImageViewerVisibility as EventListener);
     };
   }, []);
 
@@ -167,7 +189,7 @@ const Header: React.FC = () => {
         className="atlas-compact-bar"
         style={{
           ...styles.compactBar,
-          ...(showCompactBar ? styles.compactBarVisible : styles.compactBarHidden),
+          ...(showCompactBar && !isImageViewerOpen ? styles.compactBarVisible : styles.compactBarHidden),
         }}
       >
         <button

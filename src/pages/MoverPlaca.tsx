@@ -162,6 +162,14 @@ const MoverPlaca: React.FC = () => {
   const [loadingTemas,    setLoadingTemas]    = useState(true);
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
   const [loadingPlacas,   setLoadingPlacas]   = useState(false);
+  const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
+  const [subtemasLoadError, setSubtemasLoadError] = useState<string | null>(null);
+  const [placasLoadError, setPlacasLoadError] = useState<string | null>(null);
+  const [editSubtemasLoadError, setEditSubtemasLoadError] = useState<string | null>(null);
+  const [temasReloadTick, setTemasReloadTick] = useState(0);
+  const [subtemasReloadTick, setSubtemasReloadTick] = useState(0);
+  const [placasReloadTick, setPlacasReloadTick] = useState(0);
+  const [editSubtemasReloadTick, setEditSubtemasReloadTick] = useState(0);
 
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
 
@@ -193,22 +201,117 @@ const MoverPlaca: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError,   setSaveError]   = useState('');
 
-  // ── Cargar temas al montar ────────────────────────────────────────────
-  useEffect(() => {
-    const fetch = async () => {
-      const { data } = await supabase
+  const fetchTemas = useCallback(async (): Promise<boolean> => {
+    setLoadingTemas(true);
+    setTemasLoadError(null);
+    try {
+      const { data, error } = await supabase
         .from('temas')
         .select('id, nombre, parcial, sort_order')
         .order('parcial')
         .order('sort_order', { ascending: true });
-      if (data) {
-        setTemas(data);
-        setEditTemas(data); // misma lista para el panel de edición
+
+      if (error) {
+        throw error;
       }
+
+      const loadedTemas = data ?? [];
+      setTemas(loadedTemas);
+      setEditTemas(loadedTemas);
+      return true;
+    } catch (err) {
+      console.error('Error al cargar temas en mover placa:', err);
+      setTemas([]);
+      setEditTemas([]);
+      setTemasLoadError('No se pudieron cargar los temas. Revisa tu conexión e inténtalo de nuevo.');
+      return false;
+    } finally {
       setLoadingTemas(false);
-    };
-    fetch();
+    }
   }, []);
+
+  const fetchSubtemas = useCallback(async (temaId: number): Promise<boolean> => {
+    setLoadingSubtemas(true);
+    setSubtemasLoadError(null);
+    try {
+      const { data, error } = await supabase
+        .from('subtemas')
+        .select('id, nombre, tema_id')
+        .eq('tema_id', temaId)
+        .order('sort_order', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      setSubtemas(data ?? []);
+      return true;
+    } catch (err) {
+      console.error('Error al cargar subtemas en mover placa:', err);
+      setSubtemas([]);
+      setSubtemasLoadError('No se pudieron cargar los subtemas. Revisa tu conexión e inténtalo de nuevo.');
+      return false;
+    } finally {
+      setLoadingSubtemas(false);
+    }
+  }, []);
+
+  const fetchPlacas = useCallback(async (subtemaId: number): Promise<boolean> => {
+    setLoadingPlacas(true);
+    setPlacasLoadError(null);
+    try {
+      const { data, error } = await supabase
+        .from('placas')
+        .select('id, photo_url, sort_order, tema_id, subtema_id, aumento, senalados, senalados_meta, comentario, tincion')
+        .eq('subtema_id', subtemaId)
+        .order('sort_order', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      setPlacas(data ?? []);
+      return true;
+    } catch (err) {
+      console.error('Error al cargar placas en mover placa:', err);
+      setPlacas([]);
+      setPlacasLoadError('No se pudieron cargar las placas. Revisa tu conexión e inténtalo de nuevo.');
+      return false;
+    } finally {
+      setLoadingPlacas(false);
+    }
+  }, []);
+
+  const fetchEditSubtemas = useCallback(async (temaId: number): Promise<boolean> => {
+    setLoadingEditSubtemas(true);
+    setEditSubtemasLoadError(null);
+    try {
+      const { data, error } = await supabase
+        .from('subtemas')
+        .select('id, nombre, tema_id')
+        .eq('tema_id', temaId)
+        .order('sort_order', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      setEditSubtemas(data ?? []);
+      return true;
+    } catch (err) {
+      console.error('Error al cargar subtemas de edición:', err);
+      setEditSubtemas([]);
+      setEditSubtemasLoadError('No se pudieron cargar los subtemas del tema seleccionado.');
+      return false;
+    } finally {
+      setLoadingEditSubtemas(false);
+    }
+  }, []);
+
+  // ── Cargar temas al montar ────────────────────────────────────────────
+  useEffect(() => {
+    void fetchTemas();
+  }, [fetchTemas, temasReloadTick]);
 
   // ── Cargar subtemas de contexto cuando cambia el tema ─────────────────
   useEffect(() => {
@@ -216,37 +319,21 @@ const MoverPlaca: React.FC = () => {
     setPlacas([]);
     setSelectedSubtemaId(null);
     setSelectedPlaca(null);
+    setSubtemasLoadError(null);
+    setPlacasLoadError(null);
+    setPlacasReloadTick(0);
     if (!selectedTemaId) return;
-    const fetch = async () => {
-      setLoadingSubtemas(true);
-      const { data } = await supabase
-        .from('subtemas')
-        .select('id, nombre, tema_id')
-        .eq('tema_id', selectedTemaId)
-        .order('sort_order', { ascending: true });
-      if (data) setSubtemas(data);
-      setLoadingSubtemas(false);
-    };
-    fetch();
-  }, [selectedTemaId]);
+    void fetchSubtemas(selectedTemaId);
+  }, [selectedTemaId, subtemasReloadTick, fetchSubtemas]);
 
   // ── Cargar placas cuando cambia el subtema de contexto ────────────────
   useEffect(() => {
     setPlacas([]);
     setSelectedPlaca(null);
+    setPlacasLoadError(null);
     if (!selectedSubtemaId) return;
-    const fetch = async () => {
-      setLoadingPlacas(true);
-      const { data } = await supabase
-        .from('placas')
-        .select('id, photo_url, sort_order, tema_id, subtema_id, aumento, senalados, senalados_meta, comentario, tincion')
-        .eq('subtema_id', selectedSubtemaId)
-        .order('sort_order', { ascending: true });
-      if (data) setPlacas(data);
-      setLoadingPlacas(false);
-    };
-    fetch();
-  }, [selectedSubtemaId]);
+    void fetchPlacas(selectedSubtemaId);
+  }, [selectedSubtemaId, placasReloadTick, fetchPlacas]);
 
   // ── Cuando se selecciona una placa, inicializar los selectores de edición ──
   useEffect(() => {
@@ -289,34 +376,30 @@ const MoverPlaca: React.FC = () => {
     setShowEditComentario(!!(selectedPlaca.comentario));
     setEditTincion(selectedPlaca.tincion ?? '');
     setShowEditTincion(!!(selectedPlaca.tincion));
+    setEditSubtemasLoadError(null);
+    setEditSubtemasReloadTick(0);
     // Cargar subtemas del tema actual de la placa
-    const fetch = async () => {
-      setLoadingEditSubtemas(true);
-      const { data } = await supabase
-        .from('subtemas')
-        .select('id, nombre, tema_id')
-        .eq('tema_id', selectedPlaca.tema_id)
-        .order('sort_order', { ascending: true });
-      if (data) setEditSubtemas(data);
-      setLoadingEditSubtemas(false);
-    };
-    fetch();
-  }, [selectedPlaca]);
+    void fetchEditSubtemas(selectedPlaca.tema_id);
+  }, [selectedPlaca, fetchEditSubtemas]);
+
+  useEffect(() => {
+    if (!selectedPlaca || !editTemaId) {
+      return;
+    }
+    if (editSubtemasReloadTick === 0) {
+      return;
+    }
+    void fetchEditSubtemas(editTemaId);
+  }, [selectedPlaca, editTemaId, editSubtemasReloadTick, fetchEditSubtemas]);
 
   // ── Cuando cambia el tema en el panel de edición, recargar subtemas ───
   const handleEditTemaChange = async (temaId: number | null) => {
     setEditTemaId(temaId);
     setEditSubtemaId(null);
     setEditSubtemas([]);
+    setEditSubtemasLoadError(null);
     if (!temaId) return;
-    setLoadingEditSubtemas(true);
-    const { data } = await supabase
-      .from('subtemas')
-      .select('id, nombre, tema_id')
-      .eq('tema_id', temaId)
-      .order('sort_order', { ascending: true });
-    if (data) setEditSubtemas(data);
-    setLoadingEditSubtemas(false);
+    await fetchEditSubtemas(temaId);
   };
 
   // ── Guardar cambios ───────────────────────────────────────────────────
@@ -529,6 +612,38 @@ const MoverPlaca: React.FC = () => {
               )}
             </div>
           </div>
+
+          {(temasLoadError || subtemasLoadError) && (
+            <div style={s.loadErrorBox}>
+              {temasLoadError && (
+                <div style={s.loadErrorRow}>
+                  <span style={s.loadErrorText}>{temasLoadError}</span>
+                  <button
+                    type="button"
+                    style={s.retryButton}
+                    onClick={() => setTemasReloadTick(tick => tick + 1)}
+                    disabled={loadingTemas}
+                  >
+                    {loadingTemas ? 'Reintentando...' : 'Reintentar temas'}
+                  </button>
+                </div>
+              )}
+
+              {subtemasLoadError && selectedTemaId && (
+                <div style={s.loadErrorRow}>
+                  <span style={s.loadErrorText}>{subtemasLoadError}</span>
+                  <button
+                    type="button"
+                    style={s.retryButton}
+                    onClick={() => setSubtemasReloadTick(tick => tick + 1)}
+                    disabled={loadingSubtemas}
+                  >
+                    {loadingSubtemas ? 'Reintentando...' : 'Reintentar subtemas'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Grid de placas */}
@@ -544,7 +659,21 @@ const MoverPlaca: React.FC = () => {
               <div style={s.divider} />
             </div>
 
-            {loadingPlacas ? (
+            {placasLoadError ? (
+              <div style={s.loadErrorBox}>
+                <div style={s.loadErrorRow}>
+                  <span style={s.loadErrorText}>{placasLoadError}</span>
+                  <button
+                    type="button"
+                    style={s.retryButton}
+                    onClick={() => setPlacasReloadTick(tick => tick + 1)}
+                    disabled={loadingPlacas}
+                  >
+                    {loadingPlacas ? 'Reintentando...' : 'Reintentar placas'}
+                  </button>
+                </div>
+              </div>
+            ) : loadingPlacas ? (
               <div style={s.loadingWrap}>
                 <div style={s.spinner} />
                 <p style={s.loadingText}>Cargando placas...</p>
@@ -711,6 +840,22 @@ const MoverPlaca: React.FC = () => {
                         <option key={sub.id} value={sub.id}>{sub.nombre}</option>
                       ))}
                     </select>
+                  )}
+
+                  {editSubtemasLoadError && editTemaId && (
+                    <div style={{ ...s.loadErrorBox, marginTop: '8px' }}>
+                      <div style={s.loadErrorRow}>
+                        <span style={s.loadErrorText}>{editSubtemasLoadError}</span>
+                        <button
+                          type="button"
+                          style={s.retryButton}
+                          onClick={() => setEditSubtemasReloadTick(tick => tick + 1)}
+                          disabled={loadingEditSubtemas}
+                        >
+                          {loadingEditSubtemas ? 'Reintentando...' : 'Reintentar subtemas'}
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -1073,6 +1218,40 @@ const s: { [key: string]: React.CSSProperties } = {
     borderTop: '3px solid #38bdf8',
     animation: 'spin 0.8s linear infinite',
     flexShrink: 0,
+  },
+  loadErrorBox: {
+    marginTop: '14px',
+    borderRadius: '12px',
+    border: '1px solid #fecaca',
+    background: '#fff1f2',
+    padding: '12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  loadErrorRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  loadErrorText: {
+    color: '#9f1239',
+    fontSize: '0.9em',
+    fontWeight: 600,
+  },
+  retryButton: {
+    border: '1px solid #fb7185',
+    background: '#ffffff',
+    color: '#9f1239',
+    borderRadius: '999px',
+    padding: '7px 12px',
+    cursor: 'pointer',
+    fontSize: '0.8em',
+    fontWeight: 700,
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
   },
   emptyState: {
     textAlign: 'center',

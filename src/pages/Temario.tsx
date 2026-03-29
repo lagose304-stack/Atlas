@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import LoadingToast, { LoadingToastType } from '../components/LoadingToast';
 import Footer from '../components/Footer';
@@ -153,17 +153,30 @@ const Temario: React.FC = () => {
   const [temas, setTemas] = useState<Tema[]>([]);
   const [subtemasOfSelectedTema, setSubtemasOfSelectedTema] = useState<Subtema[]>([]);
   const [selectedTemaId, setSelectedTemaId] = useState<string>('');
+  const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
+  const [subtemasLoadError, setSubtemasLoadError] = useState<string | null>(null);
+  const [temasReloadTick, setTemasReloadTick] = useState(0);
+  const [subtemasReloadTick, setSubtemasReloadTick] = useState(0);
 
   // ... (toda la lógica de useEffect y los handlers permanece igual)
-  const fetchTemas = async () => {
+  const fetchTemas = useCallback(async (): Promise<boolean> => {
+    setTemasLoadError(null);
     const { data, error } = await supabase.from('temas').select('*').order('nombre', { ascending: true });
-    if (data) setTemas(data);
-    if (error) console.error('Error fetching temas:', error);
-  };
+
+    if (error) {
+      console.error('Error fetching temas:', error);
+      setTemas([]);
+      setTemasLoadError('No se pudieron cargar los temas. Revisa tu conexión e inténtalo de nuevo.');
+      return false;
+    }
+
+    setTemas(data ?? []);
+    return true;
+  }, []);
 
   useEffect(() => {
-    fetchTemas();
-  }, []);
+    void fetchTemas();
+  }, [fetchTemas, temasReloadTick]);
 
   useEffect(() => {
     const tema = temas.find(t => t.id.toString() === editingTemaId);
@@ -179,7 +192,16 @@ const Temario: React.FC = () => {
     const fetchSubtemas = async () => {
       const temaId = isEditingSubtema ? selectedTemaId : (isDeletingSubtema ? deletingTemaId : null);
       if (temaId) {
-        const { data } = await supabase.from('subtemas').select('*').eq('tema_id', temaId).order('nombre', { ascending: true });
+        setSubtemasLoadError(null);
+        const { data, error } = await supabase.from('subtemas').select('*').eq('tema_id', temaId).order('nombre', { ascending: true });
+
+        if (error) {
+          console.error('Error fetching subtemas:', error);
+          setSubtemasOfSelectedTema([]);
+          setSubtemasLoadError('No se pudieron cargar los subtemas del tema seleccionado.');
+          return;
+        }
+
         setSubtemasOfSelectedTema(data || []);
         if (isEditingSubtema) {
             setEditingSubtemaId('');
@@ -188,12 +210,15 @@ const Temario: React.FC = () => {
         if (isDeletingSubtema) {
             setDeletingSubtemaId('');
         }
+      } else {
+        setSubtemasOfSelectedTema([]);
+        setSubtemasLoadError(null);
       }
     };
     if (isEditingSubtema || isDeletingSubtema) {
-        fetchSubtemas();
+        void fetchSubtemas();
     }
-  }, [selectedTemaId, deletingTemaId, isEditingSubtema, isDeletingSubtema]);
+  }, [selectedTemaId, deletingTemaId, isEditingSubtema, isDeletingSubtema, subtemasReloadTick]);
 
   useEffect(() => {
     const subtema = subtemasOfSelectedTema.find(s => s.id.toString() === editingSubtemaId);
@@ -660,6 +685,36 @@ const Temario: React.FC = () => {
         {/* Contenido principal */}
         <div style={t.contentCard}>
 
+          {temasLoadError && (
+            <div style={t.loadErrorBox}>
+              <div style={t.loadErrorRow}>
+                <span style={t.loadErrorText}>{temasLoadError}</span>
+                <button
+                  type="button"
+                  style={t.retryButton}
+                  onClick={() => setTemasReloadTick(tick => tick + 1)}
+                >
+                  Reintentar temas
+                </button>
+              </div>
+            </div>
+          )}
+
+          {subtemasLoadError && (isEditingSubtema || isDeletingSubtema) && (
+            <div style={t.loadErrorBox}>
+              <div style={t.loadErrorRow}>
+                <span style={t.loadErrorText}>{subtemasLoadError}</span>
+                <button
+                  type="button"
+                  style={t.retryButton}
+                  onClick={() => setSubtemasReloadTick(tick => tick + 1)}
+                >
+                  Reintentar subtemas
+                </button>
+              </div>
+            </div>
+          )}
+
           {!anyFormOpen && (
             <div style={t.actionGrid} className="temario-action-grid">
 
@@ -931,6 +986,40 @@ const t: { [key: string]: React.CSSProperties } = {
     boxShadow: 'none',
     border: 'none',
     boxSizing: 'border-box',
+  },
+  loadErrorBox: {
+    marginBottom: '14px',
+    borderRadius: '12px',
+    border: '1px solid #fecaca',
+    background: '#fff1f2',
+    padding: '12px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  loadErrorRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  loadErrorText: {
+    color: '#9f1239',
+    fontSize: '0.9em',
+    fontWeight: 600,
+  },
+  retryButton: {
+    border: '1px solid #fb7185',
+    background: '#ffffff',
+    color: '#9f1239',
+    borderRadius: '999px',
+    padding: '7px 12px',
+    cursor: 'pointer',
+    fontSize: '0.82em',
+    fontWeight: 700,
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
   },
   actionGrid: {
     display: 'grid',

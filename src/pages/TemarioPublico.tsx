@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import Header from '../components/Header';
@@ -142,16 +142,26 @@ const TemarioPublico: React.FC = () => {
   const [temas, setTemas] = useState<Tema[]>([]);
   const [loading, setLoading] = useState(true);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
+  const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
+
+  const fetchTemas = useCallback(async () => {
+    setLoading(true);
+    setTemasLoadError(null);
+
+    const { data, error } = await supabase.from('temas').select('*').order('sort_order', { ascending: true });
+    if (error) {
+      console.error('Error fetching temas:', error);
+      setTemas([]);
+      setTemasLoadError('No se pudo cargar el temario en este momento. Revisa tu conexion e intenta de nuevo.');
+      setLoading(false);
+      return;
+    }
+
+    setTemas(data ?? []);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    const fetchTemas = async () => {
-      setLoading(true);
-      const { data, error } = await supabase.from('temas').select('*').order('sort_order', { ascending: true });
-      if (data) setTemas(data);
-      if (error) console.error('Error fetching temas:', error);
-      setLoading(false);
-    };
-
     const fetchBlocks = async () => {
       try {
         const blocks = await getRenderableBlocks('subtemas_page', 0);
@@ -161,9 +171,9 @@ const TemarioPublico: React.FC = () => {
       }
     };
 
-    fetchTemas();
-    fetchBlocks();
-  }, []);
+    void fetchTemas();
+    void fetchBlocks();
+  }, [fetchTemas]);
 
   return (
     <div className="atlas-temario-typography" style={styles.container}>
@@ -188,6 +198,21 @@ const TemarioPublico: React.FC = () => {
             <div style={styles.loadingWrap}>
               <div style={styles.spinner} />
               <p className="atlas-typo-body" style={styles.loadingText}>Cargando temario...</p>
+            </div>
+          ) : temasLoadError ? (
+            <div style={styles.errorState}>
+              <span style={styles.errorIcon}>⚠️</span>
+              <p className="atlas-typo-section-title" style={styles.errorTitle}>No se pudo conectar con la base de datos</p>
+              <p className="atlas-typo-body" style={styles.errorMessage}>{temasLoadError}</p>
+              <button
+                type="button"
+                style={styles.retryButton}
+                onClick={() => {
+                  void fetchTemas();
+                }}
+              >
+                Reintentar
+              </button>
             </div>
           ) : (
             <div style={styles.temarioSectionsContainer}>
@@ -385,6 +410,40 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   loadingText: {
     fontStyle: 'italic',
+  },
+  errorState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    padding: 'clamp(24px, 4vw, 42px)',
+    background: 'linear-gradient(135deg, #fff7ed, #ffedd5)',
+    borderRadius: '12px',
+    border: '1px solid #fdba74',
+    textAlign: 'center',
+  },
+  errorIcon: {
+    fontSize: '1.8em',
+    lineHeight: 1,
+  },
+  errorTitle: {
+    margin: 0,
+    color: '#9a3412',
+  },
+  errorMessage: {
+    margin: 0,
+    color: '#7c2d12',
+    maxWidth: '640px',
+  },
+  retryButton: {
+    border: '1px solid #fdba74',
+    background: '#fff',
+    color: '#9a3412',
+    borderRadius: '8px',
+    padding: '8px 14px',
+    fontWeight: 700,
+    cursor: 'pointer',
   },
 };
 

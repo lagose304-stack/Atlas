@@ -49,9 +49,9 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
     setLoading(true);
 
     try {
-      const success = await login(username.trim(), password);
+      const result = await login(username.trim(), password);
 
-      if (success) {
+      if (result.ok) {
         // Login exitoso - cerrar modal y redirigir
         setUsername('');
         setPassword('');
@@ -60,7 +60,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
         // Redirigir a la página de edición después del login
         navigate('/edicion');
       } else {
-        setError('Acceso denegado: credenciales invalidas o acceso temporalmente bloqueado');
+        setError(result.message);
       }
     } catch (error) {
       console.error('Error durante el login:', error);

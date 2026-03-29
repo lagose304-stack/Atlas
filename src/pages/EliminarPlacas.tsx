@@ -81,25 +81,100 @@ const EliminarPlacas: React.FC = () => {
   const [loadingTemas,    setLoadingTemas]    = useState(true);
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
   const [loadingPlacas,   setLoadingPlacas]   = useState(false);
+  const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
+  const [subtemasLoadError, setSubtemasLoadError] = useState<string | null>(null);
+  const [placasLoadError, setPlacasLoadError] = useState<string | null>(null);
+  const [temasReloadTick, setTemasReloadTick] = useState(0);
+  const [subtemasReloadTick, setSubtemasReloadTick] = useState(0);
+  const [placasReloadTick, setPlacasReloadTick] = useState(0);
 
   const [isDeleting,    setIsDeleting]    = useState(false);
   const [showConfirm,   setShowConfirm]   = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState(false);
   const [hoveredCard,   setHoveredCard]   = useState<number | null>(null);
 
-  // Cargar temas al montar
-  useEffect(() => {
-    const fetch = async () => {
-      const { data } = await supabase
+  const fetchTemas = useCallback(async (): Promise<boolean> => {
+    setLoadingTemas(true);
+    setTemasLoadError(null);
+    try {
+      const { data, error } = await supabase
         .from('temas')
         .select('id, nombre, parcial, sort_order')
         .order('parcial')
         .order('sort_order', { ascending: true });
-      if (data) setTemas(data);
+
+      if (error) {
+        throw error;
+      }
+
+      setTemas(data ?? []);
+      return true;
+    } catch (err) {
+      console.error('Error al cargar temas en eliminar placas:', err);
+      setTemas([]);
+      setTemasLoadError('No se pudieron cargar los temas. Revisa tu conexión e inténtalo de nuevo.');
+      return false;
+    } finally {
       setLoadingTemas(false);
-    };
-    fetch();
+    }
   }, []);
+
+  const fetchSubtemas = useCallback(async (temaId: number): Promise<boolean> => {
+    setLoadingSubtemas(true);
+    setSubtemasLoadError(null);
+    try {
+      const { data, error } = await supabase
+        .from('subtemas')
+        .select('id, nombre, tema_id')
+        .eq('tema_id', temaId)
+        .order('sort_order', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      setSubtemas(data ?? []);
+      return true;
+    } catch (err) {
+      console.error('Error al cargar subtemas en eliminar placas:', err);
+      setSubtemas([]);
+      setSubtemasLoadError('No se pudieron cargar los subtemas. Revisa tu conexión e inténtalo de nuevo.');
+      return false;
+    } finally {
+      setLoadingSubtemas(false);
+    }
+  }, []);
+
+  const fetchPlacas = useCallback(async (subtemaId: number): Promise<boolean> => {
+    setLoadingPlacas(true);
+    setPlacasLoadError(null);
+    try {
+      const { data, error } = await supabase
+        .from('placas')
+        .select('id, photo_url, sort_order, tema_id, subtema_id')
+        .eq('subtema_id', subtemaId)
+        .order('sort_order', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      setPlacas(data ?? []);
+      return true;
+    } catch (err) {
+      console.error('Error al cargar placas en eliminar placas:', err);
+      setPlacas([]);
+      setPlacasLoadError('No se pudieron cargar las placas. Revisa tu conexión e inténtalo de nuevo.');
+      return false;
+    } finally {
+      setLoadingPlacas(false);
+    }
+  }, []);
+
+  // Cargar temas al montar
+  useEffect(() => {
+    void fetchTemas();
+  }, [fetchTemas, temasReloadTick]);
 
   // Cargar subtemas cuando cambia el tema
   useEffect(() => {
@@ -107,37 +182,21 @@ const EliminarPlacas: React.FC = () => {
     setPlacas([]);
     setSelectedSubtemaId(null);
     setSelectedIds(new Set());
+    setSubtemasLoadError(null);
+    setPlacasLoadError(null);
+    setPlacasReloadTick(0);
     if (!selectedTemaId) return;
-    const fetch = async () => {
-      setLoadingSubtemas(true);
-      const { data } = await supabase
-        .from('subtemas')
-        .select('id, nombre, tema_id')
-        .eq('tema_id', selectedTemaId)
-        .order('sort_order', { ascending: true });
-      if (data) setSubtemas(data);
-      setLoadingSubtemas(false);
-    };
-    fetch();
-  }, [selectedTemaId]);
+    void fetchSubtemas(selectedTemaId);
+  }, [selectedTemaId, subtemasReloadTick, fetchSubtemas]);
 
   // Cargar placas cuando cambia el subtema
   useEffect(() => {
     setPlacas([]);
     setSelectedIds(new Set());
+    setPlacasLoadError(null);
     if (!selectedSubtemaId) return;
-    const fetch = async () => {
-      setLoadingPlacas(true);
-      const { data } = await supabase
-        .from('placas')
-        .select('id, photo_url, sort_order, tema_id, subtema_id')
-        .eq('subtema_id', selectedSubtemaId)
-        .order('sort_order', { ascending: true });
-      if (data) setPlacas(data);
-      setLoadingPlacas(false);
-    };
-    fetch();
-  }, [selectedSubtemaId]);
+    void fetchPlacas(selectedSubtemaId);
+  }, [selectedSubtemaId, placasReloadTick, fetchPlacas]);
 
   const toggleSelect = (id: number) => {
     setSelectedIds(prev => {
@@ -302,6 +361,38 @@ const EliminarPlacas: React.FC = () => {
               )}
             </div>
           </div>
+
+          {(temasLoadError || subtemasLoadError) && (
+            <div style={s.loadErrorBox}>
+              {temasLoadError && (
+                <div style={s.loadErrorRow}>
+                  <span style={s.loadErrorText}>{temasLoadError}</span>
+                  <button
+                    type="button"
+                    style={s.retryButton}
+                    onClick={() => setTemasReloadTick(tick => tick + 1)}
+                    disabled={loadingTemas}
+                  >
+                    {loadingTemas ? 'Reintentando...' : 'Reintentar temas'}
+                  </button>
+                </div>
+              )}
+
+              {subtemasLoadError && selectedTemaId && (
+                <div style={s.loadErrorRow}>
+                  <span style={s.loadErrorText}>{subtemasLoadError}</span>
+                  <button
+                    type="button"
+                    style={s.retryButton}
+                    onClick={() => setSubtemasReloadTick(tick => tick + 1)}
+                    disabled={loadingSubtemas}
+                  >
+                    {loadingSubtemas ? 'Reintentando...' : 'Reintentar subtemas'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Grid de placas */}
@@ -337,7 +428,21 @@ const EliminarPlacas: React.FC = () => {
               </div>
             )}
 
-            {loadingPlacas ? (
+            {placasLoadError ? (
+              <div style={s.loadErrorBox}>
+                <div style={s.loadErrorRow}>
+                  <span style={s.loadErrorText}>{placasLoadError}</span>
+                  <button
+                    type="button"
+                    style={s.retryButton}
+                    onClick={() => setPlacasReloadTick(tick => tick + 1)}
+                    disabled={loadingPlacas}
+                  >
+                    {loadingPlacas ? 'Reintentando...' : 'Reintentar placas'}
+                  </button>
+                </div>
+              </div>
+            ) : loadingPlacas ? (
               <div style={s.loadingWrap}>
                 <div style={s.spinner} />
                 <p style={s.loadingText}>Cargando placas...</p>
@@ -614,6 +719,40 @@ const s: { [key: string]: React.CSSProperties } = {
     borderTop: '3px solid #38bdf8',
     animation: 'spin 0.8s linear infinite',
     flexShrink: 0,
+  },
+  loadErrorBox: {
+    marginTop: '14px',
+    borderRadius: '12px',
+    border: '1px solid #fecaca',
+    background: '#fff1f2',
+    padding: '12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  loadErrorRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  loadErrorText: {
+    color: '#9f1239',
+    fontSize: '0.9em',
+    fontWeight: 600,
+  },
+  retryButton: {
+    border: '1px solid #fb7185',
+    background: '#ffffff',
+    color: '#9f1239',
+    borderRadius: '999px',
+    padding: '7px 12px',
+    cursor: 'pointer',
+    fontSize: '0.8em',
+    fontWeight: 700,
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
   },
   selectAllBar: {
     display: 'flex',

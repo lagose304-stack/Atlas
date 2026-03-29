@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
@@ -37,44 +37,74 @@ const Subtemas: React.FC = () => {
   const [temaLogoFailed, setTemaLogoFailed] = useState(false);
   const [temaLogoSrc, setTemaLogoSrc] = useState('');
   const [failedSubtemaLogos, setFailedSubtemaLogos] = useState<Record<number, boolean>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+
+    if (!temaId) {
+      setTema(null);
+      setSubtemas([]);
+      setLoadError('No se recibio un tema valido para mostrar.');
+      setLoading(false);
+      return;
+    }
+
+    void logTemaView(Number(temaId));
+
+    let nextError: string | null = null;
+
+    const { data: temaData, error: temaError } = await supabase
+      .from('temas')
+      .select('*')
+      .eq('id', temaId)
+      .single();
+
+    if (temaData) {
+      setTema(temaData);
+    } else {
+      setTema(null);
+    }
+
+    if (temaError) {
+      console.error('Error fetching tema:', temaError);
+      nextError = 'No se pudo cargar la informacion del tema en este momento.';
+    } else if (!temaData) {
+      nextError = 'El tema solicitado no existe o ya no esta disponible.';
+    }
+
+    const { data: subtemasData, error: subtemasError } = await supabase
+      .from('subtemas')
+      .select('*')
+      .eq('tema_id', temaId)
+      .order('sort_order', { ascending: true });
+
+    if (subtemasError) {
+      console.error('Error fetching subtemas:', subtemasError);
+      setSubtemas([]);
+      nextError = nextError
+        ? `${nextError} Tampoco fue posible cargar el listado de subtemas.`
+        : 'No se pudo cargar el listado de subtemas en este momento.';
+    } else {
+      setSubtemas(subtemasData ?? []);
+    }
+
+    // Cargar bloques de contenido editorial
+    try {
+      const blocks = await getRenderableBlocks('subtemas_page', Number(temaId));
+      setContentBlocks(blocks as ContentBlock[]);
+    } catch (error) {
+      console.error('Error fetching content blocks:', error);
+    }
+
+    setLoadError(nextError);
+    setLoading(false);
+  }, [temaId]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      if (!temaId) return;
-
-      void logTemaView(Number(temaId));
-
-      const { data: temaData, error: temaError } = await supabase
-        .from('temas')
-        .select('*')
-        .eq('id', temaId)
-        .single();
-
-      if (temaData) setTema(temaData);
-      if (temaError) console.error('Error fetching tema:', temaError);
-
-      const { data: subtemasData, error: subtemasError } = await supabase
-        .from('subtemas')
-        .select('*')
-        .eq('tema_id', temaId)
-        .order('sort_order', { ascending: true });
-
-      if (subtemasData) setSubtemas(subtemasData);
-      if (subtemasError) console.error('Error fetching subtemas:', subtemasError);
-
-      // Cargar bloques de contenido editorial
-      try {
-        const blocks = await getRenderableBlocks('subtemas_page', Number(temaId));
-        setContentBlocks(blocks as ContentBlock[]);
-      } catch (error) {
-        console.error('Error fetching content blocks:', error);
-      }
-
-      setLoading(false);
-    };
-    fetchData();
-  }, [temaId]);
+    void fetchData();
+  }, [fetchData]);
 
   useEffect(() => {
     setTemaLogoFailed(false);
@@ -95,6 +125,23 @@ const Subtemas: React.FC = () => {
             <div style={styles.spinner} />
             <p className="atlas-typo-body" style={styles.loadingText}>Cargando subtemas...</p>
           </div>
+        ) : loadError ? (
+          <section style={styles.card}>
+            <div style={styles.errorState}>
+              <span style={styles.errorIcon}>⚠️</span>
+              <p className="atlas-typo-section-title" style={styles.errorTitle}>No se pudo cargar el contenido</p>
+              <p className="atlas-typo-body" style={styles.errorText}>{loadError}</p>
+              <button
+                type="button"
+                style={styles.retryButton}
+                onClick={() => {
+                  void fetchData();
+                }}
+              >
+                Reintentar
+              </button>
+            </div>
+          </section>
         ) : (
           <section style={styles.card}>
             {/* Encabezado del tema */}
@@ -405,6 +452,41 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   loadingText: {
     fontStyle: 'italic',
+  },
+  errorState: {
+    width: '100%',
+    padding: 'clamp(22px, 4vw, 42px)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    borderRadius: '12px',
+    border: '1px solid #fdba74',
+    background: 'linear-gradient(135deg, #fff7ed, #ffedd5)',
+    textAlign: 'center',
+  },
+  errorIcon: {
+    fontSize: '1.8em',
+    lineHeight: 1,
+  },
+  errorTitle: {
+    margin: 0,
+    color: '#9a3412',
+  },
+  errorText: {
+    margin: 0,
+    color: '#7c2d12',
+    maxWidth: '680px',
+  },
+  retryButton: {
+    border: '1px solid #fdba74',
+    background: '#fff',
+    color: '#9a3412',
+    borderRadius: '8px',
+    padding: '8px 14px',
+    fontWeight: 700,
+    cursor: 'pointer',
   },
 };
 

@@ -44,6 +44,10 @@ const EditarSubtemas: React.FC = () => {
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [loadingTemas, setLoadingTemas] = useState(true);
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
+  const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
+  const [subtemasLoadError, setSubtemasLoadError] = useState<string | null>(null);
+  const [temasReloadTick, setTemasReloadTick] = useState(0);
+  const [subtemasReloadTick, setSubtemasReloadTick] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -52,35 +56,54 @@ const EditarSubtemas: React.FC = () => {
   // Cargar todos los temas al montar
   useEffect(() => {
     const fetchTemas = async () => {
-      const { data } = await supabase
+      setLoadingTemas(true);
+      setTemasLoadError(null);
+      const { data: fetchedData, error } = await supabase
         .from('temas')
         .select('id, nombre, logo_url, parcial, sort_order')
         .order('parcial')
         .order('sort_order', { ascending: true });
-      if (data) setTemas(data);
+      if (error) {
+        console.error('Error al cargar temas en editar subtemas:', error);
+        setTemas([]);
+        setTemasLoadError('No se pudo cargar la lista de temas. Revisa tu conexion e intenta de nuevo.');
+      } else {
+        setTemas(fetchedData ?? []);
+      }
       setLoadingTemas(false);
     };
     fetchTemas();
-  }, []);
+  }, [temasReloadTick]);
 
   // Cargar subtemas del tema seleccionado
   useEffect(() => {
-    if (!selectedTemaId) { setSubtemas([]); return; }
+    if (!selectedTemaId) {
+      setSubtemas([]);
+      setSubtemasLoadError(null);
+      return;
+    }
     const fetchSubtemas = async () => {
       setLoadingSubtemas(true);
+      setSubtemasLoadError(null);
       setHasChanges(false);
       drag.resetDrag();
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('subtemas')
         .select('*')
         .eq('tema_id', selectedTemaId)
         .order('sort_order', { ascending: true });
-      if (data) setSubtemas(data);
+      if (error) {
+        console.error('Error al cargar subtemas en editar subtemas:', error);
+        setSubtemas([]);
+        setSubtemasLoadError('No se pudo cargar la lista de subtemas. Intenta de nuevo.');
+      } else {
+        setSubtemas(data ?? []);
+      }
       setLoadingSubtemas(false);
     };
     fetchSubtemas();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTemaId]);
+  }, [selectedTemaId, subtemasReloadTick]);
 
   const handleDrop = (e: React.DragEvent) => {
     const next = drag.applyDrop(e, LIST_KEY, subtemas);
@@ -151,6 +174,19 @@ const EditarSubtemas: React.FC = () => {
             <div style={s.divider} />
           </div>
 
+          {temasLoadError && (
+            <div style={s.errorState}>
+              <p style={s.errorText}>⚠️ {temasLoadError}</p>
+              <button
+                type="button"
+                style={s.retryButton}
+                onClick={() => setTemasReloadTick(prev => prev + 1)}
+              >
+                Reintentar carga de temas
+              </button>
+            </div>
+          )}
+
           {loadingTemas ? (
             <div style={s.loadingWrap}>
               <div style={s.spinner} />
@@ -194,10 +230,27 @@ const EditarSubtemas: React.FC = () => {
               <div style={s.divider} />
             </div>
 
+            {subtemasLoadError && (
+              <div style={s.errorState}>
+                <p style={s.errorText}>⚠️ {subtemasLoadError}</p>
+                <button
+                  type="button"
+                  style={s.retryButton}
+                  onClick={() => setSubtemasReloadTick(prev => prev + 1)}
+                >
+                  Reintentar carga de subtemas
+                </button>
+              </div>
+            )}
+
             {loadingSubtemas ? (
               <div style={s.loadingWrap}>
                 <div style={s.spinner} />
                 <p style={s.loadingText}>Cargando subtemas...</p>
+              </div>
+            ) : subtemasLoadError ? (
+              <div style={s.emptyState}>
+                No se pudieron cargar los subtemas para este tema.
               </div>
             ) : subtemas.length === 0 ? (
               <div style={s.emptyState}>
@@ -603,6 +656,35 @@ const s: { [key: string]: React.CSSProperties } = {
     animation: 'spin 0.8s linear infinite',
   },
   loadingText: { color: '#64748b', fontSize: '1em', fontWeight: 500 },
+  errorState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '16px',
+    padding: '12px',
+    borderRadius: '10px',
+    border: '1px solid #fdba74',
+    background: '#fff7ed',
+    textAlign: 'center',
+  },
+  errorText: {
+    margin: 0,
+    color: '#9a3412',
+    fontWeight: 600,
+    fontSize: '0.9em',
+  },
+  retryButton: {
+    border: '1px solid #fdba74',
+    background: '#ffffff',
+    color: '#9a3412',
+    borderRadius: '8px',
+    padding: '6px 10px',
+    fontWeight: 700,
+    fontSize: '0.82em',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
 };
 
 export default EditarSubtemas;

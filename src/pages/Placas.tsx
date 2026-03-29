@@ -148,6 +148,60 @@ const styles: { [key: string]: React.CSSProperties } = {
     opacity: 0.55,
     cursor: 'not-allowed',
   },
+  inlineLoading: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '12px 16px',
+    fontSize: '0.9em',
+    color: '#64748b',
+    background: '#f8fafc',
+    borderRadius: '10px',
+    border: '1.5px solid #e2e8f0',
+  },
+  spinnerSm: {
+    width: '18px',
+    height: '18px',
+    borderRadius: '50%',
+    border: '3px solid #e0f2fe',
+    borderTop: '3px solid #38bdf8',
+    animation: 'spin 0.8s linear infinite',
+    flexShrink: 0,
+  },
+  loadErrorBox: {
+    marginTop: '12px',
+    borderRadius: '10px',
+    border: '1px solid #fecaca',
+    background: '#fff1f2',
+    padding: '10px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  loadErrorRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  loadErrorText: {
+    color: '#9f1239',
+    fontSize: '0.88em',
+    fontWeight: 600,
+  },
+  retryButton: {
+    border: '1px solid #fb7185',
+    background: '#ffffff',
+    color: '#9f1239',
+    borderRadius: '999px',
+    padding: '6px 12px',
+    cursor: 'pointer',
+    fontSize: '0.8em',
+    fontWeight: 700,
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
+  },
   editFieldGroup: {
     display: 'flex', flexDirection: 'column' as const, gap: '8px',
   },
@@ -247,6 +301,12 @@ const Placas: React.FC = () => {
   const [selectedSubtema, setSelectedSubtema] = useState('');
   const [temas, setTemas] = useState<Tema[]>([]);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
+  const [loadingTemas, setLoadingTemas] = useState(true);
+  const [loadingSubtemas, setLoadingSubtemas] = useState(false);
+  const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
+  const [subtemasLoadError, setSubtemasLoadError] = useState<string | null>(null);
+  const [temasReloadTick, setTemasReloadTick] = useState(0);
+  const [subtemasReloadTick, setSubtemasReloadTick] = useState(0);
   const [selectedAumento, setSelectedAumento] = useState('');
   const [senalados, setSenalados] = useState<string[]>([]);
   const [senaladosPos, setSenaladosPos] = useState<Array<MarkerLocation | null>>([]);
@@ -276,46 +336,60 @@ const Placas: React.FC = () => {
   // Cargar temas desde la base de datos
   useEffect(() => {
     const fetchTemas = async () => {
+      setLoadingTemas(true);
+      setTemasLoadError(null);
       const { data, error } = await supabase
         .from('temas')
         .select('id, nombre, parcial, sort_order')
         .order('parcial')
         .order('sort_order', { ascending: true });
-      
-      if (data) {
-        setTemas(data);
-      }
+
       if (error) {
         console.error('Error al cargar temas:', error);
+        setTemas([]);
+        setTemasLoadError('No se pudieron cargar los temas. Revisa tu conexión e inténtalo de nuevo.');
+        setLoadingTemas(false);
+        return;
       }
+
+      setTemas(data ?? []);
+      setLoadingTemas(false);
     };
 
     fetchTemas();
-  }, []);
+  }, [temasReloadTick]);
 
   // Cargar subtemas cuando se selecciona un tema
   useEffect(() => {
     const fetchSubtemas = async () => {
       if (selectedTema) {
+        setLoadingSubtemas(true);
+        setSubtemasLoadError(null);
         const { data, error } = await supabase
           .from('subtemas')
           .select('*')
           .eq('tema_id', selectedTema)
           .order('sort_order', { ascending: true });
-        
-        if (data) {
-          setSubtemas(data);
-        }
+
         if (error) {
           console.error('Error al cargar subtemas:', error);
+          setSubtemas([]);
+          setSubtemasLoadError('No se pudieron cargar los subtemas. Revisa tu conexión e inténtalo de nuevo.');
+          setLoadingSubtemas(false);
+          return;
         }
+
+        setSubtemas(data ?? []);
+        setLoadingSubtemas(false);
       } else {
         setSubtemas([]);
+        setSubtemasLoadError(null);
+        setLoadingSubtemas(false);
       }
     };
 
     fetchSubtemas();
-  }, [selectedTema]);
+  }, [selectedTema, subtemasReloadTick]);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -426,6 +500,8 @@ const Placas: React.FC = () => {
   const handleTemaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedTema(e.target.value);
     setSelectedSubtema(''); // Resetear subtema cuando cambia el tema
+    setSubtemasLoadError(null);
+    setSubtemasReloadTick(0);
   };
 
   const handleSubtemaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -594,38 +670,82 @@ const Placas: React.FC = () => {
                       {/* --- Tema --- */}
                       <div style={styles.editFieldGroup}>
                         <label style={styles.accordionLabel}>Tema</label>
-                        <select
-                          style={styles.select}
-                          value={selectedTema}
-                          onChange={handleTemaChange}
-                        >
-                          <option value="">— Elige un tema —</option>
-                          {PARCIALES.map(({ key, label }) => {
-                            const group = temas.filter(t => t.parcial === key);
-                            return group.length > 0 ? (
-                              <optgroup key={key} label={label}>
-                                {group.map(t => (
-                                  <option key={t.id} value={t.id}>{t.nombre}</option>
-                                ))}
-                              </optgroup>
-                            ) : null;
-                          })}
-                        </select>
+                        {loadingTemas ? (
+                          <div style={styles.inlineLoading}>
+                            <div style={styles.spinnerSm} /> Cargando temas...
+                          </div>
+                        ) : (
+                          <select
+                            style={styles.select}
+                            value={selectedTema}
+                            onChange={handleTemaChange}
+                          >
+                            <option value="">— Elige un tema —</option>
+                            {PARCIALES.map(({ key, label }) => {
+                              const group = temas.filter(t => t.parcial === key);
+                              return group.length > 0 ? (
+                                <optgroup key={key} label={label}>
+                                  {group.map(t => (
+                                    <option key={t.id} value={t.id}>{t.nombre}</option>
+                                  ))}
+                                </optgroup>
+                              ) : null;
+                            })}
+                          </select>
+                        )}
+
+                        {temasLoadError && (
+                          <div style={styles.loadErrorBox}>
+                            <div style={styles.loadErrorRow}>
+                              <span style={styles.loadErrorText}>{temasLoadError}</span>
+                              <button
+                                type="button"
+                                style={styles.retryButton}
+                                onClick={() => setTemasReloadTick(tick => tick + 1)}
+                                disabled={loadingTemas}
+                              >
+                                {loadingTemas ? 'Reintentando...' : 'Reintentar temas'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       {selectedTema && (
                         <div style={styles.editFieldGroup}>
                           <label style={styles.accordionLabel}>Subtema</label>
-                          <select
-                            style={{ ...styles.select, ...(subtemas.length === 0 ? styles.selectDisabled : {}) }}
-                            value={selectedSubtema}
-                            onChange={handleSubtemaChange}
-                            disabled={subtemas.length === 0}
-                          >
-                            <option value="">— Elige un subtema —</option>
-                            {subtemas.map(subtema => (
-                              <option key={subtema.id} value={subtema.id}>{subtema.nombre}</option>
-                            ))}
-                          </select>
+                          {loadingSubtemas ? (
+                            <div style={styles.inlineLoading}>
+                              <div style={styles.spinnerSm} /> Cargando subtemas...
+                            </div>
+                          ) : (
+                            <select
+                              style={{ ...styles.select, ...(subtemas.length === 0 ? styles.selectDisabled : {}) }}
+                              value={selectedSubtema}
+                              onChange={handleSubtemaChange}
+                              disabled={subtemas.length === 0}
+                            >
+                              <option value="">— Elige un subtema —</option>
+                              {subtemas.map(subtema => (
+                                <option key={subtema.id} value={subtema.id}>{subtema.nombre}</option>
+                              ))}
+                            </select>
+                          )}
+
+                          {subtemasLoadError && (
+                            <div style={styles.loadErrorBox}>
+                              <div style={styles.loadErrorRow}>
+                                <span style={styles.loadErrorText}>{subtemasLoadError}</span>
+                                <button
+                                  type="button"
+                                  style={styles.retryButton}
+                                  onClick={() => setSubtemasReloadTick(tick => tick + 1)}
+                                  disabled={loadingSubtemas}
+                                >
+                                  {loadingSubtemas ? 'Reintentando...' : 'Reintentar subtemas'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 

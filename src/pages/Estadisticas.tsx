@@ -63,6 +63,21 @@ interface WaitingPlateRef {
   photo_url: string;
 }
 
+interface ConnectionDiagnosticResult {
+  ok: boolean;
+  summary: string;
+  details: string;
+  checkedAt: string;
+}
+
+interface LocalLoginLockoutInfo {
+  normalizedUsername: string;
+  failedAttempts: number;
+  lockoutUntil: number | null;
+  remainingMs: number;
+  isLocked: boolean;
+}
+
 const RANGE_OPTIONS: Array<{ key: AnalyticsRangePreset; label: string }> = [
   { key: 'all', label: 'Desde siempre' },
   { key: 'year', label: 'Este anio' },
@@ -114,6 +129,94 @@ const DELETE_ACTIONS: PlateActivityLog['action_type'][] = [
 ];
 
 const PAGE_SIZE = 20;
+const SUPPORT_MAX_LOGIN_ATTEMPTS = 5;
+const SUPPORT_FAILED_ATTEMPTS_PREFIX = 'atlas_failed_attempts_';
+const SUPPORT_LOCKOUT_UNTIL_PREFIX = 'atlas_lockout_until_';
+const SUPPORT_LEGACY_FAILED_ATTEMPTS_KEY = 'atlas_failed_attempts';
+const SUPPORT_LEGACY_LOCKOUT_UNTIL_KEY = 'atlas_lockout_until';
+
+const normalizeSupportUsername = (raw: string): string => raw.trim().toLowerCase();
+
+const getSupportFailedAttemptsKey = (normalizedUsername: string) =>
+  `${SUPPORT_FAILED_ATTEMPTS_PREFIX}${normalizedUsername || 'global'}`;
+
+const getSupportLockoutUntilKey = (normalizedUsername: string) =>
+  `${SUPPORT_LOCKOUT_UNTIL_PREFIX}${normalizedUsername || 'global'}`;
+
+const formatMsAsMinutes = (remainingMs: number): string => {
+  const totalSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes <= 0) {
+    return `${seconds} segundos`;
+  }
+
+  if (seconds === 0) {
+    return `${minutes} min`;
+  }
+
+  return `${minutes} min ${seconds} s`;
+};
+
+const getLocalLoginLockoutInfo = (rawUsername: string): LocalLoginLockoutInfo => {
+  const normalizedUsername = normalizeSupportUsername(rawUsername);
+  const failedAttemptsKey = getSupportFailedAttemptsKey(normalizedUsername);
+  const lockoutUntilKey = getSupportLockoutUntilKey(normalizedUsername);
+
+  const rawAttempts = Number(localStorage.getItem(failedAttemptsKey) ?? '0');
+  const failedAttempts = Number.isNaN(rawAttempts) ? 0 : rawAttempts;
+  const rawLockoutUntil = Number(localStorage.getItem(lockoutUntilKey));
+  const lockoutUntil = Number.isNaN(rawLockoutUntil) ? null : rawLockoutUntil;
+  const remainingMs = lockoutUntil ? Math.max(0, lockoutUntil - Date.now()) : 0;
+
+  if (lockoutUntil && remainingMs <= 0) {
+    localStorage.removeItem(lockoutUntilKey);
+    return {
+      normalizedUsername,
+      failedAttempts,
+      lockoutUntil: null,
+      remainingMs: 0,
+      isLocked: false,
+    };
+  }
+
+  return {
+    normalizedUsername,
+    failedAttempts,
+    lockoutUntil,
+    remainingMs,
+    isLocked: remainingMs > 0,
+  };
+};
+
+const clearLocalLoginLockout = (rawUsername: string): LocalLoginLockoutInfo => {
+  const normalizedUsername = normalizeSupportUsername(rawUsername);
+  const failedAttemptsKey = getSupportFailedAttemptsKey(normalizedUsername);
+  const lockoutUntilKey = getSupportLockoutUntilKey(normalizedUsername);
+
+  localStorage.removeItem(failedAttemptsKey);
+  localStorage.removeItem(lockoutUntilKey);
+  localStorage.removeItem(SUPPORT_LEGACY_FAILED_ATTEMPTS_KEY);
+  localStorage.removeItem(SUPPORT_LEGACY_LOCKOUT_UNTIL_KEY);
+
+  return getLocalLoginLockoutInfo(rawUsername);
+};
+
+const describeSupabaseProbeError = (error: unknown): string => {
+  if (!error || typeof error !== 'object') {
+    return 'error desconocido';
+  }
+
+  const maybeError = error as {
+    code?: string;
+    message?: string;
+    details?: string;
+  };
+
+  const parts = [maybeError.code, maybeError.message, maybeError.details].filter(Boolean);
+  return parts.length > 0 ? parts.join(' | ') : 'error desconocido';
+};
 
 const formatBucket = (date: Date, bucketBy: BucketBy): string => {
   if (bucketBy === 'year') {
@@ -216,6 +319,11 @@ const Estadisticas: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [temasRef, setTemasRef] = useState<TemaRef[]>([]);
   const [subtemasRef, setSubtemasRef] = useState<SubtemaRef[]>([]);
+  const [connectionChecking, setConnectionChecking] = useState(false);
+  const [connectionDiagnostic, setConnectionDiagnostic] = useState<ConnectionDiagnosticResult | null>(null);
+  const [supportUsername, setSupportUsername] = useState('');
+  const [localLockoutInfo, setLocalLockoutInfo] = useState<LocalLoginLockoutInfo | null>(null);
+  const [supportActionMessage, setSupportActionMessage] = useState('');
 
   const canResetStats = user?.is_protected === true;
 
@@ -333,6 +441,85 @@ const Estadisticas: React.FC = () => {
     setDateTo('');
     setEventFilter('all');
     setCurrentPage(1);
+  };
+
+  const handleRunConnectionDiagnostic = async () => {
+    setConnectionChecking(true);
+
+    const [temasProbe, usuariosProbe] = await Promise.all([
+      supabase
+        .from('temas')
+        .select('id', { count: 'exact', head: true })
+        .limit(1),
+      supabase
+        .from('usuarios')
+        .select('id', { count: 'exact', head: true })
+        .limit(1),
+    ]);
+
+    const probeErrors: string[] = [];
+    if (temasProbe.error) {
+      probeErrors.push(`temas: ${describeSupabaseProbeError(temasProbe.error)}`);
+    }
+    if (usuariosProbe.error) {
+      probeErrors.push(`usuarios: ${describeSupabaseProbeError(usuariosProbe.error)}`);
+    }
+
+    const checkedAt = new Date().toISOString();
+    if (probeErrors.length > 0) {
+      setConnectionDiagnostic({
+        ok: false,
+        summary: 'Se detectaron errores de conexion o permisos al consultar Supabase.',
+        details: probeErrors.join(' || '),
+        checkedAt,
+      });
+      setConnectionChecking(false);
+      return;
+    }
+
+    const temasCount = typeof temasProbe.count === 'number' ? temasProbe.count : null;
+    const usuariosCount = typeof usuariosProbe.count === 'number' ? usuariosProbe.count : null;
+    setConnectionDiagnostic({
+      ok: true,
+      summary: 'Conexion a Supabase verificada correctamente en tablas temas y usuarios.',
+      details: `conteo temas=${temasCount ?? 'n/d'}, conteo usuarios=${usuariosCount ?? 'n/d'}`,
+      checkedAt,
+    });
+    setConnectionChecking(false);
+  };
+
+  const handleInspectLocalLockout = () => {
+    const normalized = normalizeSupportUsername(supportUsername);
+    if (!normalized) {
+      setLocalLockoutInfo(null);
+      setSupportActionMessage('Ingresa un usuario para revisar el bloqueo local.');
+      return;
+    }
+
+    const snapshot = getLocalLoginLockoutInfo(supportUsername);
+    setLocalLockoutInfo(snapshot);
+
+    if (snapshot.isLocked) {
+      setSupportActionMessage(
+        `El usuario ${snapshot.normalizedUsername} esta bloqueado en este navegador por ${formatMsAsMinutes(snapshot.remainingMs)}.`,
+      );
+      return;
+    }
+
+    setSupportActionMessage(`No hay bloqueo activo para ${snapshot.normalizedUsername} en este navegador.`);
+  };
+
+  const handleClearLocalLockout = () => {
+    const normalized = normalizeSupportUsername(supportUsername);
+    if (!normalized) {
+      setLocalLockoutInfo(null);
+      setSupportActionMessage('Ingresa un usuario para limpiar el bloqueo local.');
+      return;
+    }
+
+    const snapshot = clearLocalLoginLockout(supportUsername);
+    setLocalLockoutInfo(snapshot);
+    setSupportActionMessage(`Se limpiaron intentos y bloqueo local para ${snapshot.normalizedUsername} en este navegador.`);
   };
 
   const uploadsHistory = useMemo(
@@ -931,6 +1118,83 @@ const Estadisticas: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              <div style={s.sectionBox}>
+                <div style={s.recentHeader}>
+                  <h2 style={s.sectionTitle}>Diagnostico de conexion y acceso</h2>
+                  <span style={s.smallText}>Soporte local para incidencias de temas vacios y login</span>
+                </div>
+
+                <div style={s.diagnosticPanel}>
+                  <div style={s.diagnosticActionsRow}>
+                    <button
+                      type="button"
+                      style={s.ghostButton}
+                      onClick={() => {
+                        void handleRunConnectionDiagnostic();
+                      }}
+                      disabled={connectionChecking}
+                    >
+                      {connectionChecking ? 'Probando conexion...' : 'Probar conexion con Supabase'}
+                    </button>
+                    <span style={s.smallText}>Valida acceso a tablas temas y usuarios.</span>
+                  </div>
+
+                  {connectionDiagnostic && (
+                    <div
+                      style={{
+                        ...s.diagnosticResultBox,
+                        ...(connectionDiagnostic.ok ? s.diagnosticResultOk : s.diagnosticResultError),
+                      }}
+                    >
+                      <strong>{connectionDiagnostic.ok ? 'Conexion OK' : 'Problema detectado'}</strong>
+                      <span>{connectionDiagnostic.summary}</span>
+                      <span style={s.diagnosticResultDetail}>{connectionDiagnostic.details}</span>
+                      <span style={s.smallText}>Ultima prueba: {formatDateTime(connectionDiagnostic.checkedAt)}</span>
+                    </div>
+                  )}
+
+                  <div style={s.lockoutPanel}>
+                    <h3 style={s.rankTitle}>Bloqueo local de inicio de sesion</h3>
+                    <p style={s.helperText}>
+                      Este control aplica al navegador actual. Si un usuario esta bloqueado por intentos fallidos, puedes revisarlo y limpiarlo aqui.
+                    </p>
+
+                    <div style={s.lockoutControlsRow}>
+                      <input
+                        type="text"
+                        value={supportUsername}
+                        onChange={(e) => setSupportUsername(e.target.value)}
+                        placeholder="Usuario a diagnosticar"
+                        style={s.input}
+                      />
+                      <button type="button" style={s.ghostButton} onClick={handleInspectLocalLockout}>
+                        Consultar bloqueo local
+                      </button>
+                      <button type="button" style={s.ghostButton} onClick={handleClearLocalLockout}>
+                        Limpiar bloqueo local
+                      </button>
+                    </div>
+
+                    {localLockoutInfo && (
+                      <div style={s.lockoutSummaryBox}>
+                        <div style={s.lockoutSummaryRow}><strong>Usuario normalizado:</strong> {localLockoutInfo.normalizedUsername}</div>
+                        <div style={s.lockoutSummaryRow}><strong>Intentos fallidos:</strong> {localLockoutInfo.failedAttempts} / {SUPPORT_MAX_LOGIN_ATTEMPTS}</div>
+                        <div style={s.lockoutSummaryRow}>
+                          <strong>Estado:</strong>{' '}
+                          {localLockoutInfo.isLocked
+                            ? `Bloqueado (${formatMsAsMinutes(localLockoutInfo.remainingMs)} restantes)`
+                            : 'Sin bloqueo activo'}
+                        </div>
+                      </div>
+                    )}
+
+                    {supportActionMessage && (
+                      <p style={s.lockoutFeedback}>{supportActionMessage}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
             </>
           )}
         </section>
@@ -1247,6 +1511,76 @@ const s: { [key: string]: React.CSSProperties } = {
   helperText: {
     margin: '8px 0 0 0',
     color: '#475569',
+    fontSize: '0.9rem',
+  },
+  diagnosticPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    border: '1px solid #dbeafe',
+    borderRadius: '12px',
+    background: '#f8fbff',
+    padding: '12px',
+  },
+  diagnosticActionsRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  diagnosticResultBox: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    borderRadius: '10px',
+    padding: '10px',
+    fontSize: '0.9rem',
+  },
+  diagnosticResultOk: {
+    border: '1px solid #86efac',
+    background: '#f0fdf4',
+    color: '#166534',
+  },
+  diagnosticResultError: {
+    border: '1px solid #fca5a5',
+    background: '#fff1f2',
+    color: '#9f1239',
+  },
+  diagnosticResultDetail: {
+    fontFamily: 'monospace',
+    fontSize: '0.82rem',
+    wordBreak: 'break-word',
+  },
+  lockoutPanel: {
+    border: '1px dashed #bfdbfe',
+    borderRadius: '10px',
+    padding: '10px',
+    background: '#fff',
+  },
+  lockoutControlsRow: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginTop: '8px',
+  },
+  lockoutSummaryBox: {
+    marginTop: '10px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    background: '#f8fafc',
+    padding: '8px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  lockoutSummaryRow: {
+    color: '#334155',
+    fontSize: '0.88rem',
+  },
+  lockoutFeedback: {
+    margin: '10px 0 0 0',
+    color: '#1e293b',
     fontSize: '0.9rem',
   },
   funnelGrid: {
