@@ -6,6 +6,45 @@ export type SupabaseQueryError = {
 	details?: string | null;
 };
 
+type NavigatorWithConnection = Navigator & {
+	connection?: {
+		type?: string;
+		effectiveType?: string;
+		rtt?: number;
+		downlink?: number;
+		saveData?: boolean;
+	};
+	mozConnection?: {
+		type?: string;
+		effectiveType?: string;
+		rtt?: number;
+		downlink?: number;
+		saveData?: boolean;
+	};
+	webkitConnection?: {
+		type?: string;
+		effectiveType?: string;
+		rtt?: number;
+		downlink?: number;
+		saveData?: boolean;
+	};
+};
+
+export type ClientRuntimeContext = {
+	timestampIso: string;
+	online: boolean | null;
+	visibilityState: DocumentVisibilityState | 'unknown';
+	hasFocus: boolean | null;
+	userAgent: string;
+	language: string;
+	platform: string;
+	connectionType: string | null;
+	effectiveType: string | null;
+	rttMs: number | null;
+	downlinkMbps: number | null;
+	saveData: boolean | null;
+};
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -39,6 +78,51 @@ export const describeSupabaseError = (error: unknown): string => {
 	const maybeError = error as SupabaseQueryError;
 	const parts = [maybeError.code, maybeError.message, maybeError.details].filter(Boolean);
 	return parts.length > 0 ? parts.join(' | ') : 'error desconocido';
+};
+
+export const getClientRuntimeContext = (): ClientRuntimeContext => {
+	const nav = typeof navigator !== 'undefined' ? (navigator as NavigatorWithConnection) : null;
+	const doc = typeof document !== 'undefined' ? document : null;
+	const connection = nav?.connection || nav?.mozConnection || nav?.webkitConnection;
+
+	return {
+		timestampIso: new Date().toISOString(),
+		online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+		visibilityState: doc?.visibilityState ?? 'unknown',
+		hasFocus: doc && typeof doc.hasFocus === 'function' ? doc.hasFocus() : null,
+		userAgent: nav?.userAgent ?? 'unknown',
+		language: nav?.language ?? 'unknown',
+		platform: nav?.platform ?? 'unknown',
+		connectionType: connection?.type ?? null,
+		effectiveType: connection?.effectiveType ?? null,
+		rttMs: typeof connection?.rtt === 'number' ? connection.rtt : null,
+		downlinkMbps: typeof connection?.downlink === 'number' ? connection.downlink : null,
+		saveData: typeof connection?.saveData === 'boolean' ? connection.saveData : null,
+	};
+};
+
+export const formatClientRuntimeContext = (context: ClientRuntimeContext): string => {
+	const onlineLabel = context.online === null ? 'online=n/d' : `online=${context.online ? 'si' : 'no'}`;
+	const focusLabel = context.hasFocus === null ? 'focus=n/d' : `focus=${context.hasFocus ? 'si' : 'no'}`;
+	const connectionLabel = context.connectionType ? `conn=${context.connectionType}` : 'conn=n/d';
+	const effectiveTypeLabel = context.effectiveType ? `net=${context.effectiveType}` : 'net=n/d';
+	const rttLabel = context.rttMs === null ? 'rtt=n/d' : `rtt=${context.rttMs}ms`;
+	const downlinkLabel = context.downlinkMbps === null ? 'downlink=n/d' : `downlink=${context.downlinkMbps}Mbps`;
+	const saveDataLabel = context.saveData === null ? 'saveData=n/d' : `saveData=${context.saveData ? 'si' : 'no'}`;
+
+	return [
+		`ts=${context.timestampIso}`,
+		onlineLabel,
+		`visibility=${context.visibilityState}`,
+		focusLabel,
+		connectionLabel,
+		effectiveTypeLabel,
+		rttLabel,
+		downlinkLabel,
+		saveDataLabel,
+		`lang=${context.language}`,
+		`platform=${context.platform}`,
+	].join(' | ');
 };
 
 const isRetryableHttpStatus = (status: number): boolean => {

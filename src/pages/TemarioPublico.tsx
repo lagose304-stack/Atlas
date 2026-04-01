@@ -2,6 +2,8 @@
 import { useNavigate } from 'react-router-dom';
 import {
   describeSupabaseError,
+  formatClientRuntimeContext,
+  getClientRuntimeContext,
   isLikelyTransientNetworkError,
   supabase,
   type SupabaseQueryError,
@@ -193,10 +195,18 @@ const TemarioPublico: React.FC = () => {
     }
 
     const technicalDetails = describeSupabaseError(lastError);
-    console.error('Error fetching temas:', technicalDetails, lastError);
+    const runtimeContext = getClientRuntimeContext();
+    const contextDetails = formatClientRuntimeContext(runtimeContext);
+    const combinedDetails = `${technicalDetails} || contexto: ${contextDetails}`;
+
+    console.error('Error fetching temas:', {
+      error: lastError,
+      technicalDetails,
+      runtimeContext,
+    });
     setTemas([]);
     setTemasLoadError(buildTemasLoadError(lastError));
-    setTemasLoadDebug(technicalDetails);
+    setTemasLoadDebug(combinedDetails);
     setLoading(false);
   }, []);
 
@@ -484,6 +494,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     opacity: 0.82,
     maxWidth: '700px',
     wordBreak: 'break-word',
+    fontSize: '0.9rem',
   },
   retryButton: {
     border: '1px solid #fdba74',
