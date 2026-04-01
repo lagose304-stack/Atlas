@@ -172,6 +172,7 @@ const PlacasSubtema: React.FC = () => {
           src={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
           srcZoom={getCloudinaryImageUrl(selectedPlaca.photo_url, 'zoom')}
           onClose={() => setSelectedPlaca(null)}
+          placaId={selectedPlaca.id}
           temaNombre={temaNombre}
           subtemaNombre={subtema?.nombre}
           aumento={selectedPlaca.aumento}

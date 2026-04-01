@@ -14,6 +14,7 @@ interface ImageViewerModalProps {
   src: string;
   srcZoom?: string;
   onClose: () => void;
+  placaId?: number | string | null;
   temaNombre?: string;
   subtemaNombre?: string;
   aumento?: string | null;
@@ -156,12 +157,14 @@ const POINTER_TAPER_PX = 18;
 const POINTER_MIN_ANGLE_DEG = 7;
 const POINTER_OUTLINE_TIP_BACKOFF_PX = 1.1;
 const POINTER_BASE_OUTSET_PX = 3;
-const ARROW_TAIL_DISTANCE_PX = 30;
+const ARROW_TAIL_DISTANCE_PX = 21;
 const ARROW_TAIL_HALF_HEIGHT_PX = 16;
 const ARROW_INNER_DISTANCE_PX = 23;
 const ARROW_STROKE_WIDTH_PX = 2.1;
 const MARKER_FADE_OUT_MS = 180;
 const MARKER_FADE_IN_MS = 200;
+const COMMENT_HINT_DURATION_MS = 5200;
+const COMMENT_HINT_EXIT_MS = 420;
 
 const computeDynamicMaxZoom = (
   displayedSize: { width: number; height: number } | null,
@@ -182,6 +185,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   src,
   srcZoom,
   onClose,
+  placaId,
   temaNombre,
   subtemaNombre,
   aumento,
@@ -225,11 +229,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [zoomLevel, setZoomLevel]   = useState(1);
   const [position, setPosition]     = useState({ x: 0, y: 0 });
   const [activeMarkerIndex, setActiveMarkerIndex] = useState<number | null>(null);
+  const [markerRecenterRequest, setMarkerRecenterRequest] = useState(0);
   const [displayedMarkerIndex, setDisplayedMarkerIndex] = useState<number | null>(null);
   const [markerVisible, setMarkerVisible] = useState(false);
+  const [showCommentHint, setShowCommentHint] = useState(false);
+  const [isCommentHintExiting, setIsCommentHintExiting] = useState(false);
   const [hoveredMarkerIndex, setHoveredMarkerIndex] = useState<number | null>(null);
   const [focusedMarkerIndex, setFocusedMarkerIndex] = useState<number | null>(null);
-  const [markerVisualMode, setMarkerVisualMode] = useState<MarkerVisualMode>('pointer');
+  const [markerVisualMode, setMarkerVisualMode] = useState<MarkerVisualMode>('arrow');
   const [isDragging, setIsDragging] = useState(false);
   const [isPinching, setIsPinching] = useState(false);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
@@ -243,6 +250,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const isDraggingRef  = useRef(false);
   const pinchRef       = useRef<{ dist: number } | null>(null);
   const markerSwapTimeoutRef = useRef<number | null>(null);
+  const commentHintTimeoutRef = useRef<number | null>(null);
+  const commentHintExitTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => { stateRef.current.zoom = zoomLevel; }, [zoomLevel]);
   useEffect(() => { stateRef.current.pos  = position;  }, [position]);
@@ -286,6 +295,70 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     setHoveredMarkerIndex(null);
     setFocusedMarkerIndex(null);
   }, [src, senaladosMeta, senalados]);
+
+  useEffect(() => {
+    if (commentHintTimeoutRef.current !== null) {
+      window.clearTimeout(commentHintTimeoutRef.current);
+      commentHintTimeoutRef.current = null;
+    }
+
+    if (commentHintExitTimeoutRef.current !== null) {
+      window.clearTimeout(commentHintExitTimeoutRef.current);
+      commentHintExitTimeoutRef.current = null;
+    }
+
+    if (!comentario || comentario.trim().length === 0) {
+      setShowCommentHint(false);
+      setIsCommentHintExiting(false);
+      return;
+    }
+
+    setShowCommentHint(true);
+    setIsCommentHintExiting(false);
+    const visibleBeforeExitMs = Math.max(500, COMMENT_HINT_DURATION_MS - COMMENT_HINT_EXIT_MS);
+    commentHintTimeoutRef.current = window.setTimeout(() => {
+      setIsCommentHintExiting(true);
+      commentHintExitTimeoutRef.current = window.setTimeout(() => {
+        setShowCommentHint(false);
+        setIsCommentHintExiting(false);
+        commentHintExitTimeoutRef.current = null;
+      }, COMMENT_HINT_EXIT_MS);
+      commentHintTimeoutRef.current = null;
+    }, visibleBeforeExitMs);
+
+    return () => {
+      if (commentHintTimeoutRef.current !== null) {
+        window.clearTimeout(commentHintTimeoutRef.current);
+        commentHintTimeoutRef.current = null;
+      }
+      if (commentHintExitTimeoutRef.current !== null) {
+        window.clearTimeout(commentHintExitTimeoutRef.current);
+        commentHintExitTimeoutRef.current = null;
+      }
+    };
+  }, [comentario, src]);
+
+  useEffect(() => {
+    const isZooming = Math.abs(zoomLevel - 1) > 0.001;
+    if (!isZooming || !showCommentHint || isCommentHintExiting) return;
+
+    if (commentHintTimeoutRef.current !== null) {
+      window.clearTimeout(commentHintTimeoutRef.current);
+      commentHintTimeoutRef.current = null;
+    }
+
+    if (commentHintExitTimeoutRef.current !== null) {
+      window.clearTimeout(commentHintExitTimeoutRef.current);
+      commentHintExitTimeoutRef.current = null;
+    }
+
+    setIsCommentHintExiting(true);
+    commentHintExitTimeoutRef.current = window.setTimeout(() => {
+      setShowCommentHint(false);
+      setIsCommentHintExiting(false);
+      commentHintExitTimeoutRef.current = null;
+    }, COMMENT_HINT_EXIT_MS);
+  }, [zoomLevel, showCommentHint, isCommentHintExiting]);
 
   useEffect(() => {
     if (markerSwapTimeoutRef.current !== null) {
@@ -508,6 +581,114 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const handleMouseUp = () => { isDraggingRef.current = false; setIsDragging(false); };
 
+  const clampPositionToViewport = (
+    nextPos: { x: number; y: number },
+    zoom: number,
+    displayedSize: { width: number; height: number } | null,
+    containerSize: { width: number; height: number }
+  ) => {
+    if (!displayedSize || zoom <= 1) {
+      return { x: 0, y: 0 };
+    }
+
+    const scaledWidth = displayedSize.width * zoom;
+    const scaledHeight = displayedSize.height * zoom;
+    const maxOffsetX = Math.max(0, (scaledWidth - containerSize.width) / 2);
+    const maxOffsetY = Math.max(0, (scaledHeight - containerSize.height) / 2);
+
+    return {
+      x: clamp(nextPos.x, -maxOffsetX, maxOffsetX),
+      y: clamp(nextPos.y, -maxOffsetY, maxOffsetY),
+    };
+  };
+
+  useEffect(() => {
+    if (activeMarkerIndex === null || zoomLevel <= 1 || !imageSize) return;
+
+    const marker = senaladosItems[activeMarkerIndex];
+    const containerEl = containerRef.current;
+    if (!marker || marker.x == null || marker.y == null || !containerEl) return;
+
+    const containerWidth = containerEl.clientWidth;
+    const containerHeight = containerEl.clientHeight;
+    if (containerWidth <= 0 || containerHeight <= 0) return;
+
+    // Intenta centrar el señalado y luego limita el pan para no mostrar bordes sin imagen.
+    const targetCenteredPos = {
+      x: -(marker.x * imageSize.width - imageSize.width / 2) * zoomLevel,
+      y: -(marker.y * imageSize.height - imageSize.height / 2) * zoomLevel,
+    };
+
+    const nextPos = clampPositionToViewport(
+      targetCenteredPos,
+      zoomLevel,
+      imageSize,
+      { width: containerWidth, height: containerHeight }
+    );
+
+    if (
+      Math.abs(nextPos.x - stateRef.current.pos.x) < 0.5 &&
+      Math.abs(nextPos.y - stateRef.current.pos.y) < 0.5
+    ) {
+      return;
+    }
+
+    stateRef.current.pos = nextPos;
+    setPosition(nextPos);
+  }, [activeMarkerIndex, markerRecenterRequest, zoomLevel, imageSize, senaladosItems, sidebarOpen, windowWidth]);
+
+  const commentHintPlacement = useMemo(() => {
+    const fallbackTop = hasInfo && !isDesktop ? 64 : 16;
+    const baseMaxWidth = isDesktop ? 360 : 320;
+    const fallback = {
+      top: `${fallbackTop}px`,
+      left: '16px',
+      maxWidth: `${baseMaxWidth}px`,
+    };
+
+    const containerEl = containerRef.current;
+    if (!containerEl || !imageSize) return fallback;
+
+    const containerWidth = containerEl.clientWidth;
+    const containerHeight = containerEl.clientHeight;
+    if (containerWidth <= 0 || containerHeight <= 0) return fallback;
+
+    const scaledWidth = imageSize.width * zoomLevel;
+    const scaledHeight = imageSize.height * zoomLevel;
+    const centerX = containerWidth / 2 + position.x;
+    const centerY = containerHeight / 2 + position.y;
+
+    const imageLeft = centerX - scaledWidth / 2;
+    const imageTop = centerY - scaledHeight / 2;
+    const imageRight = centerX + scaledWidth / 2;
+    const imageBottom = centerY + scaledHeight / 2;
+
+    const visibleLeft = clamp(imageLeft, 0, containerWidth);
+    const visibleTop = clamp(imageTop, 0, containerHeight);
+    const visibleRight = clamp(imageRight, 0, containerWidth);
+    const visibleBottom = clamp(imageBottom, 0, containerHeight);
+
+    const visibleWidth = visibleRight - visibleLeft;
+    const visibleHeight = visibleBottom - visibleTop;
+    if (visibleWidth < 24 || visibleHeight < 24) return fallback;
+
+    const minTop = hasInfo && !isDesktop ? 64 : 12;
+    const desiredTop = visibleTop + 12;
+    const desiredLeft = visibleLeft + 12;
+
+    const top = Math.round(clamp(desiredTop, minTop, Math.max(minTop, containerHeight - 56)));
+    const left = Math.round(clamp(desiredLeft, 12, Math.max(12, containerWidth - 180)));
+    const maxWidthByVisible = Math.max(180, Math.floor(visibleRight - left - 12));
+    const maxWidthByContainer = Math.max(180, Math.floor(containerWidth - left - 12));
+    const maxWidth = Math.min(baseMaxWidth, maxWidthByVisible, maxWidthByContainer);
+
+    return {
+      top: `${top}px`,
+      left: `${left}px`,
+      maxWidth: `${maxWidth}px`,
+    };
+  }, [hasInfo, imageSize, isDesktop, position.x, position.y, zoomLevel]);
+
   const showSidebar = hasInfo && (isDesktop || sidebarOpen);
 
   return (
@@ -533,6 +714,68 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             box-shadow: 0 0 0 5px rgba(59, 130, 246, 0);
             transform: scale(1.03);
           }
+        }
+        @keyframes commentHintIn {
+          0% {
+            opacity: 0;
+            filter: blur(1.2px);
+          }
+          100% {
+            opacity: 1;
+            filter: blur(0);
+          }
+        }
+        @keyframes commentHintOut {
+          0% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            filter: blur(0);
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-6px) scale(0.975);
+            filter: blur(1.5px);
+          }
+        }
+        @keyframes commentHintFloat {
+          0%, 100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-1px);
+          }
+        }
+        @keyframes commentHintBorderGlow {
+          0%, 100% {
+            box-shadow: 0 10px 24px rgba(76, 29, 149, 0.14), 0 0 0 0 rgba(56, 189, 248, 0.24);
+          }
+          50% {
+            box-shadow: 0 12px 28px rgba(76, 29, 149, 0.16), 0 0 0 5px rgba(56, 189, 248, 0);
+          }
+        }
+        @keyframes commentHintSheen {
+          0% {
+            transform: translateX(-140%) skewX(-18deg);
+            opacity: 0;
+          }
+          18% {
+            opacity: 0.3;
+          }
+          42% {
+            opacity: 0.12;
+          }
+          100% {
+            transform: translateX(160%) skewX(-18deg);
+            opacity: 0;
+          }
+        }
+        @keyframes commentHintTwinkle {
+          0%, 100% { opacity: 0.25; transform: scale(1); }
+          50% { opacity: 0.75; transform: scale(1.09); }
+        }
+        @keyframes commentHintIconPulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.04); }
         }`}
       </style>
       <div style={{
@@ -570,6 +813,94 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           >
             {sidebarOpen ? '◀ Ocultar info' : '▶ Ver info'}
           </button>
+        )}
+
+        {showCommentHint && (
+          <div
+            style={{
+              position: 'absolute',
+              ...commentHintPlacement,
+              padding: '10px 12px',
+              borderRadius: '14px',
+              background: 'linear-gradient(115deg, rgba(245,238,255,0.52) 0%, rgba(236,246,255,0.48) 47%, rgba(255,235,246,0.5) 100%)',
+              border: '1.3px solid rgba(125,211,252,0.72)',
+              color: '#1e3a8a',
+              fontSize: '0.8em',
+              fontWeight: 600,
+              lineHeight: 1.25,
+              boxShadow: '0 10px 24px rgba(76, 29, 149, 0.14), inset 0 0 0 1px rgba(255,255,255,0.24), inset 0 8px 18px rgba(255,255,255,0.2)',
+              zIndex: 10,
+              backdropFilter: 'blur(13px) saturate(130%)',
+              pointerEvents: 'none',
+              overflow: 'hidden',
+              willChange: 'transform, opacity, filter, box-shadow',
+              animation: isCommentHintExiting
+                ? `commentHintOut ${COMMENT_HINT_EXIT_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards`
+                : 'commentHintIn 460ms cubic-bezier(0.22, 1, 0.36, 1) both, commentHintFloat 4.2s cubic-bezier(0.42, 0, 0.58, 1) 420ms infinite, commentHintBorderGlow 4.8s ease-in-out 420ms infinite',
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                top: '-40%',
+                bottom: '-40%',
+                width: '34%',
+                background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.58) 50%, rgba(255,255,255,0) 100%)',
+                animation: isCommentHintExiting ? 'none' : 'commentHintSheen 4.6s cubic-bezier(0.4, 0, 0.2, 1) 520ms infinite',
+              }}
+            />
+            <span
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                top: '12px',
+                left: isDesktop ? '72px' : '62px',
+                width: '6px',
+                height: '6px',
+                borderRadius: '999px',
+                background: '#dbeafe',
+                boxShadow: '0 0 12px rgba(186,230,253,0.95)',
+                animation: isCommentHintExiting ? 'none' : 'commentHintTwinkle 2.8s ease-in-out infinite',
+              }}
+            />
+            <span
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                bottom: '14px',
+                left: isDesktop ? '66px' : '54px',
+                width: '4px',
+                height: '4px',
+                borderRadius: '999px',
+                background: '#bfdbfe',
+                boxShadow: '0 0 10px rgba(125,211,252,0.9)',
+                animation: isCommentHintExiting ? 'none' : 'commentHintTwinkle 3.4s ease-in-out 420ms infinite',
+              }}
+            />
+
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span aria-hidden="true" style={{ position: 'relative', width: isDesktop ? '46px' : '40px', height: isDesktop ? '46px' : '40px', flexShrink: 0 }}>
+                <span style={{ position: 'absolute', inset: '-8px', borderRadius: '999px', background: 'radial-gradient(circle, rgba(125,211,252,0.46) 0%, rgba(56,189,248,0) 72%)' }} />
+                <span style={{ position: 'absolute', inset: 0, borderRadius: '999px', border: '1.6px solid rgba(191,219,254,0.95)', background: 'linear-gradient(145deg, rgba(255,255,255,0.92), rgba(219,234,254,0.75))', boxShadow: 'inset 0 2px 6px rgba(255,255,255,0.75), 0 4px 14px rgba(37,99,235,0.28)' }} />
+                <span style={{ position: 'absolute', inset: isDesktop ? '8px' : '7px', borderRadius: '999px', background: 'radial-gradient(circle at 30% 30%, #f0f9ff 0%, #93c5fd 42%, #1d4ed8 100%)', border: '1.2px solid rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', fontSize: isDesktop ? '1em' : '0.9em', fontWeight: 900, textShadow: '0 2px 4px rgba(30,64,175,0.65)', animation: isCommentHintExiting ? 'none' : 'commentHintIconPulse 2.6s ease-in-out infinite' }}>
+                  !
+                </span>
+              </span>
+
+              <span style={{ position: 'relative', display: 'inline-flex', flexDirection: 'column', gap: '1px' }}>
+                <span style={{ color: '#60a5fa', fontSize: '0.68em', fontWeight: 800, letterSpacing: '0.09em', textTransform: 'uppercase' }}>
+                  Tip rápido
+                </span>
+                <span style={{ color: '#0f1f63', fontWeight: 900, fontSize: isDesktop ? '1.02em' : '0.92em', letterSpacing: '-0.01em', lineHeight: 1.06 }}>
+                  ¡Lee el comentario!
+                </span>
+                <span style={{ color: '#132866', fontWeight: 600, fontSize: isDesktop ? '0.82em' : '0.76em', maxWidth: '30ch' }}>
+                  Revisa el comentario para aprender más sobre esta placa.
+                </span>
+              </span>
+            </div>
+          </div>
         )}
 
         <div
@@ -740,7 +1071,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                           points={pointsStr}
                           fill="none"
                           stroke="white"
-                          strokeWidth={4}
+                          strokeWidth={1.2}
                           strokeLinejoin="round"
                           shapeRendering="geometricPrecision"
                         />
@@ -808,7 +1139,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           <div style={{ padding: '18px 20px 14px', borderBottom: '2px solid #e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ width: '4px', height: '22px', borderRadius: '4px', background: 'linear-gradient(180deg, #38bdf8, #818cf8)' }} />
-              <span style={{ color: '#475569', fontSize: '0.72em', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Info de la placa</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '7px', flexWrap: 'wrap' }}>
+                <span style={{ color: '#475569', fontSize: '0.72em', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Info de la placa</span>
+                {placaId != null && (
+                  <span style={{ color: '#94a3b8', fontSize: '0.64em', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                    - ID {placaId}
+                  </span>
+                )}
+              </div>
             </div>
             {!isDesktop && (
               <button onClick={() => setSidebarOpen(false)} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#64748b', cursor: 'pointer', borderRadius: '8px', padding: '5px 10px', fontSize: '0.82em', fontFamily: 'inherit', fontWeight: 600 }}>✕ Cerrar</button>
@@ -840,34 +1178,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 <span style={{ display: 'inline-block', background: 'linear-gradient(135deg, #fef3c7, #fffbeb)', color: '#92400e', fontWeight: 700, fontSize: '0.92em', borderRadius: '20px', padding: '5px 18px', border: '1px solid #fde68a' }}>{renderBoldText(tincion)}</span>
               </div>
             )}
-            {comentario && (
-              <div>
-                <span style={labelStyle}>💬 Comentario</span>
-                <p style={{ margin: 0, color: '#334155', fontSize: '0.88em', lineHeight: 1.65, background: '#f1f5f9', borderRadius: '10px', padding: '10px 14px', border: '1px solid #e2e8f0' }}>{renderBoldText(comentario)}</p>
-              </div>
-            )}
             {senaladosItems.length > 0 && (
               <div>
                 <span style={labelStyle}>📌 Señalados</span>
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setMarkerVisualMode('pointer')}
-                    style={{
-                      flex: 1,
-                      border: markerVisualMode === 'pointer' ? '1px solid #93c5fd' : '1px solid #cbd5e1',
-                      background: markerVisualMode === 'pointer' ? 'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)' : '#f8fafc',
-                      color: markerVisualMode === 'pointer' ? '#1e3a8a' : '#475569',
-                      borderRadius: '10px',
-                      padding: '7px 10px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      fontFamily: 'inherit',
-                      fontSize: '0.8em',
-                    }}
-                  >
-                    Señalador
-                  </button>
                   <button
                     type="button"
                     onClick={() => setMarkerVisualMode('arrow')}
@@ -885,6 +1199,24 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                     }}
                   >
                     Flecha
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMarkerVisualMode('pointer')}
+                    style={{
+                      flex: 1,
+                      border: markerVisualMode === 'pointer' ? '1px solid #93c5fd' : '1px solid #cbd5e1',
+                      background: markerVisualMode === 'pointer' ? 'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)' : '#f8fafc',
+                      color: markerVisualMode === 'pointer' ? '#1e3a8a' : '#475569',
+                      borderRadius: '10px',
+                      padding: '7px 10px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      fontSize: '0.8em',
+                    }}
+                  >
+                    Señalador
                   </button>
                 </div>
                 <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -929,7 +1261,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                       <button
                         type="button"
                         disabled={!hasMarker}
-                        onClick={() => { if (hasMarker) setActiveMarkerIndex(i); }}
+                        onClick={() => {
+                          if (!hasMarker) return;
+                          if (activeMarkerIndex === i) {
+                            setMarkerRecenterRequest(prev => prev + 1);
+                            return;
+                          }
+                          setActiveMarkerIndex(i);
+                        }}
                         onMouseEnter={() => { if (hasMarker) setHoveredMarkerIndex(i); }}
                         onMouseLeave={() => setHoveredMarkerIndex(null)}
                         onFocus={() => setFocusedMarkerIndex(i)}
@@ -952,7 +1291,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                           fontWeight: isActive ? 700 : 600,
                           borderRadius: '10px',
                           padding: '8px 10px',
-                          textAlign: 'left',
+                          textAlign: 'center',
                           fontFamily: 'inherit',
                           transition: 'all 0.18s ease',
                           boxShadow: isActive ? '0 4px 12px rgba(59,130,246,0.16)' : isHovered ? '0 2px 10px rgba(14,165,233,0.12)' : 'none',
@@ -966,7 +1305,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                           outlineOffset: '1px',
                         }}
                       >
-                        <span style={{ flex: 1, minWidth: 0, letterSpacing: '0.01em' }}>{renderBoldText(item.label)}</span>
+                        <span style={{ flex: 1, minWidth: 0, letterSpacing: '0.01em', textAlign: 'center' }}>{renderBoldText(item.label)}</span>
                         <span style={{
                           fontSize: '0.7em',
                           fontWeight: 700,
@@ -985,8 +1324,47 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                           color: hasMarker ? '#0c4a6e' : '#6b7280',
                           whiteSpace: 'nowrap',
                           animation: hasMarker && isActive ? 'senaladoBadgePulse 1.7s ease-in-out infinite' : 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          minWidth: '26px',
+                          minHeight: '22px',
                         }}>
-                          {hasMarker ? (isActive ? 'Visible' : 'Ver') : 'Sin ubicacion'}
+                          {hasMarker ? (
+                            isActive ? (
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                              >
+                                <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                            ) : (
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                              >
+                                <path d="M3 3l18 18" />
+                                <path d="M10.6 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17.3 17.3 0 0 1-3.1 3.8" />
+                                <path d="M6.6 6.6A17.4 17.4 0 0 0 2 12s3.5 7 10 7c1.9 0 3.6-.5 5-1.4" />
+                                <path d="M14.1 14.1a3 3 0 0 1-4.2-4.2" />
+                              </svg>
+                            )
+                          ) : 'Sin ubicacion'}
                         </span>
                       </button>
                     </li>
@@ -1012,6 +1390,12 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 >
                   Ocultar señalador
                 </button>
+              </div>
+            )}
+            {comentario && (
+              <div>
+                <span style={labelStyle}>💬 Comentario</span>
+                <p style={{ margin: 0, color: '#334155', fontSize: '0.88em', lineHeight: 1.65, background: '#f1f5f9', borderRadius: '10px', padding: '10px 14px', border: '1px solid #e2e8f0' }}>{renderBoldText(comentario)}</p>
               </div>
             )}
           </div>
