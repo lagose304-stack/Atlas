@@ -20,6 +20,9 @@ export const isLikelyTransientNetworkError = (error: SupabaseQueryError | null |
 		blob.includes('failed to fetch')
 		|| blob.includes('networkerror')
 		|| blob.includes('network request failed')
+		|| blob.includes('aborterror')
+		|| blob.includes('operation was aborted')
+		|| blob.includes('the user aborted a request')
 		|| blob.includes('load failed')
 		|| blob.includes('fetch failed')
 		|| blob.includes('etimedout')
@@ -55,7 +58,7 @@ const getMethod = (input: RequestInfo | URL, init?: RequestInit): string => {
 const fetchWithRetry: typeof fetch = async (input, init) => {
 	const method = getMethod(input, init);
 	const canRetry = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
-	const maxAttempts = canRetry ? 2 : 1;
+	const maxAttempts = canRetry ? 3 : 1;
 
 	let lastError: unknown;
 

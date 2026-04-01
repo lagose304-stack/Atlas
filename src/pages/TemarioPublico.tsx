@@ -26,7 +26,17 @@ const PARCIALES: { key: 'primer' | 'segundo' | 'tercer'; label: string; num: str
   { key: 'tercer', label: 'TERCER PARCIAL', num: '3' },
 ];
 
+const wait = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+
 const buildTemasLoadError = (error: SupabaseQueryError | null | undefined): string => {
+  const details = describeSupabaseError(error).toLowerCase();
+  if (details.includes('aborterror') || details.includes('operation was aborted')) {
+    return 'La conexion se interrumpio mientras cargaba el temario. Revisa estabilidad de red e intenta de nuevo.';
+  }
+
   if (isLikelyTransientNetworkError(error)) {
     return 'No se pudo cargar el temario por un problema de red. Revisa tu WiFi o DNS e intenta de nuevo.';
   }
@@ -163,19 +173,30 @@ const TemarioPublico: React.FC = () => {
     setTemasLoadError(null);
     setTemasLoadDebug(null);
 
-    const { data, error } = await supabase.from('temas').select('*').order('sort_order', { ascending: true });
-    if (error) {
-      const normalizedError = error as SupabaseQueryError;
-      const technicalDetails = describeSupabaseError(normalizedError);
-      console.error('Error fetching temas:', technicalDetails, normalizedError);
-      setTemas([]);
-      setTemasLoadError(buildTemasLoadError(normalizedError));
-      setTemasLoadDebug(technicalDetails);
-      setLoading(false);
-      return;
+    let lastError: SupabaseQueryError | null = null;
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const { data, error } = await supabase.from('temas').select('*').order('sort_order', { ascending: true });
+      if (!error) {
+        setTemas(data ?? []);
+        setLoading(false);
+        return;
+      }
+
+      lastError = error as SupabaseQueryError;
+      const shouldRetry = attempt < 2 && isLikelyTransientNetworkError(lastError);
+      if (!shouldRetry) {
+        break;
+      }
+
+      await wait(450 * attempt);
     }
 
-    setTemas(data ?? []);
+    const technicalDetails = describeSupabaseError(lastError);
+    console.error('Error fetching temas:', technicalDetails, lastError);
+    setTemas([]);
+    setTemasLoadError(buildTemasLoadError(lastError));
+    setTemasLoadDebug(technicalDetails);
     setLoading(false);
   }, []);
 
