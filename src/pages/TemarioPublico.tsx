@@ -1,6 +1,11 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../services/supabase';
+import {
+  describeSupabaseError,
+  isLikelyTransientNetworkError,
+  supabase,
+  type SupabaseQueryError,
+} from '../services/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
@@ -20,6 +25,14 @@ const PARCIALES: { key: 'primer' | 'segundo' | 'tercer'; label: string; num: str
   { key: 'segundo', label: 'SEGUNDO PARCIAL', num: '2' },
   { key: 'tercer', label: 'TERCER PARCIAL', num: '3' },
 ];
+
+const buildTemasLoadError = (error: SupabaseQueryError | null | undefined): string => {
+  if (isLikelyTransientNetworkError(error)) {
+    return 'No se pudo cargar el temario por un problema de red. Revisa tu WiFi o DNS e intenta de nuevo.';
+  }
+
+  return 'No se pudo cargar el temario en este momento. Revisa tu conexion e intenta de nuevo.';
+};
 
 const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick }) => {
   const [hovered, setHovered] = useState(false);
@@ -143,16 +156,21 @@ const TemarioPublico: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
+  const [temasLoadDebug, setTemasLoadDebug] = useState<string | null>(null);
 
   const fetchTemas = useCallback(async () => {
     setLoading(true);
     setTemasLoadError(null);
+    setTemasLoadDebug(null);
 
     const { data, error } = await supabase.from('temas').select('*').order('sort_order', { ascending: true });
     if (error) {
-      console.error('Error fetching temas:', error);
+      const normalizedError = error as SupabaseQueryError;
+      const technicalDetails = describeSupabaseError(normalizedError);
+      console.error('Error fetching temas:', technicalDetails, normalizedError);
       setTemas([]);
-      setTemasLoadError('No se pudo cargar el temario en este momento. Revisa tu conexion e intenta de nuevo.');
+      setTemasLoadError(buildTemasLoadError(normalizedError));
+      setTemasLoadDebug(technicalDetails);
       setLoading(false);
       return;
     }
@@ -202,8 +220,11 @@ const TemarioPublico: React.FC = () => {
           ) : temasLoadError ? (
             <div style={styles.errorState}>
               <span style={styles.errorIcon}>⚠️</span>
-              <p className="atlas-typo-section-title" style={styles.errorTitle}>No se pudo conectar con la base de datos</p>
+              <p className="atlas-typo-section-title" style={styles.errorTitle}>No se pudo cargar el temario</p>
               <p className="atlas-typo-body" style={styles.errorMessage}>{temasLoadError}</p>
+              {temasLoadDebug && (
+                <p className="atlas-typo-body" style={styles.errorDetails}>Detalle tecnico: {temasLoadDebug}</p>
+              )}
               <button
                 type="button"
                 style={styles.retryButton}
@@ -435,6 +456,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: 0,
     color: '#7c2d12',
     maxWidth: '640px',
+  },
+  errorDetails: {
+    margin: 0,
+    color: '#7c2d12',
+    opacity: 0.82,
+    maxWidth: '700px',
+    wordBreak: 'break-word',
   },
   retryButton: {
     border: '1px solid #fdba74',
