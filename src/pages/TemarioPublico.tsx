@@ -1,6 +1,8 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  SUPABASE_ANON_KEY,
+  SUPABASE_URL,
   describeSupabaseError,
   formatClientRuntimeContext,
   getClientRuntimeContext,
@@ -32,6 +34,66 @@ const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {
     window.setTimeout(resolve, ms);
   });
+
+const fetchTemasViaRestFallback = async (): Promise<{ data: Tema[] | null; error: SupabaseQueryError | null }> => {
+  const normalizedBaseUrl = (SUPABASE_URL || '').trim().replace(/\/+$/, '');
+  const normalizedAnonKey = (SUPABASE_ANON_KEY || '').trim();
+  if (!normalizedBaseUrl || !normalizedAnonKey) {
+    return {
+      data: null,
+      error: {
+        code: 'FALLBACK_CONFIG_MISSING',
+        message: 'No se pudo usar fallback REST por configuracion incompleta de Supabase.',
+      },
+    };
+  }
+
+  const url = `${normalizedBaseUrl}/rest/v1/temas?select=id,nombre,logo_url,parcial&order=sort_order.asc`;
+  const headers: HeadersInit = {
+    apikey: normalizedAnonKey,
+    Authorization: `Bearer ${normalizedAnonKey}`,
+    Accept: 'application/json',
+    'Content-Profile': 'public',
+  };
+
+  let lastError: SupabaseQueryError | null = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        const responseText = await response.text().catch(() => '');
+        lastError = {
+          code: `FALLBACK_HTTP_${response.status}`,
+          message: `Fallback REST devolvio ${response.status} ${response.statusText}`,
+          details: responseText.slice(0, 280),
+        };
+      } else {
+        const data = (await response.json()) as Tema[];
+        return { data, error: null };
+      }
+    } catch (error) {
+      lastError = {
+        message: describeSupabaseError(error),
+      };
+    }
+
+    if (attempt < 2 && isLikelyTransientNetworkError(lastError)) {
+      await wait(420 * attempt);
+      continue;
+    }
+    break;
+  }
+
+  return {
+    data: null,
+    error: lastError ?? { message: 'Fallo fallback REST sin detalle adicional.' },
+  };
+};
 
 const buildTemasLoadError = (error: SupabaseQueryError | null | undefined): string => {
   const details = describeSupabaseError(error).toLowerCase();
@@ -176,6 +238,7 @@ const TemarioPublico: React.FC = () => {
     setTemasLoadDebug(null);
 
     let lastError: SupabaseQueryError | null = null;
+    let fallbackErrorDetails: string | null = null;
 
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       const { data, error } = await supabase.from('temas').select('*').order('sort_order', { ascending: true });
@@ -194,10 +257,21 @@ const TemarioPublico: React.FC = () => {
       await wait(450 * attempt);
     }
 
+    if (lastError && isLikelyTransientNetworkError(lastError)) {
+      const fallbackResult = await fetchTemasViaRestFallback();
+      if (!fallbackResult.error) {
+        setTemas(fallbackResult.data ?? []);
+        setLoading(false);
+        return;
+      }
+      fallbackErrorDetails = describeSupabaseError(fallbackResult.error);
+    }
+
     const technicalDetails = describeSupabaseError(lastError);
     const runtimeContext = getClientRuntimeContext();
     const contextDetails = formatClientRuntimeContext(runtimeContext);
-    const combinedDetails = `${technicalDetails} || contexto: ${contextDetails}`;
+    const fallbackDetails = fallbackErrorDetails ? ` || fallback: ${fallbackErrorDetails}` : '';
+    const combinedDetails = `${technicalDetails}${fallbackDetails} || contexto: ${contextDetails}`;
 
     console.error('Error fetching temas:', {
       error: lastError,

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 export type SupabaseQueryError = {
+	name?: string | null;
 	code?: string | null;
 	message?: string | null;
 	details?: string | null;
@@ -45,8 +46,8 @@ export type ClientRuntimeContext = {
 	saveData: boolean | null;
 };
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const wait = (ms: number): Promise<void> =>
 	new Promise((resolve) => {
@@ -76,7 +77,12 @@ export const describeSupabaseError = (error: unknown): string => {
 	}
 
 	const maybeError = error as SupabaseQueryError;
-	const parts = [maybeError.code, maybeError.message, maybeError.details].filter(Boolean);
+	const namedMessage = maybeError.name
+		? maybeError.message
+			? `${maybeError.name}: ${maybeError.message}`
+			: maybeError.name
+		: maybeError.message;
+	const parts = [maybeError.code, namedMessage, maybeError.details].filter(Boolean);
 	return parts.length > 0 ? parts.join(' | ') : 'error desconocido';
 };
 
@@ -143,12 +149,14 @@ const fetchWithRetry: typeof fetch = async (input, init) => {
 	const method = getMethod(input, init);
 	const canRetry = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
 	const maxAttempts = canRetry ? 3 : 1;
+	const { signal: requestSignal, ...initWithoutSignal } = init ?? {};
 
 	let lastError: unknown;
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
 		try {
-			const response = await fetch(input, init);
+			const nextInit = canRetry && attempt > 1 && requestSignal ? initWithoutSignal : init;
+			const response = await fetch(input, nextInit);
 			if (canRetry && attempt < maxAttempts && isRetryableHttpStatus(response.status)) {
 				await wait(350 * attempt);
 				continue;
@@ -167,7 +175,7 @@ const fetchWithRetry: typeof fetch = async (input, init) => {
 	throw lastError instanceof Error ? lastError : new Error('fetch failed');
 };
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 	global: {
 		fetch: fetchWithRetry,
 	},
