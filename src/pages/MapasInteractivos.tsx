@@ -66,6 +66,12 @@ interface InteractiveMapRow {
   sections: InteractiveMapSectionPayload[] | null;
 }
 
+interface HydratedSectionsPayload {
+  selections: number[][];
+  details: SelectionDetails[];
+  legacySectionsCount: number;
+}
+
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
 type ZoomSensitivity = 'suave' | 'media' | 'rapida';
 
@@ -154,6 +160,30 @@ const normalizedToStageFlatPoints = (points: number[], referenceRect: RectBox): 
   });
 };
 
+const projectPointBetweenRects = (point: Point2D, fromRect: RectBox, toRect: RectBox): Point2D => {
+  const fromWidth = Math.max(1, fromRect.width);
+  const fromHeight = Math.max(1, fromRect.height);
+  const u = clamp((point.x - fromRect.x) / fromWidth, 0, 1);
+  const v = clamp((point.y - fromRect.y) / fromHeight, 0, 1);
+
+  return {
+    x: toRect.x + u * Math.max(1, toRect.width),
+    y: toRect.y + v * Math.max(1, toRect.height),
+  };
+};
+
+const projectFlatPointsBetweenRects = (points: number[], fromRect: RectBox, toRect: RectBox): number[] => {
+  if (points.length < 2 || points.length % 2 !== 0) return points;
+
+  const projected: number[] = [];
+  for (let i = 0; i < points.length; i += 2) {
+    const point = projectPointBetweenRects({ x: points[i], y: points[i + 1] }, fromRect, toRect);
+    projected.push(point.x, point.y);
+  }
+
+  return projected;
+};
+
 const isValidHexColor = (value: string): boolean => /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value);
 
 const hexToRgba = (hex: string, alpha: number): string => {
@@ -210,13 +240,14 @@ const buildSectionsPayload = (
 const hydrateSectionsPayload = (
   sectionsRaw: InteractiveMapSectionPayload[] | null | undefined,
   referenceRect: RectBox | null
-): { selections: number[][]; details: SelectionDetails[] } => {
+): HydratedSectionsPayload => {
   if (!Array.isArray(sectionsRaw) || sectionsRaw.length === 0) {
-    return { selections: [], details: [] };
+    return { selections: [], details: [], legacySectionsCount: 0 };
   }
 
   const selections: number[][] = [];
   const details: SelectionDetails[] = [];
+  let legacySectionsCount = 0;
 
   sectionsRaw.forEach((section) => {
     const rawPoints = Array.isArray(section?.points)
@@ -228,8 +259,13 @@ const hydrateSectionsPayload = (
     const coordinateSpace = typeof section?.coordinate_space === 'string'
       ? section.coordinate_space
       : null;
+    const isExplicitLegacy = coordinateSpace !== INTERACTIVE_MAP_COORDINATE_SPACE;
     const isNormalizedCoordinates =
       coordinateSpace === INTERACTIVE_MAP_COORDINATE_SPACE || areLikelyNormalizedFlatPoints(rawPoints);
+
+    if (isExplicitLegacy && !areLikelyNormalizedFlatPoints(rawPoints)) {
+      legacySectionsCount += 1;
+    }
 
     const points =
       isNormalizedCoordinates && referenceRect
@@ -251,7 +287,7 @@ const hydrateSectionsPayload = (
     details.push({ title, color, description });
   });
 
-  return { selections, details };
+  return { selections, details, legacySectionsCount };
 };
 
 const cloneSelections = (selections: number[][]): number[][] => {
@@ -497,6 +533,7 @@ const MapasInteractivos: React.FC = () => {
   const targetZoomRef = useRef(1);
   const targetPanRef = useRef<Point2D>({ x: 0, y: 0 });
   const animationFrameRef = useRef<number | null>(null);
+  const previousImageRectRef = useRef<RectBox | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
@@ -766,15 +803,63 @@ const MapasInteractivos: React.FC = () => {
   }, [baseImageRect, zoomScale, panOffset]);
 
   useEffect(() => {
-    if (!pendingHydrationMapRow || !baseImageRect) return;
+    const hydrationRect = imageRect ?? baseImageRect;
+    if (!pendingHydrationMapRow || !hydrationRect) return;
 
-    const hydrated = hydrateSectionsPayload(pendingHydrationMapRow.sections, baseImageRect);
+    const hydrated = hydrateSectionsPayload(pendingHydrationMapRow.sections, hydrationRect);
     setSavedSelections(hydrated.selections);
     setSavedSelectionDetails(hydrated.details);
     setPersistedSelectionsSnapshot(cloneSelections(hydrated.selections));
     setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(hydrated.details));
+    if (hydrated.legacySectionsCount > 0) {
+      setMapPersistMessage(
+        `Mapa #${pendingHydrationMapRow.map_number} cargado con ${hydrated.legacySectionsCount} seleccion(es) legacy. Revisa y guarda para migrarlas con precision.`
+      );
+    }
     setPendingHydrationMapRow(null);
-  }, [pendingHydrationMapRow, baseImageRect]);
+  }, [pendingHydrationMapRow, imageRect, baseImageRect]);
+
+  useEffect(() => {
+    if (!selectedPlaca || !imageRect) {
+      previousImageRectRef.current = null;
+      return;
+    }
+
+    const previousRect = previousImageRectRef.current;
+    if (!previousRect) {
+      previousImageRectRef.current = imageRect;
+      return;
+    }
+
+    const hasRectChanged =
+      Math.abs(previousRect.x - imageRect.x) > 0.01 ||
+      Math.abs(previousRect.y - imageRect.y) > 0.01 ||
+      Math.abs(previousRect.width - imageRect.width) > 0.01 ||
+      Math.abs(previousRect.height - imageRect.height) > 0.01;
+
+    if (!hasRectChanged) {
+      previousImageRectRef.current = imageRect;
+      return;
+    }
+
+    const projectFlat = (points: number[]): number[] => projectFlatPointsBetweenRects(points, previousRect, imageRect);
+
+    setActiveLassoPoints((prev) => (prev.length >= 2 ? projectFlat(prev) : prev));
+    setSelectionPoints((prev) => (prev.length >= 2 ? projectFlat(prev) : prev));
+    setSavedSelections((prev) => prev.map((points) => (points.length >= 2 ? projectFlat(points) : points)));
+    setPersistedSelectionsSnapshot((prev) => prev.map((points) => (points.length >= 2 ? projectFlat(points) : points)));
+    setInsertHint((prev) => {
+      if (!prev.visible) return prev;
+      const projected = projectPointBetweenRects({ x: prev.x, y: prev.y }, previousRect, imageRect);
+      return {
+        ...prev,
+        x: projected.x,
+        y: projected.y,
+      };
+    });
+
+    previousImageRectRef.current = imageRect;
+  }, [selectedPlaca, imageRect]);
 
   const effectiveMaxZoom = useMemo(() => {
     return computeDynamicMaxZoom(baseImageRect, imageElement);

@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { MousePointerClick } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
@@ -29,6 +30,10 @@ interface SubtemaInfo {
   temas?: { nombre: string } | { nombre: string }[];
 }
 
+interface InteractiveMapRow {
+  placa_id: number;
+}
+
 const PlacasSubtema: React.FC = () => {
   const { subtemaId } = useParams<{ subtemaId: string }>();
   const [placas, setPlacas] = useState<Placa[]>([]);
@@ -37,6 +42,7 @@ const PlacasSubtema: React.FC = () => {
   const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
+  const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!subtemaId) return;
@@ -63,7 +69,33 @@ const PlacasSubtema: React.FC = () => {
         .order('sort_order', { ascending: true });
 
       if (placasError) console.error('Error fetching placas:', placasError);
-      if (placasData) setPlacas(placasData);
+      if (placasData) {
+        setPlacas(placasData);
+        const placaIds = placasData
+          .map((placa: Placa) => placa.id)
+          .filter((id): id is number => typeof id === 'number');
+
+        if (placaIds.length > 0) {
+          const { data: interactiveMapsData, error: interactiveMapsError } = await supabase
+            .from('interactive_maps')
+            .select('placa_id')
+            .in('placa_id', placaIds);
+
+          if (interactiveMapsError) {
+            console.error('Error fetching interactive maps by placa:', interactiveMapsError);
+            setPlacasConMapa(new Set());
+          } else {
+            const placaIdsConMapa = (interactiveMapsData ?? [])
+              .map((row: InteractiveMapRow) => row.placa_id)
+              .filter((id): id is number => typeof id === 'number');
+            setPlacasConMapa(new Set(placaIdsConMapa));
+          }
+        } else {
+          setPlacasConMapa(new Set());
+        }
+      } else {
+        setPlacasConMapa(new Set());
+      }
 
       // Cargar bloques de contenido editorial
       try {
@@ -125,41 +157,58 @@ const PlacasSubtema: React.FC = () => {
             </div>
           ) : (
             <div className="placas-gallery-grid">
-              {placas.map(placa => (
-                <div
-                  key={placa.id}
-                  className="placa-thumb-wrap"
-                  style={{
-                    ...styles.thumbWrap,
-                    ...(hoveredId === placa.id ? styles.thumbWrapHover : {}),
-                  }}
-                  onClick={() => {
-                    void logPlacaView(placa.id, Number(subtemaId));
-                    setSelectedPlaca(placa);
-                  }}
-                  onMouseEnter={() => setHoveredId(placa.id)}
-                  onMouseLeave={() => setHoveredId(null)}
-                  title="Ver en grande"
-                >
-                  <img
-                    src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
-                    alt="Placa histológica"
-                    style={styles.thumbImg}
-                    loading="lazy"
-                  />
-                  {placa.aumento && (
-                    <div style={styles.aumentoBadge}>
-                      {placa.aumento}
+              {placas.map(placa => {
+                const hasInteractiveMap = placasConMapa.has(placa.id);
+                const isHovered = hoveredId === placa.id;
+                return (
+                  <div
+                    key={placa.id}
+                    className="placa-thumb-wrap"
+                    style={{
+                      ...styles.thumbWrap,
+                      transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
+                      boxShadow: isHovered
+                        ? '0 16px 28px rgba(14,165,233,0.24)'
+                        : '0 6px 14px rgba(56,189,248,0.16)',
+                      borderColor: isHovered ? '#38bdf8' : '#dbeafe',
+                    }}
+                    onClick={() => {
+                      void logPlacaView(placa.id, Number(subtemaId));
+                      setSelectedPlaca(placa);
+                    }}
+                    onMouseEnter={() => setHoveredId(placa.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    title="Ver en grande"
+                  >
+                    <img
+                      src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+                      alt="Placa histológica"
+                      style={styles.thumbImg}
+                      loading="lazy"
+                    />
+                    {(placa.aumento || hasInteractiveMap) && (
+                      <div style={styles.thumbBadgesRow}>
+                        {placa.aumento && (
+                          <div style={styles.aumentoBadge} title={`Aumento ${placa.aumento}`} aria-label={`Aumento ${placa.aumento}`}>
+                            <span style={styles.aumentoBadgeText}>{placa.aumento.toUpperCase()}</span>
+                          </div>
+                        )}
+                        {hasInteractiveMap && (
+                          <div style={styles.interactiveMapBadge} title="Mapa interactivo disponible" aria-label="Mapa interactivo disponible">
+                            <MousePointerClick size={16} strokeWidth={2.35} />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div style={{
+                      ...styles.thumbOverlay,
+                      opacity: hoveredId === placa.id ? 1 : 0,
+                    }}>
+                      🔍
                     </div>
-                  )}
-                  <div style={{
-                    ...styles.thumbOverlay,
-                    opacity: hoveredId === placa.id ? 1 : 0,
-                  }}>
-                    🔍
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -173,6 +222,7 @@ const PlacasSubtema: React.FC = () => {
           srcZoom={getCloudinaryImageUrl(selectedPlaca.photo_url, 'zoom')}
           onClose={() => setSelectedPlaca(null)}
           placaId={selectedPlaca.id}
+          hasInteractiveMapHint={placasConMapa.has(selectedPlaca.id)}
           temaNombre={temaNombre}
           subtemaNombre={subtema?.nombre}
           aumento={selectedPlaca.aumento}
@@ -305,13 +355,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     aspectRatio: '1 / 1',
     background: '#f1f5f9',
     border: '1.5px solid #dbeafe',
-    boxShadow: '0 6px 14px rgba(15,23,42,0.08)',
+    boxShadow: '0 6px 14px rgba(56,189,248,0.16)',
+    outline: 'none',
+    backfaceVisibility: 'hidden',
+    willChange: 'transform, box-shadow, border-color',
     transition: 'transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease',
-  },
-  thumbWrapHover: {
-    transform: 'translateY(-4px) scale(1.03)',
-    boxShadow: '0 16px 28px rgba(14,165,233,0.24)',
-    borderColor: '#38bdf8',
   },
   thumbImg: {
     width: '100%',
@@ -331,29 +379,56 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'opacity 0.2s ease',
     backdropFilter: 'blur(2.5px)',
   },
-  aumentoBadge: {
+  thumbBadgesRow: {
     position: 'absolute',
     top: '7px',
     left: '7px',
-    minWidth: '36px',
-    height: '36px',
-    borderRadius: '50%',
-    background: 'rgba(255,255,255,0.92)',
-    color: '#0369a1',
+    right: '7px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    zIndex: 2,
+  },
+  aumentoBadge: {
+    minWidth: '52px',
+    height: '32px',
+    borderRadius: '10px',
+    color: '#f8fbff',
+    background: '#1d345f',
+    border: '1px solid rgba(120,143,186,0.78)',
     fontWeight: 800,
-    fontSize: '0.72em',
+    fontSize: '0.66em',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '0 5px',
-    boxShadow: '0 2px 8px rgba(14,165,233,0.18)',
-    border: '1.5px solid #7dd3fc',
+    padding: '0 8px',
+    boxShadow: '0 3px 10px rgba(29,52,95,0.38)',
     letterSpacing: '0.02em',
-    pointerEvents: 'none',
-    zIndex: 2,
+    flexShrink: 0,
     lineHeight: 1,
     textAlign: 'center',
     backdropFilter: 'blur(4px)',
+  },
+  aumentoBadgeText: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    lineHeight: 1,
+  },
+  interactiveMapBadge: {
+    width: '32px',
+    height: '32px',
+    color: '#f8fbff',
+    background: '#1d345f',
+    border: '1px solid rgba(120,143,186,0.78)',
+    borderRadius: '10px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 3px 10px rgba(29,52,95,0.38)',
+    backdropFilter: 'blur(4px)',
+    flexShrink: 0,
   },
 };
 

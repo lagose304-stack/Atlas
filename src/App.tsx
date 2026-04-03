@@ -5,7 +5,6 @@ import PrivateRoute from './components/PrivateRoute';
 import Home from './pages/Home';
 import Edicion from './pages/Edicion';
 import TemarioPublico from './pages/TemarioPublico';
-import Aprendizaje from './pages/Aprendizaje';
 import Temario from './pages/Temario';
 import Placas from './pages/Placas';
 import Subtemas from './pages/Subtemas';
@@ -98,7 +97,6 @@ const App: React.FC = () => {
           {/* Ruta pública */}
           <Route path="/" element={<Home />} />
           <Route path="/temario" element={<TemarioPublico />} />
-          <Route path="/aprendizaje" element={<Aprendizaje />} />
           
           {/* Rutas protegidas */}
           <Route

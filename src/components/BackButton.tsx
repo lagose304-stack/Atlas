@@ -1,4 +1,5 @@
 import React from 'react';
+import { IMAGE_VIEWER_VISIBILITY_EVENT, type ImageViewerVisibilityDetail } from '../constants/uiEvents';
 
 interface BackButtonProps {
   onClick: () => void;
@@ -13,7 +14,54 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
   const [showFloatingButton, setShowFloatingButton] = React.useState(false);
   const [floatingTopOffset, setFloatingTopOffset] = React.useState(12);
   const [floatingLeftOffset, setFloatingLeftOffset] = React.useState(12);
+  const [openImageViewerCount, setOpenImageViewerCount] = React.useState(0);
+  const [isBodyScrollLocked, setIsBodyScrollLocked] = React.useState(false);
   const inlineButtonRef = React.useRef<HTMLButtonElement>(null);
+  const isImageViewerOpen = openImageViewerCount > 0;
+
+  React.useEffect(() => {
+    const updateBodyScrollLockState = () => {
+      const bodyStyles = window.getComputedStyle(document.body);
+      const locked = bodyStyles.overflow === 'hidden' || bodyStyles.overflowY === 'hidden';
+      setIsBodyScrollLocked((prev) => (prev === locked ? prev : locked));
+    };
+
+    updateBodyScrollLockState();
+
+    const observer = new MutationObserver(() => {
+      updateBodyScrollLockState();
+    });
+
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['style', 'class'],
+    });
+
+    window.addEventListener('focus', updateBodyScrollLockState);
+    window.addEventListener('resize', updateBodyScrollLockState);
+    document.addEventListener('visibilitychange', updateBodyScrollLockState);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('focus', updateBodyScrollLockState);
+      window.removeEventListener('resize', updateBodyScrollLockState);
+      document.removeEventListener('visibilitychange', updateBodyScrollLockState);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const handleImageViewerVisibility = (event: Event) => {
+      const customEvent = event as CustomEvent<ImageViewerVisibilityDetail>;
+      const delta = customEvent.detail?.delta;
+      if (delta !== 1 && delta !== -1) return;
+      setOpenImageViewerCount((prev) => Math.max(0, prev + delta));
+    };
+
+    window.addEventListener(IMAGE_VIEWER_VISIBILITY_EVENT, handleImageViewerVisibility as EventListener);
+    return () => {
+      window.removeEventListener(IMAGE_VIEWER_VISIBILITY_EVENT, handleImageViewerVisibility as EventListener);
+    };
+  }, []);
 
   React.useEffect(() => {
     const buttonEl = inlineButtonRef.current;
@@ -51,7 +99,7 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
     setIsHover(false);
     setIsPressed(false);
     setIsFocused(false);
-  }, [showFloatingButton]);
+  }, [showFloatingButton, isImageViewerOpen]);
 
   React.useEffect(() => {
     const updateFloatingOffsets = () => {
@@ -164,10 +212,12 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
     transition: 'opacity 200ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease',
   };
 
+  const isFloatingVisible = showFloatingButton && !isImageViewerOpen && !isBodyScrollLocked;
+
   const floatingVisibilityStyle: React.CSSProperties = {
-    opacity: showFloatingButton ? 1 : 0,
-    transform: showFloatingButton ? 'translateY(0)' : 'translateY(-8px)',
-    pointerEvents: showFloatingButton ? 'auto' : 'none',
+    opacity: isFloatingVisible ? 1 : 0,
+    transform: isFloatingVisible ? 'translateY(0)' : 'translateY(-8px)',
+    pointerEvents: isFloatingVisible ? 'auto' : 'none',
   };
 
   const handleMouseEnter = () => setIsHover(true);
@@ -217,8 +267,8 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
       <button
         type="button"
         onClick={onClick}
-        tabIndex={showFloatingButton ? 0 : -1}
-        aria-hidden={!showFloatingButton}
+        tabIndex={isFloatingVisible ? 0 : -1}
+        aria-hidden={!isFloatingVisible}
         style={{
           ...baseStyle,
           ...floatingStyle,

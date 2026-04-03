@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, GraduationCap, House, Phone, Search } from 'lucide-react';
+import { BookOpen, House, Phone, Search } from 'lucide-react';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 
 import logoFacultad from '../assets/logos/facultad.png';
@@ -10,7 +10,6 @@ import fondoHeader from '../assets/imagenes/fondo.webp';
 const MENU_ITEMS = [
   { key: 'inicio', label: 'Inicio', icon: House, path: '/' },
   { key: 'temario', label: 'Temario', icon: BookOpen, path: '/temario' },
-  { key: 'aprendizaje', label: 'Aprendizaje', icon: GraduationCap, path: '/aprendizaje' },
   { key: 'contacto', label: 'Contacto', icon: Phone },
 ] as const;
 

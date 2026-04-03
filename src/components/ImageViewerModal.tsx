@@ -1,6 +1,10 @@
 ﻿import React, { useId, useState, useEffect, useMemo, useRef } from 'react';
+import { MousePointerClick } from 'lucide-react';
 import { renderBoldText } from './BoldField';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
+import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
+import { supabase } from '../services/supabase';
+import InteractiveMapViewerModal, { type InteractiveMapViewerSection } from './InteractiveMapViewerModal';
 
 interface SenaladoMetaItem {
   label: string;
@@ -15,6 +19,7 @@ interface ImageViewerModalProps {
   srcZoom?: string;
   onClose: () => void;
   placaId?: number | string | null;
+  hasInteractiveMapHint?: boolean;
   temaNombre?: string;
   subtemaNombre?: string;
   aumento?: string | null;
@@ -22,6 +27,20 @@ interface ImageViewerModalProps {
   senaladosMeta?: SenaladoMetaItem[] | null;
   comentario?: string | null;
   tincion?: string | null;
+}
+
+interface InteractiveMapRawSection {
+  title?: string | null;
+  color?: string | null;
+  description?: string | null;
+  points?: unknown;
+  sort_order?: number | null;
+  coordinate_space?: string | null;
+}
+
+interface InteractiveMapRow {
+  map_number: number;
+  sections: InteractiveMapRawSection[] | null;
 }
 
 const ZOOM_MIN = 0.5;
@@ -120,33 +139,6 @@ const getPointerPolygon = (
   ] as const;
 };
 
-const getArrowPolygon = (
-  tip: { x: number; y: number },
-  ux: number,
-  uy: number,
-  tailDistance: number,
-  tailHalfHeight: number,
-  innerDistanceFromTip: number
-) => {
-  const nx = -uy;
-  const ny = ux;
-  const tailCenter = {
-    x: tip.x - ux * tailDistance,
-    y: tip.y - uy * tailDistance,
-  };
-  const inner = {
-    x: tip.x - ux * innerDistanceFromTip,
-    y: tip.y - uy * innerDistanceFromTip,
-  };
-
-  return [
-    tip,
-    { x: tailCenter.x + nx * tailHalfHeight, y: tailCenter.y + ny * tailHalfHeight },
-    inner,
-    { x: tailCenter.x - nx * tailHalfHeight, y: tailCenter.y - ny * tailHalfHeight },
-  ] as const;
-};
-
 const polygonPoints = (points: ReadonlyArray<{ x: number; y: number }>) => (
   points.map(point => `${point.x},${point.y}`).join(' ')
 );
@@ -158,9 +150,6 @@ const POINTER_MIN_ANGLE_DEG = 7;
 const POINTER_OUTLINE_TIP_BACKOFF_PX = 1.1;
 const POINTER_BASE_OUTSET_PX = 3;
 const ARROW_TAIL_DISTANCE_PX = 21;
-const ARROW_TAIL_HALF_HEIGHT_PX = 16;
-const ARROW_INNER_DISTANCE_PX = 23;
-const ARROW_STROKE_WIDTH_PX = 2.1;
 const MARKER_FADE_OUT_MS = 180;
 const MARKER_FADE_IN_MS = 200;
 const COMMENT_HINT_DURATION_MS = 5200;
@@ -181,11 +170,63 @@ const computeDynamicMaxZoom = (
   return clamp(recommendedMax, MIN_DYNAMIC_MAX_ZOOM, ZOOM_MAX);
 };
 
+const sanitizeInteractiveMapColor = (value: string | null | undefined): string => {
+  if (typeof value !== 'string') return '#0ea5e9';
+  const color = value.trim();
+  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color)) return color;
+  return '#0ea5e9';
+};
+
+const normalizeInteractiveMapPoints = (rawPoints: unknown): number[] => {
+  if (!Array.isArray(rawPoints)) return [];
+  const clean = rawPoints.filter((item): item is number => typeof item === 'number' && Number.isFinite(item));
+  if (clean.length < 6 || clean.length % 2 !== 0) return [];
+  return clean;
+};
+
+const normalizeInteractiveMapSections = (
+  sectionsRaw: InteractiveMapRawSection[] | null | undefined
+): InteractiveMapViewerSection[] => {
+  if (!Array.isArray(sectionsRaw) || sectionsRaw.length === 0) return [];
+
+  const sections: InteractiveMapViewerSection[] = [];
+
+  sectionsRaw.forEach((section, index) => {
+    const points = normalizeInteractiveMapPoints(section?.points);
+    if (points.length < 6) return;
+
+    const title = typeof section?.title === 'string' && section.title.trim().length > 0
+      ? section.title.trim()
+      : `Zona ${index + 1}`;
+    const description = typeof section?.description === 'string' ? section.description.trim() : '';
+    const color = sanitizeInteractiveMapColor(section?.color);
+    const sortOrder = typeof section?.sort_order === 'number' ? section.sort_order : index;
+    const coordinateSpace = typeof section?.coordinate_space === 'string'
+      ? section.coordinate_space
+      : undefined;
+
+    const normalizedSection: InteractiveMapViewerSection = {
+      title,
+      description,
+      color,
+      points,
+      sortOrder,
+      ...(coordinateSpace ? { coordinateSpace } : {}),
+    };
+
+    sections.push(normalizedSection);
+  });
+
+  sections.sort((a, b) => a.sortOrder - b.sortOrder);
+  return sections;
+};
+
 const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   src,
   srcZoom,
   onClose,
   placaId,
+  hasInteractiveMapHint,
   temaNombre,
   subtemaNombre,
   aumento,
@@ -241,6 +282,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [isPinching, setIsPinching] = useState(false);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(null);
+  const [interactiveMapData, setInteractiveMapData] = useState<{ mapNumber: number; sections: InteractiveMapViewerSection[] } | null>(null);
+  const [loadingInteractiveMap, setLoadingInteractiveMap] = useState<boolean>(() => hasInteractiveMapHint === true);
+  const [showInteractiveMapViewer, setShowInteractiveMapViewer] = useState(false);
+  const [isInteractiveMapCtaHovered, setIsInteractiveMapCtaHovered] = useState(false);
   const pointerClipId = useId();
 
   const containerRef   = useRef<HTMLDivElement>(null);
@@ -257,8 +302,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   useEffect(() => { stateRef.current.pos  = position;  }, [position]);
 
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = 'unset'; };
+    acquireAtlasScrollLock();
+    return () => {
+      releaseAtlasScrollLock();
+    };
   }, []);
 
   useEffect(() => {
@@ -466,6 +513,82 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (hasInteractiveMapHint === false) {
+      setInteractiveMapData(null);
+      setLoadingInteractiveMap(false);
+      setShowInteractiveMapViewer(false);
+      return;
+    }
+
+    const plateIdNumber = typeof placaId === 'number' ? placaId : Number(placaId);
+
+    if (!Number.isFinite(plateIdNumber)) {
+      setInteractiveMapData(null);
+      setLoadingInteractiveMap(false);
+      setShowInteractiveMapViewer(false);
+      return;
+    }
+
+    const fetchInteractiveMapByPlaca = async () => {
+      setLoadingInteractiveMap(true);
+
+      const { data, error } = await supabase
+        .from('interactive_maps')
+        .select('map_number, sections')
+        .eq('placa_id', plateIdNumber)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error('Error al consultar mapa interactivo por placa en viewer:', error);
+        setInteractiveMapData(null);
+        setLoadingInteractiveMap(false);
+        return;
+      }
+
+      const mapRow = (data ?? null) as InteractiveMapRow | null;
+      if (!mapRow) {
+        setInteractiveMapData(null);
+        setLoadingInteractiveMap(false);
+        return;
+      }
+
+      const sections = normalizeInteractiveMapSections(mapRow.sections);
+      if (sections.length === 0) {
+        setInteractiveMapData(null);
+        setLoadingInteractiveMap(false);
+        return;
+      }
+
+      setInteractiveMapData({
+        mapNumber: mapRow.map_number,
+        sections,
+      });
+      setLoadingInteractiveMap(false);
+    };
+
+    void fetchInteractiveMapByPlaca();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [placaId, hasInteractiveMapHint]);
+
+  const shouldReserveInteractiveMapCtaSpace = hasInteractiveMapHint === true && loadingInteractiveMap && !interactiveMapData;
+
+  const handleReturnToPlacaInfoFromInteractiveMap = () => {
+    setShowInteractiveMapViewer(false);
+  };
+
+  const handleCloseInteractiveMapToPlacasGrid = () => {
+    setShowInteractiveMapViewer(false);
+    onClose();
+  };
 
   const applyZoom = (newZoom: number, newPos?: { x: number; y: number }) => {
     const z = clamp(newZoom, ZOOM_MIN, effectiveMaxZoom);
@@ -776,6 +899,22 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         @keyframes commentHintIconPulse {
           0%, 100% { transform: scale(1); }
           50% { transform: scale(1.04); }
+        }
+        @keyframes mapCtaGlow {
+          0%, 100% {
+            box-shadow: 0 7px 16px rgba(59,130,246,0.24), 0 0 0 0 rgba(59,130,246,0.24);
+          }
+          50% {
+            box-shadow: 0 10px 22px rgba(59,130,246,0.34), 0 0 0 6px rgba(59,130,246,0);
+          }
+        }
+        @keyframes mapCtaIconTap {
+          0%, 100% {
+            transform: translateX(0) scale(1);
+          }
+          50% {
+            transform: translateX(2px) scale(1.16);
+          }
         }`}
       </style>
       <div style={{
@@ -1057,7 +1196,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               // Matriz de transformación SVG
               const cos = Math.cos(rotation);
               const sin = Math.sin(rotation);
-              function transformPoint(pt) {
+              function transformPoint(pt: { x: number; y: number }) {
                 // Trasladar al origen (cola SVG), rotar, escalar, trasladar a actualTail
                 const x0 = pt.x - svgTail.x;
                 const y0 = pt.y - svgTail.y;
@@ -1199,6 +1338,100 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           </div>
           {/* Contenido */}
           <div style={{ padding: '12px 10px 16px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
+            {(interactiveMapData || shouldReserveInteractiveMapCtaSpace) && (
+              <div style={sidebarSectionStyle}>
+                {interactiveMapData ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowInteractiveMapViewer(true)}
+                    onMouseEnter={() => setIsInteractiveMapCtaHovered(true)}
+                    onMouseLeave={() => setIsInteractiveMapCtaHovered(false)}
+                    onFocus={() => setIsInteractiveMapCtaHovered(true)}
+                    onBlur={() => setIsInteractiveMapCtaHovered(false)}
+                    style={{
+                      width: '100%',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      borderRadius: '10px',
+                      border: isInteractiveMapCtaHovered ? '1px solid #93c5fd' : '1px solid #bfdbfe',
+                      background: isInteractiveMapCtaHovered
+                        ? 'linear-gradient(135deg, #dbeafe 0%, #c7ddff 100%)'
+                        : 'linear-gradient(135deg, #e8f0ff 0%, #dbeafe 100%)',
+                      color: '#1e3a8a',
+                      fontWeight: 800,
+                      fontSize: '0.82em',
+                      letterSpacing: '0.01em',
+                      fontFamily: 'inherit',
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      boxShadow: isInteractiveMapCtaHovered
+                        ? '0 7px 16px rgba(59,130,246,0.24)'
+                        : '0 4px 12px rgba(59,130,246,0.18)',
+                      transform: isInteractiveMapCtaHovered ? 'translateY(-2px) scale(1.01)' : 'translateY(0) scale(1)',
+                      filter: isInteractiveMapCtaHovered ? 'saturate(1.06)' : 'none',
+                      animation: isInteractiveMapCtaHovered ? 'mapCtaGlow 0.9s ease-in-out infinite' : 'none',
+                      transition: 'all 0.22s ease',
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transform: 'translateX(0) scale(1)',
+                        animation: isInteractiveMapCtaHovered ? 'mapCtaIconTap 0.62s cubic-bezier(0.22, 1, 0.36, 1) infinite' : 'none',
+                        transition: 'transform 0.2s ease',
+                      }}
+                    >
+                      <MousePointerClick size={16} strokeWidth={2.2} />
+                    </span>
+                    Ver placa interactiva
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    style={{
+                      width: '100%',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      borderRadius: '10px',
+                      border: '1px solid #bfdbfe',
+                      background: 'linear-gradient(135deg, #e8f0ff 0%, #dbeafe 100%)',
+                      color: '#1e3a8a',
+                      fontWeight: 800,
+                      fontSize: '0.82em',
+                      letterSpacing: '0.01em',
+                      fontFamily: 'inherit',
+                      padding: '10px 12px',
+                      cursor: 'default',
+                      boxShadow: '0 4px 12px rgba(59,130,246,0.18)',
+                      opacity: 0.88,
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        animation: 'mapCtaIconTap 0.72s cubic-bezier(0.22, 1, 0.36, 1) infinite',
+                      }}
+                    >
+                      <MousePointerClick size={16} strokeWidth={2.2} />
+                    </span>
+                    Preparando placa interactiva...
+                  </button>
+                )}
+              </div>
+            )}
+
             {(temaNombre || subtemaNombre) && (
               <div
                 style={{
@@ -1529,6 +1762,19 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {showInteractiveMapViewer && interactiveMapData && (
+        <InteractiveMapViewerModal
+          mapLabel={`Mapa ${interactiveMapData.mapNumber}`}
+          imageUrl={src}
+          temaNombre={temaNombre}
+          subtemaNombre={subtemaNombre}
+          sections={interactiveMapData.sections}
+          onClose={handleCloseInteractiveMapToPlacasGrid}
+          onReturnToInfo={handleReturnToPlacaInfoFromInteractiveMap}
+          returnToInfoLabel="Volver a info de la placa"
+        />
       )}
     </div>
   );
