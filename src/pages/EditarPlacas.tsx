@@ -1,4 +1,5 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { MousePointerClick } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
@@ -25,7 +26,19 @@ interface Subtema {
 interface Placa {
   id: number;
   photo_url: string;
+  aumento?: string | null;
   sort_order: number;
+}
+
+interface InteractiveMapPlacaRow {
+  placa_id: number;
+}
+
+interface PlacaGroupByAumento {
+  key: string;
+  title: string;
+  sortValue: number;
+  items: Placa[];
 }
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
@@ -36,7 +49,18 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
   { key: 'tercer',  label: 'Tercer parcial'  },
 ];
 
-const LIST_KEY = 'placas';
+const INTERACTIVE_LIST_KEY = 'placas_interactivas';
+
+const parseAumentoSortValue = (aumento: string): number => {
+  const normalized = aumento.trim().replace(',', '.');
+  const match = normalized.match(/\d+(?:\.\d+)?/);
+  if (!match) return Number.POSITIVE_INFINITY;
+
+  const numeric = Number.parseFloat(match[0]);
+  return Number.isFinite(numeric) ? numeric : Number.POSITIVE_INFINITY;
+};
+
+const normalizeAumentoLabel = (aumento: string): string => aumento.trim().replace(/\s+/g, '').toUpperCase();
 
 const EditarPlacas: React.FC = () => {
   const handleGoBack = useSmartBackNavigation('/edicion');
@@ -45,6 +69,7 @@ const EditarPlacas: React.FC = () => {
   const [temas, setTemas] = useState<Tema[]>([]);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [placas, setPlacas] = useState<Placa[]>([]);
+  const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
 
   const [selectedTemaId, setSelectedTemaId] = useState<number | null>(null);
   const [selectedSubtemaId, setSelectedSubtemaId] = useState<number | null>(null);
@@ -122,7 +147,7 @@ const EditarPlacas: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('placas')
-        .select('id, photo_url, sort_order')
+        .select('id, photo_url, aumento, sort_order')
         .eq('subtema_id', subtemaId)
         .order('sort_order', { ascending: true });
 
@@ -130,11 +155,36 @@ const EditarPlacas: React.FC = () => {
         throw error;
       }
 
-      setPlacas(data ?? []);
+      const nextPlacas = data ?? [];
+      setPlacas(nextPlacas);
+
+      const placaIds = nextPlacas
+        .map((placa) => placa.id)
+        .filter((id): id is number => typeof id === 'number');
+
+      if (placaIds.length > 0) {
+        const { data: interactiveMapsData, error: interactiveMapsError } = await supabase
+          .from('interactive_maps')
+          .select('placa_id')
+          .in('placa_id', placaIds);
+
+        if (interactiveMapsError) {
+          console.error('Error al consultar mapas interactivos por placa:', interactiveMapsError);
+          setPlacasConMapa(new Set());
+        } else {
+          const placaIdsConMapa = (interactiveMapsData ?? [])
+            .map((row: InteractiveMapPlacaRow) => row.placa_id)
+            .filter((id): id is number => typeof id === 'number');
+          setPlacasConMapa(new Set(placaIdsConMapa));
+        }
+      } else {
+        setPlacasConMapa(new Set());
+      }
       return true;
     } catch (err) {
       console.error('Error al cargar placas para edición:', err);
       setPlacas([]);
+      setPlacasConMapa(new Set());
       setPlacasLoadError('No se pudieron cargar las placas. Revisa tu conexión e inténtalo de nuevo.');
       return false;
     } finally {
@@ -151,6 +201,7 @@ const EditarPlacas: React.FC = () => {
   useEffect(() => {
     setSubtemas([]);
     setPlacas([]);
+    setPlacasConMapa(new Set());
     setSelectedSubtemaId(null);
     setHasChanges(false);
     setSubtemasLoadError(null);
@@ -163,6 +214,7 @@ const EditarPlacas: React.FC = () => {
   // Cargar placas cuando cambia el subtema
   useEffect(() => {
     setPlacas([]);
+    setPlacasConMapa(new Set());
     setHasChanges(false);
     drag.resetDrag();
     setPlacasLoadError(null);
@@ -171,13 +223,65 @@ const EditarPlacas: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSubtemaId, placasReloadTick, fetchPlacas]);
 
-  const handleDrop = (e: React.DragEvent) => {
-    const next = drag.applyDrop(e, LIST_KEY, placas);
-    if (next) {
-      setPlacas(next);
+  const interactivePlacas = useMemo(() => {
+    return placas.filter((placa) => placasConMapa.has(placa.id));
+  }, [placas, placasConMapa]);
+
+  const nonInteractivePlacas = useMemo(() => {
+    return placas.filter((placa) => !placasConMapa.has(placa.id));
+  }, [placas, placasConMapa]);
+
+  const placasByAumento = useMemo<PlacaGroupByAumento[]>(() => {
+    const groups = new Map<string, PlacaGroupByAumento>();
+
+    nonInteractivePlacas.forEach((placa) => {
+      const aumentoRaw = (placa.aumento ?? '').trim();
+      const hasAumento = aumentoRaw.length > 0;
+      const aumentoLabel = hasAumento ? normalizeAumentoLabel(aumentoRaw) : 'SIN_AUMENTO';
+      const key = hasAumento ? `AUMENTO_${aumentoLabel}` : 'AUMENTO_SIN_AUMENTO';
+      const title = hasAumento ? `Aumento ${aumentoLabel}` : 'Sin aumento';
+      const sortValue = hasAumento ? parseAumentoSortValue(aumentoRaw) : Number.POSITIVE_INFINITY;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          title,
+          sortValue,
+          items: [],
+        });
+      }
+
+      const target = groups.get(key);
+      if (target) {
+        target.items.push(placa);
+      }
+    });
+
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.sortValue !== b.sortValue) return a.sortValue - b.sortValue;
+      return a.title.localeCompare(b.title, 'es', { sensitivity: 'base' });
+    });
+  }, [nonInteractivePlacas]);
+
+  const handleDropForList = useCallback((e: React.DragEvent, listKey: string, items: Placa[]) => {
+    const next = drag.applyDrop(e, listKey, items);
+    if (!next) return;
+
+    if (listKey === INTERACTIVE_LIST_KEY) {
+      const merged = [...next, ...placasByAumento.flatMap((group) => group.items)];
+      setPlacas(merged);
       setHasChanges(true);
+      return;
     }
-  };
+
+    const merged = [
+      ...interactivePlacas,
+      ...placasByAumento.flatMap((group) => (group.key === listKey ? next : group.items)),
+    ];
+
+    setPlacas(merged);
+    setHasChanges(true);
+  }, [drag, interactivePlacas, placasByAumento]);
 
   const handleSave = useCallback(async () => {
     if (!selectedSubtemaId) return;
@@ -208,7 +312,109 @@ const EditarPlacas: React.FC = () => {
 
   const selectedTema = temas.find(t => t.id === selectedTemaId) ?? null;
   const selectedSubtema = subtemas.find(s => s.id === selectedSubtemaId) ?? null;
-  const renderItems = drag.getRenderItems(LIST_KEY, placas);
+  const placaPositionById = useMemo(() => {
+    return new Map<number, number>(placas.map((placa, index) => [placa.id, index + 1]));
+  }, [placas]);
+
+  const renderPlacaCard = (placa: Placa, listKey: string, realIndex: number) => {
+    const globalPosition = placaPositionById.get(placa.id) ?? realIndex + 1;
+    const hasInteractiveMap = placasConMapa.has(placa.id);
+    const isBeingDragged = drag.dragId === placa.id;
+    const isHovered = hoveredCard === placa.id && !drag.dragId;
+
+    return (
+      <div
+        key={placa.id}
+        draggable
+        className="placa-thumb-wrap"
+        style={{
+          ...s.placaCard,
+          opacity: isBeingDragged ? 0.25 : 1,
+          transform: isBeingDragged
+            ? 'scale(0.93) rotate(-1deg)'
+            : isHovered
+            ? 'translateY(-4px)'
+            : 'translateY(0)',
+          boxShadow: isBeingDragged
+            ? 'none'
+            : isHovered
+            ? '0 12px 28px rgba(14,165,233,0.25)'
+            : '0 2px 10px rgba(15,23,42,0.10)',
+          border: isHovered
+            ? '2px solid #38bdf8'
+            : '1.5px solid #e0f2fe',
+          cursor: isBeingDragged ? 'grabbing' : 'grab',
+        }}
+        onMouseEnter={() => setHoveredCard(placa.id)}
+        onMouseLeave={() => setHoveredCard(null)}
+        onDragStart={e => drag.onDragStart(e, placa.id, listKey)}
+        onDragOver={e => drag.onDragOverCard(e, listKey, realIndex)}
+        onDragEnd={drag.resetDrag}
+      >
+        <div style={s.cardAccent} />
+        <span style={s.positionBadge}>{globalPosition}</span>
+
+        {hasInteractiveMap && (
+          <span
+            style={s.interactiveMapBadge}
+            title="Esta placa ya tiene mapa interactivo"
+            aria-label="Esta placa ya tiene mapa interactivo"
+          >
+            <MousePointerClick size={14} strokeWidth={2.3} />
+          </span>
+        )}
+
+        <div style={s.imgWrap}>
+          <img
+            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+            alt={`Placa ${globalPosition}`}
+            style={s.img}
+            loading="lazy"
+            draggable={false}
+          />
+        </div>
+
+        <div
+          style={{
+            ...s.dragHandle,
+            background: isHovered
+              ? 'linear-gradient(135deg, #e0f2fe, #ede9fe)'
+              : '#f8fafc',
+            borderColor: isHovered ? '#7dd3fc' : '#e2e8f0',
+          }}
+        >
+          <span style={s.dragHandleDots}>⠿</span>
+          <span style={s.dragHandleText}>Arrastra</span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderDraggableSectionGrid = (listKey: string, items: Placa[]) => {
+    const renderItems = drag.getRenderItems(listKey, items);
+
+    return (
+      <div
+        className="placas-gallery-grid"
+        style={{ minHeight: '100px' }}
+        onDragOver={e => drag.onDragOverContainer(e, listKey)}
+        onDrop={e => handleDropForList(e, listKey, items)}
+      >
+        {renderItems.map((ri) => {
+          if (ri.type === 'placeholder') {
+            return (
+              <div key={ri.key} style={s.placeholder}>
+                <span style={s.placeholderIcon}>⬇</span>
+              </div>
+            );
+          }
+
+          const { item: placa, realIndex } = ri;
+          return renderPlacaCard(placa, listKey, realIndex);
+        })}
+      </div>
+    );
+  };
   return (
     <div style={s.page}>
       <Header />
@@ -378,85 +584,26 @@ const EditarPlacas: React.FC = () => {
                 Este subtema no tiene placas aún.
               </div>
             ) : (
-              <div
-                className="placas-gallery-grid"
-                style={{ minHeight: '100px' }}
-                onDragOver={e => drag.onDragOverContainer(e, LIST_KEY)}
-                onDrop={handleDrop}
-              >
-                {renderItems.map(ri => {
-                  if (ri.type === 'placeholder') {
-                    return (
-                      <div key={ri.key} style={s.placeholder}>
-                        <span style={s.placeholderIcon}>⬇</span>
-                      </div>
-                    );
-                  }
-
-                  const { item: placa, realIndex } = ri;
-                  const isBeingDragged = drag.dragId === placa.id;
-                  const isHovered = hoveredCard === placa.id && !drag.dragId;return (
-                    <div
-                      key={placa.id}
-                      draggable
-                      className="placa-thumb-wrap"
-                      style={{
-                        ...s.placaCard,
-                        opacity: isBeingDragged ? 0.25 : 1,
-                        transform: isBeingDragged
-                          ? 'scale(0.93) rotate(-1deg)'
-                          : isHovered
-                          ? 'translateY(-4px)'
-                          : 'translateY(0)',
-                        boxShadow: isBeingDragged
-                          ? 'none'
-                          : isHovered
-                          ? '0 12px 28px rgba(14,165,233,0.25)'
-                          : '0 2px 10px rgba(15,23,42,0.10)',
-                        border: isHovered
-                          ? '2px solid #38bdf8'
-                          : '1.5px solid #e0f2fe',
-                        cursor: isBeingDragged ? 'grabbing' : 'grab',
-                      }}
-                      onMouseEnter={() => setHoveredCard(placa.id)}
-                      onMouseLeave={() => setHoveredCard(null)}
-                      onDragStart={e => drag.onDragStart(e, placa.id, LIST_KEY)}
-                      onDragOver={e => drag.onDragOverCard(e, LIST_KEY, realIndex)}
-                      onDragEnd={drag.resetDrag}
-                    >
-                      {/* Acento superior */}
-                      <div style={s.cardAccent} />
-
-                      {/* Badge de posición */}
-                      <span style={s.positionBadge}>{realIndex + 1}</span>
-
-                      {/* Imagen */}
-                      <div style={s.imgWrap}>
-                        <img
-                          src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
-                          alt={`Placa ${realIndex + 1}`}
-                          style={s.img}
-                          loading="lazy"
-                          draggable={false}
-                        />
-                      </div>
-
-                      {/* Handle de arrastre */}
-                      <div
-                        style={{
-                          ...s.dragHandle,
-                          background: isHovered
-                            ? 'linear-gradient(135deg, #e0f2fe, #ede9fe)'
-                            : '#f8fafc',
-                          borderColor: isHovered ? '#7dd3fc' : '#e2e8f0',
-                        }}
-                      >
-                        <span style={s.dragHandleDots}>⠿</span>
-                        <span style={s.dragHandleText}>Arrastra</span>
-                      </div>
+              <div style={s.gallerySectionsWrap}>
+                {interactivePlacas.length > 0 && (
+                  <section style={s.gallerySection}>
+                    <div style={s.gallerySectionHeader}>
+                      <h3 style={s.gallerySectionTitle}>Placas interactivas</h3>
+                      <span style={s.gallerySectionCount}>{interactivePlacas.length}</span>
                     </div>
-                  );
-                })}
+                    {renderDraggableSectionGrid(INTERACTIVE_LIST_KEY, interactivePlacas)}
+                  </section>
+                )}
+
+                {placasByAumento.map((group) => (
+                  <section key={group.key} style={s.gallerySection}>
+                    <div style={s.gallerySectionHeader}>
+                      <h3 style={s.gallerySectionTitle}>{group.title}</h3>
+                      <span style={s.gallerySectionCount}>{group.items.length}</span>
+                    </div>
+                    {renderDraggableSectionGrid(group.key, group.items)}
+                  </section>
+                ))}
               </div>
             )}
           </div>
@@ -661,6 +808,40 @@ const s: { [key: string]: React.CSSProperties } = {
     border: '1px dashed #e2e8f0',
     fontSize: '0.95em',
   },
+  gallerySectionsWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '18px',
+  },
+  gallerySection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  gallerySectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    paddingBottom: '7px',
+    borderBottom: '1px solid rgba(148,163,184,0.24)',
+  },
+  gallerySectionTitle: {
+    margin: 0,
+    color: '#334155',
+    fontSize: '0.92em',
+    fontWeight: 700,
+    letterSpacing: '0.01em',
+  },
+  gallerySectionCount: {
+    color: '#64748b',
+    fontSize: '0.76em',
+    fontWeight: 700,
+    border: '1px solid rgba(148,163,184,0.32)',
+    borderRadius: '999px',
+    padding: '2px 9px',
+    background: 'rgba(255,255,255,0.58)',
+  },
   placeholder: {
     borderRadius: '12px',
     border: '2.5px dashed #38bdf8',
@@ -706,6 +887,23 @@ const s: { [key: string]: React.CSSProperties } = {
     lineHeight: 1.5,
     zIndex: 2,
     backdropFilter: 'blur(4px)',
+  },
+  interactiveMapBadge: {
+    position: 'absolute',
+    top: '10px',
+    right: '10px',
+    width: '28px',
+    height: '28px',
+    borderRadius: '10px',
+    background: '#1d345f',
+    color: '#f8fbff',
+    border: '1px solid rgba(120,143,186,0.78)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 3px 10px rgba(29,52,95,0.38)',
+    backdropFilter: 'blur(4px)',
+    zIndex: 2,
   },
   imgWrap: {
     width: '100%',

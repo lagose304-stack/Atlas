@@ -116,6 +116,24 @@ const hexToRgba = (hex: string, alpha: number): string => {
   return `rgba(${r},${g},${b},${alpha})`;
 };
 
+const darkenHexColor = (hex: string, amount: number): string => {
+  const normalized = hex.replace('#', '');
+  const expanded = normalized.length === 3
+    ? normalized.split('').map((char) => `${char}${char}`).join('')
+    : normalized;
+
+  if (!/^[0-9a-fA-F]{6}$/.test(expanded)) {
+    return '#0f172a';
+  }
+
+  const int = Number.parseInt(expanded, 16);
+  const ratio = Math.max(0, Math.min(1, 1 - amount));
+  const r = Math.round(((int >> 16) & 255) * ratio);
+  const g = Math.round(((int >> 8) & 255) * ratio);
+  const b = Math.round((int & 255) * ratio);
+  return `rgb(${r},${g},${b})`;
+};
+
 const normalizeSections = (sections: InteractiveMapViewerSection[]): InteractiveMapViewerSection[] => {
   return sections
     .filter((section) => Array.isArray(section.points) && section.points.length >= 6 && section.points.length % 2 === 0)
@@ -765,8 +783,12 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
                     {transformedSections.map((section, idx) => {
                       const isActive = idx === activeSectionIndex;
                       const shouldGrayOut = hasHighlightedSelection && !isActive;
-                      const strokeColor = shouldGrayOut ? '#94a3b8' : (isActive ? '#0f172a' : section.color);
-                      const fillColor = shouldGrayOut ? 'rgba(148,163,184,0.16)' : (isActive ? hexToRgba(section.color, 0.34) : hexToRgba(section.color, 0.2));
+                      const strokeColor = shouldGrayOut
+                        ? '#64748b'
+                        : (isActive ? darkenHexColor(section.color, 0.4) : darkenHexColor(section.color, 0.24));
+                      const fillColor = shouldGrayOut
+                        ? 'rgba(100,116,139,0.24)'
+                        : (isActive ? hexToRgba(section.color, 0.44) : hexToRgba(section.color, 0.3));
 
                       return (
                         <Line
@@ -775,7 +797,10 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
                           closed
                           fill={fillColor}
                           stroke={strokeColor}
-                          strokeWidth={isActive ? 1.3 : 0.8}
+                          strokeWidth={isActive ? 1.55 : 1.05}
+                          dash={[6, 4]}
+                          lineCap="round"
+                          lineJoin="round"
                           onClick={() => {
                             if (isPanningRef.current || isPinchingRef.current) return;
                             toggleSectionSelection(idx);

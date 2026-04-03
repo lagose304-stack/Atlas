@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Image as KonvaImage, Line, Circle } from 'react-konva';
+import { MousePointerClick } from 'lucide-react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import BackButton from '../components/BackButton';
@@ -23,6 +24,7 @@ interface Subtema {
 interface Placa {
   id: number;
   photo_url: string;
+  aumento?: string | null;
   sort_order: number;
 }
 
@@ -66,6 +68,17 @@ interface InteractiveMapRow {
   sections: InteractiveMapSectionPayload[] | null;
 }
 
+interface InteractiveMapPlacaRow {
+  placa_id: number;
+}
+
+interface PlacaGroupByAumento {
+  key: string;
+  title: string;
+  sortValue: number;
+  items: Placa[];
+}
+
 interface HydratedSectionsPayload {
   selections: number[][];
   details: SelectionDetails[];
@@ -80,6 +93,17 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
   { key: 'segundo', label: 'Segundo parcial' },
   { key: 'tercer', label: 'Tercer parcial' },
 ];
+
+const parseAumentoSortValue = (aumento: string): number => {
+  const normalized = aumento.trim().replace(',', '.');
+  const match = normalized.match(/\d+(?:\.\d+)?/);
+  if (!match) return Number.POSITIVE_INFINITY;
+
+  const numeric = Number.parseFloat(match[0]);
+  return Number.isFinite(numeric) ? numeric : Number.POSITIVE_INFINITY;
+};
+
+const normalizeAumentoLabel = (aumento: string): string => aumento.trim().replace(/\s+/g, '').toUpperCase();
 
 const MIN_POINT_DISTANCE_LASSO = 6;
 const MIN_ZOOM = 0.5;
@@ -472,6 +496,7 @@ const MapasInteractivos: React.FC = () => {
   const [temas, setTemas] = useState<Tema[]>([]);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [placas, setPlacas] = useState<Placa[]>([]);
+  const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
 
   const [selectedTemaId, setSelectedTemaId] = useState<number | null>(null);
   const [selectedSubtemaId, setSelectedSubtemaId] = useState<number | null>(null);
@@ -589,6 +614,7 @@ const MapasInteractivos: React.FC = () => {
 
   useEffect(() => {
     setPlacas([]);
+    setPlacasConMapa(new Set());
     setSelectedPlaca(null);
     if (!selectedSubtemaId) return;
 
@@ -596,10 +622,38 @@ const MapasInteractivos: React.FC = () => {
       setLoadingPlacas(true);
       const { data } = await supabase
         .from('placas')
-        .select('id, photo_url, sort_order')
+        .select('id, photo_url, aumento, sort_order')
         .eq('subtema_id', selectedSubtemaId)
         .order('sort_order', { ascending: true });
-      if (data) setPlacas(data);
+
+      if (data) {
+        setPlacas(data);
+
+        const placaIds = data
+          .map((placa) => placa.id)
+          .filter((id): id is number => typeof id === 'number');
+
+        if (placaIds.length > 0) {
+          const { data: interactiveMapsData, error: interactiveMapsError } = await supabase
+            .from(INTERACTIVE_MAPS_TABLE)
+            .select('placa_id')
+            .in('placa_id', placaIds);
+
+          if (interactiveMapsError) {
+            console.error('Error al consultar mapas por placa:', interactiveMapsError);
+            setPlacasConMapa(new Set());
+          } else {
+            const placaIdsConMapa = (interactiveMapsData ?? [])
+              .map((row: InteractiveMapPlacaRow) => row.placa_id)
+              .filter((id): id is number => typeof id === 'number');
+            setPlacasConMapa(new Set(placaIdsConMapa));
+          }
+        } else {
+          setPlacasConMapa(new Set());
+        }
+      } else {
+        setPlacasConMapa(new Set());
+      }
       setLoadingPlacas(false);
     };
 
@@ -1797,11 +1851,80 @@ const MapasInteractivos: React.FC = () => {
 
   const selectedTema = temas.find(t => t.id === selectedTemaId) ?? null;
   const selectedSubtema = subtemas.find(s => s.id === selectedSubtemaId) ?? null;
+  const interactivePlacas = useMemo(() => placas.filter((placa) => placasConMapa.has(placa.id)), [placas, placasConMapa]);
+  const nonInteractivePlacas = useMemo(() => placas.filter((placa) => !placasConMapa.has(placa.id)), [placas, placasConMapa]);
+  const placasByAumento = useMemo<PlacaGroupByAumento[]>(() => {
+    const groups = new Map<string, PlacaGroupByAumento>();
+
+    nonInteractivePlacas.forEach((placa) => {
+      const aumentoRaw = (placa.aumento ?? '').trim();
+      const hasAumento = aumentoRaw.length > 0;
+      const aumentoLabel = hasAumento ? normalizeAumentoLabel(aumentoRaw) : 'SIN_AUMENTO';
+      const key = hasAumento ? `AUMENTO_${aumentoLabel}` : 'AUMENTO_SIN_AUMENTO';
+      const title = hasAumento ? `Aumento ${aumentoLabel}` : 'Sin aumento';
+      const sortValue = hasAumento ? parseAumentoSortValue(aumentoRaw) : Number.POSITIVE_INFINITY;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          title,
+          sortValue,
+          items: [],
+        });
+      }
+
+      const target = groups.get(key);
+      if (target) {
+        target.items.push(placa);
+      }
+    });
+
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.sortValue !== b.sortValue) return a.sortValue - b.sortValue;
+      return a.title.localeCompare(b.title, 'es', { sensitivity: 'base' });
+    });
+  }, [nonInteractivePlacas]);
   const selectedPlacaIndex = selectedPlaca ? placas.findIndex(p => p.id === selectedPlaca.id) : -1;
   const isWorkspaceMode = selectedPlaca !== null;
   const activeSavedSelectionTitle = activeSavedSelectionIndex !== null
     ? (savedSelectionDetails[activeSavedSelectionIndex]?.title?.trim() || `Seleccion ${activeSavedSelectionIndex + 1}`)
     : '';
+
+  const renderPlacaCard = (placa: Placa, visualIndex: number) => {
+    const hasInteractiveMap = placasConMapa.has(placa.id);
+
+    return (
+      <div
+        key={placa.id}
+        style={s.placaCard}
+        onClick={() => {
+          clearSelection();
+          setSelectedPlaca(placa);
+        }}
+      >
+        <div style={s.cardAccent} />
+        <span style={s.positionBadge}>{visualIndex + 1}</span>
+        {hasInteractiveMap && (
+          <span
+            style={s.interactiveMapBadge}
+            title="Esta placa ya tiene mapa interactivo"
+            aria-label="Esta placa ya tiene mapa interactivo"
+          >
+            <MousePointerClick size={14} strokeWidth={2.3} />
+          </span>
+        )}
+        <div style={s.imgWrap}>
+          <img
+            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+            alt={`Placa ${visualIndex + 1}`}
+            style={s.img}
+            loading="lazy"
+            draggable={false}
+          />
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div style={isWorkspaceMode ? s.pageWorkspace : s.page}>
@@ -2419,6 +2542,10 @@ const MapasInteractivos: React.FC = () => {
                   <input
                     id="selection-title-input"
                     type="text"
+                    spellCheck={true}
+                    autoCorrect="on"
+                    autoCapitalize="sentences"
+                    lang="es"
                     value={pendingSelectionDetails.title}
                     onChange={(event) => {
                       const nextTitle = event.target.value;
@@ -2458,6 +2585,10 @@ const MapasInteractivos: React.FC = () => {
                   <label style={s.selectionInfoLabel} htmlFor="selection-description-input">Información</label>
                   <textarea
                     id="selection-description-input"
+                    spellCheck={true}
+                    autoCorrect="on"
+                    autoCapitalize="sentences"
+                    lang="es"
                     value={pendingSelectionDetails.description}
                     onChange={(event) => setPendingSelectionDetails(prev => ({ ...prev, description: event.target.value }))}
                     placeholder="Escribe un párrafo descriptivo para esta selección..."
@@ -2568,28 +2699,29 @@ const MapasInteractivos: React.FC = () => {
                 ) : placas.length === 0 ? (
                   <div style={s.emptyState}>Este subtema no tiene placas aún.</div>
                 ) : (
-                  <div className="placas-gallery-grid">
-                    {placas.map((placa, idx) => (
-                      <div
-                        key={placa.id}
-                        style={s.placaCard}
-                        onClick={() => {
-                          clearSelection();
-                          setSelectedPlaca(placa);
-                        }}
-                      >
-                        <div style={s.cardAccent} />
-                        <span style={s.positionBadge}>{idx + 1}</span>
-                        <div style={s.imgWrap}>
-                          <img
-                            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
-                            alt={`Placa ${idx + 1}`}
-                            style={s.img}
-                            loading="lazy"
-                            draggable={false}
-                          />
+                  <div style={s.gallerySectionsWrap}>
+                    {interactivePlacas.length > 0 && (
+                      <section style={s.gallerySection}>
+                        <div style={s.gallerySectionHeader}>
+                          <h3 style={s.gallerySectionTitle}>Placas interactivas</h3>
+                          <span style={s.gallerySectionCount}>{interactivePlacas.length}</span>
                         </div>
-                      </div>
+                        <div className="placas-gallery-grid">
+                          {interactivePlacas.map((placa, idx) => renderPlacaCard(placa, idx))}
+                        </div>
+                      </section>
+                    )}
+
+                    {placasByAumento.map((group) => (
+                      <section key={group.key} style={s.gallerySection}>
+                        <div style={s.gallerySectionHeader}>
+                          <h3 style={s.gallerySectionTitle}>{group.title}</h3>
+                          <span style={s.gallerySectionCount}>{group.items.length}</span>
+                        </div>
+                        <div className="placas-gallery-grid">
+                          {group.items.map((placa, idx) => renderPlacaCard(placa, idx))}
+                        </div>
+                      </section>
                     ))}
                   </div>
                 )}
@@ -2774,6 +2906,40 @@ const s: { [key: string]: React.CSSProperties } = {
     border: '1px dashed #e2e8f0',
     fontSize: '0.95em',
   },
+  gallerySectionsWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '18px',
+  },
+  gallerySection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  gallerySectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    paddingBottom: '7px',
+    borderBottom: '1px solid rgba(148,163,184,0.24)',
+  },
+  gallerySectionTitle: {
+    margin: 0,
+    color: '#334155',
+    fontSize: '0.92em',
+    fontWeight: 700,
+    letterSpacing: '0.01em',
+  },
+  gallerySectionCount: {
+    color: '#64748b',
+    fontSize: '0.76em',
+    fontWeight: 700,
+    border: '1px solid rgba(148,163,184,0.32)',
+    borderRadius: '999px',
+    padding: '2px 9px',
+    background: 'rgba(255,255,255,0.58)',
+  },
   placaCard: {
     borderRadius: '12px',
     background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
@@ -2811,6 +2977,23 @@ const s: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '0 8px',
+    zIndex: 2,
+  },
+  interactiveMapBadge: {
+    position: 'absolute',
+    top: '10px',
+    right: '10px',
+    width: '28px',
+    height: '28px',
+    borderRadius: '10px',
+    background: '#1d345f',
+    color: '#f8fbff',
+    border: '1px solid rgba(120,143,186,0.78)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 3px 10px rgba(29,52,95,0.38)',
+    backdropFilter: 'blur(4px)',
     zIndex: 2,
   },
   imgWrap: {

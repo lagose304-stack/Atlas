@@ -1784,10 +1784,27 @@ body {
 }
 
 @media (max-width: 900px) {
+  .footer-contact-item {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) !important;
+    align-items: center !important;
+    column-gap: 8px !important;
+  }
+
+  .footer-contact-item .footer-icon-wrap {
+    align-self: center !important;
+    margin: 0 !important;
+  }
+
   .footer-contact-item .footer-col-text {
-    display: block;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
     flex: 1 1 auto;
     min-width: 0;
+    margin: 0 !important;
+    text-align: left !important;
+    min-height: 24px;
     max-width: 100% !important;
     white-space: nowrap !important;
     overflow: hidden !important;

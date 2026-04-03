@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { MousePointerClick } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -33,6 +33,24 @@ interface SubtemaInfo {
 interface InteractiveMapRow {
   placa_id: number;
 }
+
+interface PlacaGroupByAumento {
+  key: string;
+  title: string;
+  sortValue: number;
+  items: Placa[];
+}
+
+const parseAumentoSortValue = (aumento: string): number => {
+  const normalized = aumento.trim().replace(',', '.');
+  const match = normalized.match(/\d+(?:\.\d+)?/);
+  if (!match) return Number.POSITIVE_INFINITY;
+
+  const numeric = Number.parseFloat(match[0]);
+  return Number.isFinite(numeric) ? numeric : Number.POSITIVE_INFINITY;
+};
+
+const normalizeAumentoLabel = (aumento: string): string => aumento.trim().replace(/\s+/g, '').toUpperCase();
 
 const PlacasSubtema: React.FC = () => {
   const { subtemaId } = useParams<{ subtemaId: string }>();
@@ -117,6 +135,102 @@ const PlacasSubtema: React.FC = () => {
     ? (subtema?.temas[0]?.nombre ?? '')
     : (subtema?.temas?.nombre ?? '');
 
+  const interactivePlacas = useMemo(() => {
+    return placas.filter((placa) => placasConMapa.has(placa.id));
+  }, [placas, placasConMapa]);
+
+  const nonInteractivePlacas = useMemo(() => {
+    return placas.filter((placa) => !placasConMapa.has(placa.id));
+  }, [placas, placasConMapa]);
+
+  const placasByAumento = useMemo<PlacaGroupByAumento[]>(() => {
+    const groups = new Map<string, PlacaGroupByAumento>();
+
+    nonInteractivePlacas.forEach((placa) => {
+      const aumentoRaw = (placa.aumento ?? '').trim();
+      const hasAumento = aumentoRaw.length > 0;
+      const aumentoLabel = hasAumento ? normalizeAumentoLabel(aumentoRaw) : 'SIN_AUMENTO';
+      const key = hasAumento ? `AUMENTO_${aumentoLabel}` : 'AUMENTO_SIN_AUMENTO';
+      const title = hasAumento ? `Aumento ${aumentoLabel}` : 'Sin aumento';
+      const sortValue = hasAumento ? parseAumentoSortValue(aumentoRaw) : Number.POSITIVE_INFINITY;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          title,
+          sortValue,
+          items: [],
+        });
+      }
+
+      const target = groups.get(key);
+      if (target) {
+        target.items.push(placa);
+      }
+    });
+
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.sortValue !== b.sortValue) return a.sortValue - b.sortValue;
+      return a.title.localeCompare(b.title, 'es', { sensitivity: 'base' });
+    });
+  }, [nonInteractivePlacas]);
+
+  const handlePlacaOpen = (placa: Placa) => {
+    void logPlacaView(placa.id, Number(subtemaId));
+    setSelectedPlaca(placa);
+  };
+
+  const renderPlacaCard = (placa: Placa) => {
+    const hasInteractiveMap = placasConMapa.has(placa.id);
+    const isHovered = hoveredId === placa.id;
+
+    return (
+      <div
+        key={placa.id}
+        className="placa-thumb-wrap"
+        style={{
+          ...styles.thumbWrap,
+          transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
+          boxShadow: isHovered
+            ? '0 16px 28px rgba(14,165,233,0.24)'
+            : '0 6px 14px rgba(56,189,248,0.16)',
+          borderColor: isHovered ? '#38bdf8' : '#dbeafe',
+        }}
+        onClick={() => handlePlacaOpen(placa)}
+        onMouseEnter={() => setHoveredId(placa.id)}
+        onMouseLeave={() => setHoveredId(null)}
+        title="Ver en grande"
+      >
+        <img
+          src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+          alt="Placa histológica"
+          style={styles.thumbImg}
+          loading="lazy"
+        />
+        {(placa.aumento || hasInteractiveMap) && (
+          <div style={styles.thumbBadgesRow}>
+            {placa.aumento && (
+              <div style={styles.aumentoBadge} title={`Aumento ${placa.aumento}`} aria-label={`Aumento ${placa.aumento}`}>
+                <span style={styles.aumentoBadgeText}>{placa.aumento.toUpperCase()}</span>
+              </div>
+            )}
+            {hasInteractiveMap && (
+              <div style={styles.interactiveMapBadge} title="Mapa interactivo disponible" aria-label="Mapa interactivo disponible">
+                <MousePointerClick size={16} strokeWidth={2.35} />
+              </div>
+            )}
+          </div>
+        )}
+        <div style={{
+          ...styles.thumbOverlay,
+          opacity: hoveredId === placa.id ? 1 : 0,
+        }}>
+          🔍
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={styles.page}>
       <Header />
@@ -156,59 +270,30 @@ const PlacasSubtema: React.FC = () => {
               <p style={styles.emptyText}>Aún no hay placas registradas para este subtema.</p>
             </div>
           ) : (
-            <div className="placas-gallery-grid">
-              {placas.map(placa => {
-                const hasInteractiveMap = placasConMapa.has(placa.id);
-                const isHovered = hoveredId === placa.id;
-                return (
-                  <div
-                    key={placa.id}
-                    className="placa-thumb-wrap"
-                    style={{
-                      ...styles.thumbWrap,
-                      transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
-                      boxShadow: isHovered
-                        ? '0 16px 28px rgba(14,165,233,0.24)'
-                        : '0 6px 14px rgba(56,189,248,0.16)',
-                      borderColor: isHovered ? '#38bdf8' : '#dbeafe',
-                    }}
-                    onClick={() => {
-                      void logPlacaView(placa.id, Number(subtemaId));
-                      setSelectedPlaca(placa);
-                    }}
-                    onMouseEnter={() => setHoveredId(placa.id)}
-                    onMouseLeave={() => setHoveredId(null)}
-                    title="Ver en grande"
-                  >
-                    <img
-                      src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
-                      alt="Placa histológica"
-                      style={styles.thumbImg}
-                      loading="lazy"
-                    />
-                    {(placa.aumento || hasInteractiveMap) && (
-                      <div style={styles.thumbBadgesRow}>
-                        {placa.aumento && (
-                          <div style={styles.aumentoBadge} title={`Aumento ${placa.aumento}`} aria-label={`Aumento ${placa.aumento}`}>
-                            <span style={styles.aumentoBadgeText}>{placa.aumento.toUpperCase()}</span>
-                          </div>
-                        )}
-                        {hasInteractiveMap && (
-                          <div style={styles.interactiveMapBadge} title="Mapa interactivo disponible" aria-label="Mapa interactivo disponible">
-                            <MousePointerClick size={16} strokeWidth={2.35} />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <div style={{
-                      ...styles.thumbOverlay,
-                      opacity: hoveredId === placa.id ? 1 : 0,
-                    }}>
-                      🔍
-                    </div>
+            <div style={styles.gridSectionsWrap}>
+              {interactivePlacas.length > 0 && (
+                <section style={styles.gridSection}>
+                  <div style={styles.gridSectionHeader}>
+                    <h2 style={styles.gridSectionTitle}>Placas interactivas</h2>
+                    <span style={styles.gridSectionCount}>{interactivePlacas.length}</span>
                   </div>
-                );
-              })}
+                  <div className="placas-gallery-grid">
+                    {interactivePlacas.map(renderPlacaCard)}
+                  </div>
+                </section>
+              )}
+
+              {placasByAumento.map((group) => (
+                <section key={group.key} style={styles.gridSection}>
+                  <div style={styles.gridSectionHeader}>
+                    <h2 style={styles.gridSectionTitle}>{group.title}</h2>
+                    <span style={styles.gridSectionCount}>{group.items.length}</span>
+                  </div>
+                  <div className="placas-gallery-grid">
+                    {group.items.map(renderPlacaCard)}
+                  </div>
+                </section>
+              ))}
             </div>
           )}
         </section>
@@ -346,6 +431,41 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#64748b',
     fontWeight: 500,
     textAlign: 'center',
+  },
+  gridSectionsWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '22px',
+  },
+  gridSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  gridSectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    paddingBottom: '8px',
+    borderBottom: '1px solid rgba(148, 163, 184, 0.25)',
+  },
+  gridSectionTitle: {
+    margin: 0,
+    color: '#334155',
+    fontSize: '0.95em',
+    fontWeight: 700,
+    letterSpacing: '0.01em',
+    textTransform: 'none',
+  },
+  gridSectionCount: {
+    color: '#64748b',
+    fontSize: '0.78em',
+    fontWeight: 700,
+    border: '1px solid rgba(148,163,184,0.32)',
+    borderRadius: '999px',
+    padding: '2px 9px',
+    background: 'rgba(255,255,255,0.58)',
   },
   thumbWrap: {
     position: 'relative',

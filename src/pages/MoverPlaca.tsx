@@ -1,4 +1,5 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { MousePointerClick } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
@@ -40,6 +41,17 @@ interface Placa {
   tincion?: string | null;
 }
 
+interface InteractiveMapPlacaRow {
+  placa_id: number;
+}
+
+interface PlacaGroupByAumento {
+  key: string;
+  title: string;
+  sortValue: number;
+  items: Placa[];
+}
+
 interface MarkerLocation {
   x: number;
   y: number;
@@ -62,6 +74,17 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
   { key: 'segundo', label: 'Segundo parcial' },
   { key: 'tercer',  label: 'Tercer parcial'  },
 ];
+
+const parseAumentoSortValue = (aumento: string): number => {
+  const normalized = aumento.trim().replace(',', '.');
+  const match = normalized.match(/\d+(?:\.\d+)?/);
+  if (!match) return Number.POSITIVE_INFINITY;
+
+  const numeric = Number.parseFloat(match[0]);
+  return Number.isFinite(numeric) ? numeric : Number.POSITIVE_INFINITY;
+};
+
+const normalizeAumentoLabel = (aumento: string): string => aumento.trim().replace(/\s+/g, '').toUpperCase();
 
 const normalizeLocations = (values: Array<MarkerLocation | null>): Array<MarkerLocation | null> => {
   return values.map(value => {
@@ -155,6 +178,7 @@ const MoverPlaca: React.FC = () => {
   const [temas,    setTemas]    = useState<Tema[]>([]);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [placas,   setPlacas]   = useState<Placa[]>([]);
+  const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
 
   const [selectedTemaId,    setSelectedTemaId]    = useState<number | null>(null);
   const [selectedSubtemaId, setSelectedSubtemaId] = useState<number | null>(null);
@@ -270,11 +294,36 @@ const MoverPlaca: React.FC = () => {
         throw error;
       }
 
-      setPlacas(data ?? []);
+      const nextPlacas = data ?? [];
+      setPlacas(nextPlacas);
+
+      const placaIds = nextPlacas
+        .map((placa) => placa.id)
+        .filter((id): id is number => typeof id === 'number');
+
+      if (placaIds.length > 0) {
+        const { data: interactiveMapsData, error: interactiveMapsError } = await supabase
+          .from('interactive_maps')
+          .select('placa_id')
+          .in('placa_id', placaIds);
+
+        if (interactiveMapsError) {
+          console.error('Error al consultar mapas interactivos por placa en mover placa:', interactiveMapsError);
+          setPlacasConMapa(new Set());
+        } else {
+          const placaIdsConMapa = (interactiveMapsData ?? [])
+            .map((row: InteractiveMapPlacaRow) => row.placa_id)
+            .filter((id): id is number => typeof id === 'number');
+          setPlacasConMapa(new Set(placaIdsConMapa));
+        }
+      } else {
+        setPlacasConMapa(new Set());
+      }
       return true;
     } catch (err) {
       console.error('Error al cargar placas en mover placa:', err);
       setPlacas([]);
+      setPlacasConMapa(new Set());
       setPlacasLoadError('No se pudieron cargar las placas. Revisa tu conexión e inténtalo de nuevo.');
       return false;
     } finally {
@@ -317,6 +366,7 @@ const MoverPlaca: React.FC = () => {
   useEffect(() => {
     setSubtemas([]);
     setPlacas([]);
+    setPlacasConMapa(new Set());
     setSelectedSubtemaId(null);
     setSelectedPlaca(null);
     setSubtemasLoadError(null);
@@ -329,6 +379,7 @@ const MoverPlaca: React.FC = () => {
   // ── Cargar placas cuando cambia el subtema de contexto ────────────────
   useEffect(() => {
     setPlacas([]);
+    setPlacasConMapa(new Set());
     setSelectedPlaca(null);
     setPlacasLoadError(null);
     if (!selectedSubtemaId) return;
@@ -512,6 +563,54 @@ const MoverPlaca: React.FC = () => {
   const editTema        = editTemas.find(t => t.id === editTemaId)        ?? null;
   const editSubtema     = editSubtemas.find(s => s.id === editSubtemaId)  ?? null;
 
+  const interactivePlacas = useMemo(() => {
+    return placas.filter((placa) => placasConMapa.has(placa.id));
+  }, [placas, placasConMapa]);
+
+  const nonInteractivePlacas = useMemo(() => {
+    return placas.filter((placa) => !placasConMapa.has(placa.id));
+  }, [placas, placasConMapa]);
+
+  const placasByAumento = useMemo<PlacaGroupByAumento[]>(() => {
+    const groups = new Map<string, PlacaGroupByAumento>();
+
+    nonInteractivePlacas.forEach((placa) => {
+      const aumentoRaw = (placa.aumento ?? '').trim();
+      const hasAumento = aumentoRaw.length > 0;
+      const aumentoLabel = hasAumento ? normalizeAumentoLabel(aumentoRaw) : 'SIN_AUMENTO';
+      const key = hasAumento ? `AUMENTO_${aumentoLabel}` : 'AUMENTO_SIN_AUMENTO';
+      const title = hasAumento ? `Aumento ${aumentoLabel}` : 'Sin aumento';
+      const sortValue = hasAumento ? parseAumentoSortValue(aumentoRaw) : Number.POSITIVE_INFINITY;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          title,
+          sortValue,
+          items: [],
+        });
+      }
+
+      const target = groups.get(key);
+      if (target) {
+        target.items.push(placa);
+      }
+    });
+
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.sortValue !== b.sortValue) return a.sortValue - b.sortValue;
+      return a.title.localeCompare(b.title, 'es', { sensitivity: 'base' });
+    });
+  }, [nonInteractivePlacas]);
+
+  const placaDisplayPositionById = useMemo(() => {
+    const displayOrder = [
+      ...interactivePlacas,
+      ...placasByAumento.flatMap((group) => group.items),
+    ];
+    return new Map<number, number>(displayOrder.map((placa, index) => [placa.id, index + 1]));
+  }, [interactivePlacas, placasByAumento]);
+
   const hasChanges = selectedPlaca !== null && (
     editTemaId    !== selectedPlaca.tema_id ||
     editSubtemaId !== selectedPlaca.subtema_id ||
@@ -521,6 +620,97 @@ const MoverPlaca: React.FC = () => {
       JSON.stringify(selectedPlaca.senalados_meta ?? buildSenaladosPayload(selectedPlaca.senalados ?? [], []).meta) ||
     editTincion !== (selectedPlaca.tincion ?? '')
   );
+
+  const renderPlacaCard = (placa: Placa) => {
+    const globalPosition = placaDisplayPositionById.get(placa.id) ?? 1;
+    const hasInteractiveMap = placasConMapa.has(placa.id);
+    const isSelected = selectedPlaca?.id === placa.id;
+    const isHovered = hoveredCard === placa.id;
+
+    return (
+      <div
+        key={placa.id}
+        className="placa-thumb-wrap"
+        style={{
+          ...s.placaCard,
+          border: isSelected
+            ? '2.5px solid #818cf8'
+            : isHovered
+            ? '2px solid #38bdf8'
+            : '1.5px solid #e0f2fe',
+          boxShadow: isSelected
+            ? '0 0 0 4px rgba(129,140,248,0.22)'
+            : isHovered
+            ? '0 12px 28px rgba(14,165,233,0.22)'
+            : '0 2px 10px rgba(15,23,42,0.10)',
+          transform: isHovered && !isSelected ? 'translateY(-4px)' : 'none',
+          cursor: 'pointer',
+        }}
+        onClick={() => setSelectedPlaca(isSelected ? null : placa)}
+        onMouseEnter={() => setHoveredCard(placa.id)}
+        onMouseLeave={() => setHoveredCard(null)}
+      >
+        <div style={{
+          ...s.cardAccent,
+          background: isSelected
+            ? 'linear-gradient(90deg, #818cf8, #c084fc)'
+            : 'linear-gradient(90deg, #38bdf8, #818cf8)',
+        }} />
+
+        <span style={s.positionBadge}>{globalPosition}</span>
+
+        {hasInteractiveMap && (
+          <span
+            style={s.interactiveMapBadge}
+            title="Esta placa ya tiene mapa interactivo"
+            aria-label="Esta placa ya tiene mapa interactivo"
+          >
+            <MousePointerClick size={14} strokeWidth={2.3} />
+          </span>
+        )}
+
+        {isSelected && (
+          <div
+            style={{
+              ...s.selectedMark,
+              right: hasInteractiveMap ? '44px' : '10px',
+            }}
+          >
+            ✏️
+          </div>
+        )}
+
+        <div style={s.imgWrap}>
+          <img
+            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+            alt={`Placa ${globalPosition}`}
+            style={s.img}
+            loading="lazy"
+            draggable={false}
+          />
+        </div>
+
+        <div style={{
+          ...s.cardFooter,
+          background: isSelected
+            ? 'linear-gradient(135deg, #ede9fe, #ddd6fe)'
+            : isHovered
+            ? 'linear-gradient(135deg, #e0f2fe, #ede9fe)'
+            : '#f8fafc',
+          borderColor: isSelected ? '#a5b4fc' : isHovered ? '#7dd3fc' : '#e2e8f0',
+        }}>
+          <span style={{
+            ...s.cardFooterText,
+            color: isSelected ? '#4338ca' : '#94a3b8',
+            fontWeight: isSelected ? 700 : 600,
+          }}>
+            {isSelected ? '✏️ Editando' : 'Clic para editar'}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
     const handleGoBack = useSmartBackNavigation('/edicion');
 
   return (
@@ -681,76 +871,30 @@ const MoverPlaca: React.FC = () => {
             ) : placas.length === 0 ? (
               <div style={s.emptyState}>Este subtema no tiene placas aún.</div>
             ) : (
-              <div className="placas-gallery-grid">
-                {placas.map((placa, index) => {
-                  const isSelected = selectedPlaca?.id === placa.id;
-                  const isHovered  = hoveredCard === placa.id;
-                  return (
-                    <div
-                      key={placa.id}
-                      className="placa-thumb-wrap"
-                      style={{
-                        ...s.placaCard,
-                        border: isSelected
-                          ? '2.5px solid #818cf8'
-                          : isHovered
-                          ? '2px solid #38bdf8'
-                          : '1.5px solid #e0f2fe',
-                        boxShadow: isSelected
-                          ? '0 0 0 4px rgba(129,140,248,0.22)'
-                          : isHovered
-                          ? '0 12px 28px rgba(14,165,233,0.22)'
-                          : '0 2px 10px rgba(15,23,42,0.10)',
-                        transform: isHovered && !isSelected ? 'translateY(-4px)' : 'none',
-                        cursor: 'pointer',
-                      }}
-                      onClick={() => setSelectedPlaca(isSelected ? null : placa)}
-                      onMouseEnter={() => setHoveredCard(placa.id)}
-                      onMouseLeave={() => setHoveredCard(null)}
-                    >
-                      <div style={{
-                        ...s.cardAccent,
-                        background: isSelected
-                          ? 'linear-gradient(90deg, #818cf8, #c084fc)'
-                          : 'linear-gradient(90deg, #38bdf8, #818cf8)',
-                      }} />
-
-                      <span style={s.positionBadge}>{index + 1}</span>
-
-                      {isSelected && (
-                        <div style={s.selectedMark}>✏️</div>
-                      )}
-
-                      <div style={s.imgWrap}>
-                        <img
-                          src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
-                          alt={`Placa ${index + 1}`}
-                          style={s.img}
-                          loading="lazy"
-                          draggable={false}
-                        />
-                      </div>
-
-                      <div style={{
-                        ...s.cardFooter,
-                        background: isSelected
-                          ? 'linear-gradient(135deg, #ede9fe, #ddd6fe)'
-                          : isHovered
-                          ? 'linear-gradient(135deg, #e0f2fe, #ede9fe)'
-                          : '#f8fafc',
-                        borderColor: isSelected ? '#a5b4fc' : isHovered ? '#7dd3fc' : '#e2e8f0',
-                      }}>
-                        <span style={{
-                          ...s.cardFooterText,
-                          color: isSelected ? '#4338ca' : '#94a3b8',
-                          fontWeight: isSelected ? 700 : 600,
-                        }}>
-                          {isSelected ? '✏️ Editando' : 'Clic para editar'}
-                        </span>
-                      </div>
+              <div style={s.gallerySectionsWrap}>
+                {interactivePlacas.length > 0 && (
+                  <section style={s.gallerySection}>
+                    <div style={s.gallerySectionHeader}>
+                      <h3 style={s.gallerySectionTitle}>Placas interactivas</h3>
+                      <span style={s.gallerySectionCount}>{interactivePlacas.length}</span>
                     </div>
-                  );
-                })}
+                    <div className="placas-gallery-grid">
+                      {interactivePlacas.map(renderPlacaCard)}
+                    </div>
+                  </section>
+                )}
+
+                {placasByAumento.map((group) => (
+                  <section key={group.key} style={s.gallerySection}>
+                    <div style={s.gallerySectionHeader}>
+                      <h3 style={s.gallerySectionTitle}>{group.title}</h3>
+                      <span style={s.gallerySectionCount}>{group.items.length}</span>
+                    </div>
+                    <div className="placas-gallery-grid">
+                      {group.items.map(renderPlacaCard)}
+                    </div>
+                  </section>
+                ))}
               </div>
             )}
           </div>
@@ -1263,6 +1407,40 @@ const s: { [key: string]: React.CSSProperties } = {
     border: '1px dashed #e2e8f0',
     fontSize: '0.95em',
   },
+  gallerySectionsWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '18px',
+  },
+  gallerySection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  gallerySectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    paddingBottom: '7px',
+    borderBottom: '1px solid rgba(148,163,184,0.24)',
+  },
+  gallerySectionTitle: {
+    margin: 0,
+    color: '#334155',
+    fontSize: '0.92em',
+    fontWeight: 700,
+    letterSpacing: '0.01em',
+  },
+  gallerySectionCount: {
+    color: '#64748b',
+    fontSize: '0.76em',
+    fontWeight: 700,
+    border: '1px solid rgba(148,163,184,0.32)',
+    borderRadius: '999px',
+    padding: '2px 9px',
+    background: 'rgba(255,255,255,0.58)',
+  },
   loadingWrap: {
     display: 'flex',
     flexDirection: 'column',
@@ -1311,6 +1489,23 @@ const s: { [key: string]: React.CSSProperties } = {
     lineHeight: 1.5,
     zIndex: 2,
     backdropFilter: 'blur(4px)',
+  },
+  interactiveMapBadge: {
+    position: 'absolute',
+    top: '10px',
+    right: '10px',
+    width: '28px',
+    height: '28px',
+    borderRadius: '10px',
+    background: '#1d345f',
+    color: '#f8fbff',
+    border: '1px solid rgba(120,143,186,0.78)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 3px 10px rgba(29,52,95,0.38)',
+    backdropFilter: 'blur(4px)',
+    zIndex: 2,
   },
   selectedMark: {
     position: 'absolute',
