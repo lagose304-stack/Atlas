@@ -696,7 +696,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       style={{
         position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
         zIndex: 1000, display: 'flex', flexDirection: 'row',
-        background: 'rgba(15,23,42,0.55)',
+        background: 'rgba(2,6,23,0.78)',
         fontFamily: "'Inter', 'Segoe UI', sans-serif",
       }}
     >
@@ -779,26 +779,55 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         }`}
       </style>
       <div style={{
-        flex: 1, position: 'relative', background: 'radial-gradient(ellipse at top, #dbeafe 0%, #f5f7fa 50%, #eef2ff 100%)',
+        flex: 1, position: 'relative', background: 'radial-gradient(ellipse at top, #334155 0%, #0f172a 58%, #020617 100%)',
         overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <button
           onClick={onClose}
+          title="Cerrar visor"
+          aria-label="Cerrar visor"
           style={{
-            position: 'absolute', top: '16px', right: '16px',
-            background: '#fff', color: '#ef4444', border: '1.5px solid #fca5a5',
-            borderRadius: '50%', width: '40px', height: '40px',
-            fontSize: '1.1em', cursor: 'pointer', fontWeight: 'bold', zIndex: 10,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 10px rgba(239,68,68,0.18)',
+            position: 'absolute', top: '16px', left: '16px',
+            background: 'linear-gradient(135deg, rgba(255,250,250,0.98) 0%, rgba(254,226,226,0.95) 100%)',
+            color: '#991b1b', border: '1.5px solid rgba(248,113,113,0.8)',
+            borderRadius: '10px', height: '40px', padding: '0 13px 0 10px', minWidth: '100px',
+            fontSize: '0.79em', letterSpacing: '0.03em', textTransform: 'uppercase',
+            cursor: 'pointer', fontWeight: 800, zIndex: 11,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            backdropFilter: 'blur(7px) saturate(120%)',
+            boxShadow: '0 7px 18px rgba(220,38,38,0.26), inset 0 1px 0 rgba(255,255,255,0.86)',
+            fontFamily: 'inherit',
+            transition: 'all 0.18s ease',
+            gap: '8px',
           }}
-        >✕</button>
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              width: '18px',
+              height: '18px',
+              borderRadius: '999px',
+              background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+              color: '#ffffff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.8em',
+              fontWeight: 900,
+              lineHeight: 1,
+              boxShadow: '0 2px 6px rgba(185,28,28,0.45)',
+            }}
+          >
+            X
+          </span>
+          Cerrar
+        </button>
 
         {hasInfo && !isDesktop && (
           <button
             onClick={() => setSidebarOpen(o => !o)}
             style={{
-              position: 'absolute', top: '16px', left: '16px',
+              position: 'absolute', top: '16px', right: '16px',
               background: sidebarOpen
                 ? 'linear-gradient(135deg, #818cf8, #6366f1)'
                 : 'rgba(255,255,255,0.90)',
@@ -1126,76 +1155,173 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
       {showSidebar && (
         <div style={{
-          width: isDesktop ? '300px' : 'min(300px, 88vw)',
+          width: isDesktop ? '320px' : 'min(320px, 90vw)',
           position: isDesktop ? 'relative' : 'absolute',
           top: 0, right: 0, height: '100%',
-          background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-          borderLeft: '1px solid rgba(186,230,253,0.7)',
+          background: 'linear-gradient(180deg, #f7fafd 0%, #edf2f7 100%)',
+          backdropFilter: isDesktop ? 'none' : 'blur(6px) saturate(112%)',
+          borderLeft: '1px solid #c7d2e2',
           overflowY: 'auto', display: 'flex', flexDirection: 'column',
           zIndex: isDesktop ? 1 : 20,
-          boxShadow: isDesktop ? '-4px 0 24px rgba(14,165,233,0.08)' : '-8px 0 40px rgba(15,23,42,0.18)',
+          fontFamily: "'Montserrat', 'Segoe UI', sans-serif",
+          boxShadow: isDesktop
+            ? '-12px 0 32px rgba(15,23,42,0.18), inset 1px 0 0 rgba(255,255,255,0.62)'
+            : '-12px 0 34px rgba(15,23,42,0.26)',
         }}>
           {/* Cabecera */}
-          <div style={{ padding: '18px 20px 14px', borderBottom: '2px solid #e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 2,
+            padding: '14px 15px 12px',
+            borderBottom: '1px solid #d4dde8',
+            background: 'linear-gradient(180deg, rgba(247,250,253,0.98) 0%, rgba(239,244,250,0.95) 100%)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexShrink: 0,
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '4px', height: '22px', borderRadius: '4px', background: 'linear-gradient(180deg, #38bdf8, #818cf8)' }} />
+              <div style={{ width: '4px', height: '24px', borderRadius: '999px', background: 'linear-gradient(180deg, #2563eb, #1e293b)' }} />
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '7px', flexWrap: 'wrap' }}>
-                <span style={{ color: '#475569', fontSize: '0.72em', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Info de la placa</span>
+                <span style={{ color: '#1e293b', fontSize: '0.71em', fontWeight: 800, letterSpacing: '0.11em', textTransform: 'uppercase' }}>Info de la placa</span>
                 {placaId != null && (
-                  <span style={{ color: '#94a3b8', fontSize: '0.64em', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  <span style={{ color: '#475569', fontSize: '0.63em', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                     - ID {placaId}
                   </span>
                 )}
               </div>
             </div>
             {!isDesktop && (
-              <button onClick={() => setSidebarOpen(false)} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#64748b', cursor: 'pointer', borderRadius: '8px', padding: '5px 10px', fontSize: '0.82em', fontFamily: 'inherit', fontWeight: 600 }}>✕ Cerrar</button>
+              <button onClick={() => setSidebarOpen(false)} style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b', cursor: 'pointer', borderRadius: '8px', padding: '6px 11px', fontSize: '0.77em', fontFamily: 'inherit', fontWeight: 700, boxShadow: '0 2px 6px rgba(15,23,42,0.06)' }}>✕ Cerrar</button>
             )}
           </div>
           {/* Contenido */}
-          <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '18px', flex: 1 }}>
-            {temaNombre && (
-              <div>
-                <span style={labelStyle}>Tema</span>
-                <span style={{ display: 'inline-block', background: 'linear-gradient(135deg, #bfdbfe, #e0e7ff)', color: '#1e40af', fontWeight: 700, fontSize: '0.88em', borderRadius: '8px', padding: '6px 12px', border: '1px solid #93c5fd' }}>{temaNombre}</span>
+          <div style={{ padding: '12px 10px 16px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
+            {(temaNombre || subtemaNombre) && (
+              <div
+                style={{
+                  ...sidebarGridStyle,
+                  gridTemplateColumns: temaNombre && subtemaNombre ? 'repeat(2, minmax(0, 1fr))' : '1fr',
+                }}
+              >
+                {temaNombre && (
+                  <div style={compactSidebarSectionStyle}>
+                    <span style={labelStyle}>Tema</span>
+                    <span
+                      title={temaNombre}
+                      style={{
+                        ...singleLineEllipsisStyle,
+                        background: '#eef2ff',
+                        color: '#1e3a8a',
+                        fontWeight: 700,
+                        fontSize: '0.84em',
+                        borderRadius: '8px',
+                        padding: '7px 8px',
+                        border: '1px solid #c7d7fe',
+                      }}
+                    >
+                      {temaNombre}
+                    </span>
+                  </div>
+                )}
+                {subtemaNombre && (
+                  <div style={compactSidebarSectionStyle}>
+                    <span style={labelStyle}>Subtema</span>
+                    <span
+                      title={subtemaNombre}
+                      style={{
+                        ...singleLineEllipsisStyle,
+                        background: '#ecfeff',
+                        color: '#0c4a6e',
+                        fontWeight: 700,
+                        fontSize: '0.84em',
+                        borderRadius: '8px',
+                        padding: '7px 8px',
+                        border: '1px solid #bae6fd',
+                      }}
+                    >
+                      {subtemaNombre}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
-            {subtemaNombre && (
-              <div>
-                <span style={labelStyle}>Subtema</span>
-                <span style={{ display: 'inline-block', background: 'linear-gradient(135deg, #bae6fd, #e0f2fe)', color: '#0369a1', fontWeight: 700, fontSize: '0.88em', borderRadius: '8px', padding: '6px 12px', border: '1px solid #7dd3fc' }}>{subtemaNombre}</span>
+
+            {(aumento || tincion) && (
+              <div
+                style={{
+                  ...sidebarGridStyle,
+                  gridTemplateColumns: aumento && tincion ? 'repeat(2, minmax(0, 1fr))' : '1fr',
+                }}
+              >
+                {aumento && (
+                  <div style={compactSidebarSectionStyle}>
+                    <span style={labelStyle}>Aumento</span>
+                    <span
+                      title={aumento}
+                      style={{
+                        ...singleLineEllipsisStyle,
+                        background: '#ecfdf5',
+                        color: '#065f46',
+                        fontWeight: 800,
+                        fontSize: '0.9em',
+                        borderRadius: '999px',
+                        padding: '7px 9px',
+                        border: '1px solid #9fe9b9',
+                        textAlign: 'center',
+                        letterSpacing: '0.01em',
+                      }}
+                    >
+                      {aumento}
+                    </span>
+                  </div>
+                )}
+                {tincion && (
+                  <div style={compactSidebarSectionStyle}>
+                    <span style={labelStyle}>Tinción</span>
+                    <span
+                      title={tincion}
+                      style={{
+                        ...singleLineEllipsisStyle,
+                        background: '#fff7ed',
+                        color: '#92400e',
+                        fontWeight: 700,
+                        fontSize: '0.84em',
+                        borderRadius: '999px',
+                        padding: '7px 9px',
+                        border: '1px solid #f8d88c',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {renderBoldText(tincion)}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
-            {aumento && (
-              <div>
-                <span style={labelStyle}>🔬 Aumento</span>
-                <span style={{ display: 'inline-block', background: 'linear-gradient(135deg, #bbf7d0, #d1fae5)', color: '#065f46', fontWeight: 800, fontSize: '1.05em', borderRadius: '20px', padding: '5px 18px', letterSpacing: '0.04em', border: '1px solid #6ee7b7' }}>{aumento}</span>
-              </div>
-            )}
-            {tincion && (
-              <div>
-                <span style={labelStyle}>🧪 Tinción</span>
-                <span style={{ display: 'inline-block', background: 'linear-gradient(135deg, #fef3c7, #fffbeb)', color: '#92400e', fontWeight: 700, fontSize: '0.92em', borderRadius: '20px', padding: '5px 18px', border: '1px solid #fde68a' }}>{renderBoldText(tincion)}</span>
-              </div>
-            )}
+
             {senaladosItems.length > 0 && (
-              <div>
-                <span style={labelStyle}>📌 Señalados</span>
+              <div style={sidebarSectionStyle}>
+                <span style={labelStyle}>Señalados</span>
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
                   <button
                     type="button"
                     onClick={() => setMarkerVisualMode('arrow')}
                     style={{
                       flex: 1,
-                      border: markerVisualMode === 'arrow' ? '1px solid #93c5fd' : '1px solid #cbd5e1',
-                      background: markerVisualMode === 'arrow' ? 'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)' : '#f8fafc',
-                      color: markerVisualMode === 'arrow' ? '#1e3a8a' : '#475569',
-                      borderRadius: '10px',
+                      border: markerVisualMode === 'arrow' ? '1px solid #93c5fd' : '1px solid #d1d9e6',
+                      background: markerVisualMode === 'arrow' ? '#e9f1ff' : '#ffffff',
+                      color: markerVisualMode === 'arrow' ? '#1e3a8a' : '#334155',
+                      borderRadius: '11px',
                       padding: '7px 10px',
                       fontWeight: 700,
                       cursor: 'pointer',
                       fontFamily: 'inherit',
-                      fontSize: '0.8em',
+                      fontSize: '0.75em',
+                      boxShadow: markerVisualMode === 'arrow' ? '0 4px 12px rgba(37,99,235,0.14)' : 'none',
+                      transition: 'all 0.18s ease',
                     }}
                   >
                     Flecha
@@ -1205,15 +1331,17 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                     onClick={() => setMarkerVisualMode('pointer')}
                     style={{
                       flex: 1,
-                      border: markerVisualMode === 'pointer' ? '1px solid #93c5fd' : '1px solid #cbd5e1',
-                      background: markerVisualMode === 'pointer' ? 'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)' : '#f8fafc',
-                      color: markerVisualMode === 'pointer' ? '#1e3a8a' : '#475569',
-                      borderRadius: '10px',
+                      border: markerVisualMode === 'pointer' ? '1px solid #93c5fd' : '1px solid #d1d9e6',
+                      background: markerVisualMode === 'pointer' ? '#e9f1ff' : '#ffffff',
+                      color: markerVisualMode === 'pointer' ? '#1e3a8a' : '#334155',
+                      borderRadius: '11px',
                       padding: '7px 10px',
                       fontWeight: 700,
                       cursor: 'pointer',
                       fontFamily: 'inherit',
-                      fontSize: '0.8em',
+                      fontSize: '0.75em',
+                      boxShadow: markerVisualMode === 'pointer' ? '0 4px 12px rgba(37,99,235,0.14)' : 'none',
+                      transition: 'all 0.18s ease',
                     }}
                   >
                     Señalador
@@ -1230,7 +1358,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                       display: 'flex',
                       alignItems: 'stretch',
                       gap: '10px',
-                      background: isActive ? 'linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%)' : '#f8fafc',
+                      background: isActive ? '#eff6ff' : '#f8fafc',
                       borderRadius: '12px',
                       padding: '8px 10px',
                       border: isActive ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
@@ -1250,7 +1378,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                             : 'linear-gradient(135deg, #cbd5e1, #94a3b8)',
                         color: '#fff',
                         fontWeight: 800,
-                        fontSize: '0.72em',
+                        fontSize: '0.68em',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -1278,19 +1406,19 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                           width: '100%',
                           border: isActive ? '1px solid #93c5fd' : isHovered ? '1px solid #bfdbfe' : '1px solid #cbd5e1',
                           background: isActive
-                            ? 'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)'
+                            ? '#e8f0ff'
                             : isHovered
-                              ? 'linear-gradient(135deg, #f0f9ff 0%, #f8fafc 100%)'
+                              ? '#f0f7ff'
                             : hasMarker
-                              ? 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)'
-                              : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-                          color: hasMarker ? '#1e3a8a' : '#64748b',
-                          fontSize: '0.88em',
-                          lineHeight: 1.4,
+                              ? '#ffffff'
+                              : '#f1f5f9',
+                          color: '#111111',
+                          fontSize: '0.72em',
+                          lineHeight: 1.35,
                           cursor: hasMarker ? 'pointer' : 'not-allowed',
                           fontWeight: isActive ? 700 : 600,
                           borderRadius: '10px',
-                          padding: '8px 10px',
+                          padding: '7px 10px',
                           textAlign: 'center',
                           fontFamily: 'inherit',
                           transition: 'all 0.18s ease',
@@ -1307,7 +1435,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                       >
                         <span style={{ flex: 1, minWidth: 0, letterSpacing: '0.01em', textAlign: 'center' }}>{renderBoldText(item.label)}</span>
                         <span style={{
-                          fontSize: '0.7em',
+                          fontSize: '0.66em',
                           fontWeight: 700,
                           borderRadius: '999px',
                           padding: '3px 8px',
@@ -1375,15 +1503,16 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                   onClick={() => setActiveMarkerIndex(null)}
                   style={{
                     marginTop: '10px',
+                    width: '100%',
                     border: '1px solid #bfdbfe',
                     background: 'linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)',
                     color: '#1e3a8a',
                     borderRadius: '10px',
-                    padding: '8px 12px',
+                    padding: '9px 12px',
                     fontWeight: 700,
                     cursor: 'pointer',
                     fontFamily: 'inherit',
-                    fontSize: '0.82em',
+                    fontSize: '0.77em',
                     boxShadow: '0 2px 10px rgba(14,165,233,0.12)',
                     transition: 'all 0.18s ease',
                   }}
@@ -1393,9 +1522,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               </div>
             )}
             {comentario && (
-              <div>
-                <span style={labelStyle}>💬 Comentario</span>
-                <p style={{ margin: 0, color: '#334155', fontSize: '0.88em', lineHeight: 1.65, background: '#f1f5f9', borderRadius: '10px', padding: '10px 14px', border: '1px solid #e2e8f0' }}>{renderBoldText(comentario)}</p>
+              <div style={sidebarSectionStyle}>
+                <span style={labelStyle}>Comentario</span>
+                <p style={{ margin: 0, color: '#334155', fontSize: '0.87em', lineHeight: 1.62, background: '#f8fafc', borderRadius: '10px', padding: '10px 14px', border: '1px solid #dbe3ee' }}>{renderBoldText(comentario)}</p>
               </div>
             )}
           </div>
@@ -1405,9 +1534,37 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   );
 };
 
+const sidebarSectionStyle: React.CSSProperties = {
+  background: '#ffffff',
+  border: '1px solid #d8e1ec',
+  borderRadius: '10px',
+  padding: '12px',
+  boxShadow: '0 3px 9px rgba(15,23,42,0.06)',
+};
+
+const compactSidebarSectionStyle: React.CSSProperties = {
+  ...sidebarSectionStyle,
+  padding: '10px',
+  minWidth: 0,
+};
+
+const sidebarGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: '8px',
+};
+
+const singleLineEllipsisStyle: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  minWidth: 0,
+};
+
 const labelStyle: React.CSSProperties = {
-  display: 'block', color: '#94a3b8', fontSize: '0.65em', fontWeight: 800,
-  letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '8px',
+  display: 'block', color: '#475569', fontSize: '0.64em', fontWeight: 800,
+  letterSpacing: '0.125em', textTransform: 'uppercase', marginBottom: '7px',
 };
 
 export default ImageViewerModal;

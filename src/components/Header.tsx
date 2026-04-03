@@ -10,7 +10,7 @@ import fondoHeader from '../assets/imagenes/fondo.webp';
 const MENU_ITEMS = [
   { key: 'inicio', label: 'Inicio', icon: House, path: '/' },
   { key: 'temario', label: 'Temario', icon: BookOpen, path: '/temario' },
-  { key: 'aprendizaje', label: 'Aprendizaje', icon: GraduationCap },
+  { key: 'aprendizaje', label: 'Aprendizaje', icon: GraduationCap, path: '/aprendizaje' },
   { key: 'contacto', label: 'Contacto', icon: Phone },
 ] as const;
 
@@ -22,6 +22,7 @@ const Header: React.FC = () => {
   const [isRightLogoHover, setIsRightLogoHover] = React.useState(false);
   const [showCompactBar, setShowCompactBar] = React.useState(false);
   const [openImageViewerCount, setOpenImageViewerCount] = React.useState(0);
+  const [compactBarFrame, setCompactBarFrame] = React.useState({ left: 8, width: 320 });
   const isImageViewerOpen = openImageViewerCount > 0;
 
   const isInAdminEditingFlow = React.useMemo(() => {
@@ -64,6 +65,16 @@ const Header: React.FC = () => {
 
       const rect = headerRef.current.getBoundingClientRect();
       setShowCompactBar(rect.bottom <= 0);
+
+      const nextLeft = Math.max(0, Math.round(rect.left));
+      const nextRight = Math.min(window.innerWidth, Math.round(rect.right));
+      const nextWidth = Math.max(0, nextRight - nextLeft);
+
+      setCompactBarFrame((prev) => (
+        prev.left === nextLeft && prev.width === nextWidth
+          ? prev
+          : { left: nextLeft, width: nextWidth }
+      ));
     };
 
     handleScroll();
@@ -189,6 +200,8 @@ const Header: React.FC = () => {
         className="atlas-compact-bar"
         style={{
           ...styles.compactBar,
+          left: `${compactBarFrame.left}px`,
+          width: `${compactBarFrame.width}px`,
           ...(showCompactBar && !isImageViewerOpen ? styles.compactBarVisible : styles.compactBarHidden),
         }}
       >
@@ -480,8 +493,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   compactBar: {
     position: 'fixed',
     top: 0,
-    left: '50%',
-    width: 'min(1600px, calc(100% - 16px))',
+    left: 0,
+    width: '100%',
     zIndex: 1300,
     minHeight: '52px',
     display: 'flex',
@@ -491,22 +504,22 @@ const styles: { [key: string]: React.CSSProperties } = {
     background:
       'linear-gradient(180deg, rgba(252, 254, 255, 0.94) 0%, rgba(239, 248, 255, 0.88) 100%)',
     backdropFilter: 'blur(12px)',
-    borderBottom: '1px solid rgba(162, 203, 235, 0.58)',
+    borderBottom: '3px solid #8ec8ff',
     borderLeft: '1px solid rgba(184, 216, 241, 0.42)',
     borderRight: '1px solid rgba(184, 216, 241, 0.42)',
-    borderRadius: '0 0 12px 12px',
+    borderRadius: 0,
     boxShadow: '0 7px 16px rgba(29, 84, 135, 0.14)',
     transition: 'opacity 220ms ease, transform 220ms ease, visibility 220ms ease',
   },
   compactBarVisible: {
     opacity: 1,
-    transform: 'translate(-50%, 0)',
+    transform: 'translateY(0)',
     visibility: 'visible',
     pointerEvents: 'auto',
   },
   compactBarHidden: {
     opacity: 0,
-    transform: 'translate(-50%, -14px)',
+    transform: 'translateY(-14px)',
     visibility: 'hidden',
     pointerEvents: 'none',
   },

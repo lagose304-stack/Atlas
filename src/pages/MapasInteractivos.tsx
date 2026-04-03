@@ -45,6 +45,26 @@ interface InsertHintState {
   snapped: boolean;
 }
 
+interface SelectionDetails {
+  title: string;
+  color: string;
+  description: string;
+}
+
+interface InteractiveMapSectionPayload {
+  title: string;
+  color: string;
+  description: string;
+  points: number[];
+  sort_order: number;
+}
+
+interface InteractiveMapRow {
+  id: number;
+  map_number: number;
+  sections: InteractiveMapSectionPayload[] | null;
+}
+
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
 type ZoomSensitivity = 'suave' | 'media' | 'rapida';
 
@@ -75,9 +95,109 @@ const TOUCH_SAVED_HANDLE_RADIUS = 8.5;
 const MOUSE_SAVED_HANDLE_RADIUS = 5.5;
 const TOUCH_INSERT_SNAP_DISTANCE = 26;
 const MOUSE_INSERT_SNAP_DISTANCE = 14;
+const INTERACTIVE_MAPS_TABLE = 'interactive_maps';
+const SELECTION_COLOR_OPTIONS = [
+  '#0ea5e9',
+  '#14b8a6',
+  '#22c55e',
+  '#84cc16',
+  '#eab308',
+  '#f97316',
+  '#ef4444',
+  '#ec4899',
+  '#a855f7',
+  '#6366f1',
+] as const;
+const DEFAULT_SELECTION_COLOR = SELECTION_COLOR_OPTIONS[0];
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const POINT_HIT_RADIUS = 10;
+
+const isValidHexColor = (value: string): boolean => /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value);
+
+const hexToRgba = (hex: string, alpha: number): string => {
+  const normalized = hex.replace('#', '');
+  const expanded = normalized.length === 3
+    ? normalized.split('').map(char => `${char}${char}`).join('')
+    : normalized;
+
+  if (!/^[0-9a-fA-F]{6}$/.test(expanded)) {
+    return `rgba(14,165,233,${alpha})`;
+  }
+
+  const int = Number.parseInt(expanded, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+
+const buildSectionsPayload = (
+  selections: number[][],
+  details: SelectionDetails[]
+): InteractiveMapSectionPayload[] => {
+  return selections
+    .map((points, index) => {
+      if (!Array.isArray(points) || points.length < 6 || points.length % 2 !== 0) return null;
+      const cleanPoints = points.filter(point => typeof point === 'number' && Number.isFinite(point));
+      if (cleanPoints.length < 6 || cleanPoints.length % 2 !== 0) return null;
+
+      const detail = details[index];
+      const title = detail?.title?.trim() || `Seleccion ${index + 1}`;
+      const color = isValidHexColor(detail?.color ?? '') ? detail.color : DEFAULT_SELECTION_COLOR;
+      const description = detail?.description?.trim() || '';
+
+      return {
+        title,
+        color,
+        description,
+        points: cleanPoints,
+        sort_order: index,
+      };
+    })
+    .filter((section): section is InteractiveMapSectionPayload => section !== null);
+};
+
+const hydrateSectionsPayload = (
+  sectionsRaw: InteractiveMapSectionPayload[] | null | undefined
+): { selections: number[][]; details: SelectionDetails[] } => {
+  if (!Array.isArray(sectionsRaw) || sectionsRaw.length === 0) {
+    return { selections: [], details: [] };
+  }
+
+  const selections: number[][] = [];
+  const details: SelectionDetails[] = [];
+
+  sectionsRaw.forEach((section) => {
+    const points = Array.isArray(section?.points)
+      ? section.points.filter(value => typeof value === 'number' && Number.isFinite(value))
+      : [];
+
+    if (points.length < 6 || points.length % 2 !== 0) return;
+
+    const fallbackLabel = `Seleccion ${selections.length + 1}`;
+    const title = typeof section?.title === 'string' && section.title.trim().length > 0
+      ? section.title.trim()
+      : fallbackLabel;
+    const color = typeof section?.color === 'string' && isValidHexColor(section.color)
+      ? section.color
+      : DEFAULT_SELECTION_COLOR;
+    const description = typeof section?.description === 'string' ? section.description.trim() : '';
+
+    selections.push(points);
+    details.push({ title, color, description });
+  });
+
+  return { selections, details };
+};
+
+const cloneSelections = (selections: number[][]): number[][] => {
+  return selections.map(points => [...points]);
+};
+
+const cloneSelectionDetails = (details: SelectionDetails[]): SelectionDetails[] => {
+  return details.map(detail => ({ ...detail }));
+};
 
 const clampPanForScale = (pan: Point2D, scale: number): Point2D => {
   // A 100% o menos siempre se recentra a la posición original.
@@ -275,12 +395,29 @@ const MapasInteractivos: React.FC = () => {
   const [activeLassoPoints, setActiveLassoPoints] = useState<number[]>([]);
   const [selectionPoints, setSelectionPoints] = useState<number[]>([]);
   const [savedSelections, setSavedSelections] = useState<number[][]>([]);
+  const [savedSelectionDetails, setSavedSelectionDetails] = useState<SelectionDetails[]>([]);
   const [activeSavedSelectionIndex, setActiveSavedSelectionIndex] = useState<number | null>(null);
+  const [editingSelectionIndex, setEditingSelectionIndex] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [insertHint, setInsertHint] = useState<InsertHintState>({ visible: false, x: 0, y: 0, snapped: false });
+  const [showSelectionInfoForm, setShowSelectionInfoForm] = useState(false);
+  const [pendingSelectionDetails, setPendingSelectionDetails] = useState<SelectionDetails>({
+    title: '',
+    color: DEFAULT_SELECTION_COLOR,
+    description: '',
+  });
+  const [selectionInfoError, setSelectionInfoError] = useState<string | null>(null);
   const [showPendingReplaceConfirm, setShowPendingReplaceConfirm] = useState(false);
   const [pendingLassoStartPoint, setPendingLassoStartPoint] = useState<Point2D | null>(null);
   const [dashOffset, setDashOffset] = useState(0);
+  const [currentMapId, setCurrentMapId] = useState<number | null>(null);
+  const [currentMapNumber, setCurrentMapNumber] = useState<number | null>(null);
+  const [isPersistingMap, setIsPersistingMap] = useState(false);
+  const [hasUnsavedMapChanges, setHasUnsavedMapChanges] = useState(false);
+  const [mapPersistMessage, setMapPersistMessage] = useState<string | null>(null);
+  const [persistedSelectionsSnapshot, setPersistedSelectionsSnapshot] = useState<number[][]>([]);
+  const [persistedSelectionDetailsSnapshot, setPersistedSelectionDetailsSnapshot] = useState<SelectionDetails[]>([]);
+  const [showUnsavedExitConfirm, setShowUnsavedExitConfirm] = useState(false);
 
   const canvasFrameRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<any>(null);
@@ -371,23 +508,90 @@ const MapasInteractivos: React.FC = () => {
   useEffect(() => {
     if (!selectedPlaca) {
       setImageElement(null);
+      setCurrentMapId(null);
+      setCurrentMapNumber(null);
+      setHasUnsavedMapChanges(false);
+      setMapPersistMessage(null);
+      setPersistedSelectionsSnapshot([]);
+      setPersistedSelectionDetailsSnapshot([]);
+      setShowUnsavedExitConfirm(false);
       return;
     }
+
+    let isEffectActive = true;
 
     setZoomScale(1);
     setPanOffset({ x: 0, y: 0 });
     setSelectionPoints([]);
     setSavedSelections([]);
+    setSavedSelectionDetails([]);
     setActiveSavedSelectionIndex(null);
+    setEditingSelectionIndex(null);
+    setShowSelectionInfoForm(false);
+    setPendingSelectionDetails({
+      title: '',
+      color: DEFAULT_SELECTION_COLOR,
+      description: '',
+    });
+    setSelectionInfoError(null);
     setShowPendingReplaceConfirm(false);
     setPendingLassoStartPoint(null);
+    setCurrentMapId(null);
+    setCurrentMapNumber(null);
+    setHasUnsavedMapChanges(false);
+    setMapPersistMessage(null);
+    setPersistedSelectionsSnapshot([]);
+    setPersistedSelectionDetailsSnapshot([]);
+    setShowUnsavedExitConfirm(false);
     targetZoomRef.current = 1;
     targetPanRef.current = { x: 0, y: 0 };
 
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
     img.src = getCloudinaryImageUrl(selectedPlaca.photo_url, 'zoom');
-    img.onload = () => setImageElement(img);
+    img.onload = () => {
+      if (!isEffectActive) return;
+      setImageElement(img);
+    };
+
+    const loadSavedMap = async () => {
+      const { data, error } = await supabase
+        .from(INTERACTIVE_MAPS_TABLE)
+        .select('id, map_number, sections')
+        .eq('placa_id', selectedPlaca.id)
+        .maybeSingle();
+
+      if (!isEffectActive) return;
+
+      if (error) {
+        console.error('Error al cargar mapa interactivo:', error);
+        setMapPersistMessage('No se pudo cargar el mapa guardado de esta placa.');
+        return;
+      }
+
+      if (!data) {
+        setPersistedSelectionsSnapshot([]);
+        setPersistedSelectionDetailsSnapshot([]);
+        return;
+      }
+
+      const mapRow = data as InteractiveMapRow;
+      const hydrated = hydrateSectionsPayload(mapRow.sections);
+      setSavedSelections(hydrated.selections);
+      setSavedSelectionDetails(hydrated.details);
+      setPersistedSelectionsSnapshot(cloneSelections(hydrated.selections));
+      setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(hydrated.details));
+      setCurrentMapId(mapRow.id);
+      setCurrentMapNumber(mapRow.map_number);
+      setHasUnsavedMapChanges(false);
+      setMapPersistMessage(`Mapa #${mapRow.map_number} cargado.`);
+    };
+
+    void loadSavedMap();
+
+    return () => {
+      isEffectActive = false;
+    };
   }, [selectedPlaca]);
 
   useEffect(() => {
@@ -584,6 +788,8 @@ const MapasInteractivos: React.FC = () => {
 
     setShowPendingReplaceConfirm(false);
     setPendingLassoStartPoint(null);
+    setShowSelectionInfoForm(false);
+    setSelectionInfoError(null);
 
     setActiveSavedSelectionIndex(null);
     setSelectionPoints([]);
@@ -597,6 +803,8 @@ const MapasInteractivos: React.FC = () => {
 
     setShowPendingReplaceConfirm(false);
     setPendingLassoStartPoint(null);
+    setShowSelectionInfoForm(false);
+    setSelectionInfoError(null);
     setActiveSavedSelectionIndex(null);
     setSelectionPoints([]);
     setIsDrawing(true);
@@ -626,43 +834,389 @@ const MapasInteractivos: React.FC = () => {
   };
 
   const clearSelection = () => {
+    const hadDraftSelection = isDrawing || activeLassoPoints.length > 0 || selectionPoints.length > 0;
+
     setIsDrawing(false);
     setActiveLassoPoints([]);
     setSelectionPoints([]);
-    setSavedSelections([]);
     setActiveSavedSelectionIndex(null);
+    setEditingSelectionIndex(null);
     setShowDeleteConfirm(false);
     setInsertHint({ visible: false, x: 0, y: 0, snapped: false });
+    setShowSelectionInfoForm(false);
+    setPendingSelectionDetails({
+      title: '',
+      color: DEFAULT_SELECTION_COLOR,
+      description: '',
+    });
+    setSelectionInfoError(null);
     setShowPendingReplaceConfirm(false);
     setPendingLassoStartPoint(null);
+
+    if (hasUnsavedMapChanges) {
+      const restoredSelections = cloneSelections(persistedSelectionsSnapshot);
+      const restoredDetails = cloneSelectionDetails(persistedSelectionDetailsSnapshot);
+      setSavedSelections(restoredSelections);
+      setSavedSelectionDetails(restoredDetails);
+      setHasUnsavedMapChanges(false);
+      setMapPersistMessage('Cambios no guardados descartados.');
+      return;
+    }
+
+    if (hadDraftSelection) {
+      setMapPersistMessage('Selección no guardada limpiada.');
+    }
+  };
+
+  const markPendingMapChanges = () => {
+    if (!currentMapId) return;
+    setHasUnsavedMapChanges(true);
+    setMapPersistMessage('Cambios pendientes: recuerda actualizar el mapa.');
+  };
+
+  const createInteractiveMapRecord = async (
+    selectionsToPersist: number[][],
+    detailsToPersist: SelectionDetails[]
+  ): Promise<{ id: number; mapNumber: number } | null> => {
+    if (!selectedTemaId || !selectedPlaca) return null;
+
+    const sectionsPayload = buildSectionsPayload(selectionsToPersist, detailsToPersist);
+    if (sectionsPayload.length === 0) return null;
+
+    // Si la placa ya tiene mapa, se reutiliza y se actualiza en lugar de crear otro.
+    const { data: existingMap, error: existingMapError } = await supabase
+      .from(INTERACTIVE_MAPS_TABLE)
+      .select('id, map_number')
+      .eq('placa_id', selectedPlaca.id)
+      .maybeSingle();
+
+    if (existingMapError) {
+      throw existingMapError;
+    }
+
+    if (existingMap) {
+      const existingMapRow = existingMap as { id: number; map_number: number };
+
+      const { error: updateExistingMapError } = await supabase
+        .from(INTERACTIVE_MAPS_TABLE)
+        .update({
+          tema_id: selectedTemaId,
+          subtema_id: selectedSubtemaId,
+          placa_id: selectedPlaca.id,
+          sections: sectionsPayload,
+        })
+        .eq('id', existingMapRow.id);
+
+      if (updateExistingMapError) {
+        throw updateExistingMapError;
+      }
+
+      setCurrentMapId(existingMapRow.id);
+      setCurrentMapNumber(existingMapRow.map_number);
+      setPersistedSelectionsSnapshot(cloneSelections(selectionsToPersist));
+      setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(detailsToPersist));
+      setHasUnsavedMapChanges(false);
+      setMapPersistMessage(`Mapa #${existingMapRow.map_number} actualizado.`);
+      return { id: existingMapRow.id, mapNumber: existingMapRow.map_number };
+    }
+
+    const { data: latestMapRows, error: latestMapError } = await supabase
+      .from(INTERACTIVE_MAPS_TABLE)
+      .select('map_number')
+      .eq('tema_id', selectedTemaId)
+      .order('map_number', { ascending: false })
+      .limit(1);
+
+    if (latestMapError) {
+      throw latestMapError;
+    }
+
+    const nextMapNumber = (latestMapRows?.[0]?.map_number ?? 0) + 1;
+
+    const { data: createdMap, error: createMapError } = await supabase
+      .from(INTERACTIVE_MAPS_TABLE)
+      .insert({
+        tema_id: selectedTemaId,
+        subtema_id: selectedSubtemaId,
+        placa_id: selectedPlaca.id,
+        map_number: nextMapNumber,
+        sections: sectionsPayload,
+      })
+      .select('id, map_number')
+      .single();
+
+    if (createMapError) {
+      throw createMapError;
+    }
+
+    const mapId = (createdMap as { id: number; map_number: number }).id;
+    const mapNumber = (createdMap as { id: number; map_number: number }).map_number;
+    setCurrentMapId(mapId);
+    setCurrentMapNumber(mapNumber);
+    setPersistedSelectionsSnapshot(cloneSelections(selectionsToPersist));
+    setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(detailsToPersist));
+    setHasUnsavedMapChanges(false);
+    setMapPersistMessage(`Mapa #${mapNumber} creado.`);
+    return { id: mapId, mapNumber };
+  };
+
+  const updateInteractiveMapRecord = async (): Promise<boolean> => {
+    if (!selectedTemaId || !selectedPlaca) return false;
+
+    const sectionsPayload = buildSectionsPayload(savedSelections, savedSelectionDetails);
+    if (sectionsPayload.length === 0) {
+      setMapPersistMessage('No hay selecciones para guardar en el mapa.');
+      return false;
+    }
+
+    setIsPersistingMap(true);
+
+    try {
+      if (!currentMapId) {
+        setMapPersistMessage('Creando mapa...');
+        const createdOrUpdatedMap = await createInteractiveMapRecord(savedSelections, savedSelectionDetails);
+        return createdOrUpdatedMap !== null;
+      } else {
+        setMapPersistMessage('Actualizando mapa...');
+
+        const { error: updateError } = await supabase
+          .from(INTERACTIVE_MAPS_TABLE)
+          .update({
+            tema_id: selectedTemaId,
+            subtema_id: selectedSubtemaId,
+            placa_id: selectedPlaca.id,
+            sections: sectionsPayload,
+          })
+          .eq('id', currentMapId);
+
+        if (updateError) {
+          throw updateError;
+        }
+
+        setPersistedSelectionsSnapshot(cloneSelections(savedSelections));
+        setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(savedSelectionDetails));
+        setHasUnsavedMapChanges(false);
+        setMapPersistMessage(`Mapa #${currentMapNumber ?? currentMapId} actualizado.`);
+        return true;
+      }
+    } catch (error) {
+      console.error('Error al actualizar mapa interactivo:', error);
+      setMapPersistMessage('No se pudo guardar el mapa. Intenta nuevamente.');
+      return false;
+    } finally {
+      setIsPersistingMap(false);
+    }
+  };
+
+  const closeWorkspaceEditor = () => {
+    setShowUnsavedExitConfirm(false);
+    setSelectedPlaca(null);
+  };
+
+  const handleCancelWorkspace = () => {
+    if (isPersistingMap) return;
+
+    if (hasUnsavedMapChanges) {
+      setShowUnsavedExitConfirm(true);
+      return;
+    }
+
+    closeWorkspaceEditor();
+  };
+
+  const closeWithoutSaving = () => {
+    closeWorkspaceEditor();
+  };
+
+  const saveChangesAndCloseWorkspace = async () => {
+    const wasSaved = await updateInteractiveMapRecord();
+    if (wasSaved) {
+      closeWorkspaceEditor();
+    }
   };
 
   const discardPendingSelection = () => {
     setSelectionPoints([]);
     setInsertHint({ visible: false, x: 0, y: 0, snapped: false });
+    setShowSelectionInfoForm(false);
+    setPendingSelectionDetails({
+      title: '',
+      color: DEFAULT_SELECTION_COLOR,
+      description: '',
+    });
+    setSelectionInfoError(null);
   };
 
   const confirmPendingSelection = () => {
     if (selectionPoints.length < 6) return;
-    setSavedSelections(prev => {
-      const next = [...prev, selectionPoints];
-      setActiveSavedSelectionIndex(next.length - 1);
-      return next;
+    setEditingSelectionIndex(null);
+    setPendingSelectionDetails({
+      title: '',
+      color: DEFAULT_SELECTION_COLOR,
+      description: '',
     });
-    setSelectionPoints([]);
-    setInsertHint({ visible: false, x: 0, y: 0, snapped: false });
+    setSelectionInfoError(null);
+    setShowSelectionInfoForm(true);
   };
 
-  const deleteActiveSavedSelection = () => {
+  const cancelSelectionInfoForm = () => {
+    setShowSelectionInfoForm(false);
+    setEditingSelectionIndex(null);
+    setPendingSelectionDetails({
+      title: '',
+      color: DEFAULT_SELECTION_COLOR,
+      description: '',
+    });
+    setSelectionInfoError(null);
+  };
+
+  const openEditSelectionInfoForm = () => {
     if (activeSavedSelectionIndex === null) return;
 
-    setSavedSelections(prev => {
-      if (activeSavedSelectionIndex < 0 || activeSavedSelectionIndex >= prev.length) return prev;
-      return prev.filter((_, idx) => idx !== activeSavedSelectionIndex);
-    });
+    const currentDetails = savedSelectionDetails[activeSavedSelectionIndex];
+    const fallbackTitle = `Seleccion ${activeSavedSelectionIndex + 1}`;
 
-    setActiveSavedSelectionIndex(null);
+    setPendingSelectionDetails({
+      title: currentDetails?.title?.trim() || fallbackTitle,
+      color: isValidHexColor(currentDetails?.color ?? '') ? currentDetails.color : DEFAULT_SELECTION_COLOR,
+      description: currentDetails?.description ?? '',
+    });
+    setSelectionInfoError(null);
+    setEditingSelectionIndex(activeSavedSelectionIndex);
     setShowDeleteConfirm(false);
+    setShowSelectionInfoForm(true);
+  };
+
+  const saveSelectionWithDetails = async () => {
+    const normalizedTitle = pendingSelectionDetails.title.trim();
+    if (!normalizedTitle) {
+      setSelectionInfoError('El titulo es obligatorio.');
+      return;
+    }
+
+    const detailToSave: SelectionDetails = {
+      title: normalizedTitle,
+      color: pendingSelectionDetails.color || DEFAULT_SELECTION_COLOR,
+      description: pendingSelectionDetails.description.trim(),
+    };
+
+    if (editingSelectionIndex !== null) {
+      if (editingSelectionIndex < 0 || editingSelectionIndex >= savedSelectionDetails.length) return;
+
+      const nextDetails = [...savedSelectionDetails];
+      nextDetails[editingSelectionIndex] = detailToSave;
+      setSavedSelectionDetails(nextDetails);
+      setActiveSavedSelectionIndex(editingSelectionIndex);
+      setShowSelectionInfoForm(false);
+      setEditingSelectionIndex(null);
+      setSelectionInfoError(null);
+      setPendingSelectionDetails({
+        title: '',
+        color: DEFAULT_SELECTION_COLOR,
+        description: '',
+      });
+
+      if (currentMapId) {
+        markPendingMapChanges();
+      }
+      return;
+    }
+
+    if (selectionPoints.length < 6) return;
+
+    const selectionToSave = [...selectionPoints];
+
+    const nextSelections = [...savedSelections, selectionToSave];
+    const nextDetails = [...savedSelectionDetails, detailToSave];
+
+    setSavedSelections(nextSelections);
+    setSavedSelectionDetails(nextDetails);
+    setActiveSavedSelectionIndex(nextSelections.length - 1);
+
+    setSelectionPoints([]);
+    setInsertHint({ visible: false, x: 0, y: 0, snapped: false });
+    setShowSelectionInfoForm(false);
+    setEditingSelectionIndex(null);
+    setPendingSelectionDetails({
+      title: '',
+      color: DEFAULT_SELECTION_COLOR,
+      description: '',
+    });
+    setSelectionInfoError(null);
+
+    if (currentMapId) {
+      markPendingMapChanges();
+      return;
+    }
+
+    if (!selectedTemaId || !selectedPlaca) return;
+
+    setIsPersistingMap(true);
+    setMapPersistMessage('Creando mapa...');
+
+    try {
+      await createInteractiveMapRecord(nextSelections, nextDetails);
+    } catch (error) {
+      console.error('Error al crear mapa interactivo:', error);
+      setHasUnsavedMapChanges(true);
+      setMapPersistMessage('No se pudo crear el mapa. Puedes intentar con Actualizar mapa.');
+    } finally {
+      setIsPersistingMap(false);
+    }
+  };
+
+  const deleteActiveSavedSelection = async () => {
+    if (activeSavedSelectionIndex === null) return;
+    if (activeSavedSelectionIndex < 0 || activeSavedSelectionIndex >= savedSelections.length) return;
+
+    const nextSelections = savedSelections.filter((_, idx) => idx !== activeSavedSelectionIndex);
+    const nextDetails = savedSelectionDetails.filter((_, idx) => idx !== activeSavedSelectionIndex);
+
+    setShowDeleteConfirm(false);
+    setActiveSavedSelectionIndex(null);
+    setEditingSelectionIndex(null);
+
+    if (!currentMapId) {
+      setSavedSelections(nextSelections);
+      setSavedSelectionDetails(nextDetails);
+      setHasUnsavedMapChanges(nextSelections.length > 0);
+      setMapPersistMessage('Selección eliminada.');
+      return;
+    }
+
+    setIsPersistingMap(true);
+    setMapPersistMessage('Eliminando selección...');
+
+    try {
+      const sectionsPayload = buildSectionsPayload(nextSelections, nextDetails);
+
+      const { error: deleteError } = await supabase
+        .from(INTERACTIVE_MAPS_TABLE)
+        .update({
+          sections: sectionsPayload,
+        })
+        .eq('id', currentMapId);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+
+      setSavedSelections(nextSelections);
+      setSavedSelectionDetails(nextDetails);
+      setPersistedSelectionsSnapshot(cloneSelections(nextSelections));
+      setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(nextDetails));
+      setHasUnsavedMapChanges(false);
+      setMapPersistMessage(
+        nextSelections.length > 0
+          ? `Selección eliminada y guardada en Mapa #${currentMapNumber ?? currentMapId}.`
+          : `Mapa #${currentMapNumber ?? currentMapId} quedó sin selecciones.`
+      );
+    } catch (error) {
+      console.error('Error al eliminar selección guardada:', error);
+      setMapPersistMessage('No se pudo eliminar la selección en la base de datos.');
+    } finally {
+      setIsPersistingMap(false);
+    }
   };
 
   const cancelPendingReplaceConfirm = () => {
@@ -677,6 +1231,8 @@ const MapasInteractivos: React.FC = () => {
     }
 
     hideInsertHint();
+    setShowSelectionInfoForm(false);
+    setSelectionInfoError(null);
     setSelectionPoints([]);
     setShowDeleteConfirm(false);
     startLassoDrawingAt(pendingLassoStartPoint.x, pendingLassoStartPoint.y);
@@ -692,6 +1248,26 @@ const MapasInteractivos: React.FC = () => {
     if (!stageRef.current) return null;
     const container = stageRef.current.container?.();
     if (!container) return null;
+
+    const rect = container.getBoundingClientRect();
+    return {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top,
+    };
+  };
+
+  const getPointerFromKonvaEvent = (e: any): Point2D | null => {
+    const stage = e?.target?.getStage?.();
+    const pointer = stage?.getPointerPosition?.();
+
+    if (pointer && Number.isFinite(pointer.x) && Number.isFinite(pointer.y)) {
+      return { x: pointer.x, y: pointer.y };
+    }
+
+    const touch = e?.evt?.touches?.[0] ?? e?.evt?.changedTouches?.[0];
+    const container = stage?.container?.();
+
+    if (!touch || !container) return null;
 
     const rect = container.getBoundingClientRect();
     return {
@@ -743,6 +1319,7 @@ const MapasInteractivos: React.FC = () => {
   const handleStageMouseDown = () => {
     if (!stageRef.current || !imageRect) return;
     if (showPendingReplaceConfirm) return;
+    if (showSelectionInfoForm) return;
 
     const pointer = stageRef.current.getPointerPosition();
     if (!pointer) return;
@@ -933,6 +1510,8 @@ const MapasInteractivos: React.FC = () => {
       next[selectionIndex] = nextSelection;
       return next;
     });
+
+    markPendingMapChanges();
   };
 
   const canInsertPointIntoSelection = (flatPoints: number[], x: number, y: number): boolean => {
@@ -958,13 +1537,14 @@ const MapasInteractivos: React.FC = () => {
     if (!projection) return null;
 
     const snapDistance = isCoarsePointer ? TOUCH_INSERT_SNAP_DISTANCE : MOUSE_INSERT_SNAP_DISTANCE;
-    const snapped = projection.distance <= snapDistance;
-    const hintX = snapped ? projection.x : clampedX;
-    const hintY = snapped ? projection.y : clampedY;
+    if (projection.distance > snapDistance) return null;
+
+    const hintX = projection.x;
+    const hintY = projection.y;
 
     if (!canInsertPointIntoSelection(flatPoints, hintX, hintY)) return null;
 
-    return { visible: true, x: hintX, y: hintY, snapped };
+    return { visible: true, x: hintX, y: hintY, snapped: true };
   };
 
   const insertSavedSelectionPoint = (selectionIndex: number, x: number, y: number) => {
@@ -983,8 +1563,10 @@ const MapasInteractivos: React.FC = () => {
       if (!projection) return prev;
 
       const snapDistance = isCoarsePointer ? TOUCH_INSERT_SNAP_DISTANCE : MOUSE_INSERT_SNAP_DISTANCE;
-      const insertX = projection.distance <= snapDistance ? projection.x : clampedX;
-      const insertY = projection.distance <= snapDistance ? projection.y : clampedY;
+      if (projection.distance > snapDistance) return prev;
+
+      const insertX = projection.x;
+      const insertY = projection.y;
 
       if (!canInsertPointIntoSelection(currentSelection, insertX, insertY)) return prev;
 
@@ -996,6 +1578,8 @@ const MapasInteractivos: React.FC = () => {
       next[selectionIndex] = nextSelection;
       return next;
     });
+
+    markPendingMapChanges();
   };
 
   const insertPendingSelectionPoint = (x: number, y: number) => {
@@ -1011,8 +1595,10 @@ const MapasInteractivos: React.FC = () => {
       if (!projection) return prev;
 
       const snapDistance = isCoarsePointer ? TOUCH_INSERT_SNAP_DISTANCE : MOUSE_INSERT_SNAP_DISTANCE;
-      const insertX = projection.distance <= snapDistance ? projection.x : clampedX;
-      const insertY = projection.distance <= snapDistance ? projection.y : clampedY;
+      if (projection.distance > snapDistance) return prev;
+
+      const insertX = projection.x;
+      const insertY = projection.y;
 
       if (!canInsertPointIntoSelection(prev, insertX, insertY)) return prev;
 
@@ -1054,6 +1640,9 @@ const MapasInteractivos: React.FC = () => {
   const selectedSubtema = subtemas.find(s => s.id === selectedSubtemaId) ?? null;
   const selectedPlacaIndex = selectedPlaca ? placas.findIndex(p => p.id === selectedPlaca.id) : -1;
   const isWorkspaceMode = selectedPlaca !== null;
+  const activeSavedSelectionTitle = activeSavedSelectionIndex !== null
+    ? (savedSelectionDetails[activeSavedSelectionIndex]?.title?.trim() || `Seleccion ${activeSavedSelectionIndex + 1}`)
+    : '';
 
   return (
     <div style={isWorkspaceMode ? s.pageWorkspace : s.page}>
@@ -1069,20 +1658,33 @@ const MapasInteractivos: React.FC = () => {
                 <p style={s.workspaceSubtitle}>
                   {selectedTema?.nombre ?? 'Tema'} {'›'} {selectedSubtema?.nombre ?? 'Subtema'}
                   {selectedPlacaIndex >= 0 ? ` · Placa ${selectedPlacaIndex + 1}` : ''}
+                  {currentMapNumber ? ` · Mapa ${currentMapNumber}` : ''}
                 </p>
               </div>
 
               <div style={s.workspaceActions}>
+                <button
+                  type="button"
+                  style={{
+                    ...s.updateMapBtn,
+                    ...((isPersistingMap || !hasUnsavedMapChanges || savedSelections.length === 0) ? s.updateMapBtnDisabled : {}),
+                  }}
+                  onClick={updateInteractiveMapRecord}
+                  disabled={isPersistingMap || !hasUnsavedMapChanges || savedSelections.length === 0}
+                >
+                  {isPersistingMap ? 'Guardando...' : 'Actualizar mapa'}
+                </button>
                 <button type="button" style={s.secondaryWorkspaceBtn} onClick={clearSelection}>
-                  Limpiar selección
+                  Limpiar no guardadas
                 </button>
                 <button
                   type="button"
-                  style={s.changePlacaBtn}
-                  onClick={() => {
-                    clearSelection();
-                    setSelectedPlaca(null);
+                  style={{
+                    ...s.changePlacaBtn,
+                    ...(isPersistingMap ? s.updateMapBtnDisabled : {}),
                   }}
+                  onClick={handleCancelWorkspace}
+                  disabled={isPersistingMap}
                 >
                   Cancelar
                 </button>
@@ -1130,7 +1732,11 @@ const MapasInteractivos: React.FC = () => {
                           listening={false}
                         />
 
-                        {savedSelections.map((points, idx) => (
+                        {savedSelections.map((points, idx) => {
+                          const details = savedSelectionDetails[idx];
+                          const fillColor = hexToRgba(details?.color ?? DEFAULT_SELECTION_COLOR, 0.2);
+
+                          return (
                           <React.Fragment key={`saved-${idx}`}>
                             <Line
                               points={points}
@@ -1154,7 +1760,7 @@ const MapasInteractivos: React.FC = () => {
                               }}
                               stroke="#0f766e"
                               strokeWidth={1.5}
-                              fill="rgba(45,212,191,0.14)"
+                              fill={fillColor}
                             />
                             <Line
                               points={points}
@@ -1179,7 +1785,26 @@ const MapasInteractivos: React.FC = () => {
                               }}
                               onMouseMove={e => {
                                 if (selectedTool !== 'lasso' || activeSavedSelectionIndex !== idx) return;
-                                const pointer = e.target.getStage()?.getPointerPosition();
+                                if (isCoarsePointer) {
+                                  hideInsertHint();
+                                  return;
+                                }
+                                const pointer = getPointerFromKonvaEvent(e);
+                                if (!pointer) return;
+
+                                const hint = resolveInsertHint(points, pointer.x, pointer.y);
+                                if (!hint) {
+                                  hideInsertHint();
+                                  return;
+                                }
+                                showInsertHintAt(hint.x, hint.y, hint.snapped);
+                              }}
+                              onTouchMove={e => {
+                                e.cancelBubble = true;
+                                e?.evt?.preventDefault?.();
+                                if (selectedTool !== 'lasso' || activeSavedSelectionIndex !== idx) return;
+
+                                const pointer = getPointerFromKonvaEvent(e);
                                 if (!pointer) return;
 
                                 const hint = resolveInsertHint(points, pointer.x, pointer.y);
@@ -1192,17 +1817,42 @@ const MapasInteractivos: React.FC = () => {
                               onMouseLeave={() => {
                                 hideInsertHint();
                               }}
+                              onTouchEnd={() => {
+                                hideInsertHint();
+                              }}
+                              onTouchCancel={() => {
+                                hideInsertHint();
+                              }}
                               onClick={e => {
+                                e.cancelBubble = true;
+                                if (selectedTool !== 'lasso') return;
+                                if (isCoarsePointer) return;
+
+                                if (activeSavedSelectionIndex !== idx) {
+                                  setActiveSavedSelectionIndex(idx);
+                                  setShowDeleteConfirm(false);
+                                  hideInsertHint();
+                                  return;
+                                }
+
+                                const pointer = getPointerFromKonvaEvent(e);
+                                if (!pointer) return;
+                                insertSavedSelectionPoint(idx, pointer.x, pointer.y);
+                                setShowDeleteConfirm(false);
+                                hideInsertHint();
+                              }}
+                              onTap={e => {
                                 e.cancelBubble = true;
                                 if (selectedTool !== 'lasso') return;
 
                                 if (activeSavedSelectionIndex !== idx) {
                                   setActiveSavedSelectionIndex(idx);
                                   setShowDeleteConfirm(false);
+                                  hideInsertHint();
                                   return;
                                 }
 
-                                const pointer = e.target.getStage()?.getPointerPosition();
+                                const pointer = getPointerFromKonvaEvent(e);
                                 if (!pointer) return;
                                 insertSavedSelectionPoint(idx, pointer.x, pointer.y);
                                 setShowDeleteConfirm(false);
@@ -1214,7 +1864,7 @@ const MapasInteractivos: React.FC = () => {
                               dashOffset={dashOffset}
                             />
                           </React.Fragment>
-                        ))}
+                        );})}
 
                         {selectedTool === 'lasso' &&
                           activeSavedSelectionIndex !== null &&
@@ -1262,7 +1912,26 @@ const MapasInteractivos: React.FC = () => {
                               }}
                               onMouseMove={e => {
                                 if (selectedTool !== 'lasso') return;
-                                const pointer = e.target.getStage()?.getPointerPosition();
+                                if (isCoarsePointer) {
+                                  hideInsertHint();
+                                  return;
+                                }
+                                const pointer = getPointerFromKonvaEvent(e);
+                                if (!pointer) return;
+
+                                const hint = resolveInsertHint(selectionPoints, pointer.x, pointer.y);
+                                if (!hint) {
+                                  hideInsertHint();
+                                  return;
+                                }
+                                showInsertHintAt(hint.x, hint.y, hint.snapped);
+                              }}
+                              onTouchMove={e => {
+                                e.cancelBubble = true;
+                                e?.evt?.preventDefault?.();
+                                if (selectedTool !== 'lasso') return;
+
+                                const pointer = getPointerFromKonvaEvent(e);
                                 if (!pointer) return;
 
                                 const hint = resolveInsertHint(selectionPoints, pointer.x, pointer.y);
@@ -1275,10 +1944,25 @@ const MapasInteractivos: React.FC = () => {
                               onMouseLeave={() => {
                                 hideInsertHint();
                               }}
+                              onTouchEnd={() => {
+                                hideInsertHint();
+                              }}
+                              onTouchCancel={() => {
+                                hideInsertHint();
+                              }}
                               onClick={e => {
                                 e.cancelBubble = true;
                                 if (selectedTool !== 'lasso') return;
-                                const pointer = e.target.getStage()?.getPointerPosition();
+                                if (isCoarsePointer) return;
+                                const pointer = getPointerFromKonvaEvent(e);
+                                if (!pointer) return;
+                                insertPendingSelectionPoint(pointer.x, pointer.y);
+                                hideInsertHint();
+                              }}
+                              onTap={e => {
+                                e.cancelBubble = true;
+                                if (selectedTool !== 'lasso') return;
+                                const pointer = getPointerFromKonvaEvent(e);
                                 if (!pointer) return;
                                 insertPendingSelectionPoint(pointer.x, pointer.y);
                                 hideInsertHint();
@@ -1287,7 +1971,7 @@ const MapasInteractivos: React.FC = () => {
                               strokeWidth={2}
                               dash={[10, 8]}
                               dashOffset={dashOffset}
-                              fill="rgba(56,189,248,0.16)"
+                              fill={hexToRgba(pendingSelectionDetails.color || DEFAULT_SELECTION_COLOR, 0.2)}
                             />
                             <Line
                               points={selectionPoints}
@@ -1432,42 +2116,104 @@ const MapasInteractivos: React.FC = () => {
                 )}
 
                 {activeSavedSelectionIndex !== null && !isDrawing && (
-                  <div style={s.deleteActionAnchor}>
-                    <button
-                      type="button"
-                      style={s.selectionDeleteBtn}
-                      onClick={() => setShowDeleteConfirm(prev => !prev)}
-                      title="Eliminar selección activa"
-                    >
-                      🗑
-                    </button>
+                  <div style={s.savedSelectionActionsWrap}>
+                    <div style={s.editActionAnchor}>
+                      <button
+                        type="button"
+                        style={s.selectionEditBtn}
+                        onClick={openEditSelectionInfoForm}
+                        title="Editar información de la selección"
+                      >
+                        ✎
+                      </button>
+                      <span style={s.savedSelectionTitlePill} title={activeSavedSelectionTitle}>
+                        {activeSavedSelectionTitle}
+                      </span>
+                    </div>
 
-                    {showDeleteConfirm && (
-                      <div style={s.deleteConfirmPopover}>
-                        <button
-                          type="button"
-                          style={s.deleteConfirmYesBtn}
-                          onClick={deleteActiveSavedSelection}
-                          title="Confirmar borrado"
-                        >
-                          Sí
-                        </button>
-                        <button
-                          type="button"
-                          style={s.deleteConfirmNoBtn}
-                          onClick={() => setShowDeleteConfirm(false)}
-                          title="Cancelar borrado"
-                        >
-                          No
-                        </button>
-                      </div>
-                    )}
+                    <div style={s.deleteActionAnchor}>
+                      <button
+                        type="button"
+                        style={s.selectionDeleteBtn}
+                        onClick={() => setShowDeleteConfirm(prev => !prev)}
+                        title="Eliminar selección activa"
+                      >
+                        🗑
+                      </button>
+
+                      {showDeleteConfirm && (
+                        <div style={s.deleteConfirmPopover}>
+                          <button
+                            type="button"
+                            style={s.deleteConfirmYesBtn}
+                            onClick={deleteActiveSavedSelection}
+                            title="Confirmar borrado"
+                            disabled={isPersistingMap}
+                          >
+                            Sí
+                          </button>
+                          <button
+                            type="button"
+                            style={s.deleteConfirmNoBtn}
+                            onClick={() => setShowDeleteConfirm(false)}
+                            title="Cancelar borrado"
+                            disabled={isPersistingMap}
+                          >
+                            No
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </aside>
             </div>
 
-            <p style={s.workspaceHint}>Esc limpia la selección. Haz clic en una selección confirmada para editarla por nodos o eliminarla (con confirmación). Con la lupa, arrastra a la derecha para acercar y a la izquierda para alejar.</p>
+            <p style={s.workspaceHint}>Esc limpia la selección. Haz clic o toca una selección confirmada para editar nodos, usar el lápiz para editar su información o eliminarla (con confirmación). Para agregar nodos, haz clic o toca sobre la línea de borde de la selección. Con la lupa, arrastra a la derecha para acercar y a la izquierda para alejar.</p>
+            {mapPersistMessage && <p style={s.workspacePersistHint}>{mapPersistMessage}</p>}
+
+            {showUnsavedExitConfirm && (
+              <div style={s.unsavedExitBackdrop}>
+                <div style={s.unsavedExitModal}>
+                  <h3 style={s.unsavedExitTitle}>Hay cambios sin guardar</h3>
+                  <p style={s.unsavedExitText}>
+                    Tienes cambios pendientes en este mapa. ¿Deseas guardar antes de cerrar?
+                  </p>
+                  <div style={s.unsavedExitActions}>
+                    <button
+                      type="button"
+                      style={s.unsavedExitStayBtn}
+                      onClick={() => setShowUnsavedExitConfirm(false)}
+                      disabled={isPersistingMap}
+                    >
+                      Seguir editando
+                    </button>
+                    <button
+                      type="button"
+                      style={{
+                        ...s.unsavedExitSaveBtn,
+                        ...(isPersistingMap ? s.selectionInfoSaveBtnDisabled : {}),
+                      }}
+                      onClick={saveChangesAndCloseWorkspace}
+                      disabled={isPersistingMap}
+                    >
+                      {isPersistingMap ? 'Guardando...' : 'Guardar y cerrar'}
+                    </button>
+                    <button
+                      type="button"
+                      style={{
+                        ...s.unsavedExitDiscardBtn,
+                        ...(isPersistingMap ? s.selectionInfoSaveBtnDisabled : {}),
+                      }}
+                      onClick={closeWithoutSaving}
+                      disabled={isPersistingMap}
+                    >
+                      Cerrar sin guardar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {showPendingReplaceConfirm && (
               <div style={s.pendingReplaceBackdrop}>
@@ -1490,6 +2236,90 @@ const MapasInteractivos: React.FC = () => {
                       onClick={confirmPendingReplaceSelection}
                     >
                       Confirmar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showSelectionInfoForm && (
+              <div style={s.selectionInfoBackdrop}>
+                <div style={s.selectionInfoModal}>
+                  <h3 style={s.selectionInfoTitle}>
+                    {editingSelectionIndex !== null ? 'Editar selección guardada' : 'Información de la selección'}
+                  </h3>
+                  <p style={s.selectionInfoText}>
+                    {editingSelectionIndex !== null
+                      ? 'Actualiza los datos de la selección y guarda los cambios.'
+                      : 'Completa los datos antes de confirmar esta selección.'}
+                  </p>
+
+                  <label style={s.selectionInfoLabel} htmlFor="selection-title-input">
+                    Título <span style={s.selectionInfoRequired}>*</span>
+                  </label>
+                  <input
+                    id="selection-title-input"
+                    type="text"
+                    value={pendingSelectionDetails.title}
+                    onChange={(event) => {
+                      const nextTitle = event.target.value;
+                      setPendingSelectionDetails(prev => ({ ...prev, title: nextTitle }));
+                      if (selectionInfoError && nextTitle.trim().length > 0) {
+                        setSelectionInfoError(null);
+                      }
+                    }}
+                    placeholder="Ej. Epitelio respiratorio"
+                    style={s.selectionInfoInput}
+                  />
+                  {selectionInfoError && <p style={s.selectionInfoError}>{selectionInfoError}</p>}
+
+                  <label style={s.selectionInfoLabel}>Color del área</label>
+                  <div style={s.selectionColorGrid}>
+                    {SELECTION_COLOR_OPTIONS.map(color => {
+                      const isSelected = pendingSelectionDetails.color === color;
+                      return (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => setPendingSelectionDetails(prev => ({ ...prev, color }))}
+                          title={`Color ${color}`}
+                          style={{
+                            ...s.selectionColorOption,
+                            background: hexToRgba(color, 0.6),
+                            border: isSelected ? `2px solid ${color}` : '2px solid #cbd5e1',
+                            boxShadow: isSelected
+                              ? `0 0 0 3px ${hexToRgba(color, 0.28)}`
+                              : '0 2px 7px rgba(15,23,42,0.12)',
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+
+                  <label style={s.selectionInfoLabel} htmlFor="selection-description-input">Información</label>
+                  <textarea
+                    id="selection-description-input"
+                    value={pendingSelectionDetails.description}
+                    onChange={(event) => setPendingSelectionDetails(prev => ({ ...prev, description: event.target.value }))}
+                    placeholder="Escribe un párrafo descriptivo para esta selección..."
+                    rows={4}
+                    style={s.selectionInfoTextarea}
+                  />
+
+                  <div style={s.selectionInfoActions}>
+                    <button type="button" style={s.selectionInfoCancelBtn} onClick={cancelSelectionInfoForm}>
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      style={{
+                        ...s.selectionInfoSaveBtn,
+                        ...(pendingSelectionDetails.title.trim().length === 0 ? s.selectionInfoSaveBtnDisabled : {}),
+                      }}
+                      onClick={saveSelectionWithDetails}
+                      disabled={pendingSelectionDetails.title.trim().length === 0}
+                    >
+                      {editingSelectionIndex !== null ? 'Actualizar' : 'Guardar'}
                     </button>
                   </div>
                 </div>
@@ -1851,6 +2681,8 @@ const s: { [key: string]: React.CSSProperties } = {
     justifyContent: 'space-between',
     gap: '12px',
     flexWrap: 'wrap',
+    paddingRight: '10px',
+    boxSizing: 'border-box',
   },
   workspaceTitle: {
     margin: 0,
@@ -1871,10 +2703,34 @@ const s: { [key: string]: React.CSSProperties } = {
     fontSize: '0.86em',
     fontWeight: 600,
   },
+  workspacePersistHint: {
+    margin: '-6px 0 0',
+    color: '#0f766e',
+    fontSize: '0.82em',
+    fontWeight: 700,
+  },
   workspaceActions: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '8px',
+  },
+  updateMapBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '10px 14px',
+    borderRadius: '10px',
+    border: '1.5px solid #86efac',
+    background: '#ecfdf5',
+    color: '#166534',
+    cursor: 'pointer',
+    fontWeight: 800,
+    fontFamily: 'inherit',
+    transition: 'all 0.2s ease',
+  },
+  updateMapBtnDisabled: {
+    opacity: 0.56,
+    cursor: 'not-allowed',
   },
   changePlacaBtn: {
     display: 'inline-flex',
@@ -1908,6 +2764,8 @@ const s: { [key: string]: React.CSSProperties } = {
     gap: '14px',
     alignItems: 'stretch',
     height: 'calc(100vh - 130px)',
+    paddingRight: '10px',
+    boxSizing: 'border-box',
   },
   canvasArea: {
     borderRadius: '16px',
@@ -2049,6 +2907,55 @@ const s: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     fontFamily: 'inherit',
   },
+  savedSelectionActionsWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    alignItems: 'center',
+    marginTop: '4px',
+  },
+  editActionAnchor: {
+    position: 'relative',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectionEditBtn: {
+    width: '34px',
+    height: '34px',
+    borderRadius: '999px',
+    border: '1.5px solid #fed7aa',
+    background: '#fff7ed',
+    color: '#c2410c',
+    cursor: 'pointer',
+    fontSize: '0.98em',
+    lineHeight: 1,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: 'inherit',
+  },
+  savedSelectionTitlePill: {
+    position: 'absolute',
+    right: 'calc(100% + 8px)',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    maxWidth: '180px',
+    minWidth: '110px',
+    padding: '7px 10px',
+    borderRadius: '10px',
+    border: '1.5px solid #bae6fd',
+    background: '#f8fafc',
+    boxShadow: '0 6px 18px rgba(15,23,42,0.12)',
+    color: '#0f172a',
+    fontSize: '0.74em',
+    fontWeight: 700,
+    lineHeight: 1.2,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    pointerEvents: 'none',
+  },
   deleteActionAnchor: {
     position: 'relative',
     display: 'inline-flex',
@@ -2105,6 +3012,81 @@ const s: { [key: string]: React.CSSProperties } = {
     padding: '20px',
     boxSizing: 'border-box',
   },
+  unsavedExitBackdrop: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(15,23,42,0.4)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 22,
+    padding: '20px',
+    boxSizing: 'border-box',
+  },
+  unsavedExitModal: {
+    width: 'min(94vw, 460px)',
+    borderRadius: '14px',
+    border: '1.5px solid #bfdbfe',
+    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+    boxShadow: '0 16px 34px rgba(15,23,42,0.26)',
+    padding: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  unsavedExitTitle: {
+    margin: 0,
+    color: '#0f172a',
+    fontSize: '1.02em',
+    fontWeight: 800,
+    letterSpacing: '-0.01em',
+  },
+  unsavedExitText: {
+    margin: 0,
+    color: '#475569',
+    fontSize: '0.9em',
+    lineHeight: 1.45,
+  },
+  unsavedExitActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    marginTop: '2px',
+    flexWrap: 'wrap',
+  },
+  unsavedExitStayBtn: {
+    borderRadius: '10px',
+    border: '1.5px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#334155',
+    padding: '8px 12px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '0.84em',
+    fontFamily: 'inherit',
+  },
+  unsavedExitSaveBtn: {
+    borderRadius: '10px',
+    border: '1.5px solid #86efac',
+    background: '#ecfdf5',
+    color: '#166534',
+    padding: '8px 12px',
+    cursor: 'pointer',
+    fontWeight: 800,
+    fontSize: '0.84em',
+    fontFamily: 'inherit',
+  },
+  unsavedExitDiscardBtn: {
+    borderRadius: '10px',
+    border: '1.5px solid #fecaca',
+    background: '#fff1f2',
+    color: '#b91c1c',
+    padding: '8px 12px',
+    cursor: 'pointer',
+    fontWeight: 800,
+    fontSize: '0.84em',
+    fontFamily: 'inherit',
+  },
   pendingReplaceModal: {
     width: 'min(92vw, 420px)',
     borderRadius: '14px',
@@ -2156,6 +3138,131 @@ const s: { [key: string]: React.CSSProperties } = {
     fontWeight: 800,
     fontSize: '0.84em',
     fontFamily: 'inherit',
+  },
+  selectionInfoBackdrop: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(15,23,42,0.42)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 24,
+    padding: '20px',
+    boxSizing: 'border-box',
+  },
+  selectionInfoModal: {
+    width: 'min(94vw, 460px)',
+    borderRadius: '14px',
+    border: '1.5px solid #bfdbfe',
+    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+    boxShadow: '0 18px 38px rgba(15,23,42,0.28)',
+    padding: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  selectionInfoTitle: {
+    margin: 0,
+    color: '#0f172a',
+    fontSize: '1.05em',
+    fontWeight: 800,
+    letterSpacing: '-0.01em',
+  },
+  selectionInfoText: {
+    margin: 0,
+    color: '#475569',
+    fontSize: '0.9em',
+    lineHeight: 1.45,
+  },
+  selectionInfoLabel: {
+    marginTop: '4px',
+    color: '#334155',
+    fontSize: '0.8em',
+    fontWeight: 700,
+    letterSpacing: '0.02em',
+  },
+  selectionInfoRequired: {
+    color: '#dc2626',
+    fontWeight: 800,
+  },
+  selectionInfoInput: {
+    width: '100%',
+    borderRadius: '10px',
+    border: '1.5px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#0f172a',
+    padding: '10px 12px',
+    fontSize: '0.9em',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box',
+  },
+  selectionInfoError: {
+    margin: '-2px 0 2px',
+    color: '#b91c1c',
+    fontSize: '0.78em',
+    fontWeight: 700,
+  },
+  selectionColorGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+    gap: '10px',
+    marginTop: '2px',
+  },
+  selectionColorOption: {
+    width: '100%',
+    aspectRatio: '1 / 1',
+    borderRadius: '999px',
+    cursor: 'pointer',
+    padding: 0,
+    fontSize: 0,
+    lineHeight: 0,
+    transition: 'transform 0.16s ease, box-shadow 0.18s ease',
+  },
+  selectionInfoTextarea: {
+    width: '100%',
+    borderRadius: '10px',
+    border: '1.5px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#0f172a',
+    padding: '10px 12px',
+    fontSize: '0.88em',
+    fontFamily: 'inherit',
+    lineHeight: 1.45,
+    resize: 'vertical',
+    minHeight: '92px',
+    boxSizing: 'border-box',
+  },
+  selectionInfoActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    marginTop: '4px',
+  },
+  selectionInfoCancelBtn: {
+    borderRadius: '10px',
+    border: '1.5px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#334155',
+    padding: '8px 12px',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '0.84em',
+    fontFamily: 'inherit',
+  },
+  selectionInfoSaveBtn: {
+    borderRadius: '10px',
+    border: '1.5px solid #86efac',
+    background: '#ecfdf5',
+    color: '#166534',
+    padding: '8px 12px',
+    cursor: 'pointer',
+    fontWeight: 800,
+    fontSize: '0.84em',
+    fontFamily: 'inherit',
+  },
+  selectionInfoSaveBtnDisabled: {
+    opacity: 0.55,
+    cursor: 'not-allowed',
   },
 };
 

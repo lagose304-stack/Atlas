@@ -121,6 +121,7 @@ const Footer: React.FC<FooterProps> = () => {
             </div>
             <a
               href={`mailto:${contactEmail}`}
+              title={contactEmail}
               style={s.link}
               className="footer-col-text"
               onClick={handleContactEmailClick}
@@ -142,6 +143,7 @@ const Footer: React.FC<FooterProps> = () => {
             </div>
             <a
               href={`mailto:${reportEmail}`}
+              title={reportEmail}
               style={s.link}
               className="footer-col-text"
               onClick={handleReportEmailClick}

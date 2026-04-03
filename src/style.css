@@ -941,7 +941,6 @@ body {
 @media (max-width: 900px) {
   .atlas-compact-bar {
     min-height: 48px !important;
-    width: calc(100% - 10px) !important;
     padding: 6px 9px !important;
     gap: 9px !important;
   }
@@ -999,10 +998,9 @@ body {
 @media (max-width: 640px) {
   .atlas-compact-bar {
     min-height: 44px !important;
-    width: calc(100% - 8px) !important;
     padding: 5px 7px !important;
     gap: 7px !important;
-    border-radius: 0 0 10px 10px !important;
+    border-radius: 0 !important;
   }
 
   .atlas-compact-logo-aura {
@@ -1045,10 +1043,9 @@ body {
 @media (max-width: 480px) {
   .atlas-compact-bar {
     min-height: 40px !important;
-    width: calc(100% - 6px) !important;
     padding: 4px 6px !important;
     gap: 6px !important;
-    border-radius: 0 0 8px 8px !important;
+    border-radius: 0 !important;
   }
 
   .atlas-compact-brand-button {
@@ -1782,11 +1779,20 @@ body {
   overflow: hidden;
 }
 
-.footer-contact-item .footer-col-text {
-  max-width: 100% !important;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.footer-contact-item {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .footer-contact-item .footer-col-text {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
 }
 
 .footer-about-actions {
