@@ -190,7 +190,6 @@ const PlacasSubtema: React.FC = () => {
         className="placa-thumb-wrap"
         style={{
           ...styles.thumbWrap,
-          transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
           boxShadow: isHovered
             ? '0 16px 28px rgba(14,165,233,0.24)'
             : '0 6px 14px rgba(56,189,248,0.16)',
@@ -469,17 +468,17 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   thumbWrap: {
     position: 'relative',
+    display: 'block',
     borderRadius: '14px',
     overflow: 'hidden',
     cursor: 'pointer',
     aspectRatio: '1 / 1',
+    lineHeight: 0,
     background: '#f1f5f9',
     border: '1.5px solid #dbeafe',
     boxShadow: '0 6px 14px rgba(56,189,248,0.16)',
     outline: 'none',
-    backfaceVisibility: 'hidden',
-    willChange: 'transform, box-shadow, border-color',
-    transition: 'transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease',
+    transition: 'box-shadow 0.28s ease, border-color 0.28s ease',
   },
   thumbImg: {
     width: '100%',
