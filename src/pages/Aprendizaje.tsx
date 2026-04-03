@@ -30,6 +30,7 @@ interface InteractiveMapRawSection {
   description?: string | null;
   points?: unknown;
   sort_order?: number | null;
+  coordinate_space?: string | null;
 }
 
 interface InteractiveMapRow {
@@ -57,6 +58,9 @@ const PARCIALES: { key: 'primer' | 'segundo' | 'tercer'; label: string; num: str
   { key: 'tercer', label: 'TERCER PARCIAL', num: '3' },
 ];
 
+const INTERACTIVE_MAP_COORDINATE_SPACE = 'image_uv_v1';
+const NORMALIZED_COORD_EPSILON = 0.0005;
+
 const sanitizeHexColor = (value: string | null | undefined): string => {
   if (typeof value !== 'string') return '#0ea5e9';
   const color = value.trim();
@@ -71,32 +75,49 @@ const normalizeSectionPoints = (rawPoints: unknown): number[] => {
   return clean;
 };
 
+const isNormalizedCoordinateValue = (value: number): boolean => {
+  return value >= -NORMALIZED_COORD_EPSILON && value <= 1 + NORMALIZED_COORD_EPSILON;
+};
+
+const areLikelyNormalizedFlatPoints = (points: number[]): boolean => {
+  if (points.length < 6 || points.length % 2 !== 0) return false;
+  return points.every((point) => isNormalizedCoordinateValue(point));
+};
+
 const normalizeSectionsForViewer = (sectionsRaw: InteractiveMapRawSection[] | null | undefined): InteractiveMapViewerSection[] => {
   if (!Array.isArray(sectionsRaw) || sectionsRaw.length === 0) return [];
 
-  const sections = sectionsRaw
-    .map((section, index) => {
-      const points = normalizeSectionPoints(section?.points);
-      if (points.length < 6) return null;
+  const sections: InteractiveMapViewerSection[] = [];
 
-      const title = typeof section?.title === 'string' && section.title.trim().length > 0
-        ? section.title.trim()
-        : `Zona ${index + 1}`;
-      const description = typeof section?.description === 'string' ? section.description.trim() : '';
-      const color = sanitizeHexColor(section?.color);
-      const sortOrder = typeof section?.sort_order === 'number' ? section.sort_order : index;
+  sectionsRaw.forEach((section, index) => {
+    const points = normalizeSectionPoints(section?.points);
+    if (points.length < 6) return;
 
-      return {
-        title,
-        description,
-        color,
-        points,
-        sortOrder,
-      };
-    })
-    .filter((section): section is InteractiveMapViewerSection => section !== null)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
+    const title = typeof section?.title === 'string' && section.title.trim().length > 0
+      ? section.title.trim()
+      : `Zona ${index + 1}`;
+    const description = typeof section?.description === 'string' ? section.description.trim() : '';
+    const color = sanitizeHexColor(section?.color);
+    const sortOrder = typeof section?.sort_order === 'number' ? section.sort_order : index;
+    const declaredCoordinateSpace = typeof section?.coordinate_space === 'string'
+      ? section.coordinate_space
+      : undefined;
+    const coordinateSpace =
+      declaredCoordinateSpace ?? (areLikelyNormalizedFlatPoints(points) ? INTERACTIVE_MAP_COORDINATE_SPACE : undefined);
 
+    const normalizedSection: InteractiveMapViewerSection = {
+      title,
+      description,
+      color,
+      points,
+      sortOrder,
+      ...(coordinateSpace ? { coordinateSpace } : {}),
+    };
+
+    sections.push(normalizedSection);
+  });
+
+  sections.sort((a, b) => a.sortOrder - b.sortOrder);
   return sections;
 };
 

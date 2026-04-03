@@ -57,6 +57,7 @@ interface InteractiveMapSectionPayload {
   description: string;
   points: number[];
   sort_order: number;
+  coordinate_space: string | null;
 }
 
 interface InteractiveMapRow {
@@ -96,6 +97,8 @@ const MOUSE_SAVED_HANDLE_RADIUS = 5.5;
 const TOUCH_INSERT_SNAP_DISTANCE = 26;
 const MOUSE_INSERT_SNAP_DISTANCE = 14;
 const INTERACTIVE_MAPS_TABLE = 'interactive_maps';
+const INTERACTIVE_MAP_COORDINATE_SPACE = 'image_uv_v1';
+const NORMALIZED_COORD_EPSILON = 0.0005;
 const SELECTION_COLOR_OPTIONS = [
   '#0ea5e9',
   '#14b8a6',
@@ -112,6 +115,44 @@ const DEFAULT_SELECTION_COLOR = SELECTION_COLOR_OPTIONS[0];
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const POINT_HIT_RADIUS = 10;
+
+const isNormalizedCoordinateValue = (value: number): boolean => {
+  return value >= -NORMALIZED_COORD_EPSILON && value <= 1 + NORMALIZED_COORD_EPSILON;
+};
+
+const areLikelyNormalizedFlatPoints = (points: number[]): boolean => {
+  if (points.length < 6 || points.length % 2 !== 0) return false;
+  return points.every((point) => isNormalizedCoordinateValue(point));
+};
+
+const stageToNormalizedFlatPoints = (points: number[], referenceRect: RectBox): number[] => {
+  if (points.length < 6 || points.length % 2 !== 0) return [];
+
+  const safeWidth = Math.max(1, referenceRect.width);
+  const safeHeight = Math.max(1, referenceRect.height);
+
+  return points.map((value, idx) => {
+    if (idx % 2 === 0) {
+      return clamp((value - referenceRect.x) / safeWidth, 0, 1);
+    }
+    return clamp((value - referenceRect.y) / safeHeight, 0, 1);
+  });
+};
+
+const normalizedToStageFlatPoints = (points: number[], referenceRect: RectBox): number[] => {
+  if (points.length < 6 || points.length % 2 !== 0) return [];
+
+  const safeWidth = Math.max(1, referenceRect.width);
+  const safeHeight = Math.max(1, referenceRect.height);
+
+  return points.map((value, idx) => {
+    const normalizedValue = clamp(value, 0, 1);
+    if (idx % 2 === 0) {
+      return referenceRect.x + normalizedValue * safeWidth;
+    }
+    return referenceRect.y + normalizedValue * safeHeight;
+  });
+};
 
 const isValidHexColor = (value: string): boolean => /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value);
 
@@ -134,13 +175,20 @@ const hexToRgba = (hex: string, alpha: number): string => {
 
 const buildSectionsPayload = (
   selections: number[][],
-  details: SelectionDetails[]
+  details: SelectionDetails[],
+  referenceRect: RectBox | null
 ): InteractiveMapSectionPayload[] => {
   return selections
     .map((points, index) => {
       if (!Array.isArray(points) || points.length < 6 || points.length % 2 !== 0) return null;
       const cleanPoints = points.filter(point => typeof point === 'number' && Number.isFinite(point));
       if (cleanPoints.length < 6 || cleanPoints.length % 2 !== 0) return null;
+
+      const pointsForStorage = referenceRect
+        ? stageToNormalizedFlatPoints(cleanPoints, referenceRect)
+        : cleanPoints;
+
+      if (pointsForStorage.length < 6 || pointsForStorage.length % 2 !== 0) return null;
 
       const detail = details[index];
       const title = detail?.title?.trim() || `Seleccion ${index + 1}`;
@@ -151,15 +199,17 @@ const buildSectionsPayload = (
         title,
         color,
         description,
-        points: cleanPoints,
+        points: pointsForStorage,
         sort_order: index,
+        coordinate_space: referenceRect ? INTERACTIVE_MAP_COORDINATE_SPACE : null,
       };
     })
     .filter((section): section is InteractiveMapSectionPayload => section !== null);
 };
 
 const hydrateSectionsPayload = (
-  sectionsRaw: InteractiveMapSectionPayload[] | null | undefined
+  sectionsRaw: InteractiveMapSectionPayload[] | null | undefined,
+  referenceRect: RectBox | null
 ): { selections: number[][]; details: SelectionDetails[] } => {
   if (!Array.isArray(sectionsRaw) || sectionsRaw.length === 0) {
     return { selections: [], details: [] };
@@ -169,9 +219,22 @@ const hydrateSectionsPayload = (
   const details: SelectionDetails[] = [];
 
   sectionsRaw.forEach((section) => {
-    const points = Array.isArray(section?.points)
+    const rawPoints = Array.isArray(section?.points)
       ? section.points.filter(value => typeof value === 'number' && Number.isFinite(value))
       : [];
+
+    if (rawPoints.length < 6 || rawPoints.length % 2 !== 0) return;
+
+    const coordinateSpace = typeof section?.coordinate_space === 'string'
+      ? section.coordinate_space
+      : null;
+    const isNormalizedCoordinates =
+      coordinateSpace === INTERACTIVE_MAP_COORDINATE_SPACE || areLikelyNormalizedFlatPoints(rawPoints);
+
+    const points =
+      isNormalizedCoordinates && referenceRect
+        ? normalizedToStageFlatPoints(rawPoints, referenceRect)
+        : rawPoints;
 
     if (points.length < 6 || points.length % 2 !== 0) return;
 
@@ -412,6 +475,7 @@ const MapasInteractivos: React.FC = () => {
   const [dashOffset, setDashOffset] = useState(0);
   const [currentMapId, setCurrentMapId] = useState<number | null>(null);
   const [currentMapNumber, setCurrentMapNumber] = useState<number | null>(null);
+  const [pendingHydrationMapRow, setPendingHydrationMapRow] = useState<InteractiveMapRow | null>(null);
   const [isPersistingMap, setIsPersistingMap] = useState(false);
   const [hasUnsavedMapChanges, setHasUnsavedMapChanges] = useState(false);
   const [mapPersistMessage, setMapPersistMessage] = useState<string | null>(null);
@@ -508,6 +572,7 @@ const MapasInteractivos: React.FC = () => {
   useEffect(() => {
     if (!selectedPlaca) {
       setImageElement(null);
+      setPendingHydrationMapRow(null);
       setCurrentMapId(null);
       setCurrentMapNumber(null);
       setHasUnsavedMapChanges(false);
@@ -536,6 +601,7 @@ const MapasInteractivos: React.FC = () => {
     setSelectionInfoError(null);
     setShowPendingReplaceConfirm(false);
     setPendingLassoStartPoint(null);
+    setPendingHydrationMapRow(null);
     setCurrentMapId(null);
     setCurrentMapNumber(null);
     setHasUnsavedMapChanges(false);
@@ -570,17 +636,14 @@ const MapasInteractivos: React.FC = () => {
       }
 
       if (!data) {
+        setPendingHydrationMapRow(null);
         setPersistedSelectionsSnapshot([]);
         setPersistedSelectionDetailsSnapshot([]);
         return;
       }
 
       const mapRow = data as InteractiveMapRow;
-      const hydrated = hydrateSectionsPayload(mapRow.sections);
-      setSavedSelections(hydrated.selections);
-      setSavedSelectionDetails(hydrated.details);
-      setPersistedSelectionsSnapshot(cloneSelections(hydrated.selections));
-      setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(hydrated.details));
+      setPendingHydrationMapRow(mapRow);
       setCurrentMapId(mapRow.id);
       setCurrentMapNumber(mapRow.map_number);
       setHasUnsavedMapChanges(false);
@@ -701,6 +764,17 @@ const MapasInteractivos: React.FC = () => {
       height: scaledHeight,
     };
   }, [baseImageRect, zoomScale, panOffset]);
+
+  useEffect(() => {
+    if (!pendingHydrationMapRow || !baseImageRect) return;
+
+    const hydrated = hydrateSectionsPayload(pendingHydrationMapRow.sections, baseImageRect);
+    setSavedSelections(hydrated.selections);
+    setSavedSelectionDetails(hydrated.details);
+    setPersistedSelectionsSnapshot(cloneSelections(hydrated.selections));
+    setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(hydrated.details));
+    setPendingHydrationMapRow(null);
+  }, [pendingHydrationMapRow, baseImageRect]);
 
   const effectiveMaxZoom = useMemo(() => {
     return computeDynamicMaxZoom(baseImageRect, imageElement);
@@ -880,7 +954,7 @@ const MapasInteractivos: React.FC = () => {
   ): Promise<{ id: number; mapNumber: number } | null> => {
     if (!selectedTemaId || !selectedPlaca) return null;
 
-    const sectionsPayload = buildSectionsPayload(selectionsToPersist, detailsToPersist);
+    const sectionsPayload = buildSectionsPayload(selectionsToPersist, detailsToPersist, imageRect ?? baseImageRect);
     if (sectionsPayload.length === 0) return null;
 
     // Si la placa ya tiene mapa, se reutiliza y se actualiza en lugar de crear otro.
@@ -963,7 +1037,7 @@ const MapasInteractivos: React.FC = () => {
   const updateInteractiveMapRecord = async (): Promise<boolean> => {
     if (!selectedTemaId || !selectedPlaca) return false;
 
-    const sectionsPayload = buildSectionsPayload(savedSelections, savedSelectionDetails);
+    const sectionsPayload = buildSectionsPayload(savedSelections, savedSelectionDetails, imageRect ?? baseImageRect);
     if (sectionsPayload.length === 0) {
       setMapPersistMessage('No hay selecciones para guardar en el mapa.');
       return false;
@@ -1188,7 +1262,7 @@ const MapasInteractivos: React.FC = () => {
     setMapPersistMessage('Eliminando selección...');
 
     try {
-      const sectionsPayload = buildSectionsPayload(nextSelections, nextDetails);
+      const sectionsPayload = buildSectionsPayload(nextSelections, nextDetails, imageRect ?? baseImageRect);
 
       const { error: deleteError } = await supabase
         .from(INTERACTIVE_MAPS_TABLE)

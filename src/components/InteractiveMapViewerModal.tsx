@@ -8,6 +8,7 @@ export interface InteractiveMapViewerSection {
   color: string;
   points: number[];
   sortOrder: number;
+  coordinateSpace?: string;
 }
 
 interface InteractiveMapViewerModalProps {
@@ -34,8 +35,19 @@ interface Point2D {
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3.2;
 const WHEEL_ZOOM_SENSITIVITY = 0.0016;
+const INTERACTIVE_MAP_COORDINATE_SPACE = 'image_uv_v1';
+const NORMALIZED_COORD_EPSILON = 0.0005;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const isNormalizedCoordinateValue = (value: number): boolean => {
+  return value >= -NORMALIZED_COORD_EPSILON && value <= 1 + NORMALIZED_COORD_EPSILON;
+};
+
+const areLikelyNormalizedFlatPoints = (points: number[]): boolean => {
+  if (points.length < 6 || points.length % 2 !== 0) return false;
+  return points.every((point) => isNormalizedCoordinateValue(point));
+};
 
 const fitRect = (containerWidth: number, containerHeight: number, imageWidth: number, imageHeight: number): RectBox => {
   const scale = Math.min(containerWidth / imageWidth, containerHeight / imageHeight);
@@ -68,13 +80,18 @@ const hexToRgba = (hex: string, alpha: number): string => {
 const normalizeSections = (sections: InteractiveMapViewerSection[]): InteractiveMapViewerSection[] => {
   return sections
     .filter((section) => Array.isArray(section.points) && section.points.length >= 6 && section.points.length % 2 === 0)
-    .map((section, index) => ({
-      ...section,
-      title: section.title?.trim() || `Zona ${index + 1}`,
-      color: isValidHexColor(section.color) ? section.color : '#0ea5e9',
-      description: section.description?.trim() || '',
-      points: section.points.filter((point) => typeof point === 'number' && Number.isFinite(point)),
-    }))
+    .map((section, index) => {
+      const coordinateSpace = typeof section.coordinateSpace === 'string' ? section.coordinateSpace : undefined;
+
+      return {
+        ...section,
+        title: section.title?.trim() || `Zona ${index + 1}`,
+        color: isValidHexColor(section.color) ? section.color : '#0ea5e9',
+        description: section.description?.trim() || '',
+        points: section.points.filter((point) => typeof point === 'number' && Number.isFinite(point)),
+        coordinateSpace,
+      };
+    })
     .filter((section) => section.points.length >= 6 && section.points.length % 2 === 0)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 };
@@ -228,15 +245,28 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
     const scaleX = imageRect.width / Math.max(1, baseImageRect.width);
     const scaleY = imageRect.height / Math.max(1, baseImageRect.height);
 
-    return normalizedSections.map((section) => ({
-      ...section,
-      points: section.points.map((value, idx) => {
-        if (idx % 2 === 0) {
-          return imageRect.x + (value - baseImageRect.x) * scaleX;
-        }
-        return imageRect.y + (value - baseImageRect.y) * scaleY;
-      }),
-    }));
+    return normalizedSections.map((section) => {
+      const isNormalizedCoordinates =
+        section.coordinateSpace === INTERACTIVE_MAP_COORDINATE_SPACE || areLikelyNormalizedFlatPoints(section.points);
+
+      return {
+        ...section,
+        points: section.points.map((value, idx) => {
+          if (isNormalizedCoordinates) {
+            const normalizedValue = clamp(value, 0, 1);
+            if (idx % 2 === 0) {
+              return imageRect.x + normalizedValue * imageRect.width;
+            }
+            return imageRect.y + normalizedValue * imageRect.height;
+          }
+
+          if (idx % 2 === 0) {
+            return imageRect.x + (value - baseImageRect.x) * scaleX;
+          }
+          return imageRect.y + (value - baseImageRect.y) * scaleY;
+        }),
+      };
+    });
   }, [normalizedSections, baseImageRect, imageRect]);
 
   const getTouchPointFromTouch = (touch: Touch): Point2D | null => {
