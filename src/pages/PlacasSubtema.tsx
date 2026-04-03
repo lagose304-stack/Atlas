@@ -277,7 +277,7 @@ const PlacasSubtema: React.FC = () => {
                     <h2 style={styles.gridSectionTitle}>Placas interactivas</h2>
                     <span style={styles.gridSectionCount}>{interactivePlacas.length}</span>
                   </div>
-                  <div className="placas-gallery-grid">
+                  <div className="placas-gallery-grid placas-gallery-grid--subtema">
                     {interactivePlacas.map(renderPlacaCard)}
                   </div>
                 </section>
@@ -289,7 +289,7 @@ const PlacasSubtema: React.FC = () => {
                     <h2 style={styles.gridSectionTitle}>{group.title}</h2>
                     <span style={styles.gridSectionCount}>{group.items.length}</span>
                   </div>
-                  <div className="placas-gallery-grid">
+                  <div className="placas-gallery-grid placas-gallery-grid--subtema">
                     {group.items.map(renderPlacaCard)}
                   </div>
                 </section>

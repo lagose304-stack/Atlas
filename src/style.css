@@ -1671,6 +1671,11 @@ body {
   box-sizing: border-box;
 }
 
+.placas-gallery-grid--subtema {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .placas-gallery-grid > * {
   min-width: 0;
 }
@@ -1683,9 +1688,15 @@ body {
 }
 
 @media (max-width: 420px) {
-  .placas-gallery-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
+  .placas-gallery-grid--subtema {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+
+@media (max-width: 760px) {
+  .placas-gallery-grid--subtema .placa-thumb-wrap {
+    transform: none !important;
   }
 }
 
