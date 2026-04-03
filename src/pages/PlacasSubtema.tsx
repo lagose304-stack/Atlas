@@ -180,13 +180,13 @@ const PlacasSubtema: React.FC = () => {
     setSelectedPlaca(placa);
   };
 
-  const renderPlacaCard = (placa: Placa) => {
+  const renderPlacaCard = (placa: Placa, keySuffix: string) => {
     const hasInteractiveMap = placasConMapa.has(placa.id);
     const isHovered = hoveredId === placa.id;
 
     return (
       <div
-        key={placa.id}
+        key={`${placa.id}-${keySuffix}`}
         className="placa-thumb-wrap"
         style={{
           ...styles.thumbWrap,
@@ -200,31 +200,33 @@ const PlacasSubtema: React.FC = () => {
         onMouseLeave={() => setHoveredId(null)}
         title="Ver en grande"
       >
-        <img
-          src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
-          alt="Placa histológica"
-          style={styles.thumbImg}
-          loading="lazy"
-        />
-        {(placa.aumento || hasInteractiveMap) && (
-          <div style={styles.thumbBadgesRow}>
-            {placa.aumento && (
-              <div style={styles.aumentoBadge} title={`Aumento ${placa.aumento}`} aria-label={`Aumento ${placa.aumento}`}>
-                <span style={styles.aumentoBadgeText}>{placa.aumento.toUpperCase()}</span>
-              </div>
-            )}
-            {hasInteractiveMap && (
-              <div style={styles.interactiveMapBadge} title="Mapa interactivo disponible" aria-label="Mapa interactivo disponible">
-                <MousePointerClick size={16} strokeWidth={2.35} />
-              </div>
-            )}
+        <div style={styles.thumbSquare}>
+          <img
+            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+            alt="Placa histológica"
+            style={styles.thumbImg}
+            loading="lazy"
+          />
+          {(placa.aumento || hasInteractiveMap) && (
+            <div style={styles.thumbBadgesRow}>
+              {placa.aumento && (
+                <div style={styles.aumentoBadge} title={`Aumento ${placa.aumento}`} aria-label={`Aumento ${placa.aumento}`}>
+                  <span style={styles.aumentoBadgeText}>{placa.aumento.toUpperCase()}</span>
+                </div>
+              )}
+              {hasInteractiveMap && (
+                <div style={styles.interactiveMapBadge} title="Mapa interactivo disponible" aria-label="Mapa interactivo disponible">
+                  <MousePointerClick size={16} strokeWidth={2.35} />
+                </div>
+              )}
+            </div>
+          )}
+          <div style={{
+            ...styles.thumbOverlay,
+            opacity: hoveredId === placa.id ? 1 : 0,
+          }}>
+            🔍
           </div>
-        )}
-        <div style={{
-          ...styles.thumbOverlay,
-          opacity: hoveredId === placa.id ? 1 : 0,
-        }}>
-          🔍
         </div>
       </div>
     );
@@ -277,7 +279,7 @@ const PlacasSubtema: React.FC = () => {
                     <span style={styles.gridSectionCount}>{interactivePlacas.length}</span>
                   </div>
                   <div className="placas-gallery-grid placas-gallery-grid--subtema">
-                    {interactivePlacas.map(renderPlacaCard)}
+                    {interactivePlacas.map((placa, index) => renderPlacaCard(placa, `interactive-${index}`))}
                   </div>
                 </section>
               )}
@@ -289,7 +291,7 @@ const PlacasSubtema: React.FC = () => {
                     <span style={styles.gridSectionCount}>{group.items.length}</span>
                   </div>
                   <div className="placas-gallery-grid placas-gallery-grid--subtema">
-                    {group.items.map(renderPlacaCard)}
+                    {group.items.map((placa, index) => renderPlacaCard(placa, `${group.key}-${index}`))}
                   </div>
                 </section>
               ))}
@@ -434,12 +436,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   gridSectionsWrap: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '22px',
+    gap: '14px',
   },
   gridSection: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '8px',
   },
   gridSectionHeader: {
     display: 'flex',
@@ -472,15 +474,21 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '14px',
     overflow: 'hidden',
     cursor: 'pointer',
-    aspectRatio: '1 / 1',
-    lineHeight: 0,
     background: '#f1f5f9',
     border: '1.5px solid #dbeafe',
     boxShadow: '0 6px 14px rgba(56,189,248,0.16)',
     outline: 'none',
     transition: 'box-shadow 0.28s ease, border-color 0.28s ease',
   },
+  thumbSquare: {
+    position: 'relative',
+    width: '100%',
+    paddingTop: '100%',
+    overflow: 'hidden',
+  },
   thumbImg: {
+    position: 'absolute',
+    inset: 0,
     width: '100%',
     height: '100%',
     objectFit: 'cover',

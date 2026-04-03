@@ -1673,21 +1673,25 @@ body {
 
 .placas-gallery-grid--subtema {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  column-gap: 10px;
+  row-gap: 10px;
   align-items: stretch;
   grid-auto-flow: row;
 }
 
 .placas-gallery-grid--subtema .placa-thumb-wrap {
   display: block !important;
-  aspect-ratio: 1 / 1 !important;
   transform: none !important;
   margin: 0 !important;
   will-change: auto !important;
   backface-visibility: visible !important;
 }
 
-.placas-gallery-grid--subtema .placa-thumb-wrap > img {
+.placas-gallery-grid--subtema > .placa-thumb-wrap {
+  align-self: stretch;
+}
+
+.placas-gallery-grid--subtema .placa-thumb-wrap img {
   width: 100% !important;
   height: 100% !important;
   object-fit: cover !important;
