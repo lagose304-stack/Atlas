@@ -456,6 +456,7 @@ const Temario: React.FC = () => {
       // 2. Recopilar placas del tema
       const { data: placasData } = await supabase
         .from('placas').select('id, photo_url').eq('tema_id', temaIdNum);
+      const allPlacaIdsFromTema = (placasData ?? []).map((p) => p.id);
 
       // 2b. photo_urls de placas de OTROS temas — nunca borrar esas imágenes
       const { data: otherPlacasData } = await supabase
@@ -498,17 +499,28 @@ const Temario: React.FC = () => {
           .eq('entity_type', 'placas_page').in('entity_id', subtemaIds);
       }
 
-      // 7. Borrar solo las placas no protegidas en BD
+      // 7. Borrar mapas interactivos asociados a todas las placas del tema
+      if (allPlacaIdsFromTema.length > 0) {
+        const { error: deleteMapsError } = await supabase
+          .from('interactive_maps')
+          .delete()
+          .in('placa_id', allPlacaIdsFromTema);
+        if (deleteMapsError) {
+          throw deleteMapsError;
+        }
+      }
+
+      // 8. Borrar solo las placas no protegidas en BD
       if (placasToDeleteIds.length > 0) {
         await supabase.from('placas').delete().in('id', placasToDeleteIds);
       }
 
-      // 8. Borrar subtemas y tema en BD
+      // 9. Borrar subtemas y tema en BD
       await supabase.from('subtemas').delete().eq('tema_id', temaIdNum);
       const { error } = await supabase.from('temas').delete().match({ id: temaIdNum });
       if (error) return alert(`Error al borrar el tema: ${error.message}`);
 
-      // 9. Borrar imágenes en Cloudinary
+      // 10. Borrar imágenes en Cloudinary
       const deletePromises: Promise<any>[] = [];
       const temaABorrar = temas.find(t => t.id.toString() === deletingTemaId);
       if (temaABorrar?.logo_url) {
@@ -561,6 +573,7 @@ const Temario: React.FC = () => {
       // 1. Recopilar placas del subtema
       const { data: placasData } = await supabase
         .from('placas').select('id, photo_url').eq('subtema_id', subtemaIdNum);
+      const allPlacaIdsFromSubtema = (placasData ?? []).map((p) => p.id);
 
       // 1b. photo_urls de placas de OTROS subtemas — nunca borrar esas imágenes
       const { data: otherPlacasData } = await supabase
@@ -597,16 +610,27 @@ const Temario: React.FC = () => {
       await supabase.from('content_blocks').delete()
         .eq('entity_type', 'placas_page').eq('entity_id', subtemaIdNum);
 
-      // 6. Borrar solo las placas no protegidas en BD
+      // 6. Borrar mapas interactivos asociados a todas las placas del subtema
+      if (allPlacaIdsFromSubtema.length > 0) {
+        const { error: deleteMapsError } = await supabase
+          .from('interactive_maps')
+          .delete()
+          .in('placa_id', allPlacaIdsFromSubtema);
+        if (deleteMapsError) {
+          throw deleteMapsError;
+        }
+      }
+
+      // 7. Borrar solo las placas no protegidas en BD
       if (placasToDeleteIds.length > 0) {
         await supabase.from('placas').delete().in('id', placasToDeleteIds);
       }
 
-      // 7. Borrar subtema en BD
+      // 8. Borrar subtema en BD
       const { error } = await supabase.from('subtemas').delete().match({ id: subtemaIdNum });
       if (error) return alert(`Error al borrar el subtema: ${error.message}`);
 
-      // 8. Borrar imágenes en Cloudinary
+      // 9. Borrar imágenes en Cloudinary
       const deletePromises: Promise<any>[] = [];
       if (subtemaABorrar?.logo_url) {
         const pid = getCloudinaryPublicId(subtemaABorrar.logo_url);

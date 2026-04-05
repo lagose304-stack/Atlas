@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Image as KonvaImage, Line, Circle } from 'react-konva';
 import { MousePointerClick } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import BackButton from '../components/BackButton';
@@ -70,6 +71,29 @@ interface InteractiveMapRow {
 
 interface InteractiveMapPlacaRow {
   placa_id: number;
+  sections: InteractiveMapSectionPayload[] | null;
+}
+
+interface InteractiveMapManagerRow {
+  id: number;
+  map_number: number;
+  tema_id: number;
+  subtema_id: number | null;
+  placa_id: number;
+  sections: InteractiveMapSectionPayload[] | null;
+}
+
+interface PendingMapEditTarget {
+  temaId: number;
+  subtemaId: number | null;
+  placaId: number;
+}
+
+interface InteractiveMapsBySubtemaGroup {
+  key: string;
+  title: string;
+  sortOrder: number;
+  items: InteractiveMapManagerRow[];
 }
 
 interface PlacaGroupByAumento {
@@ -492,11 +516,18 @@ const computeDynamicMaxZoom = (baseRect: RectBox | null, image: HTMLImageElement
 
 const MapasInteractivos: React.FC = () => {
   const handleGoBack = useSmartBackNavigation('/placas');
+  const [searchParams] = useSearchParams();
+  const isManageMode = searchParams.get('modo') === 'editar';
 
   const [temas, setTemas] = useState<Tema[]>([]);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [placas, setPlacas] = useState<Placa[]>([]);
   const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
+  const [temaMaps, setTemaMaps] = useState<InteractiveMapManagerRow[]>([]);
+  const [loadingTemaMaps, setLoadingTemaMaps] = useState(false);
+  const [temaMapsError, setTemaMapsError] = useState<string | null>(null);
+  const [pendingMapEditTarget, setPendingMapEditTarget] = useState<PendingMapEditTarget | null>(null);
+  const [deletingMapId, setDeletingMapId] = useState<number | null>(null);
 
   const [selectedTemaId, setSelectedTemaId] = useState<number | null>(null);
   const [selectedSubtemaId, setSelectedSubtemaId] = useState<number | null>(null);
@@ -636,7 +667,7 @@ const MapasInteractivos: React.FC = () => {
         if (placaIds.length > 0) {
           const { data: interactiveMapsData, error: interactiveMapsError } = await supabase
             .from(INTERACTIVE_MAPS_TABLE)
-            .select('placa_id')
+            .select('placa_id, sections')
             .in('placa_id', placaIds);
 
           if (interactiveMapsError) {
@@ -644,6 +675,7 @@ const MapasInteractivos: React.FC = () => {
             setPlacasConMapa(new Set());
           } else {
             const placaIdsConMapa = (interactiveMapsData ?? [])
+              .filter((row: InteractiveMapPlacaRow) => Array.isArray(row.sections) && row.sections.length > 0)
               .map((row: InteractiveMapPlacaRow) => row.placa_id)
               .filter((id): id is number => typeof id === 'number');
             setPlacasConMapa(new Set(placaIdsConMapa));
@@ -659,6 +691,81 @@ const MapasInteractivos: React.FC = () => {
 
     fetchPlacas();
   }, [selectedSubtemaId]);
+
+  useEffect(() => {
+    setTemaMaps([]);
+    setTemaMapsError(null);
+    setPendingMapEditTarget(null);
+    setDeletingMapId(null);
+
+    if (!isManageMode || !selectedTemaId) return;
+
+    let isEffectActive = true;
+
+    const fetchTemaMaps = async () => {
+      setLoadingTemaMaps(true);
+
+      const { data, error } = await supabase
+        .from(INTERACTIVE_MAPS_TABLE)
+        .select('id, map_number, tema_id, subtema_id, placa_id, sections')
+        .eq('tema_id', selectedTemaId)
+        .order('map_number', { ascending: true });
+
+      if (!isEffectActive) return;
+
+      if (error) {
+        console.error('Error al cargar mapas por tema:', error);
+        setTemaMaps([]);
+        setTemaMapsError('No se pudieron cargar los mapas de este tema.');
+        setLoadingTemaMaps(false);
+        return;
+      }
+
+      const validMaps = ((data ?? []) as InteractiveMapManagerRow[])
+        .filter((row) => Array.isArray(row.sections) && row.sections.length > 0);
+
+      setTemaMaps(validMaps);
+      setLoadingTemaMaps(false);
+    };
+
+    void fetchTemaMaps();
+
+    return () => {
+      isEffectActive = false;
+    };
+  }, [isManageMode, selectedTemaId]);
+
+  useEffect(() => {
+    if (!pendingMapEditTarget) return;
+
+    if (selectedTemaId !== pendingMapEditTarget.temaId) {
+      setSelectedTemaId(pendingMapEditTarget.temaId);
+      return;
+    }
+
+    if (pendingMapEditTarget.subtemaId === null) {
+      setMapPersistMessage('El mapa no tiene subtema asociado y no se puede abrir para edición.');
+      setPendingMapEditTarget(null);
+      return;
+    }
+
+    if (selectedSubtemaId !== pendingMapEditTarget.subtemaId) {
+      setSelectedSubtemaId(pendingMapEditTarget.subtemaId);
+      return;
+    }
+
+    if (loadingPlacas) return;
+
+    const targetPlaca = placas.find((placa) => placa.id === pendingMapEditTarget.placaId);
+    if (targetPlaca) {
+      setSelectedPlaca(targetPlaca);
+      setPendingMapEditTarget(null);
+      return;
+    }
+
+    setMapPersistMessage('No se encontró la placa del mapa seleccionado.');
+    setPendingMapEditTarget(null);
+  }, [pendingMapEditTarget, selectedTemaId, selectedSubtemaId, loadingPlacas, placas]);
 
   useEffect(() => {
     if (!selectedPlaca) {
@@ -1128,6 +1235,12 @@ const MapasInteractivos: React.FC = () => {
       setCurrentMapNumber(existingMapRow.map_number);
       setPersistedSelectionsSnapshot(cloneSelections(selectionsToPersist));
       setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(detailsToPersist));
+      setPlacasConMapa((prev) => {
+        if (!selectedPlaca || prev.has(selectedPlaca.id)) return prev;
+        const next = new Set(prev);
+        next.add(selectedPlaca.id);
+        return next;
+      });
       setHasUnsavedMapChanges(false);
       setMapPersistMessage(`Mapa #${existingMapRow.map_number} actualizado.`);
       return { id: existingMapRow.id, mapNumber: existingMapRow.map_number };
@@ -1168,6 +1281,12 @@ const MapasInteractivos: React.FC = () => {
     setCurrentMapNumber(mapNumber);
     setPersistedSelectionsSnapshot(cloneSelections(selectionsToPersist));
     setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(detailsToPersist));
+    setPlacasConMapa((prev) => {
+      if (!selectedPlaca || prev.has(selectedPlaca.id)) return prev;
+      const next = new Set(prev);
+      next.add(selectedPlaca.id);
+      return next;
+    });
     setHasUnsavedMapChanges(false);
     setMapPersistMessage(`Mapa #${mapNumber} creado.`);
     return { id: mapId, mapNumber };
@@ -1402,6 +1521,37 @@ const MapasInteractivos: React.FC = () => {
 
     try {
       const sectionsPayload = buildSectionsPayload(nextSelections, nextDetails, imageRect ?? baseImageRect);
+
+      if (sectionsPayload.length === 0) {
+        const mapIdToDelete = currentMapId;
+        const mapNumberToDelete = currentMapNumber ?? currentMapId;
+
+        const { error: deleteMapError } = await supabase
+          .from(INTERACTIVE_MAPS_TABLE)
+          .delete()
+          .eq('id', mapIdToDelete);
+
+        if (deleteMapError) {
+          throw deleteMapError;
+        }
+
+        setSavedSelections([]);
+        setSavedSelectionDetails([]);
+        setPersistedSelectionsSnapshot([]);
+        setPersistedSelectionDetailsSnapshot([]);
+        setPendingHydrationMapRow(null);
+        setCurrentMapId(null);
+        setCurrentMapNumber(null);
+        setPlacasConMapa((prev) => {
+          if (!selectedPlaca || !prev.has(selectedPlaca.id)) return prev;
+          const next = new Set(prev);
+          next.delete(selectedPlaca.id);
+          return next;
+        });
+        setHasUnsavedMapChanges(false);
+        setMapPersistMessage(`Mapa #${mapNumberToDelete} eliminado automaticamente al quedar sin selecciones.`);
+        return;
+      }
 
       const { error: deleteError } = await supabase
         .from(INTERACTIVE_MAPS_TABLE)
@@ -1889,6 +2039,98 @@ const MapasInteractivos: React.FC = () => {
   const activeSavedSelectionTitle = activeSavedSelectionIndex !== null
     ? (savedSelectionDetails[activeSavedSelectionIndex]?.title?.trim() || `Seleccion ${activeSavedSelectionIndex + 1}`)
     : '';
+  const mapsBySubtema = useMemo<InteractiveMapsBySubtemaGroup[]>(() => {
+    if (!isManageMode || !selectedTemaId) return [];
+
+    const subtemaIndexById = new Map<number, number>();
+    const subtemaNameById = new Map<number, string>();
+
+    subtemas.forEach((subtema, index) => {
+      subtemaIndexById.set(subtema.id, index);
+      subtemaNameById.set(subtema.id, subtema.nombre);
+    });
+
+    const groups = new Map<string, InteractiveMapsBySubtemaGroup>();
+
+    temaMaps.forEach((mapRow) => {
+      const hasSubtema = typeof mapRow.subtema_id === 'number';
+      const key = hasSubtema ? `subtema-${mapRow.subtema_id}` : 'subtema-null';
+      const title = hasSubtema
+        ? (subtemaNameById.get(mapRow.subtema_id as number) ?? `Subtema ${mapRow.subtema_id}`)
+        : 'Sin subtema';
+      const sortOrder = hasSubtema
+        ? (subtemaIndexById.get(mapRow.subtema_id as number) ?? Number.MAX_SAFE_INTEGER)
+        : Number.MAX_SAFE_INTEGER;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          title,
+          sortOrder,
+          items: [],
+        });
+      }
+
+      const target = groups.get(key);
+      if (target) {
+        target.items.push(mapRow);
+      }
+    });
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        items: [...group.items].sort((a, b) => a.map_number - b.map_number),
+      }))
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return a.title.localeCompare(b.title, 'es', { sensitivity: 'base' });
+      });
+  }, [isManageMode, selectedTemaId, subtemas, temaMaps]);
+
+  const handleEditMapFromManager = (mapRow: InteractiveMapManagerRow) => {
+    setMapPersistMessage(null);
+    setPendingMapEditTarget({
+      temaId: mapRow.tema_id,
+      subtemaId: mapRow.subtema_id,
+      placaId: mapRow.placa_id,
+    });
+  };
+
+  const handleDeleteMapFromManager = async (mapRow: InteractiveMapManagerRow) => {
+    const shouldDelete = window.confirm(
+      `¿Seguro que deseas borrar el mapa #${mapRow.map_number}? Esta acción no se puede deshacer.`
+    );
+
+    if (!shouldDelete) return;
+
+    setDeletingMapId(mapRow.id);
+
+    try {
+      const { error } = await supabase
+        .from(INTERACTIVE_MAPS_TABLE)
+        .delete()
+        .eq('id', mapRow.id);
+
+      if (error) {
+        throw error;
+      }
+
+      setTemaMaps((prev) => prev.filter((row) => row.id !== mapRow.id));
+      setPlacasConMapa((prev) => {
+        if (!prev.has(mapRow.placa_id)) return prev;
+        const next = new Set(prev);
+        next.delete(mapRow.placa_id);
+        return next;
+      });
+      setMapPersistMessage(`Mapa #${mapRow.map_number} eliminado.`);
+    } catch (error) {
+      console.error('Error al eliminar mapa desde el gestor:', error);
+      setMapPersistMessage('No se pudo eliminar el mapa. Intenta nuevamente.');
+    } finally {
+      setDeletingMapId(null);
+    }
+  };
 
   const renderPlacaCard = (placa: Placa, visualIndex: number) => {
     const hasInteractiveMap = placasConMapa.has(placa.id);
@@ -2616,6 +2858,126 @@ const MapasInteractivos: React.FC = () => {
               </div>
             )}
           </div>
+        ) : isManageMode ? (
+          <>
+            <div style={s.pageHeader}>
+              <h1 style={s.pageTitle}>Editar mapas interactivos</h1>
+              <span style={s.manageModePill}>Modo edicion de mapas</span>
+              <p style={s.pageSubtitle}>Selecciona un tema para ver y administrar sus mapas agrupados por subtema.</p>
+              <div style={s.accentLine} />
+            </div>
+
+            <div style={s.card}>
+              <div style={s.cardHeader}>
+                <h2 style={s.cardTitle}>Selecciona tema</h2>
+                <p style={s.cardSubtitle}>Solo necesitas elegir el tema para listar todos sus mapas.</p>
+                <div style={s.divider} />
+              </div>
+
+              <div style={s.selectGroup}>
+                <label style={s.selectLabel}>Tema</label>
+                {loadingTemas ? (
+                  <div style={s.inlineLoading}><div style={s.spinnerSm} /> Cargando...</div>
+                ) : (
+                  <select
+                    style={s.select}
+                    value={selectedTemaId ?? ''}
+                    onChange={e => setSelectedTemaId(e.target.value ? Number(e.target.value) : null)}
+                  >
+                    <option value="">— Elige un tema —</option>
+                    {PARCIALES.map(({ key, label }) =>
+                      temasByParcial[key].length > 0 ? (
+                        <optgroup key={key} label={label}>
+                          {temasByParcial[key].map(t => (
+                            <option key={t.id} value={t.id}>{t.nombre}</option>
+                          ))}
+                        </optgroup>
+                      ) : null
+                    )}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            {selectedTema && (
+              <div style={s.card}>
+                <div style={s.cardHeader}>
+                  <h2 style={s.cardTitle}>Mapas de {selectedTema.nombre}</h2>
+                  <p style={s.cardSubtitle}>{temaMaps.length} {temaMaps.length === 1 ? 'mapa' : 'mapas'} con selecciones</p>
+                  <div style={s.divider} />
+                </div>
+
+                {loadingTemaMaps ? (
+                  <div style={s.loadingWrap}>
+                    <div style={s.spinner} />
+                    <p style={s.loadingText}>Cargando mapas...</p>
+                  </div>
+                ) : temaMapsError ? (
+                  <div style={s.manageErrorBox}>{temaMapsError}</div>
+                ) : mapsBySubtema.length === 0 ? (
+                  <div style={s.emptyState}>Este tema no tiene mapas interactivos guardados.</div>
+                ) : (
+                  <div style={s.mapsAccordionWrap}>
+                    {mapsBySubtema.map((group) => (
+                      <details key={group.key} style={s.mapsAccordionItem} open>
+                        <summary style={s.mapsAccordionSummary}>
+                          <span style={s.mapsAccordionTitle}>{group.title}</span>
+                          <span style={s.mapsAccordionCount}>{group.items.length}</span>
+                        </summary>
+
+                        <div style={s.managedMapList}>
+                          {group.items.map((mapRow) => {
+                            const isDeletingCurrent = deletingMapId === mapRow.id;
+                            const cannotEdit = mapRow.subtema_id === null;
+
+                            return (
+                              <article key={mapRow.id} style={s.managedMapRow}>
+                                <div style={s.managedMapInfo}>
+                                  <p style={s.managedMapTitle}>Mapa #{mapRow.map_number}</p>
+                                  <p style={s.managedMapMeta}>Placa #{mapRow.placa_id}</p>
+                                </div>
+
+                                <div style={s.managedMapActions}>
+                                  <button
+                                    type="button"
+                                    style={{
+                                      ...s.managedMapEditBtn,
+                                      ...(cannotEdit ? s.managedMapActionBtnDisabled : {}),
+                                    }}
+                                    onClick={() => handleEditMapFromManager(mapRow)}
+                                    disabled={cannotEdit}
+                                    title={cannotEdit ? 'Este mapa no tiene subtema asociado y no se puede abrir.' : 'Abrir mapa para edición'}
+                                  >
+                                    ✏️ Editar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    style={{
+                                      ...s.managedMapDeleteBtn,
+                                      ...(isDeletingCurrent ? s.managedMapActionBtnDisabled : {}),
+                                    }}
+                                    onClick={() => {
+                                      void handleDeleteMapFromManager(mapRow);
+                                    }}
+                                    disabled={isDeletingCurrent}
+                                    title="Borrar mapa"
+                                  >
+                                    {isDeletingCurrent ? 'Borrando...' : '🗑️ Borrar'}
+                                  </button>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                )}
+
+                {mapPersistMessage && <p style={s.manageMessage}>{mapPersistMessage}</p>}
+              </div>
+            )}
+          </>
         ) : (
           <>
             <div style={s.pageHeader}>
@@ -2787,6 +3149,20 @@ const s: { [key: string]: React.CSSProperties } = {
     margin: 0,
     lineHeight: 1.6,
   },
+  manageModePill: {
+    alignSelf: 'flex-start',
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '4px 10px',
+    borderRadius: '999px',
+    border: '1px solid #bae6fd',
+    background: '#f0f9ff',
+    color: '#0369a1',
+    fontSize: '0.74em',
+    fontWeight: 800,
+    letterSpacing: '0.03em',
+    textTransform: 'uppercase',
+  },
   accentLine: {
     width: '56px',
     height: '4px',
@@ -2905,6 +3281,123 @@ const s: { [key: string]: React.CSSProperties } = {
     borderRadius: '10px',
     border: '1px dashed #e2e8f0',
     fontSize: '0.95em',
+  },
+  manageErrorBox: {
+    borderRadius: '10px',
+    border: '1px solid #fecaca',
+    background: '#fff1f2',
+    color: '#9f1239',
+    padding: '12px 14px',
+    fontSize: '0.9em',
+    fontWeight: 700,
+    textAlign: 'center',
+  },
+  manageMessage: {
+    margin: '14px 0 0',
+    color: '#0369a1',
+    fontSize: '0.9em',
+    fontWeight: 700,
+    textAlign: 'center',
+  },
+  mapsAccordionWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  mapsAccordionItem: {
+    border: '1.5px solid #dbeafe',
+    borderRadius: '12px',
+    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+    overflow: 'hidden',
+  },
+  mapsAccordionSummary: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    cursor: 'pointer',
+    padding: '12px 14px',
+    listStyle: 'none',
+    userSelect: 'none',
+  },
+  mapsAccordionTitle: {
+    color: '#0f172a',
+    fontSize: '0.95em',
+    fontWeight: 800,
+  },
+  mapsAccordionCount: {
+    color: '#0369a1',
+    fontSize: '0.76em',
+    fontWeight: 800,
+    borderRadius: '999px',
+    border: '1px solid #bae6fd',
+    background: '#f0f9ff',
+    padding: '2px 9px',
+  },
+  managedMapList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    padding: '0 12px 12px',
+  },
+  managedMapRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '10px',
+    background: '#ffffff',
+    padding: '10px 12px',
+    flexWrap: 'wrap',
+  },
+  managedMapInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '3px',
+  },
+  managedMapTitle: {
+    margin: 0,
+    color: '#0f172a',
+    fontSize: '0.92em',
+    fontWeight: 800,
+  },
+  managedMapMeta: {
+    margin: 0,
+    color: '#64748b',
+    fontSize: '0.8em',
+    fontWeight: 600,
+  },
+  managedMapActions: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  managedMapEditBtn: {
+    border: '1.5px solid #bfdbfe',
+    borderRadius: '9px',
+    background: '#eff6ff',
+    color: '#1d4ed8',
+    padding: '8px 12px',
+    cursor: 'pointer',
+    fontSize: '0.82em',
+    fontWeight: 700,
+    fontFamily: 'inherit',
+  },
+  managedMapDeleteBtn: {
+    border: '1.5px solid #fecaca',
+    borderRadius: '9px',
+    background: '#fff1f2',
+    color: '#be123c',
+    padding: '8px 12px',
+    cursor: 'pointer',
+    fontSize: '0.82em',
+    fontWeight: 700,
+    fontFamily: 'inherit',
+  },
+  managedMapActionBtnDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
   },
   gallerySectionsWrap: {
     display: 'flex',

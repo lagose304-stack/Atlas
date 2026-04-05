@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 export type QuestionBlockType =
   | 'single_choice'
@@ -112,7 +112,16 @@ interface TestBuilderProps {
   onSave: (blocks: QuestionBlock[]) => Promise<void>;
   saveDisabled?: boolean;
   saveLabel?: string;
+  initialBlocks?: QuestionBlock[];
+  clearOnSave?: boolean;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
+
+const SUPPORTED_BLOCK_TYPE: QuestionBlockType = 'multiple_choice';
+
+const keepSupportedBlocksOnly = (source?: QuestionBlock[]): QuestionBlock[] => {
+  return (source ?? []).filter((block) => block.type === SUPPORTED_BLOCK_TYPE);
+};
 
 const makeId = () => crypto.randomUUID();
 
@@ -222,10 +231,31 @@ const TestBuilder: React.FC<TestBuilderProps> = ({
   onSave,
   saveDisabled = false,
   saveLabel = 'Guardar prueba',
+  initialBlocks,
+  clearOnSave = true,
+  onDirtyChange,
 }) => {
-  const [blocks, setBlocks] = useState<QuestionBlock[]>([]);
+  const normalizedInitialBlocks = useMemo(
+    () => keepSupportedBlocksOnly(initialBlocks),
+    [initialBlocks]
+  );
+
+  const [blocks, setBlocks] = useState<QuestionBlock[]>(normalizedInitialBlocks);
+  const [savedSignature, setSavedSignature] = useState<string>(
+    JSON.stringify(normalizedInitialBlocks)
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [dragState, setDragState] = useState<{ blockId: string; questionId: string; itemId: string } | null>(null);
+
+  useEffect(() => {
+    setBlocks(normalizedInitialBlocks);
+    setSavedSignature(JSON.stringify(normalizedInitialBlocks));
+  }, [normalizedInitialBlocks]);
+
+  useEffect(() => {
+    if (!onDirtyChange) return;
+    onDirtyChange(JSON.stringify(blocks) !== savedSignature);
+  }, [blocks, onDirtyChange, savedSignature]);
 
   const addBlock = (type: QuestionBlockType) => {
     setBlocks(prev => [...prev, createBlock(type)]);
@@ -290,7 +320,12 @@ const TestBuilder: React.FC<TestBuilderProps> = ({
     setIsSaving(true);
     try {
       await onSave(blocks);
-      setBlocks([]);
+      if (clearOnSave) {
+        setBlocks([]);
+        setSavedSignature('[]');
+      } else {
+        setSavedSignature(JSON.stringify(blocks));
+      }
     } finally {
       setIsSaving(false);
     }
@@ -298,642 +333,637 @@ const TestBuilder: React.FC<TestBuilderProps> = ({
 
   return (
     <div style={tb.wrap}>
-      <div style={tb.topBar}>
-        <span style={tb.topLabel}>Agregar bloque de preguntas cerradas</span>
-        <div style={tb.topActions}>
-          <button type="button" style={tb.typeBtn} onClick={() => addBlock('single_choice')}>Seleccion unica</button>
-          <button type="button" style={tb.typeBtn} onClick={() => addBlock('multiple_choice')}>Seleccion multiple</button>
-          <button type="button" style={tb.typeBtn} onClick={() => addBlock('true_false')}>Verdadero/Falso</button>
-          <button type="button" style={tb.typeBtn} onClick={() => addBlock('matching')}>Terminos pareados</button>
-          <button type="button" style={tb.typeBtn} onClick={() => addBlock('ordering')}>Ordenar (drag)</button>
-          <button type="button" style={tb.typeBtn} onClick={() => addBlock('dropdown_single')}>Lista desplegable</button>
-        </div>
-      </div>
-
-      <div style={tb.summaryRow}>
-        <span style={tb.summaryPill}>Bloques: {blocks.length}</span>
-        <span style={tb.summaryPill}>Preguntas: {summary.totalQuestions}</span>
-        <span style={tb.summaryPill}>Unica: {summary.counts.single_choice}</span>
-        <span style={tb.summaryPill}>Multiple: {summary.counts.multiple_choice}</span>
-        <span style={tb.summaryPill}>V/F: {summary.counts.true_false}</span>
-        <span style={tb.summaryPill}>Pareado: {summary.counts.matching}</span>
-        <span style={tb.summaryPill}>Orden: {summary.counts.ordering}</span>
-        <span style={tb.summaryPill}>Desplegable: {summary.counts.dropdown_single}</span>
-      </div>
-
-      {blocks.length === 0 && (
-        <div style={tb.emptyState}>
-          Aun no hay bloques. Agrega uno y dentro podras sumar varias preguntas del mismo tipo.
-        </div>
-      )}
-
-      {blocks.map((block, index) => (
-        <div key={block.id} style={tb.blockCard}>
-          <div style={tb.blockHeader}>
-            <div style={tb.blockHeaderLeft}>
-              <span style={tb.blockIndex}>#{index + 1}</span>
-              <span style={tb.blockType}>{blockTypeLabel[block.type]}</span>
-            </div>
-            <button type="button" style={tb.deleteBtn} onClick={() => deleteBlock(block.id)}>Eliminar bloque</button>
+      <div style={tb.layout}>
+        <div style={tb.editorArea}>
+          <div style={tb.summaryRow}>
+            <span style={tb.summaryPill}>Preguntas de seleccion multiple: {summary.counts.multiple_choice}</span>
+            <span style={tb.summaryPill}>Total preguntas: {summary.totalQuestions}</span>
           </div>
 
-          <div style={tb.fieldRow}>
-            <label style={tb.fieldLabel}>Titulo del bloque</label>
-            <input
-              value={block.title}
-              onChange={e => updateBlock(block.id, b => ({ ...b, title: e.target.value }))}
-              style={tb.input}
-              placeholder="Ej. Preguntas de seleccion sobre epitelio"
-            />
-          </div>
-
-          {block.type === 'single_choice' && (
-            <div style={tb.innerBox}>
-              {(block as SingleChoiceBlock).questions.map((question, qIndex) => (
-                <div key={question.id} style={tb.questionCard}>
-                  <div style={tb.questionHeader}>
-                    <span style={tb.questionTitle}>Pregunta {qIndex + 1}</span>
-                    <button type="button" style={tb.smallBtn} onClick={() => deleteQuestionFromBlock(block.id, question.id)}>Quitar</button>
-                  </div>
-                  <textarea
-                    value={question.prompt}
-                    onChange={e =>
-                      updateBlock(block.id, b => ({
-                        ...(b as SingleChoiceBlock),
-                        questions: (b as SingleChoiceBlock).questions.map(q =>
-                          q.id === question.id ? { ...q, prompt: e.target.value } : q
-                        ),
-                      }))
-                    }
-                    style={tb.textarea}
-                    placeholder="Escribe el enunciado de la pregunta"
-                  />
-                  {question.options.map((opt, optIdx) => (
-                    <div key={opt.id} style={tb.optionRow}>
-                      <input
-                        type="radio"
-                        name={`correct-${question.id}`}
-                        checked={question.correctOptionId === opt.id}
-                        onChange={() =>
-                          updateBlock(block.id, b => ({
-                            ...(b as SingleChoiceBlock),
-                            questions: (b as SingleChoiceBlock).questions.map(q =>
-                              q.id === question.id ? { ...q, correctOptionId: opt.id } : q
-                            ),
-                          }))
-                        }
-                      />
-                      <input
-                        value={opt.text}
-                        onChange={e =>
-                          updateBlock(block.id, b => ({
-                            ...(b as SingleChoiceBlock),
-                            questions: (b as SingleChoiceBlock).questions.map(q =>
-                              q.id === question.id
-                                ? {
-                                    ...q,
-                                    options: q.options.map(item =>
-                                      item.id === opt.id ? { ...item, text: e.target.value } : item
-                                    ),
-                                  }
-                                : q
-                            ),
-                          }))
-                        }
-                        style={tb.input}
-                        placeholder={`Opcion ${optIdx + 1}`}
-                      />
-                      <button
-                        type="button"
-                        style={tb.smallBtn}
-                        onClick={() =>
-                          updateBlock(block.id, b => ({
-                            ...(b as SingleChoiceBlock),
-                            questions: (b as SingleChoiceBlock).questions.map(q => {
-                              if (q.id !== question.id || q.options.length <= 2) return q;
-                              const nextOptions = q.options.filter(item => item.id !== opt.id);
-                              return {
-                                ...q,
-                                options: nextOptions,
-                                correctOptionId: q.correctOptionId === opt.id ? null : q.correctOptionId,
-                              };
-                            }),
-                          }))
-                        }
-                      >
-                        Quitar
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    style={tb.addBtn}
-                    onClick={() =>
-                      updateBlock(block.id, b => ({
-                        ...(b as SingleChoiceBlock),
-                        questions: (b as SingleChoiceBlock).questions.map(q =>
-                          q.id === question.id ? { ...q, options: [...q.options, createOption('')] } : q
-                        ),
-                      }))
-                    }
-                  >
-                    Agregar opcion
-                  </button>
-                </div>
-              ))}
-              <button type="button" style={tb.addTypeQuestionBtn} onClick={() => addQuestionToBlock(block.id)}>
-                + Agregar otra pregunta de seleccion unica
-              </button>
+          {blocks.length === 0 && (
+            <div style={tb.emptyState}>
+              Aun no hay preguntas. Usa el menu lateral para agregar la primera de seleccion multiple.
             </div>
           )}
 
-          {block.type === 'multiple_choice' && (
-            <div style={tb.innerBox}>
-              {(block as MultipleChoiceBlock).questions.map((question, qIndex) => (
-                <div key={question.id} style={tb.questionCard}>
-                  <div style={tb.questionHeader}>
-                    <span style={tb.questionTitle}>Pregunta {qIndex + 1}</span>
-                    <button type="button" style={tb.smallBtn} onClick={() => deleteQuestionFromBlock(block.id, question.id)}>Quitar</button>
-                  </div>
-                  <textarea
-                    value={question.prompt}
-                    onChange={e =>
-                      updateBlock(block.id, b => ({
-                        ...(b as MultipleChoiceBlock),
-                        questions: (b as MultipleChoiceBlock).questions.map(q =>
-                          q.id === question.id ? { ...q, prompt: e.target.value } : q
-                        ),
-                      }))
-                    }
-                    style={tb.textarea}
-                    placeholder="Escribe el enunciado de la pregunta"
-                  />
-                  {question.options.map((opt, optIdx) => (
-                    <div key={opt.id} style={tb.optionRow}>
-                      <input
-                        type="checkbox"
-                        checked={question.correctOptionIds.includes(opt.id)}
+          {blocks.map((block, index) => (
+        <div key={block.id} style={tb.blockCard}>
+              <div style={tb.blockHeader}>
+                <div style={tb.blockHeaderLeft}>
+                  <span style={tb.blockIndex}>#{index + 1}</span>
+                  <span style={tb.blockType}>{blockTypeLabel[block.type]}</span>
+                </div>
+                <button type="button" style={tb.deleteBtn} onClick={() => deleteBlock(block.id)}>Eliminar bloque</button>
+              </div>
+
+              <div style={tb.fieldRow}>
+                <label style={tb.fieldLabel}>Titulo del bloque</label>
+                <input
+                  value={block.title}
+                  onChange={e => updateBlock(block.id, b => ({ ...b, title: e.target.value }))}
+                  style={tb.input}
+                  placeholder="Ej. Preguntas de seleccion sobre epitelio"
+                />
+              </div>
+
+              {block.type === 'single_choice' && (
+                <div style={tb.innerBox}>
+                  {(block as SingleChoiceBlock).questions.map((question, qIndex) => (
+                    <div key={question.id} style={tb.questionCard}>
+                      <div style={tb.questionHeader}>
+                        <span style={tb.questionTitle}>Pregunta {qIndex + 1}</span>
+                        <button type="button" style={tb.smallBtn} onClick={() => deleteQuestionFromBlock(block.id, question.id)}>Quitar</button>
+                      </div>
+                      <textarea
+                        value={question.prompt}
                         onChange={e =>
                           updateBlock(block.id, b => ({
-                            ...(b as MultipleChoiceBlock),
-                            questions: (b as MultipleChoiceBlock).questions.map(q => {
-                              if (q.id !== question.id) return q;
-                              const has = q.correctOptionIds.includes(opt.id);
-                              return {
-                                ...q,
-                                correctOptionIds: e.target.checked
-                                  ? has
-                                    ? q.correctOptionIds
-                                    : [...q.correctOptionIds, opt.id]
-                                  : q.correctOptionIds.filter(id => id !== opt.id),
-                              };
-                            }),
+                            ...(b as SingleChoiceBlock),
+                            questions: (b as SingleChoiceBlock).questions.map(q =>
+                              q.id === question.id ? { ...q, prompt: e.target.value } : q
+                            ),
                           }))
                         }
+                        style={tb.textarea}
+                        placeholder="Escribe el enunciado de la pregunta"
                       />
-                      <input
-                        value={opt.text}
+                      {question.options.map((opt, optIdx) => (
+                        <div key={opt.id} style={tb.optionRow}>
+                          <input
+                            type="radio"
+                            name={`correct-${question.id}`}
+                            checked={question.correctOptionId === opt.id}
+                            onChange={() =>
+                              updateBlock(block.id, b => ({
+                                ...(b as SingleChoiceBlock),
+                                questions: (b as SingleChoiceBlock).questions.map(q =>
+                                  q.id === question.id ? { ...q, correctOptionId: opt.id } : q
+                                ),
+                              }))
+                            }
+                          />
+                          <input
+                            value={opt.text}
+                            onChange={e =>
+                              updateBlock(block.id, b => ({
+                                ...(b as SingleChoiceBlock),
+                                questions: (b as SingleChoiceBlock).questions.map(q =>
+                                  q.id === question.id
+                                    ? {
+                                        ...q,
+                                        options: q.options.map(item =>
+                                          item.id === opt.id ? { ...item, text: e.target.value } : item
+                                        ),
+                                      }
+                                    : q
+                                ),
+                              }))
+                            }
+                            style={tb.input}
+                            placeholder={`Opcion ${optIdx + 1}`}
+                          />
+                          <button
+                            type="button"
+                            style={tb.smallBtn}
+                            onClick={() =>
+                              updateBlock(block.id, b => ({
+                                ...(b as SingleChoiceBlock),
+                                questions: (b as SingleChoiceBlock).questions.map(q => {
+                                  if (q.id !== question.id || q.options.length <= 2) return q;
+                                  const nextOptions = q.options.filter(item => item.id !== opt.id);
+                                  return {
+                                    ...q,
+                                    options: nextOptions,
+                                    correctOptionId: q.correctOptionId === opt.id ? null : q.correctOptionId,
+                                  };
+                                }),
+                              }))
+                            }
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        style={tb.addBtn}
+                        onClick={() =>
+                          updateBlock(block.id, b => ({
+                            ...(b as SingleChoiceBlock),
+                            questions: (b as SingleChoiceBlock).questions.map(q =>
+                              q.id === question.id ? { ...q, options: [...q.options, createOption('')] } : q
+                            ),
+                          }))
+                        }
+                      >
+                        Agregar opcion
+                      </button>
+                    </div>
+                  ))}
+                  <button type="button" style={tb.addTypeQuestionBtn} onClick={() => addQuestionToBlock(block.id)}>
+                    + Agregar otra pregunta de seleccion unica
+                  </button>
+                </div>
+              )}
+
+              {block.type === 'multiple_choice' && (
+                <div style={tb.innerBox}>
+                  {(block as MultipleChoiceBlock).questions.map((question, qIndex) => (
+                    <div key={question.id} style={tb.questionCard}>
+                      <div style={tb.questionHeader}>
+                        <span style={tb.questionTitle}>Pregunta {qIndex + 1}</span>
+                        <button type="button" style={tb.smallBtn} onClick={() => deleteQuestionFromBlock(block.id, question.id)}>Quitar</button>
+                      </div>
+                      <textarea
+                        value={question.prompt}
                         onChange={e =>
                           updateBlock(block.id, b => ({
                             ...(b as MultipleChoiceBlock),
                             questions: (b as MultipleChoiceBlock).questions.map(q =>
-                              q.id === question.id
-                                ? {
-                                    ...q,
-                                    options: q.options.map(item =>
-                                      item.id === opt.id ? { ...item, text: e.target.value } : item
-                                    ),
-                                  }
-                                : q
+                              q.id === question.id ? { ...q, prompt: e.target.value } : q
                             ),
                           }))
                         }
-                        style={tb.input}
-                        placeholder={`Opcion ${optIdx + 1}`}
+                        style={tb.textarea}
+                        placeholder="Escribe el enunciado de la pregunta"
                       />
+                      {question.options.map((opt, optIdx) => (
+                        <div key={opt.id} style={tb.optionRow}>
+                          <input
+                            type="checkbox"
+                            checked={question.correctOptionIds.includes(opt.id)}
+                            onChange={e =>
+                              updateBlock(block.id, b => ({
+                                ...(b as MultipleChoiceBlock),
+                                questions: (b as MultipleChoiceBlock).questions.map(q => {
+                                  if (q.id !== question.id) return q;
+                                  const has = q.correctOptionIds.includes(opt.id);
+                                  return {
+                                    ...q,
+                                    correctOptionIds: e.target.checked
+                                      ? has
+                                        ? q.correctOptionIds
+                                        : [...q.correctOptionIds, opt.id]
+                                      : q.correctOptionIds.filter(id => id !== opt.id),
+                                  };
+                                }),
+                              }))
+                            }
+                          />
+                          <input
+                            value={opt.text}
+                            onChange={e =>
+                              updateBlock(block.id, b => ({
+                                ...(b as MultipleChoiceBlock),
+                                questions: (b as MultipleChoiceBlock).questions.map(q =>
+                                  q.id === question.id
+                                    ? {
+                                        ...q,
+                                        options: q.options.map(item =>
+                                          item.id === opt.id ? { ...item, text: e.target.value } : item
+                                        ),
+                                      }
+                                    : q
+                                ),
+                              }))
+                            }
+                            style={tb.input}
+                            placeholder={`Opcion ${optIdx + 1}`}
+                          />
+                          <button
+                            type="button"
+                            style={tb.smallBtn}
+                            onClick={() =>
+                              updateBlock(block.id, b => ({
+                                ...(b as MultipleChoiceBlock),
+                                questions: (b as MultipleChoiceBlock).questions.map(q => {
+                                  if (q.id !== question.id || q.options.length <= 2) return q;
+                                  return {
+                                    ...q,
+                                    options: q.options.filter(item => item.id !== opt.id),
+                                    correctOptionIds: q.correctOptionIds.filter(id => id !== opt.id),
+                                  };
+                                }),
+                              }))
+                            }
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ))}
                       <button
                         type="button"
-                        style={tb.smallBtn}
+                        style={tb.addBtn}
                         onClick={() =>
                           updateBlock(block.id, b => ({
                             ...(b as MultipleChoiceBlock),
-                            questions: (b as MultipleChoiceBlock).questions.map(q => {
-                              if (q.id !== question.id || q.options.length <= 2) return q;
-                              return {
-                                ...q,
-                                options: q.options.filter(item => item.id !== opt.id),
-                                correctOptionIds: q.correctOptionIds.filter(id => id !== opt.id),
-                              };
-                            }),
+                            questions: (b as MultipleChoiceBlock).questions.map(q =>
+                              q.id === question.id ? { ...q, options: [...q.options, createOption('')] } : q
+                            ),
                           }))
                         }
                       >
-                        Quitar
+                        Agregar opcion
                       </button>
                     </div>
                   ))}
-                  <button
-                    type="button"
-                    style={tb.addBtn}
-                    onClick={() =>
-                      updateBlock(block.id, b => ({
-                        ...(b as MultipleChoiceBlock),
-                        questions: (b as MultipleChoiceBlock).questions.map(q =>
-                          q.id === question.id ? { ...q, options: [...q.options, createOption('')] } : q
-                        ),
-                      }))
-                    }
-                  >
-                    Agregar opcion
+                  <button type="button" style={tb.addTypeQuestionBtn} onClick={() => addQuestionToBlock(block.id)}>
+                    + Agregar otra pregunta de seleccion multiple
                   </button>
                 </div>
-              ))}
-              <button type="button" style={tb.addTypeQuestionBtn} onClick={() => addQuestionToBlock(block.id)}>
-                + Agregar otra pregunta de seleccion multiple
-              </button>
-            </div>
-          )}
+              )}
 
-          {block.type === 'true_false' && (
-            <div style={tb.innerBox}>
-              {(block as TrueFalseBlock).questions.map((question, qIndex) => (
-                <div key={question.id} style={tb.questionCard}>
-                  <div style={tb.questionHeader}>
-                    <span style={tb.questionTitle}>Pregunta {qIndex + 1}</span>
-                    <button type="button" style={tb.smallBtn} onClick={() => deleteQuestionFromBlock(block.id, question.id)}>Quitar</button>
-                  </div>
-                  <textarea
-                    value={question.prompt}
-                    onChange={e =>
-                      updateBlock(block.id, b => ({
-                        ...(b as TrueFalseBlock),
-                        questions: (b as TrueFalseBlock).questions.map(q =>
-                          q.id === question.id ? { ...q, prompt: e.target.value } : q
-                        ),
-                      }))
-                    }
-                    style={tb.textarea}
-                    placeholder="Escribe el enunciado de la pregunta"
-                  />
-                  <div style={tb.inlineChoices}>
-                    <label style={tb.choiceLabel}>
-                      <input
-                        type="radio"
-                        name={`tf-${question.id}`}
-                        checked={question.correctAnswer === 'true'}
-                        onChange={() =>
+              {block.type === 'true_false' && (
+                <div style={tb.innerBox}>
+                  {(block as TrueFalseBlock).questions.map((question, qIndex) => (
+                    <div key={question.id} style={tb.questionCard}>
+                      <div style={tb.questionHeader}>
+                        <span style={tb.questionTitle}>Pregunta {qIndex + 1}</span>
+                        <button type="button" style={tb.smallBtn} onClick={() => deleteQuestionFromBlock(block.id, question.id)}>Quitar</button>
+                      </div>
+                      <textarea
+                        value={question.prompt}
+                        onChange={e =>
                           updateBlock(block.id, b => ({
                             ...(b as TrueFalseBlock),
                             questions: (b as TrueFalseBlock).questions.map(q =>
-                              q.id === question.id ? { ...q, correctAnswer: 'true' as const } : q
+                              q.id === question.id ? { ...q, prompt: e.target.value } : q
                             ),
                           }))
                         }
+                        style={tb.textarea}
+                        placeholder="Escribe el enunciado de la pregunta"
                       />
-                      Verdadero
-                    </label>
-                    <label style={tb.choiceLabel}>
-                      <input
-                        type="radio"
-                        name={`tf-${question.id}`}
-                        checked={question.correctAnswer === 'false'}
-                        onChange={() =>
-                          updateBlock(block.id, b => ({
-                            ...(b as TrueFalseBlock),
-                            questions: (b as TrueFalseBlock).questions.map(q =>
-                              q.id === question.id ? { ...q, correctAnswer: 'false' as const } : q
-                            ),
-                          }))
-                        }
-                      />
-                      Falso
-                    </label>
-                  </div>
+                      <div style={tb.inlineChoices}>
+                        <label style={tb.choiceLabel}>
+                          <input
+                            type="radio"
+                            name={`tf-${question.id}`}
+                            checked={question.correctAnswer === 'true'}
+                            onChange={() =>
+                              updateBlock(block.id, b => ({
+                                ...(b as TrueFalseBlock),
+                                questions: (b as TrueFalseBlock).questions.map(q =>
+                                  q.id === question.id ? { ...q, correctAnswer: 'true' as const } : q
+                                ),
+                              }))
+                            }
+                          />
+                          Verdadero
+                        </label>
+                        <label style={tb.choiceLabel}>
+                          <input
+                            type="radio"
+                            name={`tf-${question.id}`}
+                            checked={question.correctAnswer === 'false'}
+                            onChange={() =>
+                              updateBlock(block.id, b => ({
+                                ...(b as TrueFalseBlock),
+                                questions: (b as TrueFalseBlock).questions.map(q =>
+                                  q.id === question.id ? { ...q, correctAnswer: 'false' as const } : q
+                                ),
+                              }))
+                            }
+                          />
+                          Falso
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button" style={tb.addTypeQuestionBtn} onClick={() => addQuestionToBlock(block.id)}>
+                    + Agregar otra pregunta verdadero/falso
+                  </button>
                 </div>
-              ))}
-              <button type="button" style={tb.addTypeQuestionBtn} onClick={() => addQuestionToBlock(block.id)}>
-                + Agregar otra pregunta verdadero/falso
-              </button>
-            </div>
-          )}
+              )}
 
-          {block.type === 'matching' && (
-            <div style={tb.innerBox}>
-              {(block as MatchingBlock).questions.map((question, qIndex) => (
-                <div key={question.id} style={tb.questionCard}>
-                  <div style={tb.questionHeader}>
-                    <span style={tb.questionTitle}>Pregunta {qIndex + 1}</span>
-                    <button type="button" style={tb.smallBtn} onClick={() => deleteQuestionFromBlock(block.id, question.id)}>Quitar</button>
-                  </div>
-                  <textarea
-                    value={question.prompt}
-                    onChange={e =>
-                      updateBlock(block.id, b => ({
-                        ...(b as MatchingBlock),
-                        questions: (b as MatchingBlock).questions.map(q =>
-                          q.id === question.id ? { ...q, prompt: e.target.value } : q
-                        ),
-                      }))
-                    }
-                    style={tb.textarea}
-                    placeholder="Escribe el enunciado de la pregunta"
-                  />
-                  {question.pairs.map(pair => (
-                    <div key={pair.id} style={tb.matchRow}>
-                      <input
-                        value={pair.left}
+              {block.type === 'matching' && (
+                <div style={tb.innerBox}>
+                  {(block as MatchingBlock).questions.map((question, qIndex) => (
+                    <div key={question.id} style={tb.questionCard}>
+                      <div style={tb.questionHeader}>
+                        <span style={tb.questionTitle}>Pregunta {qIndex + 1}</span>
+                        <button type="button" style={tb.smallBtn} onClick={() => deleteQuestionFromBlock(block.id, question.id)}>Quitar</button>
+                      </div>
+                      <textarea
+                        value={question.prompt}
                         onChange={e =>
                           updateBlock(block.id, b => ({
                             ...(b as MatchingBlock),
                             questions: (b as MatchingBlock).questions.map(q =>
-                              q.id === question.id
-                                ? {
-                                    ...q,
-                                    pairs: q.pairs.map(item =>
-                                      item.id === pair.id ? { ...item, left: e.target.value } : item
-                                    ),
-                                  }
-                                : q
+                              q.id === question.id ? { ...q, prompt: e.target.value } : q
                             ),
                           }))
                         }
-                        style={tb.input}
-                        placeholder="Columna izquierda"
+                        style={tb.textarea}
+                        placeholder="Escribe el enunciado de la pregunta"
                       />
-                      <span style={tb.matchArrow}>↔</span>
-                      <input
-                        value={pair.right}
-                        onChange={e =>
-                          updateBlock(block.id, b => ({
-                            ...(b as MatchingBlock),
-                            questions: (b as MatchingBlock).questions.map(q =>
-                              q.id === question.id
-                                ? {
-                                    ...q,
-                                    pairs: q.pairs.map(item =>
-                                      item.id === pair.id ? { ...item, right: e.target.value } : item
-                                    ),
-                                  }
-                                : q
-                            ),
-                          }))
-                        }
-                        style={tb.input}
-                        placeholder="Columna derecha"
-                      />
+                      {question.pairs.map(pair => (
+                        <div key={pair.id} style={tb.matchRow}>
+                          <input
+                            value={pair.left}
+                            onChange={e =>
+                              updateBlock(block.id, b => ({
+                                ...(b as MatchingBlock),
+                                questions: (b as MatchingBlock).questions.map(q =>
+                                  q.id === question.id
+                                    ? {
+                                        ...q,
+                                        pairs: q.pairs.map(item =>
+                                          item.id === pair.id ? { ...item, left: e.target.value } : item
+                                        ),
+                                      }
+                                    : q
+                                ),
+                              }))
+                            }
+                            style={tb.input}
+                            placeholder="Columna izquierda"
+                          />
+                          <span style={tb.matchArrow}>↔</span>
+                          <input
+                            value={pair.right}
+                            onChange={e =>
+                              updateBlock(block.id, b => ({
+                                ...(b as MatchingBlock),
+                                questions: (b as MatchingBlock).questions.map(q =>
+                                  q.id === question.id
+                                    ? {
+                                        ...q,
+                                        pairs: q.pairs.map(item =>
+                                          item.id === pair.id ? { ...item, right: e.target.value } : item
+                                        ),
+                                      }
+                                    : q
+                                ),
+                              }))
+                            }
+                            style={tb.input}
+                            placeholder="Columna derecha"
+                          />
+                          <button
+                            type="button"
+                            style={tb.smallBtn}
+                            onClick={() =>
+                              updateBlock(block.id, b => ({
+                                ...(b as MatchingBlock),
+                                questions: (b as MatchingBlock).questions.map(q => {
+                                  if (q.id !== question.id || q.pairs.length <= 2) return q;
+                                  return { ...q, pairs: q.pairs.filter(item => item.id !== pair.id) };
+                                }),
+                              }))
+                            }
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ))}
                       <button
                         type="button"
-                        style={tb.smallBtn}
+                        style={tb.addBtn}
                         onClick={() =>
                           updateBlock(block.id, b => ({
                             ...(b as MatchingBlock),
-                            questions: (b as MatchingBlock).questions.map(q => {
-                              if (q.id !== question.id || q.pairs.length <= 2) return q;
-                              return { ...q, pairs: q.pairs.filter(item => item.id !== pair.id) };
-                            }),
+                            questions: (b as MatchingBlock).questions.map(q =>
+                              q.id === question.id
+                                ? { ...q, pairs: [...q.pairs, { id: makeId(), left: '', right: '' }] }
+                                : q
+                            ),
                           }))
                         }
                       >
-                        Quitar
+                        Agregar pareja
                       </button>
                     </div>
                   ))}
-                  <button
-                    type="button"
-                    style={tb.addBtn}
-                    onClick={() =>
-                      updateBlock(block.id, b => ({
-                        ...(b as MatchingBlock),
-                        questions: (b as MatchingBlock).questions.map(q =>
-                          q.id === question.id
-                            ? { ...q, pairs: [...q.pairs, { id: makeId(), left: '', right: '' }] }
-                            : q
-                        ),
-                      }))
-                    }
-                  >
-                    Agregar pareja
+                  <button type="button" style={tb.addTypeQuestionBtn} onClick={() => addQuestionToBlock(block.id)}>
+                    + Agregar otra pregunta de pareado
                   </button>
                 </div>
-              ))}
-              <button type="button" style={tb.addTypeQuestionBtn} onClick={() => addQuestionToBlock(block.id)}>
-                + Agregar otra pregunta de pareado
-              </button>
-            </div>
-          )}
+              )}
 
-          {block.type === 'ordering' && (
-            <div style={tb.innerBox}>
-              {(block as OrderingBlock).questions.map((question, qIndex) => (
-                <div key={question.id} style={tb.questionCard}>
-                  <div style={tb.questionHeader}>
-                    <span style={tb.questionTitle}>Pregunta {qIndex + 1}</span>
-                    <button type="button" style={tb.smallBtn} onClick={() => deleteQuestionFromBlock(block.id, question.id)}>Quitar</button>
-                  </div>
-                  <textarea
-                    value={question.prompt}
-                    onChange={e =>
-                      updateBlock(block.id, b => ({
-                        ...(b as OrderingBlock),
-                        questions: (b as OrderingBlock).questions.map(q =>
-                          q.id === question.id ? { ...q, prompt: e.target.value } : q
-                        ),
-                      }))
-                    }
-                    style={tb.textarea}
-                    placeholder="Escribe el enunciado de la pregunta"
-                  />
-                  {question.items.map((item, itemIdx) => (
-                    <div
-                      key={item.id}
-                      style={tb.orderItem}
-                      draggable
-                      onDragStart={() => setDragState({ blockId: block.id, questionId: question.id, itemId: item.id })}
-                      onDragOver={e => e.preventDefault()}
-                      onDrop={() => {
-                        if (!dragState) return;
-                        if (dragState.blockId !== block.id || dragState.questionId !== question.id || dragState.itemId === item.id) {
-                          return;
-                        }
-                        updateBlock(block.id, b => ({
-                          ...(b as OrderingBlock),
-                          questions: (b as OrderingBlock).questions.map(q => {
-                            if (q.id !== question.id) return q;
-                            const from = q.items.findIndex(it => it.id === dragState.itemId);
-                            const to = q.items.findIndex(it => it.id === item.id);
-                            if (from < 0 || to < 0) return q;
-                            const next = [...q.items];
-                            const [moved] = next.splice(from, 1);
-                            next.splice(to, 0, moved);
-                            return { ...q, items: next };
-                          }),
-                        }));
-                        setDragState(null);
-                      }}
-                      onDragEnd={() => setDragState(null)}
-                    >
-                      <span style={tb.dragHandle}>⋮⋮</span>
-                      <span style={tb.orderIndex}>{itemIdx + 1}</span>
-                      <input
-                        value={item.text}
+              {block.type === 'ordering' && (
+                <div style={tb.innerBox}>
+                  {(block as OrderingBlock).questions.map((question, qIndex) => (
+                    <div key={question.id} style={tb.questionCard}>
+                      <div style={tb.questionHeader}>
+                        <span style={tb.questionTitle}>Pregunta {qIndex + 1}</span>
+                        <button type="button" style={tb.smallBtn} onClick={() => deleteQuestionFromBlock(block.id, question.id)}>Quitar</button>
+                      </div>
+                      <textarea
+                        value={question.prompt}
                         onChange={e =>
                           updateBlock(block.id, b => ({
                             ...(b as OrderingBlock),
                             questions: (b as OrderingBlock).questions.map(q =>
-                              q.id === question.id
-                                ? {
-                                    ...q,
-                                    items: q.items.map(it =>
-                                      it.id === item.id ? { ...it, text: e.target.value } : it
-                                    ),
-                                  }
-                                : q
+                              q.id === question.id ? { ...q, prompt: e.target.value } : q
                             ),
                           }))
                         }
-                        style={tb.input}
-                        placeholder={`Elemento ${itemIdx + 1}`}
+                        style={tb.textarea}
+                        placeholder="Escribe el enunciado de la pregunta"
                       />
+                      {question.items.map((item, itemIdx) => (
+                        <div
+                          key={item.id}
+                          style={tb.orderItem}
+                          draggable
+                          onDragStart={() => setDragState({ blockId: block.id, questionId: question.id, itemId: item.id })}
+                          onDragOver={e => e.preventDefault()}
+                          onDrop={() => {
+                            if (!dragState) return;
+                            if (dragState.blockId !== block.id || dragState.questionId !== question.id || dragState.itemId === item.id) {
+                              return;
+                            }
+                            updateBlock(block.id, b => ({
+                              ...(b as OrderingBlock),
+                              questions: (b as OrderingBlock).questions.map(q => {
+                                if (q.id !== question.id) return q;
+                                const from = q.items.findIndex(it => it.id === dragState.itemId);
+                                const to = q.items.findIndex(it => it.id === item.id);
+                                if (from < 0 || to < 0) return q;
+                                const next = [...q.items];
+                                const [moved] = next.splice(from, 1);
+                                next.splice(to, 0, moved);
+                                return { ...q, items: next };
+                              }),
+                            }));
+                            setDragState(null);
+                          }}
+                          onDragEnd={() => setDragState(null)}
+                        >
+                          <span style={tb.dragHandle}>⋮⋮</span>
+                          <span style={tb.orderIndex}>{itemIdx + 1}</span>
+                          <input
+                            value={item.text}
+                            onChange={e =>
+                              updateBlock(block.id, b => ({
+                                ...(b as OrderingBlock),
+                                questions: (b as OrderingBlock).questions.map(q =>
+                                  q.id === question.id
+                                    ? {
+                                        ...q,
+                                        items: q.items.map(it =>
+                                          it.id === item.id ? { ...it, text: e.target.value } : it
+                                        ),
+                                      }
+                                    : q
+                                ),
+                              }))
+                            }
+                            style={tb.input}
+                            placeholder={`Elemento ${itemIdx + 1}`}
+                          />
+                          <button
+                            type="button"
+                            style={tb.smallBtn}
+                            onClick={() =>
+                              updateBlock(block.id, b => ({
+                                ...(b as OrderingBlock),
+                                questions: (b as OrderingBlock).questions.map(q => {
+                                  if (q.id !== question.id || q.items.length <= 2) return q;
+                                  return { ...q, items: q.items.filter(it => it.id !== item.id) };
+                                }),
+                              }))
+                            }
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ))}
                       <button
                         type="button"
-                        style={tb.smallBtn}
+                        style={tb.addBtn}
                         onClick={() =>
                           updateBlock(block.id, b => ({
                             ...(b as OrderingBlock),
-                            questions: (b as OrderingBlock).questions.map(q => {
-                              if (q.id !== question.id || q.items.length <= 2) return q;
-                              return { ...q, items: q.items.filter(it => it.id !== item.id) };
-                            }),
-                          }))
-                        }
-                      >
-                        Quitar
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    style={tb.addBtn}
-                    onClick={() =>
-                      updateBlock(block.id, b => ({
-                        ...(b as OrderingBlock),
-                        questions: (b as OrderingBlock).questions.map(q =>
-                          q.id === question.id ? { ...q, items: [...q.items, createOption('')] } : q
-                        ),
-                      }))
-                    }
-                  >
-                    Agregar elemento
-                  </button>
-                </div>
-              ))}
-              <button type="button" style={tb.addTypeQuestionBtn} onClick={() => addQuestionToBlock(block.id)}>
-                + Agregar otra pregunta de ordenar
-              </button>
-            </div>
-          )}
-
-          {block.type === 'dropdown_single' && (
-            <div style={tb.innerBox}>
-              {(block as DropdownBlock).questions.map((question, qIndex) => (
-                <div key={question.id} style={tb.questionCard}>
-                  <div style={tb.questionHeader}>
-                    <span style={tb.questionTitle}>Pregunta {qIndex + 1}</span>
-                    <button type="button" style={tb.smallBtn} onClick={() => deleteQuestionFromBlock(block.id, question.id)}>Quitar</button>
-                  </div>
-                  <textarea
-                    value={question.prompt}
-                    onChange={e =>
-                      updateBlock(block.id, b => ({
-                        ...(b as DropdownBlock),
-                        questions: (b as DropdownBlock).questions.map(q =>
-                          q.id === question.id ? { ...q, prompt: e.target.value } : q
-                        ),
-                      }))
-                    }
-                    style={tb.textarea}
-                    placeholder="Escribe el enunciado de la pregunta"
-                  />
-                  {question.options.map((opt, optIdx) => (
-                    <div key={opt.id} style={tb.optionRow}>
-                      <input
-                        type="radio"
-                        name={`dropdown-correct-${question.id}`}
-                        checked={question.correctOptionId === opt.id}
-                        onChange={() =>
-                          updateBlock(block.id, b => ({
-                            ...(b as DropdownBlock),
-                            questions: (b as DropdownBlock).questions.map(q =>
-                              q.id === question.id ? { ...q, correctOptionId: opt.id } : q
+                            questions: (b as OrderingBlock).questions.map(q =>
+                              q.id === question.id ? { ...q, items: [...q.items, createOption('')] } : q
                             ),
                           }))
                         }
-                      />
-                      <input
-                        value={opt.text}
+                      >
+                        Agregar elemento
+                      </button>
+                    </div>
+                  ))}
+                  <button type="button" style={tb.addTypeQuestionBtn} onClick={() => addQuestionToBlock(block.id)}>
+                    + Agregar otra pregunta de ordenar
+                  </button>
+                </div>
+              )}
+
+              {block.type === 'dropdown_single' && (
+                <div style={tb.innerBox}>
+                  {(block as DropdownBlock).questions.map((question, qIndex) => (
+                    <div key={question.id} style={tb.questionCard}>
+                      <div style={tb.questionHeader}>
+                        <span style={tb.questionTitle}>Pregunta {qIndex + 1}</span>
+                        <button type="button" style={tb.smallBtn} onClick={() => deleteQuestionFromBlock(block.id, question.id)}>Quitar</button>
+                      </div>
+                      <textarea
+                        value={question.prompt}
                         onChange={e =>
                           updateBlock(block.id, b => ({
                             ...(b as DropdownBlock),
                             questions: (b as DropdownBlock).questions.map(q =>
-                              q.id === question.id
-                                ? {
-                                    ...q,
-                                    options: q.options.map(item =>
-                                      item.id === opt.id ? { ...item, text: e.target.value } : item
-                                    ),
-                                  }
-                                : q
+                              q.id === question.id ? { ...q, prompt: e.target.value } : q
                             ),
                           }))
                         }
-                        style={tb.input}
-                        placeholder={`Opcion ${optIdx + 1}`}
+                        style={tb.textarea}
+                        placeholder="Escribe el enunciado de la pregunta"
                       />
+                      {question.options.map((opt, optIdx) => (
+                        <div key={opt.id} style={tb.optionRow}>
+                          <input
+                            type="radio"
+                            name={`dropdown-correct-${question.id}`}
+                            checked={question.correctOptionId === opt.id}
+                            onChange={() =>
+                              updateBlock(block.id, b => ({
+                                ...(b as DropdownBlock),
+                                questions: (b as DropdownBlock).questions.map(q =>
+                                  q.id === question.id ? { ...q, correctOptionId: opt.id } : q
+                                ),
+                              }))
+                            }
+                          />
+                          <input
+                            value={opt.text}
+                            onChange={e =>
+                              updateBlock(block.id, b => ({
+                                ...(b as DropdownBlock),
+                                questions: (b as DropdownBlock).questions.map(q =>
+                                  q.id === question.id
+                                    ? {
+                                        ...q,
+                                        options: q.options.map(item =>
+                                          item.id === opt.id ? { ...item, text: e.target.value } : item
+                                        ),
+                                      }
+                                    : q
+                                ),
+                              }))
+                            }
+                            style={tb.input}
+                            placeholder={`Opcion ${optIdx + 1}`}
+                          />
+                          <button
+                            type="button"
+                            style={tb.smallBtn}
+                            onClick={() =>
+                              updateBlock(block.id, b => ({
+                                ...(b as DropdownBlock),
+                                questions: (b as DropdownBlock).questions.map(q => {
+                                  if (q.id !== question.id || q.options.length <= 2) return q;
+                                  const nextOptions = q.options.filter(item => item.id !== opt.id);
+                                  return {
+                                    ...q,
+                                    options: nextOptions,
+                                    correctOptionId: q.correctOptionId === opt.id ? null : q.correctOptionId,
+                                  };
+                                }),
+                              }))
+                            }
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ))}
                       <button
                         type="button"
-                        style={tb.smallBtn}
+                        style={tb.addBtn}
                         onClick={() =>
                           updateBlock(block.id, b => ({
                             ...(b as DropdownBlock),
-                            questions: (b as DropdownBlock).questions.map(q => {
-                              if (q.id !== question.id || q.options.length <= 2) return q;
-                              const nextOptions = q.options.filter(item => item.id !== opt.id);
-                              return {
-                                ...q,
-                                options: nextOptions,
-                                correctOptionId: q.correctOptionId === opt.id ? null : q.correctOptionId,
-                              };
-                            }),
+                            questions: (b as DropdownBlock).questions.map(q =>
+                              q.id === question.id ? { ...q, options: [...q.options, createOption('')] } : q
+                            ),
                           }))
                         }
                       >
-                        Quitar
+                        Agregar opcion
                       </button>
                     </div>
                   ))}
-                  <button
-                    type="button"
-                    style={tb.addBtn}
-                    onClick={() =>
-                      updateBlock(block.id, b => ({
-                        ...(b as DropdownBlock),
-                        questions: (b as DropdownBlock).questions.map(q =>
-                          q.id === question.id ? { ...q, options: [...q.options, createOption('')] } : q
-                        ),
-                      }))
-                    }
-                  >
-                    Agregar opcion
+                  <button type="button" style={tb.addTypeQuestionBtn} onClick={() => addQuestionToBlock(block.id)}>
+                    + Agregar otra pregunta desplegable
                   </button>
                 </div>
-              ))}
-              <button type="button" style={tb.addTypeQuestionBtn} onClick={() => addQuestionToBlock(block.id)}>
-                + Agregar otra pregunta desplegable
-              </button>
+              )}
             </div>
-          )}
+          ))}
         </div>
-      ))}
+
+        <aside style={tb.topBar}>
+          <span style={tb.topLabel}>Tipos de pregunta</span>
+          <div style={tb.topActions}>
+            <button type="button" style={tb.typeBtn} onClick={() => addBlock('multiple_choice')}>
+              + Seleccion multiple
+            </button>
+          </div>
+        </aside>
+      </div>
 
       <div style={tb.saveRow}>
         <button
@@ -956,37 +986,60 @@ const tb: Record<string, React.CSSProperties> = {
     gap: '12px',
     marginTop: '8px',
   },
+  layout: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(220px, 260px)',
+    gap: '12px',
+    alignItems: 'start',
+  },
+  editorArea: {
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
   topBar: {
+    position: 'sticky',
+    top: '24px',
     border: '1px solid #dbeafe',
-    borderRadius: '12px',
-    background: '#f8fbff',
-    padding: '10px 12px',
+    borderRadius: '14px',
+    background: 'linear-gradient(165deg, #ffffff 0%, #f8fbff 100%)',
+    padding: '14px',
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
   },
   topLabel: {
-    fontSize: '0.8em',
-    color: '#475569',
-    fontWeight: 700,
+    fontSize: '0.76em',
+    color: '#0369a1',
+    fontWeight: 800,
     textTransform: 'uppercase',
-    letterSpacing: '0.03em',
+    letterSpacing: '0.06em',
+  },
+  topHint: {
+    margin: 0,
+    fontSize: '0.86em',
+    color: '#475569',
+    lineHeight: 1.45,
   },
   topActions: {
     display: 'flex',
+    flexDirection: 'column',
     gap: '8px',
-    flexWrap: 'wrap',
   },
   typeBtn: {
-    padding: '8px 12px',
+    width: '100%',
+    padding: '9px 12px',
     borderRadius: '8px',
-    border: '1px solid #bfdbfe',
+    border: '1px solid #93c5fd',
     background: '#eff6ff',
-    color: '#1d4ed8',
+    color: '#1e3a8a',
     fontWeight: 700,
     fontSize: '0.8em',
     fontFamily: 'inherit',
     cursor: 'pointer',
+    textAlign: 'left',
+    boxShadow: '0 2px 6px rgba(15,23,42,0.04)',
   },
   summaryRow: {
     display: 'flex',

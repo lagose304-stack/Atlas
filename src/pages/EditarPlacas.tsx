@@ -32,6 +32,7 @@ interface Placa {
 
 interface InteractiveMapPlacaRow {
   placa_id: number;
+  sections: unknown[] | null;
 }
 
 interface PlacaGroupByAumento {
@@ -165,7 +166,7 @@ const EditarPlacas: React.FC = () => {
       if (placaIds.length > 0) {
         const { data: interactiveMapsData, error: interactiveMapsError } = await supabase
           .from('interactive_maps')
-          .select('placa_id')
+          .select('placa_id, sections')
           .in('placa_id', placaIds);
 
         if (interactiveMapsError) {
@@ -173,6 +174,7 @@ const EditarPlacas: React.FC = () => {
           setPlacasConMapa(new Set());
         } else {
           const placaIdsConMapa = (interactiveMapsData ?? [])
+            .filter((row: InteractiveMapPlacaRow) => Array.isArray(row.sections) && row.sections.length > 0)
             .map((row: InteractiveMapPlacaRow) => row.placa_id)
             .filter((id): id is number => typeof id === 'number');
           setPlacasConMapa(new Set(placaIdsConMapa));

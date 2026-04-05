@@ -1,4 +1,5 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { MousePointerClick } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { deleteFromCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
@@ -26,9 +27,22 @@ interface Subtema {
 interface Placa {
   id: number;
   photo_url: string;
+  aumento?: string | null;
   sort_order: number;
   tema_id?: number;
   subtema_id?: number;
+}
+
+interface InteractiveMapPlacaRow {
+  placa_id: number;
+  sections: unknown[] | null;
+}
+
+interface PlacaGroupByAumento {
+  key: string;
+  title: string;
+  sortValue: number;
+  items: Placa[];
 }
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
@@ -38,6 +52,17 @@ const PARCIALES: { key: ParcialKey; label: string }[] = [
   { key: 'segundo', label: 'Segundo parcial' },
   { key: 'tercer',  label: 'Tercer parcial'  },
 ];
+
+const parseAumentoSortValue = (aumento: string): number => {
+  const normalized = aumento.trim().replace(',', '.');
+  const match = normalized.match(/\d+(?:\.\d+)?/);
+  if (!match) return Number.POSITIVE_INFINITY;
+
+  const numeric = Number.parseFloat(match[0]);
+  return Number.isFinite(numeric) ? numeric : Number.POSITIVE_INFINITY;
+};
+
+const normalizeAumentoLabel = (aumento: string): string => aumento.trim().replace(/\s+/g, '').toUpperCase();
 
 // Extrae todas las URLs de imagen de un bloque (todos los tipos)
 function extractAllBlockImageUrls(b: { block_type: string; content: Record<string, string> }): string[] {
@@ -73,6 +98,7 @@ const EliminarPlacas: React.FC = () => {
   const [temas,    setTemas]    = useState<Tema[]>([]);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [placas,   setPlacas]   = useState<Placa[]>([]);
+  const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const [selectedTemaId,    setSelectedTemaId]    = useState<number | null>(null);
@@ -90,7 +116,7 @@ const EliminarPlacas: React.FC = () => {
 
   const [isDeleting,    setIsDeleting]    = useState(false);
   const [showConfirm,   setShowConfirm]   = useState(false);
-  const [deleteSuccess, setDeleteSuccess] = useState(false);
+  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
   const [hoveredCard,   setHoveredCard]   = useState<number | null>(null);
 
   const fetchTemas = useCallback(async (): Promise<boolean> => {
@@ -151,7 +177,7 @@ const EliminarPlacas: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('placas')
-        .select('id, photo_url, sort_order, tema_id, subtema_id')
+        .select('id, photo_url, aumento, sort_order, tema_id, subtema_id')
         .eq('subtema_id', subtemaId)
         .order('sort_order', { ascending: true });
 
@@ -159,11 +185,38 @@ const EliminarPlacas: React.FC = () => {
         throw error;
       }
 
-      setPlacas(data ?? []);
+      const nextPlacas = data ?? [];
+      setPlacas(nextPlacas);
+
+      const placaIds = nextPlacas
+        .map((placa) => placa.id)
+        .filter((id): id is number => typeof id === 'number');
+
+      if (placaIds.length > 0) {
+        const { data: interactiveMapsData, error: interactiveMapsError } = await supabase
+          .from('interactive_maps')
+          .select('placa_id, sections')
+          .in('placa_id', placaIds);
+
+        if (interactiveMapsError) {
+          console.error('Error al consultar mapas interactivos por placa en eliminar placas:', interactiveMapsError);
+          setPlacasConMapa(new Set());
+        } else {
+          const placaIdsConMapa = (interactiveMapsData ?? [])
+            .filter((row: InteractiveMapPlacaRow) => Array.isArray(row.sections) && row.sections.length > 0)
+            .map((row: InteractiveMapPlacaRow) => row.placa_id)
+            .filter((id): id is number => typeof id === 'number');
+          setPlacasConMapa(new Set(placaIdsConMapa));
+        }
+      } else {
+        setPlacasConMapa(new Set());
+      }
+
       return true;
     } catch (err) {
       console.error('Error al cargar placas en eliminar placas:', err);
       setPlacas([]);
+      setPlacasConMapa(new Set());
       setPlacasLoadError('No se pudieron cargar las placas. Revisa tu conexión e inténtalo de nuevo.');
       return false;
     } finally {
@@ -180,6 +233,7 @@ const EliminarPlacas: React.FC = () => {
   useEffect(() => {
     setSubtemas([]);
     setPlacas([]);
+    setPlacasConMapa(new Set());
     setSelectedSubtemaId(null);
     setSelectedIds(new Set());
     setSubtemasLoadError(null);
@@ -192,6 +246,7 @@ const EliminarPlacas: React.FC = () => {
   // Cargar placas cuando cambia el subtema
   useEffect(() => {
     setPlacas([]);
+    setPlacasConMapa(new Set());
     setSelectedIds(new Set());
     setPlacasLoadError(null);
     if (!selectedSubtemaId) return;
@@ -219,9 +274,12 @@ const EliminarPlacas: React.FC = () => {
     if (selectedIds.size === 0) return;
     setIsDeleting(true);
     setShowConfirm(false);
+    setDeleteSuccessMessage(null);
     try {
       const toDelete = placas.filter(p => selectedIds.has(p.id));
       const toDeleteUrlSet = new Set(toDelete.map(p => p.photo_url));
+      const placaIdsToDelete = toDelete.map((placa) => placa.id);
+      let deletedMapsCount = 0;
 
       // 1. Borrar content_blocks que referencian estas fotos en cualquier página del sitio
       const { data: allBlocks } = await supabase
@@ -237,14 +295,38 @@ const EliminarPlacas: React.FC = () => {
         await supabase.from('content_blocks').delete().in('id', blockIdsToDelete);
       }
 
-      // 2. Borrar fotos de Cloudinary y registros de placas
+      // 2. Borrar mapas interactivos asociados a las placas seleccionadas
+      if (placaIdsToDelete.length > 0) {
+        const { data: deletedInteractiveMaps, error: deleteInteractiveMapsError } = await supabase
+          .from('interactive_maps')
+          .delete()
+          .in('placa_id', placaIdsToDelete)
+          .select('id');
+
+        if (deleteInteractiveMapsError) {
+          throw deleteInteractiveMapsError;
+        }
+
+        deletedMapsCount = deletedInteractiveMaps?.length ?? 0;
+      }
+
+      // 3. Borrar fotos de Cloudinary y registros de placas
       await Promise.all(
         toDelete.map(async placa => {
           const publicId = getCloudinaryPublicId(placa.photo_url);
           if (publicId) {
             try { await deleteFromCloudinary({ publicId, imageUrl: placa.photo_url }); } catch {/* ignorar si falla Cloudinary */}
           }
-          await supabase.from('placas').delete().eq('id', placa.id);
+
+          const { error: deletePlacaError } = await supabase
+            .from('placas')
+            .delete()
+            .eq('id', placa.id);
+
+          if (deletePlacaError) {
+            throw deletePlacaError;
+          }
+
           await logPlateActivity({
             actionType: 'delete_classified',
             targetTable: 'placas',
@@ -264,15 +346,26 @@ const EliminarPlacas: React.FC = () => {
         })
       );
       setPlacas(prev => prev.filter(p => !selectedIds.has(p.id)));
+      setPlacasConMapa((prev) => {
+        if (prev.size === 0) return prev;
+        const next = new Set(prev);
+        placaIdsToDelete.forEach((id) => next.delete(id));
+        return next;
+      });
       setSelectedIds(new Set());
-      setDeleteSuccess(true);
-      setTimeout(() => setDeleteSuccess(false), 3500);
+      const deletedPlacasCount = placaIdsToDelete.length;
+      const placasLabel = deletedPlacasCount === 1 ? 'placa' : 'placas';
+      const mapasLabel = deletedMapsCount === 1 ? 'mapa interactivo asociado' : 'mapas interactivos asociados';
+      setDeleteSuccessMessage(
+        `✅ Eliminacion completada: ${deletedPlacasCount} ${placasLabel} y ${deletedMapsCount} ${mapasLabel}.`
+      );
+      setTimeout(() => setDeleteSuccessMessage(null), 4500);
     } catch (err) {
       console.error('Error al eliminar placas:', err);
     } finally {
       setIsDeleting(false);
     }
-  }, [selectedIds, placas]);
+  }, [selectedIds, placas, user, selectedTemaId, selectedSubtemaId]);
 
   const temasByParcial: Record<ParcialKey, Tema[]> = { primer: [], segundo: [], tercer: [] };
   temas.forEach(t => {
@@ -286,6 +379,127 @@ const EliminarPlacas: React.FC = () => {
   const allSelected     = placas.length > 0 && selectedIds.size === placas.length;
   const someSelected    = selectedIds.size > 0;
   const handleGoBack = useSmartBackNavigation('/edicion');
+
+  const interactivePlacas = useMemo(() => {
+    return placas.filter((placa) => placasConMapa.has(placa.id));
+  }, [placas, placasConMapa]);
+
+  const nonInteractivePlacas = useMemo(() => {
+    return placas.filter((placa) => !placasConMapa.has(placa.id));
+  }, [placas, placasConMapa]);
+
+  const placasByAumento = useMemo<PlacaGroupByAumento[]>(() => {
+    const groups = new Map<string, PlacaGroupByAumento>();
+
+    nonInteractivePlacas.forEach((placa) => {
+      const aumentoRaw = (placa.aumento ?? '').trim();
+      const hasAumento = aumentoRaw.length > 0;
+      const aumentoLabel = hasAumento ? normalizeAumentoLabel(aumentoRaw) : 'SIN_AUMENTO';
+      const key = hasAumento ? `AUMENTO_${aumentoLabel}` : 'AUMENTO_SIN_AUMENTO';
+      const title = hasAumento ? `Aumento ${aumentoLabel}` : 'Sin aumento';
+      const sortValue = hasAumento ? parseAumentoSortValue(aumentoRaw) : Number.POSITIVE_INFINITY;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          title,
+          sortValue,
+          items: [],
+        });
+      }
+
+      const target = groups.get(key);
+      if (target) {
+        target.items.push(placa);
+      }
+    });
+
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.sortValue !== b.sortValue) return a.sortValue - b.sortValue;
+      return a.title.localeCompare(b.title, 'es', { sensitivity: 'base' });
+    });
+  }, [nonInteractivePlacas]);
+
+  const renderPlacaCard = (placa: Placa, index: number, keySuffix: string) => {
+    const isSelected = selectedIds.has(placa.id);
+    const isHovered = hoveredCard === placa.id;
+    const hasInteractiveMap = placasConMapa.has(placa.id);
+
+    return (
+      <div
+        key={`${placa.id}-${keySuffix}`}
+        className="placa-thumb-wrap"
+        style={{
+          ...s.placaCard,
+          border: isSelected
+            ? '2.5px solid #ef4444'
+            : isHovered
+            ? '2px solid #38bdf8'
+            : '1.5px solid #e0f2fe',
+          boxShadow: isSelected
+            ? '0 0 0 4px rgba(239,68,68,0.18)'
+            : isHovered
+            ? '0 12px 28px rgba(14,165,233,0.22)'
+            : '0 2px 10px rgba(15,23,42,0.10)',
+          transform: isHovered && !isSelected ? 'translateY(-4px)' : 'none',
+          cursor: 'pointer',
+        }}
+        onClick={() => toggleSelect(placa.id)}
+        onMouseEnter={() => setHoveredCard(placa.id)}
+        onMouseLeave={() => setHoveredCard(null)}
+      >
+        <div style={{
+          ...s.cardAccent,
+          background: isSelected
+            ? 'linear-gradient(90deg, #ef4444, #f97316)'
+            : 'linear-gradient(90deg, #38bdf8, #818cf8)',
+        }} />
+
+        <span style={s.positionBadge}>{index + 1}</span>
+
+        {hasInteractiveMap && (
+          <span style={s.interactiveMapBadge} title="Mapa interactivo disponible" aria-label="Mapa interactivo disponible">
+            <MousePointerClick size={14} strokeWidth={2.3} />
+          </span>
+        )}
+
+        {isSelected && (
+          <div style={{ ...s.selectedMark, right: hasInteractiveMap ? '42px' : '10px' }}>✓</div>
+        )}
+
+        <div style={s.imgWrap}>
+          <img
+            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+            alt={`Placa ${index + 1}`}
+            style={{
+              ...s.img,
+              ...(isSelected ? { filter: 'brightness(0.55) saturate(0.5)' } : {}),
+            }}
+            loading="lazy"
+            draggable={false}
+          />
+        </div>
+
+        <div style={{
+          ...s.cardFooter,
+          background: isSelected
+            ? '#fee2e2'
+            : isHovered
+            ? 'linear-gradient(135deg, #e0f2fe, #ede9fe)'
+            : '#f8fafc',
+          borderColor: isSelected ? '#fca5a5' : isHovered ? '#7dd3fc' : '#e2e8f0',
+        }}>
+          <span style={{
+            ...s.cardFooterText,
+            color: isSelected ? '#991b1b' : '#94a3b8',
+            fontWeight: isSelected ? 700 : 600,
+          }}>
+            {isSelected ? '🗑️ Seleccionada' : 'Clic para seleccionar'}
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div style={s.page}>
@@ -450,84 +664,30 @@ const EliminarPlacas: React.FC = () => {
             ) : placas.length === 0 ? (
               <div style={s.emptyState}>Este subtema no tiene placas aún.</div>
             ) : (
-              <div className="placas-gallery-grid">
-                {placas.map((placa, index) => {
-                  const isSelected = selectedIds.has(placa.id);
-                  const isHovered  = hoveredCard === placa.id;
-                  return (
-                    <div
-                      key={placa.id}
-                      className="placa-thumb-wrap"
-                      style={{
-                        ...s.placaCard,
-                        border: isSelected
-                          ? '2.5px solid #ef4444'
-                          : isHovered
-                          ? '2px solid #38bdf8'
-                          : '1.5px solid #e0f2fe',
-                        boxShadow: isSelected
-                          ? '0 0 0 4px rgba(239,68,68,0.18)'
-                          : isHovered
-                          ? '0 12px 28px rgba(14,165,233,0.22)'
-                          : '0 2px 10px rgba(15,23,42,0.10)',
-                        transform: isHovered && !isSelected ? 'translateY(-4px)' : 'none',
-                        cursor: 'pointer',
-                      }}
-                      onClick={() => toggleSelect(placa.id)}
-                      onMouseEnter={() => setHoveredCard(placa.id)}
-                      onMouseLeave={() => setHoveredCard(null)}
-                    >
-                      {/* Acento superior */}
-                      <div style={{
-                        ...s.cardAccent,
-                        background: isSelected
-                          ? 'linear-gradient(90deg, #ef4444, #f97316)'
-                          : 'linear-gradient(90deg, #38bdf8, #818cf8)',
-                      }} />
-
-                      {/* Badge número */}
-                      <span style={s.positionBadge}>{index + 1}</span>
-
-                      {/* Icono de seleccionada */}
-                      {isSelected && (
-                        <div style={s.selectedMark}>✓</div>
-                      )}
-
-                      {/* Imagen */}
-                      <div style={s.imgWrap}>
-                        <img
-                          src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
-                          alt={`Placa ${index + 1}`}
-                          style={{
-                            ...s.img,
-                            ...(isSelected ? { filter: 'brightness(0.55) saturate(0.5)' } : {}),
-                          }}
-                          loading="lazy"
-                          draggable={false}
-                        />
-                      </div>
-
-                      {/* Footer de la tarjeta */}
-                      <div style={{
-                        ...s.cardFooter,
-                        background: isSelected
-                          ? '#fee2e2'
-                          : isHovered
-                          ? 'linear-gradient(135deg, #e0f2fe, #ede9fe)'
-                          : '#f8fafc',
-                        borderColor: isSelected ? '#fca5a5' : isHovered ? '#7dd3fc' : '#e2e8f0',
-                      }}>
-                        <span style={{
-                          ...s.cardFooterText,
-                          color: isSelected ? '#991b1b' : '#94a3b8',
-                          fontWeight: isSelected ? 700 : 600,
-                        }}>
-                          {isSelected ? '🗑️ Seleccionada' : 'Clic para seleccionar'}
-                        </span>
-                      </div>
+              <div style={s.gallerySectionsWrap}>
+                {interactivePlacas.length > 0 && (
+                  <section style={s.gallerySection}>
+                    <div style={s.gallerySectionHeader}>
+                      <h3 style={s.gallerySectionTitle}>Placas con mapa interactivo</h3>
+                      <span style={s.gallerySectionCount}>{interactivePlacas.length}</span>
                     </div>
-                  );
-                })}
+                    <div className="placas-gallery-grid">
+                      {interactivePlacas.map((placa, idx) => renderPlacaCard(placa, idx, 'interactive'))}
+                    </div>
+                  </section>
+                )}
+
+                {placasByAumento.map((group) => (
+                  <section key={group.key} style={s.gallerySection}>
+                    <div style={s.gallerySectionHeader}>
+                      <h3 style={s.gallerySectionTitle}>{group.title}</h3>
+                      <span style={s.gallerySectionCount}>{group.items.length}</span>
+                    </div>
+                    <div className="placas-gallery-grid">
+                      {group.items.map((placa, idx) => renderPlacaCard(placa, idx, group.key))}
+                    </div>
+                  </section>
+                ))}
               </div>
             )}
           </div>
@@ -535,8 +695,8 @@ const EliminarPlacas: React.FC = () => {
 
         {/* Botón de eliminar inline — sin barra fija */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', justifyContent: 'flex-end', marginTop: '24px', paddingBottom: '40px' }}>
-          {deleteSuccess && (
-            <span style={s.successMsg}>✅ Placas eliminadas correctamente</span>
+          {deleteSuccessMessage && (
+            <span style={s.successMsg}>{deleteSuccessMessage}</span>
           )}
           <button
             style={someSelected && !isDeleting ? s.deleteBtn : s.deleteBtnDisabled}
@@ -791,6 +951,40 @@ const s: { [key: string]: React.CSSProperties } = {
     border: '1px dashed #e2e8f0',
     fontSize: '0.95em',
   },
+  gallerySectionsWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '18px',
+  },
+  gallerySection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  gallerySectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    paddingBottom: '7px',
+    borderBottom: '1px solid rgba(148,163,184,0.24)',
+  },
+  gallerySectionTitle: {
+    margin: 0,
+    color: '#334155',
+    fontSize: '0.92em',
+    fontWeight: 700,
+    letterSpacing: '0.01em',
+  },
+  gallerySectionCount: {
+    color: '#64748b',
+    fontSize: '0.76em',
+    fontWeight: 700,
+    border: '1px solid rgba(148,163,184,0.32)',
+    borderRadius: '999px',
+    padding: '2px 9px',
+    background: 'rgba(255,255,255,0.58)',
+  },
   loadingWrap: {
     display: 'flex',
     flexDirection: 'column',
@@ -856,6 +1050,22 @@ const s: { [key: string]: React.CSSProperties } = {
     fontWeight: 800,
     zIndex: 3,
     boxShadow: '0 2px 8px rgba(239,68,68,0.4)',
+  },
+  interactiveMapBadge: {
+    position: 'absolute',
+    top: '10px',
+    right: '10px',
+    width: '26px',
+    height: '26px',
+    borderRadius: '8px',
+    background: '#1d345f',
+    color: '#f8fbff',
+    border: '1px solid rgba(120,143,186,0.78)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 3px 10px rgba(29,52,95,0.38)',
+    zIndex: 3,
   },
   imgWrap: {
     width: '100%',

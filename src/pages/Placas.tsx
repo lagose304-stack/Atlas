@@ -1048,19 +1048,12 @@ const Placas: React.FC = () => {
               </button>
               <button
                 type="button"
-                style={{ ...p.actionBtn, color: '#0369a1', background: '#ecfeff', borderColor: '#a5f3fc', opacity: 0.8, cursor: 'not-allowed' }}
-                title="Próximamente"
-                disabled
+                style={{ ...p.actionBtn, color: '#0369a1', background: '#ecfeff', borderColor: '#a5f3fc' }}
+                onClick={() => navigate('/mapas-interactivos?modo=editar')}
+                onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#0ea5e9,#22d3ee)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#ecfeff'; e.currentTarget.style.color = '#0369a1'; e.currentTarget.style.borderColor = '#a5f3fc'; }}
               >
                 ✏️ Editar
-              </button>
-              <button
-                type="button"
-                style={{ ...p.actionBtn, color: '#0369a1', background: '#ecfeff', borderColor: '#a5f3fc', opacity: 0.8, cursor: 'not-allowed' }}
-                title="Próximamente"
-                disabled
-              >
-                🗑️ Borrar
               </button>
             </div>
           </div>
