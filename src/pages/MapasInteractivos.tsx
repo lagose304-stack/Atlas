@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Stage, Layer, Image as KonvaImage, Line, Circle } from 'react-konva';
+import { Stage, Layer, Image as KonvaImage, Line, Circle, Path } from 'react-konva';
 import { MousePointerClick } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Header from '../components/Header';
@@ -111,6 +111,7 @@ interface HydratedSectionsPayload {
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
 type ZoomSensitivity = 'suave' | 'media' | 'rapida';
+type LassoInteractionMode = 'draw' | 'edit';
 
 const PARCIALES: { key: ParcialKey; label: string }[] = [
   { key: 'primer', label: 'Primer parcial' },
@@ -490,6 +491,103 @@ const pointInPolygonFlat = (x: number, y: number, flatPoints: number[]): boolean
   return inside;
 };
 
+const isPolygonContainedInPolygon = (innerFlatPoints: number[], outerFlatPoints: number[]): boolean => {
+  if (innerFlatPoints.length < 6 || outerFlatPoints.length < 6) return false;
+
+  for (let i = 0; i < innerFlatPoints.length; i += 2) {
+    if (!pointInPolygonFlat(innerFlatPoints[i], innerFlatPoints[i + 1], outerFlatPoints)) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const flatPointsToSvgPath = (flatPoints: number[]): string => {
+  if (flatPoints.length < 6 || flatPoints.length % 2 !== 0) return '';
+
+  const firstX = flatPoints[0];
+  const firstY = flatPoints[1];
+  if (!Number.isFinite(firstX) || !Number.isFinite(firstY)) return '';
+
+  let d = `M ${firstX} ${firstY}`;
+  for (let i = 2; i < flatPoints.length; i += 2) {
+    const x = flatPoints[i];
+    const y = flatPoints[i + 1];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    d += ` L ${x} ${y}`;
+  }
+
+  d += ' Z';
+  return d;
+};
+
+const buildExclusiveFillPath = (baseFlatPoints: number[], cutoutFlatPoints: number[][]): string => {
+  const basePath = flatPointsToSvgPath(baseFlatPoints);
+  if (!basePath) return '';
+
+  const cutoutPaths = cutoutFlatPoints
+    .map((points) => flatPointsToSvgPath(points))
+    .filter((path) => path.length > 0);
+
+  if (cutoutPaths.length === 0) return basePath;
+  return [basePath, ...cutoutPaths].join(' ');
+};
+
+const getPolygonArea = (flatPoints: number[]): number => {
+  if (flatPoints.length < 6 || flatPoints.length % 2 !== 0) return 0;
+
+  let signedArea = 0;
+  const pairCount = flatPoints.length / 2;
+
+  for (let i = 0; i < pairCount; i += 1) {
+    const currentX = flatPoints[i * 2];
+    const currentY = flatPoints[i * 2 + 1];
+    const nextIndex = (i + 1) % pairCount;
+    const nextX = flatPoints[nextIndex * 2];
+    const nextY = flatPoints[nextIndex * 2 + 1];
+    signedArea += currentX * nextY - nextX * currentY;
+  }
+
+  return Math.abs(signedArea) / 2;
+};
+
+const buildContainmentChildrenMap = (polygons: number[][]): number[][] => {
+  const childrenByParent = polygons.map(() => [] as number[]);
+  const polygonAreas = polygons.map((points) => getPolygonArea(points));
+
+  for (let innerIdx = 0; innerIdx < polygons.length; innerIdx += 1) {
+    const inner = polygons[innerIdx];
+    if (inner.length < 6) continue;
+
+    let parentIdx: number | null = null;
+    let parentArea = Number.POSITIVE_INFINITY;
+    const innerArea = polygonAreas[innerIdx];
+
+    for (let outerIdx = 0; outerIdx < polygons.length; outerIdx += 1) {
+      if (outerIdx === innerIdx) continue;
+
+      const outer = polygons[outerIdx];
+      if (outer.length < 6) continue;
+
+      const outerArea = polygonAreas[outerIdx];
+      if (outerArea <= innerArea + Number.EPSILON) continue;
+      if (!isPolygonContainedInPolygon(inner, outer)) continue;
+
+      if (outerArea < parentArea) {
+        parentArea = outerArea;
+        parentIdx = outerIdx;
+      }
+    }
+
+    if (parentIdx !== null) {
+      childrenByParent[parentIdx].push(innerIdx);
+    }
+  }
+
+  return childrenByParent;
+};
+
 const pointInsideRect = (x: number, y: number, rect: RectBox): boolean => {
   return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
 };
@@ -533,6 +631,7 @@ const MapasInteractivos: React.FC = () => {
   const [selectedSubtemaId, setSelectedSubtemaId] = useState<number | null>(null);
   const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(null);
   const [selectedTool, setSelectedTool] = useState<'lasso' | 'zoom'>('lasso');
+  const [lassoInteractionMode, setLassoInteractionMode] = useState<LassoInteractionMode>('draw');
   const [zoomSensitivity, setZoomSensitivity] = useState<ZoomSensitivity>('media');
   const [zoomScale, setZoomScale] = useState(1);
   const [isZoomDragging, setIsZoomDragging] = useState(false);
@@ -785,6 +884,7 @@ const MapasInteractivos: React.FC = () => {
 
     setZoomScale(1);
     setPanOffset({ x: 0, y: 0 });
+    setLassoInteractionMode('draw');
     setSelectionPoints([]);
     setSavedSelections([]);
     setSavedSelectionDetails([]);
@@ -2036,6 +2136,62 @@ const MapasInteractivos: React.FC = () => {
   }, [nonInteractivePlacas]);
   const selectedPlacaIndex = selectedPlaca ? placas.findIndex(p => p.id === selectedPlaca.id) : -1;
   const isWorkspaceMode = selectedPlaca !== null;
+  const canInteractWithSavedSelections = selectedTool === 'lasso' && lassoInteractionMode === 'edit';
+  const savedSelectionChildrenMap = useMemo(() => {
+    return buildContainmentChildrenMap(savedSelections);
+  }, [savedSelections]);
+  const pendingSelectionContainment = useMemo(() => {
+    if (selectionPoints.length < 6) {
+      return {
+        parentSavedSelectionIndex: null as number | null,
+        childSavedSelectionIndexes: [] as number[],
+      };
+    }
+
+    const combinedPolygons = [...savedSelections, selectionPoints];
+    const containmentChildrenMap = buildContainmentChildrenMap(combinedPolygons);
+    const pendingIndex = combinedPolygons.length - 1;
+
+    const parentSavedSelectionIndex = containmentChildrenMap.findIndex((children) =>
+      children.includes(pendingIndex)
+    );
+
+    const childSavedSelectionIndexes = containmentChildrenMap[pendingIndex]
+      .filter((childIndex) => childIndex < savedSelections.length);
+
+    return {
+      parentSavedSelectionIndex: parentSavedSelectionIndex >= 0 ? parentSavedSelectionIndex : null,
+      childSavedSelectionIndexes,
+    };
+  }, [savedSelections, selectionPoints]);
+  const savedSelectionFillPaths = useMemo(() => {
+    return savedSelections.map((points, idx) => {
+      const cutouts = savedSelectionChildrenMap[idx].map((childIdx) => savedSelections[childIdx]);
+
+      if (pendingSelectionContainment.parentSavedSelectionIndex === idx) {
+        cutouts.push(selectionPoints);
+      }
+
+      return buildExclusiveFillPath(points, cutouts);
+    });
+  }, [savedSelections, selectionPoints, savedSelectionChildrenMap, pendingSelectionContainment]);
+  const pendingSelectionFillPath = useMemo(() => {
+    if (selectionPoints.length < 6) return '';
+
+    const containedSavedSelections = pendingSelectionContainment.childSavedSelectionIndexes
+      .map((savedSelectionIndex) => savedSelections[savedSelectionIndex]);
+
+    return buildExclusiveFillPath(selectionPoints, containedSavedSelections);
+  }, [selectionPoints, savedSelections, pendingSelectionContainment]);
+  const savedSelectionRenderOrder = useMemo(() => {
+    return savedSelections
+      .map((_, idx) => idx)
+      .sort((a, b) => {
+        const areaDiff = getPolygonArea(savedSelections[b]) - getPolygonArea(savedSelections[a]);
+        if (Math.abs(areaDiff) > Number.EPSILON) return areaDiff;
+        return a - b;
+      });
+  }, [savedSelections]);
   const activeSavedSelectionTitle = activeSavedSelectionIndex !== null
     ? (savedSelectionDetails[activeSavedSelectionIndex]?.title?.trim() || `Seleccion ${activeSavedSelectionIndex + 1}`)
     : '';
@@ -2228,6 +2384,11 @@ const MapasInteractivos: React.FC = () => {
                         : (insertHint.visible ? 'copy' : 'crosshair'),
                   }}
                 >
+                  {selectedTool === 'lasso' && (
+                    <div style={s.lassoModeBadge}>
+                      Modo: {lassoInteractionMode === 'draw' ? 'Nuevo' : 'Editar'}
+                    </div>
+                  )}
                   {imageElement && imageRect ? (
                     <Stage
                       ref={stageRef}
@@ -2256,16 +2417,28 @@ const MapasInteractivos: React.FC = () => {
                           listening={false}
                         />
 
-                        {savedSelections.map((points, idx) => {
+                        {savedSelectionRenderOrder.map((idx) => {
+                          const points = savedSelections[idx];
                           const details = savedSelectionDetails[idx];
                           const fillColor = hexToRgba(details?.color ?? DEFAULT_SELECTION_COLOR, 0.2);
+                          const fillPath = savedSelectionFillPaths[idx] ?? '';
 
                           return (
                           <React.Fragment key={`saved-${idx}`}>
+                            {fillPath && (
+                              <Path
+                                data={fillPath}
+                                fill={fillColor}
+                                fillRule="evenodd"
+                                listening={false}
+                              />
+                            )}
                             <Line
                               points={points}
                               closed
-                              listening={selectedTool === 'lasso'}
+                              listening={canInteractWithSavedSelections}
+                              fill="rgba(0,0,0,0.001)"
+                              strokeEnabled={false}
                               onMouseDown={e => {
                                 e.cancelBubble = true;
                                 if (selectedTool !== 'lasso') return;
@@ -2282,14 +2455,11 @@ const MapasInteractivos: React.FC = () => {
                                 setSelectionPoints([]);
                                 setActiveLassoPoints([]);
                               }}
-                              stroke="#0f766e"
-                              strokeWidth={1.5}
-                              fill={fillColor}
                             />
                             <Line
                               points={points}
                               closed
-                              listening={selectedTool === 'lasso'}
+                              listening={canInteractWithSavedSelections}
                               hitStrokeWidth={isCoarsePointer ? TOUCH_LINE_HIT_STROKE : MOUSE_LINE_HIT_STROKE}
                               onMouseDown={e => {
                                 e.cancelBubble = true;
@@ -2391,6 +2561,7 @@ const MapasInteractivos: React.FC = () => {
                         );})}
 
                         {selectedTool === 'lasso' &&
+                          canInteractWithSavedSelections &&
                           activeSavedSelectionIndex !== null &&
                           savedSelections[activeSavedSelectionIndex] &&
                           savedSelections[activeSavedSelectionIndex].length >= 6 &&
@@ -2425,6 +2596,14 @@ const MapasInteractivos: React.FC = () => {
 
                         {selectionPoints.length >= 6 && (
                           <>
+                            {pendingSelectionFillPath && (
+                              <Path
+                                data={pendingSelectionFillPath}
+                                fill={hexToRgba(pendingSelectionDetails.color || DEFAULT_SELECTION_COLOR, 0.2)}
+                                fillRule="evenodd"
+                                listening={false}
+                              />
+                            )}
                             <Line
                               points={selectionPoints}
                               closed
@@ -2495,7 +2674,7 @@ const MapasInteractivos: React.FC = () => {
                               strokeWidth={2}
                               dash={[10, 8]}
                               dashOffset={dashOffset}
-                              fill={hexToRgba(pendingSelectionDetails.color || DEFAULT_SELECTION_COLOR, 0.2)}
+                              fill="rgba(0,0,0,0.001)"
                             />
                             <Line
                               points={selectionPoints}
@@ -2606,6 +2785,39 @@ const MapasInteractivos: React.FC = () => {
                 >
                   🔍
                 </button>
+                {selectedTool === 'lasso' && (
+                  <div style={s.lassoModeSwitch}>
+                    <button
+                      type="button"
+                      style={{
+                        ...s.lassoModeBtn,
+                        ...(lassoInteractionMode === 'draw' ? s.lassoModeBtnActive : {}),
+                      }}
+                      onClick={() => {
+                        setLassoInteractionMode('draw');
+                        setActiveSavedSelectionIndex(null);
+                        setShowDeleteConfirm(false);
+                        hideInsertHint();
+                      }}
+                      title="Dibujar nueva selección dentro o fuera de otras"
+                    >
+                      Nuevo
+                    </button>
+                    <button
+                      type="button"
+                      style={{
+                        ...s.lassoModeBtn,
+                        ...(lassoInteractionMode === 'edit' ? s.lassoModeBtnActive : {}),
+                      }}
+                      onClick={() => {
+                        setLassoInteractionMode('edit');
+                      }}
+                      title="Seleccionar y editar una selección guardada"
+                    >
+                      Editar
+                    </button>
+                  </div>
+                )}
                 {selectedTool === 'zoom' && (
                   <button
                     type="button"
@@ -2639,7 +2851,7 @@ const MapasInteractivos: React.FC = () => {
                   </div>
                 )}
 
-                {activeSavedSelectionIndex !== null && !isDrawing && (
+                {canInteractWithSavedSelections && activeSavedSelectionIndex !== null && !isDrawing && (
                   <div style={s.savedSelectionActionsWrap}>
                     <div style={s.editActionAnchor}>
                       <button
@@ -2693,7 +2905,7 @@ const MapasInteractivos: React.FC = () => {
               </aside>
             </div>
 
-            <p style={s.workspaceHint}>Esc limpia la selección. Haz clic o toca una selección confirmada para editar nodos, usar el lápiz para editar su información o eliminarla (con confirmación). Para agregar nodos, haz clic o toca sobre la línea de borde de la selección. Con la lupa, arrastra a la derecha para acercar y a la izquierda para alejar.</p>
+            <p style={s.workspaceHint}>Esc limpia la selección. En Nuevo puedes dibujar selecciones dentro de otras sin capturar la anterior; en Editar puedes tocar una selección guardada para mover nodos, usar el lápiz o eliminarla. Para agregar nodos, haz clic o toca sobre la línea de borde de la selección. Con la lupa, arrastra a la derecha para acercar y a la izquierda para alejar.</p>
             {mapPersistMessage && <p style={s.workspacePersistHint}>{mapPersistMessage}</p>}
 
             {showUnsavedExitConfirm && (
@@ -3639,6 +3851,22 @@ const s: { [key: string]: React.CSSProperties } = {
     fontWeight: 600,
     fontSize: '0.92em',
   },
+  lassoModeBadge: {
+    position: 'absolute',
+    top: '10px',
+    left: '10px',
+    zIndex: 5,
+    pointerEvents: 'none',
+    borderRadius: '999px',
+    border: '1.5px solid #7dd3fc',
+    background: 'rgba(240,249,255,0.9)',
+    color: '#0369a1',
+    fontSize: '0.72em',
+    fontWeight: 800,
+    letterSpacing: '0.02em',
+    padding: '5px 10px',
+    boxShadow: '0 6px 16px rgba(14,116,144,0.16)',
+  },
   toolsRibbon: {
     borderRadius: '12px',
     border: '1.5px solid #dbeafe',
@@ -3668,6 +3896,31 @@ const s: { [key: string]: React.CSSProperties } = {
     background: '#e0f2fe',
     color: '#0369a1',
     boxShadow: '0 0 0 2px rgba(56,189,248,0.18)',
+  },
+  lassoModeSwitch: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    width: '100%',
+  },
+  lassoModeBtn: {
+    width: '100%',
+    minWidth: '52px',
+    padding: '5px 8px',
+    borderRadius: '8px',
+    border: '1.5px solid #cbd5e1',
+    background: '#fff',
+    color: '#0f172a',
+    cursor: 'pointer',
+    fontSize: '0.66em',
+    fontWeight: 700,
+    letterSpacing: '0.01em',
+    fontFamily: 'inherit',
+  },
+  lassoModeBtnActive: {
+    border: '1.5px solid #0284c7',
+    background: '#e0f2fe',
+    color: '#075985',
   },
   zoomValue: {
     fontSize: '0.72em',

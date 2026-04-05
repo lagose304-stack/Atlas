@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
@@ -16,6 +16,7 @@ interface Tema {
   nombre: string;
   logo_url: string;
   parcial: string;
+  sort_order?: number | null;
 }
 
 interface Subtema {
@@ -25,6 +26,14 @@ interface Subtema {
   tema_id: number;
   logo_url?: string;
 }
+
+const normalizeParcial = (parcial: string | null | undefined): string => {
+  const normalized = (parcial ?? '').toString().trim().toLowerCase();
+  if (normalized.startsWith('prim')) return 'primer';
+  if (normalized.startsWith('seg')) return 'segundo';
+  if (normalized.startsWith('ter')) return 'tercer';
+  return normalized;
+};
 
 const Subtemas: React.FC = () => {
   const { temaId } = useParams<{ temaId: string }>();
@@ -38,6 +47,7 @@ const Subtemas: React.FC = () => {
   const [temaLogoSrc, setTemaLogoSrc] = useState('');
   const [failedSubtemaLogos, setFailedSubtemaLogos] = useState<Record<number, boolean>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [allTemas, setAllTemas] = useState<Tema[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -90,6 +100,21 @@ const Subtemas: React.FC = () => {
       setSubtemas(subtemasData ?? []);
     }
 
+    const { data: temasData, error: temasError } = await supabase
+      .from('temas')
+      .select('id, nombre, parcial, sort_order')
+      .order('sort_order', { ascending: true });
+
+    if (temasError) {
+      console.error('Error fetching temas for navigation:', temasError);
+      setAllTemas([]);
+      nextError = nextError
+        ? `${nextError} No fue posible preparar la navegacion entre temas.`
+        : 'No se pudo preparar la navegacion entre temas en este momento.';
+    } else {
+      setAllTemas((temasData ?? []) as Tema[]);
+    }
+
     // Cargar bloques de contenido editorial
     try {
       const blocks = await getRenderableBlocks('subtemas_page', Number(temaId));
@@ -110,6 +135,59 @@ const Subtemas: React.FC = () => {
     setTemaLogoFailed(false);
     setTemaLogoSrc(tema?.logo_url ? getCloudinaryImageUrl(tema.logo_url, 'thumb') : '');
   }, [tema?.logo_url]);
+
+  const orderedTemas = useMemo(() => {
+    return [...allTemas].sort((a, b) => {
+      const aSort = typeof a.sort_order === 'number' ? a.sort_order : Number.POSITIVE_INFINITY;
+      const bSort = typeof b.sort_order === 'number' ? b.sort_order : Number.POSITIVE_INFINITY;
+      if (aSort !== bSort) return aSort - bSort;
+
+      return a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
+    });
+  }, [allTemas]);
+
+  const currentTemaId = Number(temaId ?? 0);
+
+  const currentTemaParcial = useMemo(() => {
+    const fromSelectedTema = orderedTemas.find((item) => item.id === currentTemaId)?.parcial;
+    return normalizeParcial(tema?.parcial ?? fromSelectedTema ?? '');
+  }, [orderedTemas, currentTemaId, tema?.parcial]);
+
+  const temasDelParcial = useMemo(() => {
+    return orderedTemas.filter((item) => normalizeParcial(item.parcial) === currentTemaParcial);
+  }, [orderedTemas, currentTemaParcial]);
+
+  const currentTemaParcialIndex = useMemo(() => {
+    return temasDelParcial.findIndex((item) => item.id === currentTemaId);
+  }, [temasDelParcial, currentTemaId]);
+
+  const temaAnterior = currentTemaParcialIndex > 0 ? temasDelParcial[currentTemaParcialIndex - 1] : null;
+  const temaSiguiente =
+    currentTemaParcialIndex >= 0 && currentTemaParcialIndex < temasDelParcial.length - 1
+      ? temasDelParcial[currentTemaParcialIndex + 1]
+      : null;
+
+  const navAnterior = useMemo(() => {
+    if (temaAnterior) {
+      return {
+        targetId: temaAnterior.id,
+        label: `← Tema anterior: ${temaAnterior.nombre}`,
+      };
+    }
+
+    return null;
+  }, [temaAnterior]);
+
+  const navSiguiente = useMemo(() => {
+    if (temaSiguiente) {
+      return {
+        targetId: temaSiguiente.id,
+        label: `Siguiente tema: ${temaSiguiente.nombre} →`,
+      };
+    }
+
+    return null;
+  }, [temaSiguiente]);
 
   const handleGoBack = useSmartBackNavigation('/');
 
@@ -236,6 +314,36 @@ const Subtemas: React.FC = () => {
                   </div>
                 ))}
               </div>
+            )}
+
+            {(navAnterior || navSiguiente) && (
+              <section style={styles.navigationPanel}>
+                <div style={styles.navigationButtonsWrap}>
+                  {navAnterior && (
+                    <button
+                      type="button"
+                      style={styles.navigationButton}
+                      onClick={() => {
+                        navigate(`/subtemas/${navAnterior.targetId}`);
+                      }}
+                    >
+                      {navAnterior.label}
+                    </button>
+                  )}
+
+                  {navSiguiente && (
+                    <button
+                      type="button"
+                      style={styles.navigationButton}
+                      onClick={() => {
+                        navigate(`/subtemas/${navSiguiente.targetId}`);
+                      }}
+                    >
+                      {navSiguiente.label}
+                    </button>
+                  )}
+                </div>
+              </section>
             )}
           </section>
         )}
@@ -487,6 +595,31 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '8px 14px',
     fontWeight: 700,
     cursor: 'pointer',
+  },
+  navigationPanel: {
+    marginTop: 'clamp(18px, 4vw, 34px)',
+    borderTop: '1px solid rgba(148, 163, 184, 0.28)',
+    paddingTop: 'clamp(14px, 3vw, 20px)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  navigationButtonsWrap: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '10px',
+    width: '100%',
+  },
+  navigationButton: {
+    border: '1px solid #cbd5e1',
+    background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
+    color: '#0f172a',
+    borderRadius: '10px',
+    padding: '10px 12px',
+    fontWeight: 700,
+    textAlign: 'center',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
   },
 };
 

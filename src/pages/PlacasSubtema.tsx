@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { MousePointerClick } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
@@ -27,7 +27,15 @@ interface SubtemaInfo {
   id: number;
   nombre: string;
   tema_id: number;
+  sort_order?: number | null;
   temas?: { nombre: string } | { nombre: string }[];
+}
+
+interface SubtemaNav {
+  id: number;
+  nombre: string;
+  tema_id: number;
+  sort_order?: number | null;
 }
 
 interface InteractiveMapRow {
@@ -54,6 +62,7 @@ const parseAumentoSortValue = (aumento: string): number => {
 const normalizeAumentoLabel = (aumento: string): string => aumento.trim().replace(/\s+/g, '').toUpperCase();
 
 const PlacasSubtema: React.FC = () => {
+  const navigate = useNavigate();
   const { subtemaId } = useParams<{ subtemaId: string }>();
   const [placas, setPlacas] = useState<Placa[]>([]);
   const [subtema, setSubtema] = useState<SubtemaInfo | null>(null);
@@ -62,6 +71,7 @@ const PlacasSubtema: React.FC = () => {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
+  const [allSubtemas, setAllSubtemas] = useState<SubtemaNav[]>([]);
 
   useEffect(() => {
     if (!subtemaId) return;
@@ -79,6 +89,23 @@ const PlacasSubtema: React.FC = () => {
 
       if (subtemaError) console.error('Error fetching subtema:', subtemaError);
       if (subtemaData) setSubtema(subtemaData as unknown as SubtemaInfo);
+
+      if (subtemaData?.tema_id) {
+        const { data: subtemasListData, error: subtemasListError } = await supabase
+          .from('subtemas')
+          .select('id, nombre, tema_id, sort_order')
+          .eq('tema_id', subtemaData.tema_id)
+          .order('sort_order', { ascending: true });
+
+        if (subtemasListError) {
+          console.error('Error fetching subtemas for navigation:', subtemasListError);
+          setAllSubtemas([]);
+        } else {
+          setAllSubtemas((subtemasListData ?? []) as SubtemaNav[]);
+        }
+      } else {
+        setAllSubtemas([]);
+      }
 
       // Cargar placas de este subtema
       const { data: placasData, error: placasError } = await supabase
@@ -136,6 +163,49 @@ const PlacasSubtema: React.FC = () => {
   const temaNombre = Array.isArray(subtema?.temas)
     ? (subtema?.temas[0]?.nombre ?? '')
     : (subtema?.temas?.nombre ?? '');
+
+  const currentSubtemaId = Number(subtemaId ?? 0);
+
+  const subtemasTemaActual = useMemo(() => {
+    return [...allSubtemas].sort((a, b) => {
+      const aSort = typeof a.sort_order === 'number' ? a.sort_order : Number.POSITIVE_INFINITY;
+      const bSort = typeof b.sort_order === 'number' ? b.sort_order : Number.POSITIVE_INFINITY;
+      if (aSort !== bSort) return aSort - bSort;
+      return a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
+    });
+  }, [allSubtemas]);
+
+  const currentSubtemaIndex = useMemo(() => {
+    return subtemasTemaActual.findIndex((item) => item.id === currentSubtemaId);
+  }, [subtemasTemaActual, currentSubtemaId]);
+
+  const subtemaAnterior = currentSubtemaIndex > 0 ? subtemasTemaActual[currentSubtemaIndex - 1] : null;
+  const subtemaSiguiente =
+    currentSubtemaIndex >= 0 && currentSubtemaIndex < subtemasTemaActual.length - 1
+      ? subtemasTemaActual[currentSubtemaIndex + 1]
+      : null;
+
+  const navAnterior = useMemo(() => {
+    if (subtemaAnterior) {
+      return {
+        label: `← Subtema anterior: ${subtemaAnterior.nombre}`,
+        onClick: () => navigate(`/ver-placas/${subtemaAnterior.id}`),
+      };
+    }
+
+    return null;
+  }, [subtemaAnterior, navigate]);
+
+  const navSiguiente = useMemo(() => {
+    if (subtemaSiguiente) {
+      return {
+        label: `Siguiente subtema: ${subtemaSiguiente.nombre} →`,
+        onClick: () => navigate(`/ver-placas/${subtemaSiguiente.id}`),
+      };
+    }
+
+    return null;
+  }, [subtemaSiguiente, navigate]);
 
   const interactivePlacas = useMemo(() => {
     return placas.filter((placa) => placasConMapa.has(placa.id));
@@ -298,6 +368,36 @@ const PlacasSubtema: React.FC = () => {
                 </section>
               ))}
             </div>
+          )}
+
+          {!loading && (navAnterior || navSiguiente) && (
+            <section style={styles.navigationPanel}>
+              <div style={styles.navigationButtonGrid}>
+                {navAnterior && (
+                  <button
+                    type="button"
+                    style={styles.navigationButton}
+                    onClick={() => {
+                      navAnterior.onClick();
+                    }}
+                  >
+                    {navAnterior.label}
+                  </button>
+                )}
+
+                {navSiguiente && (
+                  <button
+                    type="button"
+                    style={styles.navigationButton}
+                    onClick={() => {
+                      navSiguiente.onClick();
+                    }}
+                  >
+                    {navSiguiente.label}
+                  </button>
+                )}
+              </div>
+            </section>
           )}
         </section>
       </main>
@@ -558,6 +658,30 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: '0 3px 10px rgba(29,52,95,0.38)',
     backdropFilter: 'blur(4px)',
     flexShrink: 0,
+  },
+  navigationPanel: {
+    marginTop: '6px',
+    paddingTop: '14px',
+    borderTop: '1px solid rgba(148, 163, 184, 0.28)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  navigationButtonGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '10px',
+  },
+  navigationButton: {
+    border: '1px solid #cbd5e1',
+    background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
+    color: '#0f172a',
+    borderRadius: '10px',
+    padding: '10px 12px',
+    fontWeight: 700,
+    textAlign: 'center',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
   },
 };
 

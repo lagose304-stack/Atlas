@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MousePointerClick } from 'lucide-react';
-import { Stage, Layer, Image as KonvaImage, Line } from 'react-konva';
+import { Stage, Layer, Image as KonvaImage, Line, Path, Text, Rect } from 'react-konva';
+import Konva from 'konva';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, type ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
 
@@ -36,6 +37,21 @@ interface Point2D {
   y: number;
 }
 
+interface CalloutLayout {
+  title: string;
+  accentColor: string;
+  isCompact: boolean;
+  fontSize: number;
+  side: 'left' | 'right';
+  boxX: number;
+  boxY: number;
+  boxWidth: number;
+  boxHeight: number;
+  titleX: number;
+  titleY: number;
+  leaderPoints: number[];
+}
+
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3.2;
 const WHEEL_ZOOM_SENSITIVITY = 0.0016;
@@ -45,6 +61,8 @@ const SECTION_AUTO_FOCUS_TARGET_TOLERANCE = 1.2;
 const SECTION_AUTO_FOCUS_MIN_DELTA = 0.5;
 const INTERACTIVE_MAP_COORDINATE_SPACE = 'image_uv_v1';
 const NORMALIZED_COORD_EPSILON = 0.0005;
+const CALLOUT_MIN_DISTANCE_PX = 38;
+const CALLOUT_MAX_DISTANCE_PX = 66;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -55,6 +73,333 @@ const isNormalizedCoordinateValue = (value: number): boolean => {
 const areLikelyNormalizedFlatPoints = (points: number[]): boolean => {
   if (points.length < 6 || points.length % 2 !== 0) return false;
   return points.every((point) => isNormalizedCoordinateValue(point));
+};
+
+const pointsToPairs = (points: number[]): Array<{ x: number; y: number }> => {
+  const pairs: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < points.length; i += 2) {
+    pairs.push({ x: points[i], y: points[i + 1] });
+  }
+  return pairs;
+};
+
+const pointInPolygonFlat = (x: number, y: number, flatPoints: number[]): boolean => {
+  const points = pointsToPairs(flatPoints);
+  if (points.length < 3) return false;
+
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x;
+    const yi = points[i].y;
+    const xj = points[j].x;
+    const yj = points[j].y;
+
+    const intersects =
+      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi;
+    if (intersects) inside = !inside;
+  }
+
+  return inside;
+};
+
+const isPolygonContainedInPolygon = (innerFlatPoints: number[], outerFlatPoints: number[]): boolean => {
+  if (innerFlatPoints.length < 6 || outerFlatPoints.length < 6) return false;
+
+  for (let i = 0; i < innerFlatPoints.length; i += 2) {
+    if (!pointInPolygonFlat(innerFlatPoints[i], innerFlatPoints[i + 1], outerFlatPoints)) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const flatPointsToSvgPath = (flatPoints: number[]): string => {
+  if (flatPoints.length < 6 || flatPoints.length % 2 !== 0) return '';
+
+  const firstX = flatPoints[0];
+  const firstY = flatPoints[1];
+  if (!Number.isFinite(firstX) || !Number.isFinite(firstY)) return '';
+
+  let d = `M ${firstX} ${firstY}`;
+  for (let i = 2; i < flatPoints.length; i += 2) {
+    const x = flatPoints[i];
+    const y = flatPoints[i + 1];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    d += ` L ${x} ${y}`;
+  }
+
+  d += ' Z';
+  return d;
+};
+
+const buildExclusiveFillPath = (baseFlatPoints: number[], cutoutFlatPoints: number[][]): string => {
+  const basePath = flatPointsToSvgPath(baseFlatPoints);
+  if (!basePath) return '';
+
+  const cutoutPaths = cutoutFlatPoints
+    .map((points) => flatPointsToSvgPath(points))
+    .filter((path) => path.length > 0);
+
+  if (cutoutPaths.length === 0) return basePath;
+  return [basePath, ...cutoutPaths].join(' ');
+};
+
+const getPolygonArea = (flatPoints: number[]): number => {
+  if (flatPoints.length < 6 || flatPoints.length % 2 !== 0) return 0;
+
+  let signedArea = 0;
+  const pairCount = flatPoints.length / 2;
+
+  for (let i = 0; i < pairCount; i += 1) {
+    const currentX = flatPoints[i * 2];
+    const currentY = flatPoints[i * 2 + 1];
+    const nextIndex = (i + 1) % pairCount;
+    const nextX = flatPoints[nextIndex * 2];
+    const nextY = flatPoints[nextIndex * 2 + 1];
+    signedArea += currentX * nextY - nextX * currentY;
+  }
+
+  return Math.abs(signedArea) / 2;
+};
+
+const getPolygonCentroid = (flatPoints: number[]): Point2D | null => {
+  if (flatPoints.length < 6 || flatPoints.length % 2 !== 0) return null;
+
+  let areaAcc = 0;
+  let cxAcc = 0;
+  let cyAcc = 0;
+  const pairCount = flatPoints.length / 2;
+
+  for (let i = 0; i < pairCount; i += 1) {
+    const currentX = flatPoints[i * 2];
+    const currentY = flatPoints[i * 2 + 1];
+    const nextIndex = (i + 1) % pairCount;
+    const nextX = flatPoints[nextIndex * 2];
+    const nextY = flatPoints[nextIndex * 2 + 1];
+
+    const cross = currentX * nextY - nextX * currentY;
+    areaAcc += cross;
+    cxAcc += (currentX + nextX) * cross;
+    cyAcc += (currentY + nextY) * cross;
+  }
+
+  const signedArea = areaAcc / 2;
+  if (Math.abs(signedArea) < Number.EPSILON) {
+    const bounds = getFlatPointsBounds(flatPoints);
+    if (!bounds) return null;
+    return {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+    };
+  }
+
+  return {
+    x: cxAcc / (6 * signedArea),
+    y: cyAcc / (6 * signedArea),
+  };
+};
+
+const buildContainmentChildrenMap = (polygons: number[][]): number[][] => {
+  const childrenByParent = polygons.map(() => [] as number[]);
+  const polygonAreas = polygons.map((points) => getPolygonArea(points));
+
+  for (let innerIdx = 0; innerIdx < polygons.length; innerIdx += 1) {
+    const inner = polygons[innerIdx];
+    if (inner.length < 6) continue;
+
+    let parentIdx: number | null = null;
+    let parentArea = Number.POSITIVE_INFINITY;
+    const innerArea = polygonAreas[innerIdx];
+
+    for (let outerIdx = 0; outerIdx < polygons.length; outerIdx += 1) {
+      if (outerIdx === innerIdx) continue;
+
+      const outer = polygons[outerIdx];
+      if (outer.length < 6) continue;
+
+      const outerArea = polygonAreas[outerIdx];
+      if (outerArea <= innerArea + Number.EPSILON) continue;
+      if (!isPolygonContainedInPolygon(inner, outer)) continue;
+
+      if (outerArea < parentArea) {
+        parentArea = outerArea;
+        parentIdx = outerIdx;
+      }
+    }
+
+    if (parentIdx !== null) {
+      childrenByParent[parentIdx].push(innerIdx);
+    }
+  }
+
+  return childrenByParent;
+};
+
+const collectDescendantIndexes = (childrenMap: number[][], rootIndex: number): number[] => {
+  const collected: number[] = [];
+  const stack = [...(childrenMap[rootIndex] ?? [])];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current == null) continue;
+    collected.push(current);
+    const children = childrenMap[current] ?? [];
+    for (let idx = 0; idx < children.length; idx += 1) {
+      stack.push(children[idx]);
+    }
+  }
+
+  return collected;
+};
+
+const isPointInsideAnyPolygon = (point: Point2D, polygons: number[][]): boolean => {
+  return polygons.some((polygon) => pointInPolygonFlat(point.x, point.y, polygon));
+};
+
+const distancePointToSegment = (point: Point2D, start: Point2D, end: Point2D): number => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  }
+
+  const t = clamp(
+    ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy),
+    0,
+    1
+  );
+
+  const projectedX = start.x + t * dx;
+  const projectedY = start.y + t * dy;
+  return Math.hypot(point.x - projectedX, point.y - projectedY);
+};
+
+const distancePointToPolygonBoundary = (point: Point2D, polygon: number[]): number => {
+  if (polygon.length < 6 || polygon.length % 2 !== 0) return Number.POSITIVE_INFINITY;
+
+  const pairs = pointsToPairs(polygon);
+  let minDistance = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < pairs.length; i += 1) {
+    const current = pairs[i];
+    const next = pairs[(i + 1) % pairs.length];
+    const segmentDistance = distancePointToSegment(point, current, next);
+    if (segmentDistance < minDistance) {
+      minDistance = segmentDistance;
+    }
+  }
+
+  return minDistance;
+};
+
+const isValidCalloutTarget = (point: Point2D, activePolygon: number[], excludedPolygons: number[][]): boolean => {
+  if (!pointInPolygonFlat(point.x, point.y, activePolygon)) return false;
+  if (isPointInsideAnyPolygon(point, excludedPolygons)) return false;
+  return true;
+};
+
+const findCalloutTargetInEffectiveArea = (
+  activePolygon: number[],
+  excludedPolygons: number[][],
+  preferredPoint: Point2D,
+  bounds: RectBox
+): Point2D => {
+  if (isValidCalloutTarget(preferredPoint, activePolygon, excludedPolygons)) {
+    return preferredPoint;
+  }
+
+  const centerPoint = {
+    x: bounds.x + bounds.width / 2,
+    y: bounds.y + bounds.height / 2,
+  };
+
+  if (isValidCalloutTarget(centerPoint, activePolygon, excludedPolygons)) {
+    return centerPoint;
+  }
+
+  if (excludedPolygons.length > 0) {
+    let bestCandidate: Point2D | null = null;
+    let bestScore = Number.NEGATIVE_INFINITY;
+    const gridSize = 20;
+
+    for (let gx = 0; gx <= gridSize; gx += 1) {
+      const x = bounds.x + (bounds.width * gx) / gridSize;
+      for (let gy = 0; gy <= gridSize; gy += 1) {
+        const y = bounds.y + (bounds.height * gy) / gridSize;
+        const candidate = { x, y };
+        if (!isValidCalloutTarget(candidate, activePolygon, excludedPolygons)) continue;
+
+        const outerDistance = distancePointToPolygonBoundary(candidate, activePolygon);
+        const innerDistance = excludedPolygons.reduce((minDistance, polygon) => {
+          const distance = distancePointToPolygonBoundary(candidate, polygon);
+          return Math.min(minDistance, distance);
+        }, Number.POSITIVE_INFINITY);
+
+        if (!Number.isFinite(outerDistance) || !Number.isFinite(innerDistance)) continue;
+
+        // Favorece puntos centrados entre ambos bordes y evita pegarse al borde interno.
+        const harmonicMidDistance = (2 * outerDistance * innerDistance) /
+          Math.max(Number.EPSILON, outerDistance + innerDistance);
+        const proximityPenalty = Math.hypot(candidate.x - preferredPoint.x, candidate.y - preferredPoint.y) * 0.02;
+        const score = harmonicMidDistance - proximityPenalty;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestCandidate = candidate;
+        }
+      }
+    }
+
+    if (bestCandidate) {
+      return bestCandidate;
+    }
+  }
+
+  const radialMax = Math.max(bounds.width, bounds.height) * 0.56;
+  const radialSteps = 9;
+  const angleSteps = 24;
+
+  for (let rStep = 1; rStep <= radialSteps; rStep += 1) {
+    const radius = (radialMax * rStep) / radialSteps;
+
+    for (let aStep = 0; aStep < angleSteps; aStep += 1) {
+      const angle = (Math.PI * 2 * aStep) / angleSteps;
+      const candidate = {
+        x: preferredPoint.x + Math.cos(angle) * radius,
+        y: preferredPoint.y + Math.sin(angle) * radius,
+      };
+
+      if (isValidCalloutTarget(candidate, activePolygon, excludedPolygons)) {
+        return candidate;
+      }
+    }
+  }
+
+  let bestCandidate: Point2D | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  const gridSize = 12;
+
+  for (let gx = 0; gx <= gridSize; gx += 1) {
+    const x = bounds.x + (bounds.width * gx) / gridSize;
+    for (let gy = 0; gy <= gridSize; gy += 1) {
+      const y = bounds.y + (bounds.height * gy) / gridSize;
+      const candidate = { x, y };
+      if (!isValidCalloutTarget(candidate, activePolygon, excludedPolygons)) continue;
+
+      const dx = candidate.x - preferredPoint.x;
+      const dy = candidate.y - preferredPoint.y;
+      const distance = dx * dx + dy * dy;
+
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestCandidate = candidate;
+      }
+    }
+  }
+
+  return bestCandidate ?? preferredPoint;
 };
 
 const getFlatPointsBounds = (points: number[]): RectBox | null => {
@@ -174,6 +519,9 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
   const autoFocusTargetRef = useRef<Point2D | null>(null);
   const panOffsetRef = useRef<Point2D>({ x: 0, y: 0 });
   const pendingAutoFocusSectionIndexRef = useRef<number | null>(null);
+  const grayscaleImageRef = useRef<any>(null);
+  const calloutAnimationFrameRef = useRef<number | null>(null);
+  const lastCalloutLayoutRef = useRef<CalloutLayout | null>(null);
 
   const [workspaceSize, setWorkspaceSize] = useState({ width: 0, height: 0 });
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
@@ -186,6 +534,7 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
   const [isReturnToInfoCtaHovered, setIsReturnToInfoCtaHovered] = useState(false);
   const [hoveredSectionIndex, setHoveredSectionIndex] = useState<number | null>(null);
   const [focusedSectionIndex, setFocusedSectionIndex] = useState<number | null>(null);
+  const [animatedCallout, setAnimatedCallout] = useState<CalloutLayout | null>(null);
 
   const normalizedSections = useMemo(() => normalizeSections(sections), [sections]);
   const isNarrowLayout = windowWidth < 980;
@@ -413,6 +762,225 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
     });
   }, [normalizedSections, baseImageRect, imageRect]);
 
+  const sectionContainmentChildrenMap = useMemo(() => {
+    return buildContainmentChildrenMap(transformedSections.map((section) => section.points));
+  }, [transformedSections]);
+
+  const sectionFillPaths = useMemo(() => {
+    const containmentChildrenMap = sectionContainmentChildrenMap;
+
+    return transformedSections.map((section, idx) => {
+      const cutouts = containmentChildrenMap[idx].map(
+        (childIdx) => transformedSections[childIdx].points
+      );
+
+      return buildExclusiveFillPath(section.points, cutouts);
+    });
+  }, [transformedSections, sectionContainmentChildrenMap]);
+  const activeSelectionCutoutPath = useMemo(() => {
+    if (activeSectionIndex === null) return '';
+
+    const activePath = sectionFillPaths[activeSectionIndex] ?? '';
+    if (!activePath) return '';
+
+    return activePath;
+  }, [activeSectionIndex, sectionFillPaths]);
+  const transformedSectionRenderOrder = useMemo(() => {
+    return transformedSections
+      .map((_, idx) => idx)
+      .sort((a, b) => {
+        const areaDiff = getPolygonArea(transformedSections[b].points) - getPolygonArea(transformedSections[a].points);
+        if (Math.abs(areaDiff) > Number.EPSILON) return areaDiff;
+        return a - b;
+      });
+  }, [transformedSections]);
+  const activeSelectionCalloutRaw = useMemo<CalloutLayout | null>(() => {
+    if (activeSectionIndex === null) return null;
+
+    const activeSection = transformedSections[activeSectionIndex];
+    if (!activeSection) return null;
+
+    const bounds = getFlatPointsBounds(activeSection.points);
+    if (!bounds) return null;
+
+    const rawTarget = getPolygonCentroid(activeSection.points) ?? {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+    };
+
+    const descendantIndexes = collectDescendantIndexes(sectionContainmentChildrenMap, activeSectionIndex);
+    const excludedPolygons = descendantIndexes
+      .map((idx) => transformedSections[idx]?.points)
+      .filter((points): points is number[] => Array.isArray(points) && points.length >= 6);
+
+    const preferredTarget = pointInPolygonFlat(rawTarget.x, rawTarget.y, activeSection.points)
+      ? rawTarget
+      : {
+          x: bounds.x + bounds.width / 2,
+          y: bounds.y + bounds.height / 2,
+        };
+
+    const safeTarget = findCalloutTargetInEffectiveArea(
+      activeSection.points,
+      excludedPolygons,
+      preferredTarget,
+      bounds
+    );
+
+    const title = activeSection.title?.trim() || `Zona ${activeSectionIndex + 1}`;
+    const isCompact = isNarrowLayout;
+    const fontSize = isCompact ? 14 : 15;
+    const textPaddingX = isCompact ? 8 : 9;
+    const textPaddingY = isCompact ? 4 : 5;
+    const accentWidth = isCompact ? 3 : 4;
+    const accentGap = isCompact ? 5 : 6;
+    const approxTextWidth = clamp(title.length * (isCompact ? 7.6 : 8.1), isCompact ? 58 : 68, isCompact ? 260 : 300);
+    const labelWidth = approxTextWidth + textPaddingX * 2 + accentWidth + accentGap;
+    const labelHeight = fontSize + textPaddingY * 2;
+    const viewportMargin = isCompact ? 6 : 8;
+    const minHorizontalGap = isCompact ? Math.round(CALLOUT_MIN_DISTANCE_PX * 0.78) : CALLOUT_MIN_DISTANCE_PX;
+    const maxHorizontalGap = isCompact ? Math.round(CALLOUT_MAX_DISTANCE_PX * 0.78) : CALLOUT_MAX_DISTANCE_PX;
+    const selectionLeft = bounds.x;
+    const selectionRight = bounds.x + bounds.width;
+    const availableLeft = selectionLeft - viewportMargin;
+    const availableRight = workspaceSize.width - selectionRight - viewportMargin;
+    const requiredSpace = labelWidth + minHorizontalGap;
+    const canPlaceLeft = availableLeft >= requiredSpace;
+    const canPlaceRight = availableRight >= requiredSpace;
+
+    let placeLeft: boolean;
+    if (canPlaceLeft && !canPlaceRight) {
+      placeLeft = true;
+    } else if (!canPlaceLeft && canPlaceRight) {
+      placeLeft = false;
+    } else if (canPlaceLeft && canPlaceRight) {
+      placeLeft = safeTarget.x > workspaceSize.width * 0.5;
+    } else {
+      placeLeft = availableLeft > availableRight;
+    }
+
+    const rawLabelX = placeLeft
+      ? selectionLeft - labelWidth - minHorizontalGap
+      : selectionRight + minHorizontalGap;
+
+    const viewportMinX = viewportMargin;
+    const viewportMaxX = Math.max(viewportMargin, workspaceSize.width - labelWidth - viewportMargin);
+    let labelX = clamp(rawLabelX, viewportMinX, viewportMaxX);
+    const currentGap = placeLeft
+      ? selectionLeft - (labelX + labelWidth)
+      : labelX - selectionRight;
+    if (currentGap > maxHorizontalGap) {
+      const pulledX = placeLeft
+        ? selectionLeft - labelWidth - maxHorizontalGap
+        : selectionRight + maxHorizontalGap;
+      labelX = clamp(pulledX, viewportMinX, viewportMaxX);
+    }
+
+    const idealLabelY = safeTarget.y - labelHeight / 2;
+    const maxVerticalDrift = isCompact ? 42 : 56;
+    const driftLimitedY = clamp(idealLabelY, safeTarget.y - maxVerticalDrift, safeTarget.y + maxVerticalDrift);
+    const labelY = clamp(driftLimitedY, viewportMargin, Math.max(viewportMargin, workspaceSize.height - labelHeight - viewportMargin));
+
+    const leaderStartY = clamp(safeTarget.y, labelY + 5, labelY + labelHeight - 5);
+    const leaderStartX = placeLeft ? labelX + labelWidth - 2 : labelX + 2;
+    const horizontalLength = clamp(labelWidth * 0.2, 8, 22);
+    const leaderKinkX = placeLeft
+      ? Math.min(safeTarget.x - 6, leaderStartX + horizontalLength)
+      : Math.max(safeTarget.x + 6, leaderStartX - horizontalLength);
+
+    return {
+      title,
+      accentColor: activeSection.color,
+      isCompact,
+      fontSize,
+      side: placeLeft ? 'left' : 'right',
+      boxX: labelX,
+      boxY: labelY,
+      boxWidth: labelWidth,
+      boxHeight: labelHeight,
+      titleX: labelX + textPaddingX + accentWidth + accentGap,
+      titleY: labelY + textPaddingY,
+      leaderPoints: [leaderStartX, leaderStartY, leaderKinkX, leaderStartY, safeTarget.x, safeTarget.y],
+    };
+  }, [activeSectionIndex, transformedSections, sectionContainmentChildrenMap, workspaceSize.width, workspaceSize.height, isNarrowLayout]);
+
+  useEffect(() => {
+    if (calloutAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(calloutAnimationFrameRef.current);
+      calloutAnimationFrameRef.current = null;
+    }
+
+    if (!activeSelectionCalloutRaw) {
+      lastCalloutLayoutRef.current = null;
+      setAnimatedCallout(null);
+      return;
+    }
+
+    const previousCallout = lastCalloutLayoutRef.current;
+    if (!previousCallout) {
+      lastCalloutLayoutRef.current = activeSelectionCalloutRaw;
+      setAnimatedCallout(activeSelectionCalloutRaw);
+      return;
+    }
+
+    if (previousCallout.side === activeSelectionCalloutRaw.side) {
+      lastCalloutLayoutRef.current = activeSelectionCalloutRaw;
+      setAnimatedCallout(activeSelectionCalloutRaw);
+      return;
+    }
+
+    const start = previousCallout;
+    const end = activeSelectionCalloutRaw;
+    const durationMs = 170;
+    const startTime = window.performance.now();
+
+    const animate = (now: number) => {
+      const t = clamp((now - startTime) / durationMs, 0, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+
+      const interpolate = (from: number, to: number) => from + (to - from) * eased;
+      const nextLeaderPoints = start.leaderPoints.map((fromValue, idx) => {
+        const toValue = end.leaderPoints[idx] ?? fromValue;
+        return interpolate(fromValue, toValue);
+      });
+
+      setAnimatedCallout({
+        title: end.title,
+        accentColor: end.accentColor,
+        isCompact: end.isCompact,
+        fontSize: interpolate(start.fontSize, end.fontSize),
+        side: end.side,
+        boxX: interpolate(start.boxX, end.boxX),
+        boxY: interpolate(start.boxY, end.boxY),
+        boxWidth: interpolate(start.boxWidth, end.boxWidth),
+        boxHeight: interpolate(start.boxHeight, end.boxHeight),
+        titleX: interpolate(start.titleX, end.titleX),
+        titleY: interpolate(start.titleY, end.titleY),
+        leaderPoints: nextLeaderPoints,
+      });
+
+      if (t < 1) {
+        calloutAnimationFrameRef.current = window.requestAnimationFrame(animate);
+        return;
+      }
+
+      calloutAnimationFrameRef.current = null;
+      lastCalloutLayoutRef.current = end;
+      setAnimatedCallout(end);
+    };
+
+    calloutAnimationFrameRef.current = window.requestAnimationFrame(animate);
+  }, [activeSelectionCalloutRaw]);
+
+  useEffect(() => {
+    return () => {
+      if (calloutAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(calloutAnimationFrameRef.current);
+        calloutAnimationFrameRef.current = null;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (activeSectionIndex === null) return;
     if (pendingAutoFocusSectionIndexRef.current !== activeSectionIndex) return;
@@ -487,6 +1055,21 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
 
     animatePanOffsetTo(nextPan);
   }, [activeSectionIndex, transformedSections, workspaceSize.width, workspaceSize.height, zoomScale]);
+
+  useEffect(() => {
+    if (!activeSelectionCutoutPath) return;
+
+    const grayscaleNode = grayscaleImageRef.current;
+    if (!grayscaleNode || typeof grayscaleNode.cache !== 'function') return;
+
+    try {
+      grayscaleNode.clearCache();
+      grayscaleNode.cache();
+      grayscaleNode.getLayer()?.batchDraw?.();
+    } catch {
+      // Si el cache falla en un frame de resize/pan, simplemente se intenta de nuevo en el siguiente render.
+    }
+  }, [activeSelectionCutoutPath, imageElement, imageRect]);
 
   const getTouchPointFromTouch = (touch: Touch): Point2D | null => {
     const stage = stageRef.current;
@@ -770,7 +1353,7 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
                   onTouchEnd={handleStageTouchEnd}
                   onTouchCancel={handleStageTouchEnd}
                 >
-                  <Layer>
+                  <Layer listening={false}>
                     <KonvaImage
                       image={imageElement}
                       x={imageRect.x}
@@ -779,39 +1362,135 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
                       height={imageRect.height}
                       listening={false}
                     />
+                  </Layer>
 
-                    {transformedSections.map((section, idx) => {
+                  {activeSelectionCutoutPath && (
+                    <Layer listening={false}>
+                      <KonvaImage
+                        ref={grayscaleImageRef}
+                        image={imageElement}
+                        x={imageRect.x}
+                        y={imageRect.y}
+                        width={imageRect.width}
+                        height={imageRect.height}
+                        filters={[Konva.Filters.Grayscale]}
+                        opacity={0.85}
+                        listening={false}
+                      />
+                      <Path
+                        data={activeSelectionCutoutPath}
+                        fill="#000000"
+                        globalCompositeOperation="destination-out"
+                        listening={false}
+                      />
+                    </Layer>
+                  )}
+
+                  <Layer>
+                    {transformedSectionRenderOrder.map((idx) => {
+                      const section = transformedSections[idx];
                       const isActive = idx === activeSectionIndex;
-                      const shouldGrayOut = hasHighlightedSelection && !isActive;
-                      const strokeColor = shouldGrayOut
-                        ? '#64748b'
+                      const hasActiveSelection = hasHighlightedSelection;
+                      const shouldGrayOut = hasActiveSelection && !isActive;
+                      const strokeColor = hasActiveSelection
+                        ? (isActive ? section.color : '#000000')
                         : (isActive ? darkenHexColor(section.color, 0.4) : darkenHexColor(section.color, 0.24));
-                      const fillColor = shouldGrayOut
-                        ? 'rgba(100,116,139,0.24)'
+                      const fillColor = hasActiveSelection
+                        ? 'rgba(0,0,0,0)'
                         : (isActive ? hexToRgba(section.color, 0.44) : hexToRgba(section.color, 0.3));
+                      const fillPath = sectionFillPaths[idx] ?? '';
 
                       return (
-                        <Line
-                          key={`viewer-section-${idx}`}
-                          points={section.points}
-                          closed
-                          fill={fillColor}
-                          stroke={strokeColor}
-                          strokeWidth={isActive ? 1.55 : 1.05}
-                          dash={[6, 4]}
-                          lineCap="round"
-                          lineJoin="round"
-                          onClick={() => {
-                            if (isPanningRef.current || isPinchingRef.current) return;
-                            toggleSectionSelection(idx);
-                          }}
-                          onTap={() => {
-                            if (isPanningRef.current || isPinchingRef.current) return;
-                            toggleSectionSelection(idx);
-                          }}
-                        />
+                        <React.Fragment key={`viewer-section-${idx}`}>
+                          {fillPath && !shouldGrayOut && (
+                            <Path
+                              data={fillPath}
+                              fill={fillColor}
+                              fillRule="evenodd"
+                              listening={false}
+                            />
+                          )}
+                          <Line
+                            points={section.points}
+                            closed
+                            fill="rgba(0,0,0,0.001)"
+                            stroke={strokeColor}
+                            strokeWidth={hasActiveSelection ? (isActive ? 1.9 : 1.55) : (isActive ? 1.55 : 1.05)}
+                            dash={[6, 4]}
+                            lineCap="round"
+                            lineJoin="round"
+                            onClick={() => {
+                              if (isPanningRef.current || isPinchingRef.current) return;
+                              toggleSectionSelection(idx);
+                            }}
+                            onTap={() => {
+                              if (isPanningRef.current || isPinchingRef.current) return;
+                              toggleSectionSelection(idx);
+                            }}
+                          />
+                        </React.Fragment>
                       );
                     })}
+
+                    {animatedCallout && (
+                      <>
+                        <Line
+                          points={animatedCallout.leaderPoints}
+                          stroke="#ffffff"
+                          strokeWidth={animatedCallout.isCompact ? 2.4 : 2.8}
+                          lineCap="round"
+                          lineJoin="round"
+                          listening={false}
+                        />
+                        <Line
+                          points={animatedCallout.leaderPoints}
+                          stroke="#000000"
+                          strokeWidth={animatedCallout.isCompact ? 1 : 1.1}
+                          lineCap="round"
+                          lineJoin="round"
+                          listening={false}
+                        />
+                        <Rect
+                          x={animatedCallout.boxX + (animatedCallout.isCompact ? 1.1 : 1.5)}
+                          y={animatedCallout.boxY + (animatedCallout.isCompact ? 1.6 : 2)}
+                          width={animatedCallout.boxWidth}
+                          height={animatedCallout.boxHeight}
+                          fill="rgba(15,23,42,0.22)"
+                          cornerRadius={animatedCallout.isCompact ? 7 : 8}
+                          listening={false}
+                        />
+                        <Rect
+                          x={animatedCallout.boxX}
+                          y={animatedCallout.boxY}
+                          width={animatedCallout.boxWidth}
+                          height={animatedCallout.boxHeight}
+                          fill="rgba(255,255,255,0.96)"
+                          stroke="rgba(15,23,42,0.46)"
+                          strokeWidth={1}
+                          cornerRadius={animatedCallout.isCompact ? 7 : 8}
+                          listening={false}
+                        />
+                        <Rect
+                          x={animatedCallout.boxX + (animatedCallout.isCompact ? 5 : 6)}
+                          y={animatedCallout.boxY + (animatedCallout.isCompact ? 4 : 5)}
+                          width={animatedCallout.isCompact ? 3 : 4}
+                          height={Math.max(animatedCallout.isCompact ? 7 : 8, animatedCallout.boxHeight - (animatedCallout.isCompact ? 8 : 10))}
+                          fill={animatedCallout.accentColor}
+                          cornerRadius={3}
+                          listening={false}
+                        />
+                        <Text
+                          x={animatedCallout.titleX}
+                          y={animatedCallout.titleY}
+                          text={animatedCallout.title}
+                          fontSize={animatedCallout.fontSize}
+                          fontStyle="bold"
+                          fontFamily="Montserrat, Segoe UI, sans-serif"
+                          fill="#111827"
+                          listening={false}
+                        />
+                      </>
+                    )}
                   </Layer>
                 </Stage>
               ) : (
