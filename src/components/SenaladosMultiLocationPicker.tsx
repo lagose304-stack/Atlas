@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 interface MarkerLocation {
   x: number;
@@ -7,17 +7,16 @@ interface MarkerLocation {
   startY?: number | null;
 }
 
-interface SenaladoLocationPickerProps {
+interface SenaladosMultiLocationPickerProps {
   imageSrc: string;
   senaladoLabel: string;
-  initialLocation?: MarkerLocation | null;
-  required?: boolean;
+  initialLocations?: MarkerLocation[];
   onCancel: () => void;
-  onSave: (location: MarkerLocation | null) => void;
-  onRemove?: () => void;
+  onSave: (locations: MarkerLocation[]) => void;
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
 type PointerEdge = 'left' | 'right' | 'top' | 'bottom';
 type PointerStartPoint = { x: number; y: number; edge: PointerEdge };
 
@@ -115,20 +114,25 @@ const POINTER_MIN_ANGLE_DEG = 7;
 const POINTER_OUTLINE_TIP_BACKOFF_PX = 1.1;
 const POINTER_BASE_OUTSET_PX = 3;
 
-const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
+const SenaladosMultiLocationPicker: React.FC<SenaladosMultiLocationPickerProps> = ({
   imageSrc,
   senaladoLabel,
-  initialLocation = null,
-  required = false,
+  initialLocations = [],
   onCancel,
   onSave,
-  onRemove,
 }) => {
-  const [location, setLocation] = useState<MarkerLocation | null>(initialLocation);
-  const imageRef = useRef<HTMLImageElement>(null);
+  const [locations, setLocations] = useState<MarkerLocation[]>(initialLocations);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const [draggingPointerStart, setDraggingPointerStart] = useState(false);
   const pointerClipId = useId();
+
+  const commonStart = useMemo(() => {
+    if (!locations.length) return null;
+    const first = locations[0];
+    if (first.startX == null || first.startY == null) return null;
+    return { startX: first.startX, startY: first.startY };
+  }, [locations]);
 
   const updateImageSize = () => {
     const imageEl = imageRef.current;
@@ -152,17 +156,50 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   }, [imageSrc]);
 
   useEffect(() => {
+    if (!imageSize) return;
+    if (locations.length === 0) return;
+    const first = locations[0];
+    const hasStart = first.startX != null && first.startY != null;
+    if (hasStart) return;
+
+    const startPx = getPointerStartPx(first.x * imageSize.width, first.y * imageSize.height, imageSize.width, imageSize.height);
+    setLocations(prev => prev.map(item => ({
+      ...item,
+      startX: startPx.x / imageSize.width,
+      startY: startPx.y / imageSize.height,
+    })));
+  }, [imageSize, locations]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !required) onCancel();
+      if (event.key === 'Escape') onCancel();
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onCancel]);
 
-  const updatePointerTipFromClient = (clientX: number, clientY: number) => {
+  const updateAllPointerStartsFromClient = (clientX: number, clientY: number) => {
+    if (!imageRef.current || !imageSize) return;
+
+    const rect = imageRef.current.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const relX = clamp((clientX - rect.left) / rect.width, 0, 1);
+    const relY = clamp((clientY - rect.top) / rect.height, 0, 1);
+    const startPx = clampPointToNearestEdge(relX * imageSize.width, relY * imageSize.height, imageSize.width, imageSize.height);
+
+    setLocations(prev => prev.map(item => ({
+      ...item,
+      startX: startPx.x / imageSize.width,
+      startY: startPx.y / imageSize.height,
+    })));
+  };
+
+  const addLocationFromClient = (clientX: number, clientY: number) => {
     const imageEl = imageRef.current;
     if (!imageEl) return;
+
     const rect = imageEl.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
 
@@ -172,40 +209,28 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
 
     const x = clamp(relX, 0, 1);
     const y = clamp(relY, 0, 1);
-    setLocation(prev => ({
-      x,
-      y,
-      startX: prev?.startX ?? null,
-      startY: prev?.startY ?? null,
-    }));
-  };
 
-  const handleImageClick = (event: React.MouseEvent<HTMLImageElement>) => {
-    updatePointerTipFromClient(event.clientX, event.clientY);
-  };
+    setLocations(prev => {
+      const next: MarkerLocation[] = [...prev];
 
-  const updatePointerStartFromClient = (clientX: number, clientY: number) => {
-    if (!imageRef.current || !imageSize) return;
+      let startX: number | null = null;
+      let startY: number | null = null;
 
-    const rect = imageRef.current.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
+      const existingStart = prev[0]?.startX != null && prev[0]?.startY != null
+        ? { startX: prev[0]?.startX ?? null, startY: prev[0]?.startY ?? null }
+        : null;
 
-    const relX = clamp((clientX - rect.left) / rect.width, 0, 1);
-    const relY = clamp((clientY - rect.top) / rect.height, 0, 1);
-    const startPx = clampPointToNearestEdge(
-      relX * imageSize.width,
-      relY * imageSize.height,
-      imageSize.width,
-      imageSize.height
-    );
+      if (existingStart) {
+        startX = existingStart.startX;
+        startY = existingStart.startY;
+      } else if (imageSize) {
+        const startPx = getPointerStartPx(x * imageSize.width, y * imageSize.height, imageSize.width, imageSize.height);
+        startX = startPx.x / imageSize.width;
+        startY = startPx.y / imageSize.height;
+      }
 
-    setLocation(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        startX: startPx.x / imageSize.width,
-        startY: startPx.y / imageSize.height,
-      };
+      next.push({ x, y, startX, startY });
+      return next;
     });
   };
 
@@ -214,7 +239,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
 
     const handlePointerMove = (event: PointerEvent) => {
       event.preventDefault();
-      updatePointerStartFromClient(event.clientX, event.clientY);
+      updateAllPointerStartsFromClient(event.clientX, event.clientY);
     };
 
     const handlePointerUp = () => {
@@ -231,11 +256,11 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   }, [draggingPointerStart, imageSize]);
 
   const handlePointerStartDown = (event: React.PointerEvent<SVGCircleElement>) => {
-    if (!location) return;
+    if (!locations.length) return;
     event.preventDefault();
     event.stopPropagation();
     setDraggingPointerStart(true);
-    updatePointerStartFromClient(event.clientX, event.clientY);
+    updateAllPointerStartsFromClient(event.clientX, event.clientY);
   };
 
   const handleOverlayPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
@@ -243,8 +268,21 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
     const target = event.target as Element;
     if (target.tagName.toLowerCase() === 'circle') return;
     event.preventDefault();
-    updatePointerTipFromClient(event.clientX, event.clientY);
+    addLocationFromClient(event.clientX, event.clientY);
   };
+
+  const computedStartCircle = useMemo(() => {
+    if (!commonStart || !imageSize) return null;
+
+    const startPx = clampPointToNearestEdge(
+      (commonStart.startX ?? 0) * imageSize.width,
+      (commonStart.startY ?? 0) * imageSize.height,
+      imageSize.width,
+      imageSize.height
+    );
+
+    return startPx;
+  }, [commonStart, imageSize]);
 
   return (
     <div
@@ -258,7 +296,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
         justifyContent: 'center',
         padding: '20px',
       }}
-      onClick={required ? undefined : onCancel}
+      onClick={onCancel}
     >
       <div
         style={{
@@ -285,27 +323,26 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
         >
           <div>
             <p style={{ margin: 0, color: '#0f172a', fontWeight: 800, fontSize: '0.98em' }}>
-              Ubicar señalado
+              Ubicar señalados múltiples
             </p>
             <p style={{ margin: '4px 0 0', color: '#475569', fontSize: '0.86em' }}>
-              Haz clic sobre la imagen para ubicar: <strong>{senaladoLabel || 'Señalado'}</strong>
+              Haz clic para añadir puntos del señalado: <strong>{senaladoLabel || 'Señalado'}</strong>
             </p>
             <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.8em' }}>
-              Arrastra el punto azul del borde para cambiar la dirección del puntero.
+              Arrastra el punto azul del borde para mover el origen común del nombre.
             </p>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            disabled={required}
             style={{
               border: '1px solid #cbd5e1',
-              background: required ? '#f1f5f9' : '#f8fafc',
-              color: required ? '#94a3b8' : '#475569',
+              background: '#f8fafc',
+              color: '#475569',
               borderRadius: '8px',
               padding: '6px 10px',
               fontWeight: 700,
-              cursor: required ? 'not-allowed' : 'pointer',
+              cursor: 'pointer',
               fontFamily: 'inherit',
             }}
           >
@@ -330,8 +367,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
             <img
               ref={imageRef}
               src={imageSrc}
-              alt="Seleccionar ubicación"
-              onClick={handleImageClick}
+              alt="Seleccionar ubicaciones"
               onLoad={updateImageSize}
               style={{
                 display: 'block',
@@ -344,7 +380,8 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                 boxShadow: '0 8px 24px rgba(15, 23, 42, 0.25)',
               }}
             />
-            {location && imageSize && (
+
+            {imageSize && (
               <svg
                 style={{
                   position: 'absolute',
@@ -358,75 +395,105 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                 height={imageSize.height}
                 viewBox={`0 0 ${imageSize.width} ${imageSize.height}`}
               >
-                {(() => {
-                  const endPx = {
-                    x: location.x * imageSize.width,
-                    y: location.y * imageSize.height,
-                  };
-                  const hasManualStart = location.startX != null && location.startY != null;
-                  const manualStart = hasManualStart
-                    ? clampPointToNearestEdge(
-                      (location.startX ?? 0) * imageSize.width,
-                      (location.startY ?? 0) * imageSize.height,
-                      imageSize.width,
-                      imageSize.height
-                    )
-                    : null;
-                  const autoStart = getPointerStartPx(endPx.x, endPx.y, imageSize.width, imageSize.height);
-                  const startPx = manualStart
-                    ? manualStart
-                    : enforceMinimumInclination(
-                      autoStart,
-                      endPx,
-                      imageSize.width,
-                      imageSize.height,
-                      POINTER_MIN_ANGLE_DEG
-                    );
-                  const directionLen = Math.hypot(endPx.x - startPx.x, endPx.y - startPx.y) || 1;
-                  const drawStartPx = {
-                    x: startPx.x - ((endPx.x - startPx.x) / directionLen) * POINTER_BASE_OUTSET_PX,
-                    y: startPx.y - ((endPx.y - startPx.y) / directionLen) * POINTER_BASE_OUTSET_PX,
-                  };
-                  const tipInsetPoint = {
-                    x: endPx.x - ((endPx.x - startPx.x) / directionLen) * POINTER_OUTLINE_TIP_BACKOFF_PX,
-                    y: endPx.y - ((endPx.y - startPx.y) / directionLen) * POINTER_OUTLINE_TIP_BACKOFF_PX,
-                  };
-                  const outline = getPointerPolygon(drawStartPx, tipInsetPoint, POINTER_OUTLINE_WIDTH_PX, POINTER_TAPER_PX);
-                  const core = getPointerPolygon(drawStartPx, endPx, POINTER_CORE_WIDTH_PX, POINTER_TAPER_PX);
-                  return (
-                    <>
-                      <defs>
-                        <clipPath id={pointerClipId}>
-                          <rect x="0" y="0" width={imageSize.width} height={imageSize.height} />
-                        </clipPath>
-                      </defs>
-                      <g clipPath={`url(#${pointerClipId})`}>
-                        <polygon
-                          points={`${outline[0].x},${outline[0].y} ${outline[1].x},${outline[1].y} ${outline[2].x},${outline[2].y} ${outline[3].x},${outline[3].y} ${outline[4].x},${outline[4].y}`}
-                          fill="rgba(255,255,255,0.6)"
-                          pointerEvents="none"
-                          shapeRendering="geometricPrecision"
-                        />
-                        <polygon
-                          points={`${core[0].x},${core[0].y} ${core[1].x},${core[1].y} ${core[2].x},${core[2].y} ${core[3].x},${core[3].y} ${core[4].x},${core[4].y}`}
-                          fill="#0a0a0a"
-                          pointerEvents="none"
-                          shapeRendering="geometricPrecision"
-                        />
+                <defs>
+                  <clipPath id={pointerClipId}>
+                    <rect x="0" y="0" width={imageSize.width} height={imageSize.height} />
+                  </clipPath>
+                </defs>
+
+                <g clipPath={`url(#${pointerClipId})`}>
+                  {locations.map((location, idx) => {
+                    const endPx = {
+                      x: location.x * imageSize.width,
+                      y: location.y * imageSize.height,
+                    };
+
+                    const hasManualStart = location.startX != null && location.startY != null;
+                    const manualStart = hasManualStart
+                      ? clampPointToNearestEdge(
+                        (location.startX ?? 0) * imageSize.width,
+                        (location.startY ?? 0) * imageSize.height,
+                        imageSize.width,
+                        imageSize.height
+                      )
+                      : null;
+
+                    const autoStart = getPointerStartPx(endPx.x, endPx.y, imageSize.width, imageSize.height);
+                    const startPx = manualStart
+                      ? manualStart
+                      : enforceMinimumInclination(autoStart, endPx, imageSize.width, imageSize.height, POINTER_MIN_ANGLE_DEG);
+
+                    const directionLen = Math.hypot(endPx.x - startPx.x, endPx.y - startPx.y) || 1;
+                    const drawStartPx = {
+                      x: startPx.x - ((endPx.x - startPx.x) / directionLen) * POINTER_BASE_OUTSET_PX,
+                      y: startPx.y - ((endPx.y - startPx.y) / directionLen) * POINTER_BASE_OUTSET_PX,
+                    };
+                    const tipInsetPoint = {
+                      x: endPx.x - ((endPx.x - startPx.x) / directionLen) * POINTER_OUTLINE_TIP_BACKOFF_PX,
+                      y: endPx.y - ((endPx.y - startPx.y) / directionLen) * POINTER_OUTLINE_TIP_BACKOFF_PX,
+                    };
+
+                    const outline = getPointerPolygon(drawStartPx, tipInsetPoint, POINTER_OUTLINE_WIDTH_PX, POINTER_TAPER_PX);
+                    const core = getPointerPolygon(drawStartPx, endPx, POINTER_CORE_WIDTH_PX, POINTER_TAPER_PX);
+
+                    const outlinePoints = `${outline[0].x},${outline[0].y} ${outline[1].x},${outline[1].y} ${outline[2].x},${outline[2].y} ${outline[3].x},${outline[3].y} ${outline[4].x},${outline[4].y}`;
+                    const corePoints = `${core[0].x},${core[0].y} ${core[1].x},${core[1].y} ${core[2].x},${core[2].y} ${core[3].x},${core[3].y} ${core[4].x},${core[4].y}`;
+
+                    return (
+                      <g key={idx} pointerEvents="none">
+                        <polygon points={outlinePoints} fill="rgba(255,255,255,0.6)" shapeRendering="geometricPrecision" />
+                        <polygon points={corePoints} fill="#0a0a0a" shapeRendering="geometricPrecision" />
                       </g>
-                      <circle
-                        cx={startPx.x}
-                        cy={startPx.y}
-                        r={8}
-                        fill={draggingPointerStart ? '#2563eb' : '#0ea5e9'}
-                        stroke="#ffffff"
-                        strokeWidth={2}
-                        onPointerDown={handlePointerStartDown}
-                        style={{ cursor: draggingPointerStart ? 'grabbing' : 'grab' }}
-                      />
-                    </>
-                  );
-                })()}
+                    );
+                  })}
+                </g>
+
+                {computedStartCircle && (
+                  <g>
+                    <circle
+                      cx={computedStartCircle.x}
+                      cy={computedStartCircle.y}
+                      r={8}
+                      fill={draggingPointerStart ? '#2563eb' : '#0ea5e9'}
+                      stroke="#ffffff"
+                      strokeWidth={2}
+                      onPointerDown={handlePointerStartDown}
+                      style={{ cursor: draggingPointerStart ? 'grabbing' : 'grab' }}
+                    />
+                    <foreignObject
+                      x={computedStartCircle.x + 10}
+                      y={computedStartCircle.y - 16}
+                      width={260}
+                      height={40}
+                      pointerEvents="none"
+                    >
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          background: 'rgba(255,255,255,0.92)',
+                          border: '1px solid rgba(186,230,253,0.9)',
+                          borderRadius: '999px',
+                          padding: '6px 10px',
+                          fontWeight: 800,
+                          color: '#0f172a',
+                          fontFamily: 'inherit',
+                          fontSize: '12px',
+                          boxShadow: '0 6px 18px rgba(15,23,42,0.12)',
+                          maxWidth: '240px',
+                          overflow: 'hidden',
+                          whiteSpace: 'nowrap',
+                          textOverflow: 'ellipsis',
+                        }}
+                        title={senaladoLabel}
+                      >
+                        <span style={{ color: '#0284c7' }}>📌</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{senaladoLabel || 'Señalado'}</span>
+                      </div>
+                    </foreignObject>
+                  </g>
+                )}
               </svg>
             )}
           </div>
@@ -442,55 +509,41 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
             flexWrap: 'wrap',
           }}
         >
-          {onRemove ? (
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <button
               type="button"
-              onClick={onRemove}
+              onClick={() => setLocations(prev => prev.slice(0, -1))}
+              disabled={locations.length === 0}
               style={{
                 border: '1px solid #fecaca',
-                background: '#fff1f2',
-                color: '#be123c',
+                background: locations.length === 0 ? '#f1f5f9' : '#fff1f2',
+                color: locations.length === 0 ? '#94a3b8' : '#be123c',
                 borderRadius: '8px',
                 padding: '8px 12px',
                 fontWeight: 700,
-                cursor: 'pointer',
+                cursor: locations.length === 0 ? 'not-allowed' : 'pointer',
                 fontFamily: 'inherit',
               }}
             >
-              Quitar señalado
+              Quitar último
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setLocation(null)}
-              style={{
-                border: '1px solid #fecaca',
-                background: '#fff1f2',
-                color: '#be123c',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
-            >
-              Quitar ubicación
-            </button>
-          )}
+            <span style={{ color: '#475569', fontWeight: 800, fontSize: '0.85em' }}>
+              Puntos: {locations.length}
+            </span>
+          </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
               type="button"
               onClick={onCancel}
-              disabled={required}
               style={{
                 border: '1px solid #cbd5e1',
-                background: required ? '#f1f5f9' : '#fff',
-                color: required ? '#94a3b8' : '#475569',
+                background: '#fff',
+                color: '#475569',
                 borderRadius: '8px',
                 padding: '8px 12px',
                 fontWeight: 700,
-                cursor: required ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 fontFamily: 'inherit',
               }}
             >
@@ -498,19 +551,23 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => onSave(location)}
+              onClick={() => onSave(locations)}
+              disabled={locations.length === 0}
               style={{
                 border: 'none',
-                background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                background: locations.length === 0
+                  ? '#94a3b8'
+                  : 'linear-gradient(135deg, #2563eb, #3b82f6)',
                 color: '#fff',
                 borderRadius: '8px',
                 padding: '8px 14px',
                 fontWeight: 800,
-                cursor: 'pointer',
+                cursor: locations.length === 0 ? 'not-allowed' : 'pointer',
                 fontFamily: 'inherit',
+                opacity: locations.length === 0 ? 0.75 : 1,
               }}
             >
-              Guardar ubicación
+              Guardar señalados
             </button>
           </div>
         </div>
@@ -519,4 +576,5 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   );
 };
 
-export default SenaladoLocationPicker;
+export default SenaladosMultiLocationPicker;
+export type { MarkerLocation };
