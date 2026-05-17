@@ -7,7 +7,8 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
-import SenaladosEditorModal from '../components/SenaladosEditorModal';
+import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
+import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
 import TincionAccordionSelector from '../components/TincionAccordionSelector';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { useAuth } from '../contexts/AuthContext';
@@ -213,7 +214,9 @@ const MoverPlaca: React.FC = () => {
   const [editAumento,       setEditAumento]       = useState('');
   const [editSenalados,     setEditSenalados]     = useState<string[]>([]);
   const [editSenaladosPos,  setEditSenaladosPos]  = useState<Array<MarkerLocation | null>>([]);
-  const [senaladosEditorOpen, setSenaladosEditorOpen] = useState(false);
+  const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
+  const [namingSenaladoIndex, setNamingSenaladoIndex] = useState<number | null>(null);
+  const [forceLocationAssignment, setForceLocationAssignment] = useState(false);
   const [editComentario,    setEditComentario]    = useState('');
   const [showEditComentario, setShowEditComentario] = useState(false);
   const [editTincion,       setEditTincion]       = useState('');
@@ -394,7 +397,9 @@ const MoverPlaca: React.FC = () => {
       setEditAumento('');
       setEditSenalados([]);
       setEditSenaladosPos([]);
-      setSenaladosEditorOpen(false);
+      setEditingSenaladoIndex(null);
+      setNamingSenaladoIndex(null);
+      setForceLocationAssignment(false);
       setEditComentario('');
       setShowEditComentario(false);
       setEditTincion('');
@@ -408,6 +413,17 @@ const MoverPlaca: React.FC = () => {
     const nextLocations = deriveLocations(nextNames, selectedPlaca.senalados_meta ?? null);
     setEditSenalados(nextNames);
     setEditSenaladosPos(nextLocations);
+
+    const firstMissingLocationIndex = nextNames.findIndex((label, index) => {
+      return label.trim() !== '' && !nextLocations[index];
+    });
+    if (firstMissingLocationIndex >= 0) {
+      setEditingSenaladoIndex(firstMissingLocationIndex);
+      setForceLocationAssignment(true);
+      setSaveError('Esta placa tiene señalados sin ubicación. Debes ubicarlos para continuar.');
+    } else {
+      setForceLocationAssignment(false);
+    }
 
     setEditComentario(selectedPlaca.comentario ?? '');
     setShowEditComentario(!!(selectedPlaca.comentario));
@@ -445,6 +461,10 @@ const MoverPlaca: React.FC = () => {
     const senaladosPayload = buildSenaladosPayload(editSenalados, editSenaladosPos);
     if (senaladosPayload.error) {
       setSaveError(senaladosPayload.error);
+      if (senaladosPayload.firstMissingLocationIndex != null) {
+        setEditingSenaladoIndex(senaladosPayload.firstMissingLocationIndex);
+        setForceLocationAssignment(true);
+      }
       return;
     }
 
@@ -1023,12 +1043,56 @@ const MoverPlaca: React.FC = () => {
                 {/* ── Señalados ── */}
                 <div style={s.editFieldGroup}>
                   <label style={s.selectLabel}>📌 Señalados</label>
+                  {editSenalados.map((val, idx) => (
+                    <div key={idx} style={s.senalRow}>
+                      <span style={s.senalNumber}>{idx + 1}</span>
+                      <BoldField
+                        as="input"
+                        inline
+                        style={s.senalInput}
+                        value={val}
+                        placeholder={`Señalado ${idx + 1}`}
+                        onChange={v => {
+                          const updated = [...editSenalados];
+                          updated[idx] = v;
+                          setEditSenalados(updated);
+                        }}
+                        onFocus={e => (e.currentTarget.style.borderColor = '#818cf8')}
+                        onBlur={e => (e.currentTarget.style.borderColor = '#cbd5e1')}
+                      />
+                      <button
+                        type="button"
+                        style={s.senalRemoveBtn}
+                        title="Eliminar señalado"
+                        onClick={() => {
+                          setEditSenalados(prev => prev.filter((_, i) => i !== idx));
+                          setEditSenaladosPos(prev => prev.filter((_, i) => i !== idx));
+                        }}
+                      >✕</button>
+                      <button
+                        type="button"
+                        style={{ ...s.addSenalBtn, padding: '6px 10px' }}
+                        onClick={() => {
+                          setForceLocationAssignment(false);
+                          setEditingSenaladoIndex(idx);
+                        }}
+                      >
+                        {editSenaladosPos[idx] ? '📍 Editar ubicación' : '📍 Ubicar'}
+                      </button>
+                    </div>
+                  ))}
                   <button
                     type="button"
                     style={s.addSenalBtn}
-                    onClick={() => setSenaladosEditorOpen(true)}
+                    onClick={() => {
+                      const nextIndex = editSenalados.length;
+                      setEditSenalados(prev => [...prev, '']);
+                      setEditSenaladosPos(prev => [...prev, null]);
+                      setForceLocationAssignment(true);
+                      setEditingSenaladoIndex(nextIndex);
+                    }}
                   >
-                    Añadir señalados
+                    + Añadir señalado
                   </button>
                 </div>
 
@@ -1106,14 +1170,60 @@ const MoverPlaca: React.FC = () => {
       <Footer />
       <LoadingToast visible={isSaving} type="updating" message="Actualizando placa" />
 
-      {senaladosEditorOpen && selectedPlaca && (
-        <SenaladosEditorModal
+      {editingSenaladoIndex !== null && selectedPlaca && (
+        <SenaladoLocationPicker
           imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
-          senalados={editSenalados}
-          senaladosPos={editSenaladosPos}
-          onChangeSenalados={setEditSenalados}
-          onChangeSenaladosPos={setEditSenaladosPos}
-          onClose={() => setSenaladosEditorOpen(false)}
+          senaladoLabel={editSenalados[editingSenaladoIndex] ?? ''}
+          initialLocation={editSenaladosPos[editingSenaladoIndex] ?? null}
+          onCancel={() => setEditingSenaladoIndex(null)}
+          onRemove={() => {
+            const targetIndex = editingSenaladoIndex;
+            setEditSenalados(prev => prev.filter((_, i) => i !== targetIndex));
+            setEditSenaladosPos(prev => prev.filter((_, i) => i !== targetIndex));
+            setEditingSenaladoIndex(null);
+            setNamingSenaladoIndex(null);
+            setForceLocationAssignment(false);
+          }}
+          onSave={(location) => {
+            const targetIndex = editingSenaladoIndex;
+            setEditSenaladosPos(prev => {
+              const next = [...prev];
+              next[targetIndex] = location;
+              return next;
+            });
+
+            const currentLabel = (editSenalados[targetIndex] ?? '').trim();
+            if (!currentLabel) {
+              setNamingSenaladoIndex(targetIndex);
+            }
+
+            setForceLocationAssignment(false);
+            setEditingSenaladoIndex(null);
+          }}
+        />
+      )}
+
+      {namingSenaladoIndex !== null && (
+        <RequiredTextPromptModal
+          title="Nombre del señalado"
+          description="Después de ubicar el señalado, debes escribir su nombre para continuar."
+          placeholder="Ej: Luz del túbulo"
+          required
+          cancelLabel="Cancelar y señalar de nuevo"
+          onCancel={() => {
+            const targetIndex = namingSenaladoIndex;
+            setNamingSenaladoIndex(null);
+            setForceLocationAssignment(true);
+            setEditingSenaladoIndex(targetIndex);
+          }}
+          onSubmit={(value) => {
+            setEditSenalados(prev => {
+              const next = [...prev];
+              next[namingSenaladoIndex] = value;
+              return next;
+            });
+            setNamingSenaladoIndex(null);
+          }}
         />
       )}
     </div>

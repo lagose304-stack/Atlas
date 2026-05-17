@@ -166,12 +166,8 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
     const rect = imageEl.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
 
-    const relX = (clientX - rect.left) / rect.width;
-    const relY = (clientY - rect.top) / rect.height;
-    if (relX < 0 || relX > 1 || relY < 0 || relY > 1) return;
-
-    const x = clamp(relX, 0, 1);
-    const y = clamp(relY, 0, 1);
+    const x = clamp((clientX - rect.left) / rect.width, 0, 1);
+    const y = clamp((clientY - rect.top) / rect.height, 0, 1);
     setLocation(prev => ({
       x,
       y,
@@ -239,7 +235,6 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   };
 
   const handleOverlayPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (event.button !== 0) return;
     const target = event.target as Element;
     if (target.tagName.toLowerCase() === 'circle') return;
     event.preventDefault();

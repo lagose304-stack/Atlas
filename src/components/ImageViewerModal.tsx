@@ -49,22 +49,111 @@ const MIN_DYNAMIC_MAX_ZOOM = 1.2;
 const ZOOM_OVERSHOOT_FACTOR = 1.1;
 const SIDEBAR_BREAKPOINT = 900;
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+type PointerEdge = 'left' | 'right' | 'top' | 'bottom';
 type MarkerVisualMode = 'pointer' | 'arrow';
 
-const clampPointToBoundsPx = (x: number, y: number, width: number, height: number) => {
-  return {
-    x: clamp(x, 0, width),
-    y: clamp(y, 0, height),
-  };
+const getPointerStartPx = (x: number, y: number, width: number, height: number) => {
+  const distances = [
+    { edge: 'left', value: x },
+    { edge: 'right', value: width - x },
+    { edge: 'top', value: y },
+    { edge: 'bottom', value: height - y },
+  ] as const;
+
+  const nearest = distances.reduce((prev, curr) => (curr.value < prev.value ? curr : prev));
+
+  switch (nearest.edge) {
+    case 'left':
+      return { x: 0, y, edge: 'left' as PointerEdge };
+    case 'right':
+      return { x: width, y, edge: 'right' as PointerEdge };
+    case 'top':
+      return { x, y: 0, edge: 'top' as PointerEdge };
+    default:
+      return { x, y: height, edge: 'bottom' as PointerEdge };
+  }
 };
 
-// (render antiguo de flechas eliminado: ahora usamos callouts con targets + leader line)
+const clampPointToNearestEdge = (x: number, y: number, width: number, height: number) => {
+  const clampedX = clamp(x, 0, width);
+  const clampedY = clamp(y, 0, height);
+  return getPointerStartPx(clampedX, clampedY, width, height);
+};
+
+const enforceMinimumInclination = (
+  start: { x: number; y: number; edge: PointerEdge },
+  end: { x: number; y: number },
+  width: number,
+  height: number,
+  minAngleDeg: number
+) => {
+  const tanMin = Math.tan((minAngleDeg * Math.PI) / 180);
+
+  if (start.edge === 'left' || start.edge === 'right') {
+    const dx = Math.abs(end.x - start.x);
+    const currentDy = Math.abs(end.y - start.y);
+    const minDy = dx * tanMin;
+    if (currentDy < minDy) {
+      const sign = end.y < height / 2 ? 1 : -1;
+      return { ...start, y: clamp(end.y - sign * minDy, 0, height) };
+    }
+    return start;
+  }
+
+  const dy = Math.abs(end.y - start.y);
+  const currentDx = Math.abs(end.x - start.x);
+  const minDx = dy * tanMin;
+  if (currentDx < minDx) {
+    const sign = end.x < width / 2 ? 1 : -1;
+    return { ...start, x: clamp(end.x - sign * minDx, 0, width) };
+  }
+  return start;
+};
+
+const getPointerPolygon = (
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  bodyWidth: number,
+  taperDistance: number
+) => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const nx = -dy / len;
+  const ny = dx / len;
+  const half = bodyWidth / 2;
+  const taper = Math.min(taperDistance, len * 0.6);
+  const neck = {
+    x: end.x - ux * taper,
+    y: end.y - uy * taper,
+  };
+
+  return [
+    { x: start.x + nx * half, y: start.y + ny * half },
+    { x: start.x - nx * half, y: start.y - ny * half },
+    { x: neck.x - nx * half, y: neck.y - ny * half },
+    end,
+    { x: neck.x + nx * half, y: neck.y + ny * half },
+  ] as const;
+};
+
+const polygonPoints = (points: ReadonlyArray<{ x: number; y: number }>) => (
+  points.map(point => `${point.x},${point.y}`).join(' ')
+);
+
+const POINTER_CORE_WIDTH_PX = 6;
+const POINTER_OUTLINE_WIDTH_PX = 8.2;
+const POINTER_TAPER_PX = 18;
+const POINTER_MIN_ANGLE_DEG = 7;
+const POINTER_OUTLINE_TIP_BACKOFF_PX = 1.1;
+const POINTER_BASE_OUTSET_PX = 3;
+const ARROW_TAIL_DISTANCE_PX = 21;
 const MARKER_FADE_OUT_MS = 180;
 const MARKER_FADE_IN_MS = 200;
 const COMMENT_HINT_DURATION_MS = 5200;
 const COMMENT_HINT_EXIT_MS = 420;
-
-const CALLOUT_MARGIN_PX = 14;
 
 const computeDynamicMaxZoom = (
   displayedSize: { width: number; height: number } | null,
@@ -172,42 +261,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     tincion
   );
 
-  type SenaladoGroup = {
-    label: string;
-    indices: number[];
-    count: number;
-    hasMarker: boolean;
-    primaryIndex: number | null;
-  };
-
-  const senaladoGroups = useMemo<SenaladoGroup[]>(() => {
-    const byLabel = new Map<string, number[]>();
-
-    for (let i = 0; i < senaladosItems.length; i += 1) {
-      const label = senaladosItems[i]?.label ?? '';
-      if (!byLabel.has(label)) byLabel.set(label, []);
-      byLabel.get(label)!.push(i);
-    }
-
-    const groups: SenaladoGroup[] = [];
-    for (const [label, indices] of byLabel.entries()) {
-      const markerIndices = indices.filter(idx => {
-        const item = senaladosItems[idx];
-        return item?.x != null && item?.y != null;
-      });
-
-      groups.push({
-        label,
-        indices,
-        count: indices.length,
-        hasMarker: markerIndices.length > 0,
-        primaryIndex: markerIndices[0] ?? null,
-      });
-    }
-
-    return groups;
-  }, [senaladosItems]);
-
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
   const isDesktop = windowWidth >= SIDEBAR_BREAKPOINT;
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -216,15 +269,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const [zoomLevel, setZoomLevel]   = useState(1);
   const [position, setPosition]     = useState({ x: 0, y: 0 });
-  const [activeMarkerLabel, setActiveMarkerLabel] = useState<string | null>(null);
+  const [activeMarkerIndex, setActiveMarkerIndex] = useState<number | null>(null);
   const [markerRecenterRequest, setMarkerRecenterRequest] = useState(0);
-  const [displayedMarkerLabel, setDisplayedMarkerLabel] = useState<string | null>(null);
+  const [displayedMarkerIndex, setDisplayedMarkerIndex] = useState<number | null>(null);
   const [markerVisible, setMarkerVisible] = useState(false);
   const [showCommentHint, setShowCommentHint] = useState(false);
   const [isCommentHintExiting, setIsCommentHintExiting] = useState(false);
-  const [hoveredMarkerLabel, setHoveredMarkerLabel] = useState<string | null>(null);
-  const [focusedMarkerLabel, setFocusedMarkerLabel] = useState<string | null>(null);
-  const [hoveredMarkerIdx, setHoveredMarkerIdx] = useState<number | null>(null);
+  const [hoveredMarkerIndex, setHoveredMarkerIndex] = useState<number | null>(null);
+  const [focusedMarkerIndex, setFocusedMarkerIndex] = useState<number | null>(null);
   const [markerVisualMode, setMarkerVisualMode] = useState<MarkerVisualMode>('arrow');
   const [isDragging, setIsDragging] = useState(false);
   const [isPinching, setIsPinching] = useState(false);
@@ -235,7 +287,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [showInteractiveMapViewer, setShowInteractiveMapViewer] = useState(false);
   const [isInteractiveMapCtaHovered, setIsInteractiveMapCtaHovered] = useState(false);
   const pointerClipId = useId();
-  const labelTagFilterId = useId();
 
   const containerRef   = useRef<HTMLDivElement>(null);
   const imageRef       = useRef<HTMLImageElement>(null);
@@ -247,18 +298,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const commentHintTimeoutRef = useRef<number | null>(null);
   const commentHintExitTimeoutRef = useRef<number | null>(null);
 
-  const activeMarkerPrimaryIndex = useMemo(() => {
-    if (activeMarkerLabel === null) return null;
-    const group = senaladoGroups.find(item => item.label === activeMarkerLabel);
-    return group?.primaryIndex ?? null;
-  }, [activeMarkerLabel, senaladoGroups]);
-
   useEffect(() => { stateRef.current.zoom = zoomLevel; }, [zoomLevel]);
   useEffect(() => { stateRef.current.pos  = position;  }, [position]);
-
-  useEffect(() => {
-    setHoveredMarkerIdx(null);
-  }, [displayedMarkerLabel]);
 
   useEffect(() => {
     acquireAtlasScrollLock();
@@ -295,20 +336,12 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, [zoomLevel, srcZoom, zoomSourceFailed]);
 
   useEffect(() => {
-    setActiveMarkerLabel(null);
-    setDisplayedMarkerLabel(null);
+    setActiveMarkerIndex(null);
+    setDisplayedMarkerIndex(null);
     setMarkerVisible(false);
-    setHoveredMarkerLabel(null);
-    setFocusedMarkerLabel(null);
+    setHoveredMarkerIndex(null);
+    setFocusedMarkerIndex(null);
   }, [src, senaladosMeta, senalados]);
-
-  useEffect(() => {
-    if (activeMarkerLabel === null) return;
-    const stillExists = senaladoGroups.some(group => group.label === activeMarkerLabel && group.hasMarker);
-    if (!stillExists) {
-      setActiveMarkerLabel(null);
-    }
-  }, [activeMarkerLabel, senaladoGroups]);
 
   useEffect(() => {
     if (commentHintTimeoutRef.current !== null) {
@@ -380,28 +413,28 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       markerSwapTimeoutRef.current = null;
     }
 
-    if (activeMarkerLabel === null) {
+    if (activeMarkerIndex === null) {
       setMarkerVisible(false);
       markerSwapTimeoutRef.current = window.setTimeout(() => {
-        setDisplayedMarkerLabel(null);
+        setDisplayedMarkerIndex(null);
       }, MARKER_FADE_OUT_MS);
       return;
     }
 
-    if (displayedMarkerLabel === null) {
-      setDisplayedMarkerLabel(activeMarkerLabel);
+    if (displayedMarkerIndex === null) {
+      setDisplayedMarkerIndex(activeMarkerIndex);
       requestAnimationFrame(() => setMarkerVisible(true));
       return;
     }
 
-    if (displayedMarkerLabel === activeMarkerLabel) {
+    if (displayedMarkerIndex === activeMarkerIndex) {
       setMarkerVisible(true);
       return;
     }
 
     setMarkerVisible(false);
     markerSwapTimeoutRef.current = window.setTimeout(() => {
-      setDisplayedMarkerLabel(activeMarkerLabel);
+      setDisplayedMarkerIndex(activeMarkerIndex);
       requestAnimationFrame(() => setMarkerVisible(true));
     }, MARKER_FADE_OUT_MS);
 
@@ -411,7 +444,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         markerSwapTimeoutRef.current = null;
       }
     };
-  }, [activeMarkerLabel, displayedMarkerLabel]);
+  }, [activeMarkerIndex, displayedMarkerIndex]);
 
   useEffect(() => {
     return () => {
@@ -693,9 +726,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   };
 
   useEffect(() => {
-    if (activeMarkerPrimaryIndex === null || zoomLevel <= 1 || !imageSize) return;
+    if (activeMarkerIndex === null || zoomLevel <= 1 || !imageSize) return;
 
-    const marker = senaladosItems[activeMarkerPrimaryIndex];
+    const marker = senaladosItems[activeMarkerIndex];
     const containerEl = containerRef.current;
     if (!marker || marker.x == null || marker.y == null || !containerEl) return;
 
@@ -725,7 +758,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
     stateRef.current.pos = nextPos;
     setPosition(nextPos);
-  }, [activeMarkerPrimaryIndex, markerRecenterRequest, zoomLevel, imageSize, senaladosItems, sidebarOpen, windowWidth]);
+  }, [activeMarkerIndex, markerRecenterRequest, zoomLevel, imageSize, senaladosItems, sidebarOpen, windowWidth]);
 
   const commentHintPlacement = useMemo(() => {
     const fallbackTop = hasInfo && !isDesktop ? 64 : 16;
@@ -1096,167 +1129,142 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               />
             )}
 
-            {displayedMarkerLabel !== null && imageSize && (() => {
-              const group = senaladoGroups.find(item => item.label === displayedMarkerLabel);
-              if (!group) return null;
-
-              const markers = group.indices
-                .map(idx => senaladosItems[idx])
-                .filter(marker => marker && marker.x != null && marker.y != null);
-
-              if (markers.length === 0) return null;
-
-              const renderLabelTag = (label: string, x: number, y: number) => {
-                const safe = (label ?? '').trim();
-                if (!safe) return null;
-                const text = safe.length > 44 ? `${safe.slice(0, 44)}…` : safe;
-
-                const approxCharW = 7.1;
-                const padX = 12;
-                const maxWidth = 300;
-                const boxW = clamp(Math.round(text.length * approxCharW + padX * 2), 92, maxWidth);
-                const boxH = 26;
-                const margin = 6;
-                const gap = 12;
-
-                let x0 = x + gap;
-                let side: 'right' | 'left' = 'right';
-                if (x0 + boxW > imageSize.width - margin) {
-                  x0 = x - gap - boxW;
-                  side = 'left';
-                }
-
-                x0 = clamp(x0, margin, imageSize.width - boxW - margin);
-                const y0 = clamp(y - boxH / 2, margin, imageSize.height - boxH - margin);
-                const cy = clamp(y, y0 + 9, y0 + boxH - 9);
-                const edgeX = side === 'right' ? x0 : x0 + boxW;
-
-                return (
-                  <g pointerEvents="none" filter={`url(#${labelTagFilterId})`}>
-                    <path
-                      d={`M ${edgeX} ${cy - 7} L ${edgeX} ${cy + 7} L ${x} ${cy} Z`}
-                      fill="rgba(15, 23, 42, 0.78)"
-                      stroke="rgba(255,255,255,0.55)"
-                      strokeWidth={1}
-                    />
-                    <rect
-                      x={x0}
-                      y={y0}
-                      width={boxW}
-                      height={boxH}
-                      rx={12}
-                      fill="rgba(15, 23, 42, 0.78)"
-                      stroke="rgba(255,255,255,0.58)"
-                      strokeWidth={1}
-                    />
-                    <text
-                      x={x0 + padX}
-                      y={y0 + boxH / 2 + 4}
-                      fontSize={12}
-                      fontWeight={900}
-                      fill="#ffffff"
-                      style={{ userSelect: 'none' }}
-                    >
-                      {text}
-                    </text>
-                  </g>
-                );
+            {displayedMarkerIndex !== null && imageSize && (() => {
+              const marker = senaladosItems[displayedMarkerIndex];
+              if (!marker || marker.x == null || marker.y == null) return null;
+              const endPx = {
+                x: marker.x * imageSize.width,
+                y: marker.y * imageSize.height,
               };
-
-              const markerWithStart = markers.find(item => item?.startX != null && item?.startY != null);
-              const avgX = markers.reduce((acc, m) => acc + (m.x ?? 0), 0) / markers.length;
-              const avgY = markers.reduce((acc, m) => acc + (m.y ?? 0), 0) / markers.length;
-              const defaultAnchor = {
-                x: avgX >= 0.5 ? (imageSize.width - CALLOUT_MARGIN_PX) : CALLOUT_MARGIN_PX,
-                y: clamp(avgY * imageSize.height, CALLOUT_MARGIN_PX, imageSize.height - CALLOUT_MARGIN_PX)
-              };
-              const labelAnchorPx = markerWithStart
-                ? clampPointToBoundsPx(
-                  (markerWithStart.startX ?? 0) * imageSize.width,
-                  (markerWithStart.startY ?? 0) * imageSize.height,
+              const hasManualStart = marker.startX != null && marker.startY != null;
+              const manualStart = hasManualStart
+                ? clampPointToNearestEdge(
+                  (marker.startX ?? 0) * imageSize.width,
+                  (marker.startY ?? 0) * imageSize.height,
                   imageSize.width,
                   imageSize.height
                 )
-                : defaultAnchor;
-
-              const groupLabelText = group.count > 1 ? `${group.label} (x${group.count})` : group.label;
-
+                : null;
+              const autoStart = getPointerStartPx(endPx.x, endPx.y, imageSize.width, imageSize.height);
+              const startPx = manualStart
+                ? manualStart
+                : enforceMinimumInclination(
+                  autoStart,
+                  endPx,
+                  imageSize.width,
+                  imageSize.height,
+                  POINTER_MIN_ANGLE_DEG
+                );
+              const directionLen = Math.hypot(endPx.x - startPx.x, endPx.y - startPx.y) || 1;
+              const ux = (endPx.x - startPx.x) / directionLen;
+              const uy = (endPx.y - startPx.y) / directionLen;
+              const drawStartPx = {
+                x: startPx.x - ux * POINTER_BASE_OUTSET_PX,
+                y: startPx.y - uy * POINTER_BASE_OUTSET_PX,
+              };
+              const tipInsetPoint = {
+                x: endPx.x - ux * POINTER_OUTLINE_TIP_BACKOFF_PX,
+                y: endPx.y - uy * POINTER_OUTLINE_TIP_BACKOFF_PX,
+              };
+              const outline = getPointerPolygon(drawStartPx, tipInsetPoint, POINTER_OUTLINE_WIDTH_PX, POINTER_TAPER_PX);
+              const core = getPointerPolygon(drawStartPx, endPx, POINTER_CORE_WIDTH_PX, POINTER_TAPER_PX);
+              // SVG base: puntos fijos del SVG de referencia
+              const svgPoints = [
+                { x: 140, y: 80 },
+                { x: 30, y: 20 },
+                { x: 55, y: 80 },
+                { x: 30, y: 140 }
+              ];
+              // Calcula la transformación para alinear la punta y la cola
+              // Punta SVG: (140,80), Cola SVG: (30,80) (punto medio entre 30,20 y 30,140)
+              const svgTip = { x: 140, y: 80 };
+              const svgTail = { x: 30, y: 80 };
+              const actualTip = endPx;
+              const actualTail = {
+                x: endPx.x - ux * Math.min(ARROW_TAIL_DISTANCE_PX, directionLen * 0.95),
+                y: endPx.y - uy * Math.min(ARROW_TAIL_DISTANCE_PX, directionLen * 0.95)
+              };
+              // Vector SVG y real
+              const vSvg = { x: svgTip.x - svgTail.x, y: svgTip.y - svgTail.y };
+              const vReal = { x: actualTip.x - actualTail.x, y: actualTip.y - actualTail.y };
+              const lenSvg = Math.hypot(vSvg.x, vSvg.y);
+              const lenReal = Math.hypot(vReal.x, vReal.y);
+              const scale = lenReal / lenSvg;
+              const angleSvg = Math.atan2(vSvg.y, vSvg.x);
+              const angleReal = Math.atan2(vReal.y, vReal.x);
+              const rotation = angleReal - angleSvg;
+              // Matriz de transformación SVG
+              const cos = Math.cos(rotation);
+              const sin = Math.sin(rotation);
+              function transformPoint(pt: { x: number; y: number }) {
+                // Trasladar al origen (cola SVG), rotar, escalar, trasladar a actualTail
+                const x0 = pt.x - svgTail.x;
+                const y0 = pt.y - svgTail.y;
+                const xr = x0 * cos - y0 * sin;
+                const yr = x0 * sin + y0 * cos;
+                return {
+                  x: actualTail.x + xr * scale,
+                  y: actualTail.y + yr * scale
+                };
+              }
+              const transformedPoints = svgPoints.map(transformPoint);
+              const pointsStr = transformedPoints.map(p => `${p.x},${p.y}`).join(' ');
               return (
                 <svg
                   style={{
                     position: 'absolute',
                     inset: 0,
-                    pointerEvents: 'auto',
+                    pointerEvents: 'none',
                     zIndex: 4,
                     overflow: 'visible',
                     opacity: markerVisible ? 1 : 0,
                     transform: markerVisible ? 'translateY(0px) scale(1)' : 'translateY(2px) scale(0.992)',
-                    transformOrigin: 'center center',
+                    transformOrigin: `${endPx.x}px ${endPx.y}px`,
                     filter: markerVisible ? 'blur(0px)' : 'blur(0.4px)',
                     transition: `opacity ${MARKER_FADE_IN_MS}ms ease, transform ${MARKER_FADE_IN_MS}ms ease, filter ${MARKER_FADE_IN_MS}ms ease`,
                   }}
                   width={imageSize.width}
                   height={imageSize.height}
                   viewBox={`0 0 ${imageSize.width} ${imageSize.height}`}
-                  onPointerLeave={() => setHoveredMarkerIdx(null)}
                 >
                   <defs>
                     <clipPath id={pointerClipId}>
                       <rect x="0" y="0" width={imageSize.width} height={imageSize.height} />
                     </clipPath>
-
-                    <filter id={labelTagFilterId} x="-30%" y="-30%" width="160%" height="160%">
-                      <feDropShadow dx="0" dy="6" stdDeviation="6" floodColor="rgba(0,0,0,0.45)" />
-                      <feDropShadow dx="0" dy="1" stdDeviation="1" floodColor="rgba(0,0,0,0.35)" />
-                    </filter>
                   </defs>
                   <g clipPath={`url(#${pointerClipId})`}>
-                    {markers.map((marker, idx) => {
-                      const endPx = {
-                        x: (marker.x ?? 0) * imageSize.width,
-                        y: (marker.y ?? 0) * imageSize.height,
-                      };
-                      const isHovered = hoveredMarkerIdx === idx;
-                      const showLine = group.count <= 1 || isHovered;
-
-                      return (
-                        <g key={idx}>
-                          {showLine && (
-                            <path
-                              d={`M ${endPx.x} ${endPx.y} L ${labelAnchorPx.x} ${labelAnchorPx.y}`}
-                              stroke="rgba(255,255,255,0.78)"
-                              strokeWidth={1.35}
-                              strokeLinecap="round"
-                              fill="none"
-                            />
-                          )}
-
-                          <circle
-                            cx={endPx.x}
-                            cy={endPx.y}
-                            r={isHovered ? 7.5 : 6.2}
-                            fill="rgba(15, 23, 42, 0.25)"
-                            stroke="#0ea5e9"
-                            strokeWidth={2}
-                            pointerEvents="auto"
-                            onPointerEnter={() => setHoveredMarkerIdx(idx)}
-                            onPointerLeave={() => setHoveredMarkerIdx(prev => (prev === idx ? null : prev))}
-                            style={{ transition: 'all 120ms ease' }}
-                          />
-                          <circle
-                            cx={endPx.x}
-                            cy={endPx.y}
-                            r={2.1}
-                            fill="#ffffff"
-                            opacity={0.92}
-                            pointerEvents="none"
-                          />
-                        </g>
-                      );
-                    })}
+                    {markerVisualMode === 'arrow' ? (
+                      <>
+                        <polygon
+                          points={pointsStr}
+                          fill="none"
+                          stroke="white"
+                          strokeWidth={1.2}
+                          strokeLinejoin="round"
+                          shapeRendering="geometricPrecision"
+                        />
+                        <polygon
+                          points={pointsStr}
+                          fill="black"
+                          stroke="none"
+                          shapeRendering="geometricPrecision"
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <polygon
+                          points={polygonPoints(outline)}
+                          fill="rgba(255,255,255,0.6)"
+                          shapeRendering="geometricPrecision"
+                        />
+                        <polygon
+                          points={polygonPoints(core)}
+                          fill="#0a0a0a"
+                          shapeRendering="geometricPrecision"
+                        />
+                      </>
+                    )}
                   </g>
-
-                  {renderLabelTag(groupLabelText, labelAnchorPx.x, labelAnchorPx.y)}
                 </svg>
               );
             })()}
@@ -1573,13 +1581,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                   </button>
                 </div>
                 <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {senaladoGroups.map((group, i) => {
-                    const hasMarker = group.hasMarker;
-                    const isActive = activeMarkerLabel === group.label;
-                    const isHovered = hoveredMarkerLabel === group.label;
-                    const isFocused = focusedMarkerLabel === group.label;
+                  {senaladosItems.map((item, i) => {
+                    const hasMarker = item.x != null && item.y != null;
+                    const isActive = activeMarkerIndex === i;
+                    const isHovered = hoveredMarkerIndex === i;
+                    const isFocused = focusedMarkerIndex === i;
                     return (
-                    <li key={`${group.label}-${i}`} style={{
+                    <li key={i} style={{
                       display: 'flex',
                       alignItems: 'stretch',
                       gap: '10px',
@@ -1616,16 +1624,16 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                         disabled={!hasMarker}
                         onClick={() => {
                           if (!hasMarker) return;
-                          if (activeMarkerLabel === group.label) {
+                          if (activeMarkerIndex === i) {
                             setMarkerRecenterRequest(prev => prev + 1);
                             return;
                           }
-                          setActiveMarkerLabel(group.label);
+                          setActiveMarkerIndex(i);
                         }}
-                        onMouseEnter={() => { if (hasMarker) setHoveredMarkerLabel(group.label); }}
-                        onMouseLeave={() => setHoveredMarkerLabel(null)}
-                        onFocus={() => setFocusedMarkerLabel(group.label)}
-                        onBlur={() => setFocusedMarkerLabel(null)}
+                        onMouseEnter={() => { if (hasMarker) setHoveredMarkerIndex(i); }}
+                        onMouseLeave={() => setHoveredMarkerIndex(null)}
+                        onFocus={() => setFocusedMarkerIndex(i)}
+                        onBlur={() => setFocusedMarkerIndex(null)}
                         aria-pressed={isActive}
                         style={{
                           width: '100%',
@@ -1658,14 +1666,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                           outlineOffset: '1px',
                         }}
                       >
-                        <span style={{ flex: 1, minWidth: 0, letterSpacing: '0.01em', textAlign: 'center' }}>
-                          {renderBoldText(group.label)}
-                          {group.count > 1 && (
-                            <span style={{ marginLeft: '8px', fontSize: '0.92em', fontWeight: 800, color: '#0c4a6e', opacity: 0.78 }}>
-                              ×{group.count}
-                            </span>
-                          )}
-                        </span>
+                        <span style={{ flex: 1, minWidth: 0, letterSpacing: '0.01em', textAlign: 'center' }}>{renderBoldText(item.label)}</span>
                         <span style={{
                           fontSize: '0.66em',
                           fontWeight: 700,
@@ -1732,7 +1733,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 </ol>
                 <button
                   type="button"
-                  onClick={() => setActiveMarkerLabel(null)}
+                  onClick={() => setActiveMarkerIndex(null)}
                   style={{
                     marginTop: '10px',
                     width: '100%',

@@ -6,7 +6,8 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
-import SenaladosEditorModal from '../components/SenaladosEditorModal';
+import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
+import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
 import TincionAccordionSelector from '../components/TincionAccordionSelector';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { useAuth } from '../contexts/AuthContext';
@@ -127,7 +128,8 @@ const ListaEspera: React.FC = () => {
   const [aumento,         setAumento]         = useState('');
   const [senalados,       setSenalados]       = useState<string[]>([]);
   const [senaladosPos,    setSenaladosPos]    = useState<Array<MarkerLocation | null>>([]);
-  const [senaladosEditorOpen, setSenaladosEditorOpen] = useState(false);
+  const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
+  const [namingSenaladoIndex, setNamingSenaladoIndex] = useState<number | null>(null);
   const [comentario,      setComentario]      = useState('');
   const [showComentario,  setShowComentario]  = useState(false);
   const [tincion,         setTincion]         = useState('');
@@ -172,7 +174,8 @@ const ListaEspera: React.FC = () => {
     setAumento('');
     setSenalados([]);
     setSenaladosPos([]);
-    setSenaladosEditorOpen(false);
+    setEditingSenaladoIndex(null);
+    setNamingSenaladoIndex(null);
     setComentario('');
     setShowComentario(false);
     setTincion('');
@@ -706,9 +709,45 @@ const ListaEspera: React.FC = () => {
                     {/* Señalados */}
                     <div style={s.fieldGroup}>
                       <label style={s.label}>📌 Señalados</label>
+                      {senalados.map((val, idx) => (
+                        <div key={idx} style={s.senalRow}>
+                          <span style={s.senalNum}>{idx + 1}</span>
+                          <BoldField
+                            as="input"
+                            inline
+                            style={s.senalInput}
+                            value={val}
+                            placeholder={`Señalado ${idx + 1}`}
+                            onChange={v => {
+                              const u = [...senalados];
+                              u[idx] = v;
+                              setSenalados(u);
+                            }}
+                            onFocus={e => (e.currentTarget.style.borderColor = '#818cf8')}
+                            onBlur={e => (e.currentTarget.style.borderColor = '#cbd5e1')}
+                          />
+                          <button type="button" style={s.senalRemBtn}
+                            onClick={() => {
+                              setSenalados(prev => prev.filter((_, i) => i !== idx));
+                              setSenaladosPos(prev => prev.filter((_, i) => i !== idx));
+                            }}>✕</button>
+                          <button
+                            type="button"
+                            style={{ ...s.addSenalBtn, padding: '6px 10px' }}
+                            onClick={() => setEditingSenaladoIndex(idx)}
+                          >
+                            {senaladosPos[idx] ? '📍 Editar ubicación' : '📍 Ubicar'}
+                          </button>
+                        </div>
+                      ))}
                       <button type="button" style={s.addSenalBtn}
-                        onClick={() => setSenaladosEditorOpen(true)}>
-                        Añadir señalados
+                        onClick={() => {
+                          const nextIndex = senalados.length;
+                          setSenalados(prev => [...prev, '']);
+                          setSenaladosPos(prev => [...prev, null]);
+                          setEditingSenaladoIndex(nextIndex);
+                        }}>
+                        + Añadir señalado
                       </button>
                     </div>
 
@@ -767,14 +806,57 @@ const ListaEspera: React.FC = () => {
       <Footer />
       <LoadingToast visible={isSaving} type="saving" message="Clasificando placa" />
 
-      {senaladosEditorOpen && selected && (
-        <SenaladosEditorModal
+      {editingSenaladoIndex !== null && selected && (
+        <SenaladoLocationPicker
           imageSrc={getCloudinaryImageUrl(selected.photo_url, 'view')}
-          senalados={senalados}
-          senaladosPos={senaladosPos}
-          onChangeSenalados={setSenalados}
-          onChangeSenaladosPos={setSenaladosPos}
-          onClose={() => setSenaladosEditorOpen(false)}
+          senaladoLabel={senalados[editingSenaladoIndex] ?? ''}
+          initialLocation={senaladosPos[editingSenaladoIndex] ?? null}
+          onCancel={() => setEditingSenaladoIndex(null)}
+          onRemove={() => {
+            const targetIndex = editingSenaladoIndex;
+            setSenalados(prev => prev.filter((_, i) => i !== targetIndex));
+            setSenaladosPos(prev => prev.filter((_, i) => i !== targetIndex));
+            setEditingSenaladoIndex(null);
+            setNamingSenaladoIndex(null);
+          }}
+          onSave={(location) => {
+            const targetIndex = editingSenaladoIndex;
+            setSenaladosPos(prev => {
+              const next = [...prev];
+              next[targetIndex] = location;
+              return next;
+            });
+
+            const currentLabel = (senalados[targetIndex] ?? '').trim();
+            if (!currentLabel) {
+              setNamingSenaladoIndex(targetIndex);
+            }
+
+            setEditingSenaladoIndex(null);
+          }}
+        />
+      )}
+
+      {namingSenaladoIndex !== null && (
+        <RequiredTextPromptModal
+          title="Nombre del señalado"
+          description="Después de ubicar el señalado, debes escribir su nombre para continuar."
+          placeholder="Ej: Membrana basal"
+          required
+          cancelLabel="Cancelar y señalar de nuevo"
+          onCancel={() => {
+            const targetIndex = namingSenaladoIndex;
+            setNamingSenaladoIndex(null);
+            setEditingSenaladoIndex(targetIndex);
+          }}
+          onSubmit={(value) => {
+            setSenalados(prev => {
+              const next = [...prev];
+              next[namingSenaladoIndex] = value;
+              return next;
+            });
+            setNamingSenaladoIndex(null);
+          }}
         />
       )}
 
