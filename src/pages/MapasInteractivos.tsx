@@ -1977,6 +1977,17 @@ const MapasInteractivos: React.FC = () => {
     markPendingMapChanges();
   };
 
+  const startCircleDrag = (e: any) => {
+    e.cancelBubble = true;
+    e?.evt?.preventDefault?.();
+    e?.target?.startDrag?.();
+  };
+
+  const stopCircleDrag = (e: any) => {
+    e?.evt?.preventDefault?.();
+    e?.target?.stopDrag?.();
+  };
+
   const canInsertPointIntoSelection = (flatPoints: number[], x: number, y: number): boolean => {
     if (flatPoints.length < 6) return false;
     const pairs = pointsToPairs(flatPoints);
@@ -2576,13 +2587,15 @@ const MapasInteractivos: React.FC = () => {
                               strokeWidth={2}
                               draggable
                               onMouseDown={e => {
-                                e.cancelBubble = true;
+                                startCircleDrag(e);
                                 setShowDeleteConfirm(false);
                               }}
                               onTouchStart={e => {
-                                e.cancelBubble = true;
+                                startCircleDrag(e);
                                 setShowDeleteConfirm(false);
                               }}
+                              onTouchEnd={stopCircleDrag}
+                              onTouchCancel={stopCircleDrag}
                               onDragMove={e =>
                                 moveSavedSelectionPoint(
                                   activeSavedSelectionIndex,
@@ -2697,13 +2710,15 @@ const MapasInteractivos: React.FC = () => {
                                 strokeWidth={2}
                                 draggable
                                 onMouseDown={e => {
-                                  e.cancelBubble = true;
+                                  startCircleDrag(e);
                                   hideInsertHint();
                                 }}
                                 onTouchStart={e => {
-                                  e.cancelBubble = true;
+                                  startCircleDrag(e);
                                   hideInsertHint();
                                 }}
+                                onTouchEnd={stopCircleDrag}
+                                onTouchCancel={stopCircleDrag}
                                 onDragStart={e => {
                                   e.cancelBubble = true;
                                   hideInsertHint();
