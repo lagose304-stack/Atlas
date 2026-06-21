@@ -363,6 +363,56 @@ const pointsToPairs = (points: number[]): Array<{ x: number; y: number; index: n
   return pairs;
 };
 
+const pointInPolygonFlat = (x: number, y: number, flatPoints: number[]): boolean => {
+  const points = pointsToPairs(flatPoints);
+  if (points.length < 3) return false;
+
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x;
+    const yi = points[i].y;
+    const xj = points[j].x;
+    const yj = points[j].y;
+
+    const intersects =
+      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi;
+    if (intersects) inside = !inside;
+  }
+
+  return inside;
+};
+
+const isPolygonContainedInPolygon = (innerFlatPoints: number[], outerFlatPoints: number[]): boolean => {
+  if (innerFlatPoints.length < 6 || outerFlatPoints.length < 6) return false;
+
+  for (let i = 0; i < innerFlatPoints.length; i += 2) {
+    if (!pointInPolygonFlat(innerFlatPoints[i], innerFlatPoints[i + 1], outerFlatPoints)) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const flatPointsToSvgPath = (flatPoints: number[]): string => {
+  if (flatPoints.length < 6 || flatPoints.length % 2 !== 0) return '';
+
+  const firstX = flatPoints[0];
+  const firstY = flatPoints[1];
+  if (!Number.isFinite(firstX) || !Number.isFinite(firstY)) return '';
+
+  let d = `M ${firstX} ${firstY}`;
+  for (let i = 2; i < flatPoints.length; i += 2) {
+    const x = flatPoints[i];
+    const y = flatPoints[i + 1];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    d += ` L ${x} ${y}`;
+  }
+
+  d += ' Z';
+  return d;
+};
+
 const perpendicularDistance = (
   point: { x: number; y: number },
   start: { x: number; y: number },
@@ -431,95 +481,50 @@ const projectPointToSegment = (
     return { x: ax, y: ay, distance };
   }
 
-  const t = clamp(((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy), 0, 1);
+  const lengthSquared = dx * dx + dy * dy;
+  const t = clamp(((px - ax) * dx + (py - ay) * dy) / lengthSquared, 0, 1);
   const x = ax + t * dx;
   const y = ay + t * dy;
-  const distance = Math.hypot(px - x, py - y);
-  return { x, y, distance };
+
+  return {
+    x,
+    y,
+    distance: Math.hypot(px - x, py - y),
+  };
 };
 
 const findClosestSegmentProjection = (
   flatPoints: number[],
   x: number,
   y: number
-): { segmentStartIndex: number; x: number; y: number; distance: number } | null => {
-  if (flatPoints.length < 6) return null;
+): { x: number; y: number; distance: number; segmentStartIndex: number } | null => {
+  if (flatPoints.length < 6 || flatPoints.length % 2 !== 0) return null;
 
-  const pairs = pointsToPairs(flatPoints);
-  let closestSegmentStartIndex = 0;
-  let closestX = x;
-  let closestY = y;
-  let minDistance = Number.POSITIVE_INFINITY;
+  let bestProjection: { x: number; y: number; distance: number; segmentStartIndex: number } | null = null;
+  const pairCount = flatPoints.length / 2;
 
-  for (let i = 0; i < pairs.length; i++) {
-    const a = pairs[i];
-    const b = pairs[(i + 1) % pairs.length];
-    const projected = projectPointToSegment(x, y, a.x, a.y, b.x, b.y);
+  for (let i = 0; i < pairCount; i += 1) {
+    const nextIndex = (i + 1) % pairCount;
+    const projection = projectPointToSegment(
+      x,
+      y,
+      flatPoints[i * 2],
+      flatPoints[i * 2 + 1],
+      flatPoints[nextIndex * 2],
+      flatPoints[nextIndex * 2 + 1]
+    );
 
-    if (projected.distance < minDistance) {
-      minDistance = projected.distance;
-      closestSegmentStartIndex = i;
-      closestX = projected.x;
-      closestY = projected.y;
+    if (!bestProjection || projection.distance < bestProjection.distance) {
+      bestProjection = {
+        x: projection.x,
+        y: projection.y,
+        distance: projection.distance,
+        segmentStartIndex: i,
+      };
     }
   }
 
-  return {
-    segmentStartIndex: closestSegmentStartIndex,
-    x: closestX,
-    y: closestY,
-    distance: minDistance,
-  };
-};
-
-const pointInPolygonFlat = (x: number, y: number, flatPoints: number[]): boolean => {
-  const points = pointsToPairs(flatPoints);
-  if (points.length < 3) return false;
-
-  let inside = false;
-  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-    const xi = points[i].x;
-    const yi = points[i].y;
-    const xj = points[j].x;
-    const yj = points[j].y;
-
-    const intersects =
-      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi;
-    if (intersects) inside = !inside;
-  }
-
-  return inside;
-};
-
-const isPolygonContainedInPolygon = (innerFlatPoints: number[], outerFlatPoints: number[]): boolean => {
-  if (innerFlatPoints.length < 6 || outerFlatPoints.length < 6) return false;
-
-  for (let i = 0; i < innerFlatPoints.length; i += 2) {
-    if (!pointInPolygonFlat(innerFlatPoints[i], innerFlatPoints[i + 1], outerFlatPoints)) {
-      return false;
-    }
-  }
-
-  return true;
-};
-
-const flatPointsToSvgPath = (flatPoints: number[]): string => {
-  if (flatPoints.length < 6 || flatPoints.length % 2 !== 0) return '';
-
-  const firstX = flatPoints[0];
-  const firstY = flatPoints[1];
-  if (!Number.isFinite(firstX) || !Number.isFinite(firstY)) return '';
-
-  let d = `M ${firstX} ${firstY}`;
-  for (let i = 2; i < flatPoints.length; i += 2) {
-    const x = flatPoints[i];
-    const y = flatPoints[i + 1];
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    d += ` L ${x} ${y}`;
-  }
-
-  d += ' Z';
-  return d;
+  return bestProjection;
 };
 
 const buildExclusiveFillPath = (baseFlatPoints: number[], cutoutFlatPoints: number[][]): string => {
@@ -632,6 +637,7 @@ const MapasInteractivos: React.FC = () => {
   const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(null);
   const [selectedTool, setSelectedTool] = useState<'lasso' | 'zoom'>('lasso');
   const [lassoInteractionMode, setLassoInteractionMode] = useState<LassoInteractionMode>('draw');
+  const [isEditingExistingMap, setIsEditingExistingMap] = useState(false);
   const [zoomSensitivity, setZoomSensitivity] = useState<ZoomSensitivity>('media');
   const [zoomScale, setZoomScale] = useState(1);
   const [isZoomDragging, setIsZoomDragging] = useState(false);
@@ -685,6 +691,7 @@ const MapasInteractivos: React.FC = () => {
   const pinchStartDistanceRef = useRef(0);
   const pinchStartScaleRef = useRef(1);
   const isPointerGestureActiveRef = useRef(false);
+  const isSelectionHandleInteractingRef = useRef(false);
   const targetZoomRef = useRef(1);
   const targetPanRef = useRef<Point2D>({ x: 0, y: 0 });
   const animationFrameRef = useRef<number | null>(null);
@@ -861,7 +868,7 @@ const MapasInteractivos: React.FC = () => {
       setPendingMapEditTarget(null);
       return;
     }
-
+      setIsEditingExistingMap(false);
     setMapPersistMessage('No se encontró la placa del mapa seleccionado.');
     setPendingMapEditTarget(null);
   }, [pendingMapEditTarget, selectedTemaId, selectedSubtemaId, loadingPlacas, placas]);
@@ -869,12 +876,13 @@ const MapasInteractivos: React.FC = () => {
   useEffect(() => {
     if (!selectedPlaca) {
       setImageElement(null);
-      setPendingHydrationMapRow(null);
+    setIsEditingExistingMap(false);
       setCurrentMapId(null);
       setCurrentMapNumber(null);
+      setIsEditingExistingMap(false);
       setHasUnsavedMapChanges(false);
       setMapPersistMessage(null);
-      setPersistedSelectionsSnapshot([]);
+        setIsEditingExistingMap(false);
       setPersistedSelectionDetailsSnapshot([]);
       setShowUnsavedExitConfirm(false);
       return;
@@ -885,6 +893,7 @@ const MapasInteractivos: React.FC = () => {
     setZoomScale(1);
     setPanOffset({ x: 0, y: 0 });
     setLassoInteractionMode('draw');
+    setIsEditingExistingMap(false);
     setSelectionPoints([]);
     setSavedSelections([]);
     setSavedSelectionDetails([]);
@@ -937,6 +946,7 @@ const MapasInteractivos: React.FC = () => {
         setPendingHydrationMapRow(null);
         setPersistedSelectionsSnapshot([]);
         setPersistedSelectionDetailsSnapshot([]);
+        setIsEditingExistingMap(false);
         return;
       }
 
@@ -944,6 +954,7 @@ const MapasInteractivos: React.FC = () => {
       setPendingHydrationMapRow(mapRow);
       setCurrentMapId(mapRow.id);
       setCurrentMapNumber(mapRow.map_number);
+      setIsEditingExistingMap(true);
       setHasUnsavedMapChanges(false);
       setMapPersistMessage(`Mapa #${mapRow.map_number} cargado.`);
     };
@@ -1333,6 +1344,7 @@ const MapasInteractivos: React.FC = () => {
 
       setCurrentMapId(existingMapRow.id);
       setCurrentMapNumber(existingMapRow.map_number);
+      setIsEditingExistingMap(true);
       setPersistedSelectionsSnapshot(cloneSelections(selectionsToPersist));
       setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(detailsToPersist));
       setPlacasConMapa((prev) => {
@@ -1379,6 +1391,7 @@ const MapasInteractivos: React.FC = () => {
     const mapNumber = (createdMap as { id: number; map_number: number }).map_number;
     setCurrentMapId(mapId);
     setCurrentMapNumber(mapNumber);
+    setIsEditingExistingMap(false);
     setPersistedSelectionsSnapshot(cloneSelections(selectionsToPersist));
     setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(detailsToPersist));
     setPlacasConMapa((prev) => {
@@ -1642,6 +1655,7 @@ const MapasInteractivos: React.FC = () => {
         setPendingHydrationMapRow(null);
         setCurrentMapId(null);
         setCurrentMapNumber(null);
+        setIsEditingExistingMap(false);
         setPlacasConMapa((prev) => {
           if (!selectedPlaca || !prev.has(selectedPlaca.id)) return prev;
           const next = new Set(prev);
@@ -1783,11 +1797,14 @@ const MapasInteractivos: React.FC = () => {
     if (!stageRef.current || !imageRect) return;
     if (showPendingReplaceConfirm) return;
     if (showSelectionInfoForm) return;
+    if (isSelectionHandleInteractingRef.current) return;
 
     const pointer = stageRef.current.getPointerPosition();
     if (!pointer) return;
 
     if (selectedTool === 'lasso') {
+      if (lassoInteractionMode !== 'draw') return;
+
       const hasPendingSelection = selectionPoints.length >= 6 && !isDrawing;
       const isInsidePending = hasPendingSelection
         ? pointInPolygonFlat(pointer.x, pointer.y, selectionPoints)
@@ -1853,6 +1870,7 @@ const MapasInteractivos: React.FC = () => {
   const handleStageTouchStart = (e: any) => {
     e?.evt?.preventDefault?.();
     if (isPointerGestureActiveRef.current) return;
+    if (isSelectionHandleInteractingRef.current) return;
 
     const touches = e?.evt?.touches;
     const touchCount = touches?.length ?? 0;
@@ -1870,6 +1888,7 @@ const MapasInteractivos: React.FC = () => {
   const handleStageTouchMove = (e: any) => {
     e?.evt?.preventDefault?.();
     if (isPointerGestureActiveRef.current) return;
+    if (isSelectionHandleInteractingRef.current) return;
 
     const touches = e?.evt?.touches;
     const touchCount = touches?.length ?? 0;
@@ -1887,6 +1906,7 @@ const MapasInteractivos: React.FC = () => {
   const handleStageTouchEnd = (e: any) => {
     e?.evt?.preventDefault?.();
     if (isPointerGestureActiveRef.current) return;
+    if (isSelectionHandleInteractingRef.current) return;
 
     const touches = e?.evt?.touches;
     const touchCount = touches?.length ?? 0;
@@ -1916,6 +1936,7 @@ const MapasInteractivos: React.FC = () => {
   const handleStagePointerDown = (e: any) => {
     const evt = e?.evt;
     if (!isStylusLikePointerEvent(evt)) return;
+    if (isSelectionHandleInteractingRef.current) return;
     isPointerGestureActiveRef.current = true;
     evt?.preventDefault?.();
     handleStageMouseDown();
@@ -1924,6 +1945,7 @@ const MapasInteractivos: React.FC = () => {
   const handleStagePointerMove = (e: any) => {
     const evt = e?.evt;
     if (!isStylusLikePointerEvent(evt)) return;
+    if (isSelectionHandleInteractingRef.current) return;
     evt?.preventDefault?.();
     handleStageMouseMove();
   };
@@ -1931,6 +1953,7 @@ const MapasInteractivos: React.FC = () => {
   const handleStagePointerUp = (e: any) => {
     const evt = e?.evt;
     if (!isStylusLikePointerEvent(evt)) return;
+    if (isSelectionHandleInteractingRef.current) return;
     isPointerGestureActiveRef.current = false;
     evt?.preventDefault?.();
     handleStageMouseUp();
@@ -1980,11 +2003,13 @@ const MapasInteractivos: React.FC = () => {
   const startCircleDrag = (e: any) => {
     e.cancelBubble = true;
     e?.evt?.preventDefault?.();
+    isSelectionHandleInteractingRef.current = true;
     e?.target?.startDrag?.();
   };
 
   const stopCircleDrag = (e: any) => {
     e?.evt?.preventDefault?.();
+    isSelectionHandleInteractingRef.current = false;
     e?.target?.stopDrag?.();
   };
 
@@ -2088,6 +2113,11 @@ const MapasInteractivos: React.FC = () => {
       hideInsertHint();
     }
   }, [selectedTool]);
+
+  useEffect(() => {
+    if (!isEditingExistingMap || selectedTool !== 'lasso') return;
+    setLassoInteractionMode('edit');
+  }, [isEditingExistingMap, selectedTool]);
 
   useEffect(() => {
     if (!selectedPlaca) return;
@@ -2802,22 +2832,24 @@ const MapasInteractivos: React.FC = () => {
                 </button>
                 {selectedTool === 'lasso' && (
                   <div style={s.lassoModeSwitch}>
-                    <button
-                      type="button"
-                      style={{
-                        ...s.lassoModeBtn,
-                        ...(lassoInteractionMode === 'draw' ? s.lassoModeBtnActive : {}),
-                      }}
-                      onClick={() => {
-                        setLassoInteractionMode('draw');
-                        setActiveSavedSelectionIndex(null);
-                        setShowDeleteConfirm(false);
-                        hideInsertHint();
-                      }}
-                      title="Dibujar nueva selección dentro o fuera de otras"
-                    >
-                      Nuevo
-                    </button>
+                    {!isEditingExistingMap && (
+                      <button
+                        type="button"
+                        style={{
+                          ...s.lassoModeBtn,
+                          ...(lassoInteractionMode === 'draw' ? s.lassoModeBtnActive : {}),
+                        }}
+                        onClick={() => {
+                          setLassoInteractionMode('draw');
+                          setActiveSavedSelectionIndex(null);
+                          setShowDeleteConfirm(false);
+                          hideInsertHint();
+                        }}
+                        title="Dibujar nueva selección dentro o fuera de otras"
+                      >
+                        Nuevo
+                      </button>
+                    )}
                     <button
                       type="button"
                       style={{
