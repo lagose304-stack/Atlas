@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BookOpen, House, Phone, Search } from 'lucide-react';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
+import { supabase } from '../services/supabase';
 
 import logoFacultad from '../assets/logos/facultad.png';
 import microscopioHeader from '../assets/logos/laboratorio.png';
@@ -13,15 +14,196 @@ const MENU_ITEMS = [
   { key: 'contacto', label: 'Contacto', icon: Phone },
 ] as const;
 
+interface SearchTemaRecord {
+  id: number;
+  nombre: string;
+}
+
+interface SearchSubtemaRecord {
+  id: number;
+  nombre: string;
+  tema_id: number;
+  tema_nombre: string;
+}
+
+interface SearchSuggestion {
+  id: string;
+  kind: 'tema' | 'subtema';
+  title: string;
+  targetPath: string;
+  score: number;
+}
+
+const stripDiacritics = (value: string): string =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const normalizeSearchText = (value: string): string =>
+  stripDiacritics(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const levenshteinDistance = (leftValue: string, rightValue: string): number => {
+  if (leftValue === rightValue) return 0;
+  if (!leftValue.length) return rightValue.length;
+  if (!rightValue.length) return leftValue.length;
+
+  const previousRow = Array.from({ length: rightValue.length + 1 }, (_, index) => index);
+
+  for (let leftIndex = 1; leftIndex <= leftValue.length; leftIndex += 1) {
+    let previousDiagonal = previousRow[0];
+    previousRow[0] = leftIndex;
+
+    for (let rightIndex = 1; rightIndex <= rightValue.length; rightIndex += 1) {
+      const temp = previousRow[rightIndex];
+      const cost = leftValue[leftIndex - 1] === rightValue[rightIndex - 1] ? 0 : 1;
+      previousRow[rightIndex] = Math.min(
+        previousRow[rightIndex] + 1,
+        previousRow[rightIndex - 1] + 1,
+        previousDiagonal + cost,
+      );
+      previousDiagonal = temp;
+    }
+  }
+
+  return previousRow[rightValue.length];
+};
+
+const scoreTextMatch = (query: string, candidate: string): number => {
+  const normalizedQuery = normalizeSearchText(query);
+  const normalizedCandidate = normalizeSearchText(candidate);
+
+  if (!normalizedQuery || !normalizedCandidate) {
+    return 0;
+  }
+
+  if (normalizedQuery === normalizedCandidate) {
+    return 240;
+  }
+
+  let score = 0;
+
+  if (normalizedCandidate.startsWith(normalizedQuery)) {
+    score += 90;
+  }
+
+  if (normalizedCandidate.includes(normalizedQuery)) {
+    score += 75;
+  }
+
+  const queryTokens = normalizedQuery.split(' ').filter(Boolean);
+  const candidateTokens = normalizedCandidate.split(' ').filter(Boolean);
+
+  queryTokens.forEach((token) => {
+    if (normalizedCandidate === token) {
+      score += 48;
+      return;
+    }
+
+    if (normalizedCandidate.includes(token)) {
+      score += 22;
+      return;
+    }
+
+    if (candidateTokens.some((candidateToken) => candidateToken.startsWith(token))) {
+      score += 12;
+    }
+  });
+
+  const distance = levenshteinDistance(normalizedQuery, normalizedCandidate);
+  const maxLength = Math.max(normalizedQuery.length, normalizedCandidate.length);
+  const similarity = maxLength > 0 ? 1 - distance / maxLength : 0;
+  score += Math.max(0, similarity * 70);
+
+  return score;
+};
+
+const getThemeNameFromRelation = (relation: unknown): string => {
+  if (!relation) return '';
+  if (Array.isArray(relation)) {
+    const firstItem = relation[0] as { nombre?: string } | undefined;
+    return firstItem?.nombre?.trim() ?? '';
+  }
+
+  if (typeof relation === 'object') {
+    const maybeRelation = relation as { nombre?: string };
+    return maybeRelation.nombre?.trim() ?? '';
+  }
+
+  return '';
+};
+
+const buildSearchSuggestions = (
+  query: string,
+  temas: SearchTemaRecord[],
+  subtemas: SearchSubtemaRecord[],
+  limit = 8,
+): SearchSuggestion[] => {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const suggestions: SearchSuggestion[] = [];
+
+  temas.forEach((tema) => {
+    const score = scoreTextMatch(normalizedQuery, tema.nombre);
+    if (score <= 0) return;
+
+    suggestions.push({
+      id: `tema-${tema.id}`,
+      kind: 'tema',
+      title: `Tema: ${tema.nombre}`,
+      targetPath: `/subtemas/${tema.id}`,
+      score,
+    });
+  });
+
+  subtemas.forEach((subtema) => {
+    const themeScore = scoreTextMatch(normalizedQuery, subtema.tema_nombre);
+    const subtemaScore = scoreTextMatch(normalizedQuery, subtema.nombre);
+    const combinedScore = scoreTextMatch(normalizedQuery, `${subtema.tema_nombre} ${subtema.nombre}`);
+    const score = Math.max(themeScore * 0.9, subtemaScore, combinedScore);
+
+    if (score <= 0) return;
+
+    suggestions.push({
+      id: `subtema-${subtema.id}`,
+      kind: 'subtema',
+      title: `${subtema.tema_nombre}: ${subtema.nombre}`,
+      targetPath: `/ver-placas/${subtema.id}`,
+      score,
+    });
+  });
+
+  return suggestions
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      if (left.kind !== right.kind) return left.kind === 'tema' ? -1 : 1;
+      return left.title.localeCompare(right.title, 'es', { sensitivity: 'base' });
+    })
+    .slice(0, limit);
+};
+
 const Header: React.FC = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const headerRef = React.useRef<HTMLElement | null>(null);
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
+  const searchFieldShellRef = React.useRef<HTMLDivElement | null>(null);
   const [isLeftLogoHover, setIsLeftLogoHover] = React.useState(false);
   const [isRightLogoHover, setIsRightLogoHover] = React.useState(false);
   const [showCompactBar, setShowCompactBar] = React.useState(false);
   const [openImageViewerCount, setOpenImageViewerCount] = React.useState(0);
   const [compactBarFrame, setCompactBarFrame] = React.useState({ left: 8, width: 320 });
+  const [showSearchBar, setShowSearchBar] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [searchTemas, setSearchTemas] = React.useState<SearchTemaRecord[]>([]);
+  const [searchSubtemas, setSearchSubtemas] = React.useState<SearchSubtemaRecord[]>([]);
+  const [searchIndexLoading, setSearchIndexLoading] = React.useState(false);
+  const [searchIndexLoaded, setSearchIndexLoaded] = React.useState(false);
+  const [searchSuggestionsFrame, setSearchSuggestionsFrame] = React.useState<{ top: number; left: number; width: number } | null>(null);
   const isImageViewerOpen = openImageViewerCount > 0;
 
   const isInAdminEditingFlow = React.useMemo(() => {
@@ -105,6 +287,101 @@ const Header: React.FC = () => {
     };
   }, []);
 
+  React.useEffect(() => {
+    if (!showSearchBar) return;
+    searchInputRef.current?.focus();
+  }, [showSearchBar]);
+
+  React.useEffect(() => {
+    if (showSearchBar) return;
+    setSearchQuery('');
+  }, [showSearchBar]);
+
+  React.useEffect(() => {
+    if (!showSearchBar || !searchFieldShellRef.current) {
+      setSearchSuggestionsFrame(null);
+      return;
+    }
+
+    const syncSearchFrame = () => {
+      const rect = searchFieldShellRef.current?.getBoundingClientRect();
+      if (!rect) {
+        setSearchSuggestionsFrame(null);
+        return;
+      }
+
+      const viewportPadding = 8;
+      const maxWidth = Math.max(0, window.innerWidth - viewportPadding * 2);
+      const preferredWidth = Math.round(rect.width);
+      const boundedWidth = Math.min(preferredWidth, maxWidth);
+      const boundedLeft = Math.max(
+        viewportPadding,
+        Math.min(Math.round(rect.left), window.innerWidth - viewportPadding - boundedWidth),
+      );
+      const boundedTop = Math.max(viewportPadding, Math.round(rect.bottom + 8));
+
+      const nextFrame = {
+        top: boundedTop,
+        left: boundedLeft,
+        width: boundedWidth,
+      };
+
+      setSearchSuggestionsFrame((prev) => (
+        prev?.top === nextFrame.top && prev?.left === nextFrame.left && prev?.width === nextFrame.width
+          ? prev
+          : nextFrame
+      ));
+    };
+
+    syncSearchFrame();
+    window.addEventListener('resize', syncSearchFrame);
+    window.addEventListener('scroll', syncSearchFrame, { passive: true, capture: true });
+
+    return () => {
+      window.removeEventListener('resize', syncSearchFrame);
+      window.removeEventListener('scroll', syncSearchFrame, true);
+    };
+  }, [searchIndexLoaded, searchIndexLoading, searchQuery, searchSubtemas.length, searchTemas.length, showSearchBar]);
+
+  React.useEffect(() => {
+    if (!showSearchBar || searchIndexLoading || searchIndexLoaded) {
+      return;
+    }
+
+    const loadSearchIndex = async () => {
+      setSearchIndexLoading(true);
+
+      const [temasResult, subtemasResult] = await Promise.all([
+        supabase.from('temas').select('id, nombre').order('sort_order', { ascending: true }),
+        supabase.from('subtemas').select('id, nombre, tema_id, temas(nombre)').order('sort_order', { ascending: true }),
+      ]);
+
+      if (!temasResult.error) {
+        setSearchTemas((temasResult.data ?? []) as SearchTemaRecord[]);
+      }
+
+      if (!subtemasResult.error) {
+        const nextSubtemas = (subtemasResult.data ?? []).map((row) => ({
+          id: row.id,
+          nombre: row.nombre,
+          tema_id: row.tema_id,
+          tema_nombre: getThemeNameFromRelation((row as { temas?: unknown }).temas),
+        }));
+        setSearchSubtemas(nextSubtemas);
+      }
+
+      setSearchIndexLoaded(true);
+      setSearchIndexLoading(false);
+    };
+
+    void loadSearchIndex();
+  }, [searchIndexLoaded, searchIndexLoading, showSearchBar]);
+
+  const searchSuggestions = React.useMemo(
+    () => buildSearchSuggestions(searchQuery, searchTemas, searchSubtemas, 7),
+    [searchQuery, searchSubtemas, searchTemas],
+  );
+
   return (
     <>
       <header ref={headerRef} className="atlas-header-wrapper" style={styles.wrapper}>
@@ -162,14 +439,90 @@ const Header: React.FC = () => {
                 type="button"
                 className="atlas-header-search-button"
                 style={styles.searchButton}
-                onClick={(event) => event.preventDefault()}
+                onClick={() => setShowSearchBar((prev) => !prev)}
                 aria-label="Buscar"
+                aria-expanded={showSearchBar}
+                aria-controls="atlas-header-search-panel"
               >
                 <Search size={24} color="#e6f5ff" strokeWidth={2.2} />
               </button>
             </div>
           </div>
         </section>
+
+        {showSearchBar && (
+          <div id="atlas-header-search-panel" className="atlas-header-search-panel" style={styles.searchPanel}>
+            <div className="atlas-header-search-panel-inner" style={styles.searchPanelInner}>
+              <div ref={searchFieldShellRef} className="atlas-header-search-field-shell" style={styles.searchFieldShell}>
+                <div className="atlas-header-search-field-row" style={styles.searchFieldRow}>
+                  <Search size={18} color="#5b7ea6" strokeWidth={2.2} />
+                  <input
+                    ref={searchInputRef}
+                    type="search"
+                    className="atlas-header-search-input"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Buscar temas y subtemas"
+                    aria-label="Buscar temas y subtemas"
+                    style={styles.searchInput}
+                  />
+                  <button
+                    type="button"
+                    className="atlas-header-search-close-button"
+                    onClick={() => setShowSearchBar(false)}
+                    aria-label="Cerrar búsqueda"
+                    style={styles.searchCloseButton}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {searchQuery.trim() && searchSuggestionsFrame && (
+                  <div
+                    className="atlas-header-search-suggestions"
+                    style={{
+                      ...styles.searchSuggestions,
+                      top: `${searchSuggestionsFrame.top}px`,
+                      left: `${searchSuggestionsFrame.left}px`,
+                      width: `${searchSuggestionsFrame.width}px`,
+                    }}
+                    role="listbox"
+                    aria-label="Sugerencias de búsqueda"
+                  >
+                    {searchIndexLoading && searchSuggestions.length === 0 ? (
+                      <div className="atlas-header-search-empty" style={styles.searchEmptyState}>Cargando sugerencias...</div>
+                    ) : searchSuggestions.length > 0 ? (
+                      searchSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          className="atlas-header-search-suggestion-item"
+                          style={styles.searchSuggestionItem}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            navigateFromHeader(suggestion.targetPath);
+                            setShowSearchBar(false);
+                          }}
+                        >
+                          <span className="atlas-header-search-suggestion-badge" style={styles.searchSuggestionBadge}>
+                            {suggestion.kind === 'tema' ? 'Tema' : 'Subtema'}
+                          </span>
+                          <span className="atlas-header-search-suggestion-content" style={styles.searchSuggestionContent}>
+                            <span className="atlas-header-search-suggestion-title" style={styles.searchSuggestionTitle}>
+                              {suggestion.title}
+                            </span>
+                          </span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="atlas-header-search-empty" style={styles.searchEmptyState}>No encontramos coincidencias. Prueba con otro nombre o una parte de la palabra.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <nav className="atlas-header-bottom-nav" style={styles.bottomNav} aria-label="Menú principal">
           <ul className="atlas-header-nav-list" style={styles.navList}>
@@ -263,6 +616,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
+    width: '100%',
     borderBottom: '2px solid rgba(174, 216, 255, 0.8)',
   },
   heroGlass: {
@@ -447,6 +801,115 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     backdropFilter: 'blur(2px)',
+  },
+  searchPanel: {
+    width: '100%',
+    padding: '12px 20px',
+    background: 'linear-gradient(180deg, rgba(243, 249, 255, 0.98) 0%, rgba(232, 243, 253, 0.98) 100%)',
+    borderTop: '1px solid rgba(211, 232, 250, 0.9)',
+    borderBottom: '1px solid rgba(211, 232, 250, 0.9)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.75)',
+  },
+  searchPanelInner: {
+    width: '100%',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'stretch',
+    gap: 0,
+    maxWidth: '1600px',
+    margin: '0 auto',
+  },
+  searchFieldShell: {
+    position: 'relative',
+    width: '100%',
+    maxWidth: '1120px',
+  },
+  searchFieldRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  searchInput: {
+    flex: 1,
+    minWidth: 0,
+    height: '40px',
+    borderRadius: '999px',
+    border: '1px solid rgba(155, 194, 227, 0.9)',
+    background: 'rgba(255,255,255,0.98)',
+    color: '#0b214c',
+    fontSize: '15px',
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
+    padding: '0 14px',
+    outline: 'none',
+  },
+  searchCloseButton: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '999px',
+    border: '1px solid rgba(155, 194, 227, 0.9)',
+    background: '#ffffff',
+    color: '#143768',
+    fontSize: '24px',
+    lineHeight: 1,
+    cursor: 'pointer',
+  },
+  searchSuggestions: {
+    position: 'fixed',
+    zIndex: 2600,
+    maxHeight: 'min(48vh, 360px)',
+    overflowY: 'auto',
+    padding: '8px',
+    borderRadius: '18px',
+    border: '1px solid rgba(183, 212, 238, 0.95)',
+    background: 'rgba(255,255,255,0.99)',
+    boxShadow: '0 18px 36px rgba(12, 47, 93, 0.18)',
+    backdropFilter: 'blur(10px)',
+  },
+  searchSuggestionItem: {
+    width: '100%',
+    border: 'none',
+    background: 'transparent',
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '10px',
+    padding: '10px 12px',
+    borderRadius: '14px',
+    textAlign: 'left',
+    cursor: 'pointer',
+  },
+  searchSuggestionBadge: {
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '78px',
+    padding: '4px 10px',
+    borderRadius: '999px',
+    background: 'linear-gradient(180deg, #eaf4ff 0%, #d7eaff 100%)',
+    color: '#194274',
+    fontSize: '12px',
+    fontWeight: 700,
+    letterSpacing: '0.2px',
+    textTransform: 'uppercase',
+  },
+  searchSuggestionContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: 0,
+    flex: 1,
+  },
+  searchSuggestionTitle: {
+    color: '#0c2346',
+    fontSize: '15px',
+    lineHeight: 1.2,
+    fontWeight: 700,
+    wordBreak: 'break-word',
+  },
+  searchEmptyState: {
+    padding: '10px 12px',
+    color: '#5c7596',
+    fontSize: '14px',
+    lineHeight: 1.35,
   },
   bottomNav: {
     background: 'linear-gradient(180deg, rgba(247, 252, 255, 0.96) 0%, rgba(240, 247, 255, 0.98) 100%)',
