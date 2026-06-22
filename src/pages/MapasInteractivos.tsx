@@ -947,6 +947,7 @@ const MapasInteractivos: React.FC = () => {
         setPersistedSelectionsSnapshot([]);
         setPersistedSelectionDetailsSnapshot([]);
         setIsEditingExistingMap(false);
+        setLassoInteractionMode('draw');
         return;
       }
 
@@ -955,6 +956,7 @@ const MapasInteractivos: React.FC = () => {
       setCurrentMapId(mapRow.id);
       setCurrentMapNumber(mapRow.map_number);
       setIsEditingExistingMap(true);
+      setLassoInteractionMode('edit');
       setHasUnsavedMapChanges(false);
       setMapPersistMessage(`Mapa #${mapRow.map_number} cargado.`);
     };
@@ -2115,11 +2117,6 @@ const MapasInteractivos: React.FC = () => {
   }, [selectedTool]);
 
   useEffect(() => {
-    if (!isEditingExistingMap || selectedTool !== 'lasso') return;
-    setLassoInteractionMode('edit');
-  }, [isEditingExistingMap, selectedTool]);
-
-  useEffect(() => {
     if (!selectedPlaca) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -2428,6 +2425,7 @@ const MapasInteractivos: React.FC = () => {
                   {selectedTool === 'lasso' && (
                     <div style={s.lassoModeBadge}>
                       Modo: {lassoInteractionMode === 'draw' ? 'Nuevo' : 'Editar'}
+                      {isEditingExistingMap ? ' · mapa existente' : ''}
                     </div>
                   )}
                   {imageElement && imageRect ? (
@@ -2832,24 +2830,22 @@ const MapasInteractivos: React.FC = () => {
                 </button>
                 {selectedTool === 'lasso' && (
                   <div style={s.lassoModeSwitch}>
-                    {!isEditingExistingMap && (
-                      <button
-                        type="button"
-                        style={{
-                          ...s.lassoModeBtn,
-                          ...(lassoInteractionMode === 'draw' ? s.lassoModeBtnActive : {}),
-                        }}
-                        onClick={() => {
-                          setLassoInteractionMode('draw');
-                          setActiveSavedSelectionIndex(null);
-                          setShowDeleteConfirm(false);
-                          hideInsertHint();
-                        }}
-                        title="Dibujar nueva selección dentro o fuera de otras"
-                      >
-                        Nuevo
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      style={{
+                        ...s.lassoModeBtn,
+                        ...(lassoInteractionMode === 'draw' ? s.lassoModeBtnActive : {}),
+                      }}
+                      onClick={() => {
+                        setLassoInteractionMode('draw');
+                        setActiveSavedSelectionIndex(null);
+                        setShowDeleteConfirm(false);
+                        hideInsertHint();
+                      }}
+                      title="Dibujar nueva selección dentro o fuera de otras"
+                    >
+                      Nuevo
+                    </button>
                     <button
                       type="button"
                       style={{
