@@ -134,6 +134,8 @@ const ListaEspera: React.FC = () => {
   const [senalados,       setSenalados]       = useState<string[]>([]);
   const [senaladosPos,    setSenaladosPos]    = useState<Array<MarkerLocation | null>>([]);
   const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
+  const [editingSenaladoGroup, setEditingSenaladoGroup] = useState<{ label: string; indices: number[] } | null>(null);
+  const [editingSenaladoGroupLocations, setEditingSenaladoGroupLocations] = useState<Array<MarkerLocation | null>>([]);
   const [namingSenaladoIndex, setNamingSenaladoIndex] = useState<number | null>(null);
   const [comentario,      setComentario]      = useState('');
   const [showComentario,  setShowComentario]  = useState(false);
@@ -184,6 +186,8 @@ const ListaEspera: React.FC = () => {
     setSenalados([]);
     setSenaladosPos([]);
     setEditingSenaladoIndex(null);
+    setEditingSenaladoGroup(null);
+    setEditingSenaladoGroupLocations([]);
     setNamingSenaladoIndex(null);
     setComentario('');
     setShowComentario(false);
@@ -783,9 +787,12 @@ const ListaEspera: React.FC = () => {
                       }}
                       onOpenSenaladoLocation={(index) => {
                         const groupIndices = getSenaladoGroupIndices(index);
+                        const targetLabel = (senalados[index] ?? '').trim();
 
                         if (groupIndices.length > 1) {
-                          setEditingSenaladoIndex(groupIndices[0]);
+                          setEditingSenaladoGroup({ label: targetLabel, indices: groupIndices });
+                          setEditingSenaladoGroupLocations(groupIndices.map(currentIndex => senaladosPos[currentIndex] ?? null));
+                          setEditingSenaladoIndex(null);
                           return;
                         }
 
@@ -866,6 +873,41 @@ const ListaEspera: React.FC = () => {
             }
 
             setEditingSenaladoIndex(null);
+          }}
+        />
+      )}
+
+      {editingSenaladoGroup && selected && (
+        <SenaladoLocationPicker
+          key={`senalado-group-${editingSenaladoGroup.label}-${editingSenaladoGroup.indices.join('-')}`}
+          imageSrc={getCloudinaryImageUrl(selected.photo_url, 'view')}
+          senaladoLabel={editingSenaladoGroup.label}
+          batchMode
+          batchSaveLabel="Guardar cambios del grupo"
+          initialBatchLocations={editingSenaladoGroupLocations.filter((location): location is MarkerLocation => location !== null)}
+          onCancel={() => {
+            setEditingSenaladoGroup(null);
+            setEditingSenaladoGroupLocations([]);
+          }}
+          onSave={() => {}}
+          onBatchSave={(locations) => {
+            const targetIndices = editingSenaladoGroup.indices;
+            const firstIndex = targetIndices[0] ?? 0;
+
+            setSenalados(prev => {
+              const remaining = prev.filter((_, currentIndex) => !targetIndices.includes(currentIndex));
+              remaining.splice(firstIndex, 0, ...locations.map(() => editingSenaladoGroup.label));
+              return remaining;
+            });
+
+            setSenaladosPos(prev => {
+              const remaining = prev.filter((_, currentIndex) => !targetIndices.includes(currentIndex));
+              remaining.splice(firstIndex, 0, ...locations);
+              return remaining;
+            });
+
+            setEditingSenaladoGroup(null);
+            setEditingSenaladoGroupLocations([]);
           }}
         />
       )}

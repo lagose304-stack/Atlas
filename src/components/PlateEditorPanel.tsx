@@ -509,20 +509,20 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
 
             <div style={mergedStyles.section}>
               <label style={mergedStyles.label}>{texts.senalados}</label>
-              {groupedSenalados.map((group) => {
+              {groupedSenalados.map((group, displayIndex) => {
                 const hasMarker = group.representativePos != null;
                 const idx = group.representativeIndex;
                 const displayLabel = group.count > 1 ? `${group.label} (${group.count})` : group.label;
 
                 return (
                   <div key={`${group.label}-${group.firstIndex}`} style={mergedStyles.senalRow}>
-                    <span style={mergedStyles.senalNum}>{group.firstIndex + 1}</span>
+                    <span style={mergedStyles.senalNum}>{displayIndex + 1}</span>
                     <BoldField
                       as="input"
                       inline
                       style={mergedStyles.senalInput}
                       value={group.label}
-                      placeholder={`Señalado ${group.firstIndex + 1}`}
+                      placeholder={`Señalado ${displayIndex + 1}`}
                       onChange={value => {
                         group.indices.forEach(groupIndex => onSenaladoChange(groupIndex, value));
                       }}

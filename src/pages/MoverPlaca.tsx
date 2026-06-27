@@ -215,6 +215,8 @@ const MoverPlaca: React.FC = () => {
   const [editSenalados,     setEditSenalados]     = useState<string[]>([]);
   const [editSenaladosPos,  setEditSenaladosPos]  = useState<Array<MarkerLocation | null>>([]);
   const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
+  const [editingSenaladoGroup, setEditingSenaladoGroup] = useState<{ label: string; indices: number[] } | null>(null);
+  const [editingSenaladoGroupLocations, setEditingSenaladoGroupLocations] = useState<Array<MarkerLocation | null>>([]);
   const [namingSenaladoIndex, setNamingSenaladoIndex] = useState<number | null>(null);
   const [forceLocationAssignment, setForceLocationAssignment] = useState(false);
   const [multipleSenaladoActivo, setMultipleSenaladoActivo] = useState(false);
@@ -1079,9 +1081,18 @@ const MoverPlaca: React.FC = () => {
                   }}
                   onOpenSenaladoLocation={(index) => {
                     const groupIndices = getSenaladoGroupIndices(index);
+                    const targetLabel = (editSenalados[index] ?? '').trim();
+
+                    if (groupIndices.length > 1) {
+                      setEditingSenaladoGroup({ label: targetLabel, indices: groupIndices });
+                      setEditingSenaladoGroupLocations(groupIndices.map(currentIndex => editSenaladosPos[currentIndex] ?? null));
+                      setEditingSenaladoIndex(null);
+                      setForceLocationAssignment(false);
+                      return;
+                    }
 
                     setForceLocationAssignment(false);
-                    setEditingSenaladoIndex(groupIndices[0] ?? index);
+                    setEditingSenaladoIndex(index);
                   }}
                   onAddSenalado={() => {
                     const nextIndex = editSenalados.length;
@@ -1144,7 +1155,11 @@ const MoverPlaca: React.FC = () => {
           imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
           senaladoLabel={editSenalados[editingSenaladoIndex] ?? ''}
           initialLocation={editSenaladosPos[editingSenaladoIndex] ?? null}
-          onCancel={() => setEditingSenaladoIndex(null)}
+          onCancel={() => {
+            setEditingSenaladoIndex(null);
+            setEditingSenaladoGroup(null);
+            setEditingSenaladoGroupLocations([]);
+          }}
           onRemove={() => {
             const targetIndex = editingSenaladoIndex;
             setEditSenalados(prev => prev.filter((_, i) => i !== targetIndex));
@@ -1180,6 +1195,41 @@ const MoverPlaca: React.FC = () => {
 
             setForceLocationAssignment(false);
             setEditingSenaladoIndex(null);
+          }}
+        />
+      )}
+
+      {editingSenaladoGroup && selectedPlaca && (
+        <SenaladoLocationPicker
+          key={`senalado-group-${editingSenaladoGroup.label}-${editingSenaladoGroup.indices.join('-')}`}
+          imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
+          senaladoLabel={editingSenaladoGroup.label}
+          batchMode
+          batchSaveLabel="Guardar cambios del grupo"
+          initialBatchLocations={editingSenaladoGroupLocations}
+          onCancel={() => {
+            setEditingSenaladoGroup(null);
+            setEditingSenaladoGroupLocations([]);
+          }}
+          onSave={() => {}}
+          onBatchSave={(locations) => {
+            const targetIndices = editingSenaladoGroup.indices;
+            const firstIndex = targetIndices[0] ?? 0;
+
+            setEditSenalados(prev => {
+              const remaining = prev.filter((_, currentIndex) => !targetIndices.includes(currentIndex));
+              remaining.splice(firstIndex, 0, ...locations.map(() => editingSenaladoGroup.label));
+              return remaining;
+            });
+
+            setEditSenaladosPos(prev => {
+              const remaining = prev.filter((_, currentIndex) => !targetIndices.includes(currentIndex));
+              remaining.splice(firstIndex, 0, ...locations);
+              return remaining;
+            });
+
+            setEditingSenaladoGroup(null);
+            setEditingSenaladoGroupLocations([]);
           }}
         />
       )}
