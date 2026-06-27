@@ -868,9 +868,34 @@ const MapasInteractivos: React.FC = () => {
       setPendingMapEditTarget(null);
       return;
     }
-      setIsEditingExistingMap(false);
-    setMapPersistMessage('No se encontró la placa del mapa seleccionado.');
-    setPendingMapEditTarget(null);
+
+    let isEffectActive = true;
+
+    const fetchTargetPlaca = async () => {
+      const { data, error } = await supabase
+        .from('placas')
+        .select('id, photo_url, aumento, sort_order')
+        .eq('id', pendingMapEditTarget.placaId)
+        .maybeSingle();
+
+      if (!isEffectActive) return;
+
+      if (error || !data) {
+        setIsEditingExistingMap(false);
+        setMapPersistMessage('No se encontró la placa del mapa seleccionado.');
+        setPendingMapEditTarget(null);
+        return;
+      }
+
+      setSelectedPlaca(data as Placa);
+      setPendingMapEditTarget(null);
+    };
+
+    void fetchTargetPlaca();
+
+    return () => {
+      isEffectActive = false;
+    };
   }, [pendingMapEditTarget, selectedTemaId, selectedSubtemaId, loadingPlacas, placas]);
 
   useEffect(() => {

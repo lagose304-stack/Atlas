@@ -13,6 +13,8 @@ CREATE OR REPLACE FUNCTION public.classify_waiting_plate(
 )
 RETURNS BIGINT
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_waiting RECORD;

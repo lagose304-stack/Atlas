@@ -9,7 +9,7 @@ import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
 import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
 import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
-import TincionAccordionSelector from '../components/TincionAccordionSelector';
+import PlateEditorPanel from '../components/PlateEditorPanel';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
@@ -217,6 +217,10 @@ const MoverPlaca: React.FC = () => {
   const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
   const [namingSenaladoIndex, setNamingSenaladoIndex] = useState<number | null>(null);
   const [forceLocationAssignment, setForceLocationAssignment] = useState(false);
+  const [multipleSenaladoActivo, setMultipleSenaladoActivo] = useState(false);
+  const [multipleSenaladoLabel, setMultipleSenaladoLabel] = useState('');
+  const [multipleSenaladoPromptOpen, setMultipleSenaladoPromptOpen] = useState(false);
+  const [multipleSenaladoBatchOpen, setMultipleSenaladoBatchOpen] = useState(false);
   const [editComentario,    setEditComentario]    = useState('');
   const [showEditComentario, setShowEditComentario] = useState(false);
   const [editTincion,       setEditTincion]       = useState('');
@@ -225,6 +229,19 @@ const MoverPlaca: React.FC = () => {
   const [isSaving,    setIsSaving]    = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError,   setSaveError]   = useState('');
+
+  const appendMultipleSenaladoSlot = useCallback((label: string) => {
+    const nextIndex = editSenalados.length;
+    setEditSenalados(prev => [...prev, label]);
+    setEditSenaladosPos(prev => [...prev, null]);
+    setEditingSenaladoIndex(nextIndex);
+    return nextIndex;
+  }, [editSenalados.length]);
+
+  const handleAddMultipleSenalado = useCallback(() => {
+    setMultipleSenaladoActivo(true);
+    setMultipleSenaladoPromptOpen(true);
+  }, []);
 
   const fetchTemas = useCallback(async (): Promise<boolean> => {
     setLoadingTemas(true);
@@ -525,6 +542,7 @@ const MoverPlaca: React.FC = () => {
         setPlacas(prev => prev.map(p => p.id === selectedPlaca.id ? updated : p));
         setSelectedPlaca(updated);
       }
+      setSelectedPlaca(null);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err) {
@@ -545,6 +563,16 @@ const MoverPlaca: React.FC = () => {
     user?.id,
     user?.username,
   ]);
+
+  const getSenaladoGroupIndices = useCallback((index: number) => {
+    const targetLabel = (editSenalados[index] ?? '').trim();
+    return targetLabel
+      ? editSenalados.reduce<number[]>((acc, value, currentIndex) => {
+          if ((value ?? '').trim() === targetLabel) acc.push(currentIndex);
+          return acc;
+        }, [])
+      : [index];
+  }, [editSenalados]);
 
   const temasByParcial: Record<ParcialKey, Tema[]> = { primer: [], segundo: [], tercer: [] };
   temas.forEach(t => {
@@ -1022,112 +1050,68 @@ const MoverPlaca: React.FC = () => {
                   </div>
                 </div>
 
-                {/* ── Tinción ── */}
-                <div style={s.editFieldGroup}>
-                  {!showEditTincion ? (
-                    <button
-                      type="button"
-                      style={s.addTincionBtn}
-                      onClick={() => setShowEditTincion(true)}
-                    >
-                      🧪 Añadir / editar tinción
-                    </button>
-                  ) : (
-                    <>
-                      <label style={{ ...s.selectLabel, color: '#b45309' }}>🧪 Tinción</label>
-                      <TincionAccordionSelector value={editTincion} onChange={setEditTincion} />
-                    </>
-                  )}
-                </div>
+                <PlateEditorPanel
+                  title="Editar placa"
+                  imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'thumb')}
+                  imageAlt="Miniatura de la placa que estás editando"
+                  primaryActionLabel="💾 Guardar cambios"
+                  primaryActionLoading={isSaving}
+                  primaryActionDisabled={!hasChanges || isSaving || !editTemaId || !editSubtemaId}
+                  primaryActionFeedback={saveError || (saveSuccess ? 'Placa reasignada correctamente.' : '')}
+                  primaryActionFeedbackTone={saveError ? 'error' : saveSuccess ? 'success' : 'info'}
+                  onPrimaryAction={handleSave}
+                  aumento={editAumento}
+                  onAumentoChange={setEditAumento}
+                  showTincion={showEditTincion}
+                  onShowTincion={() => setShowEditTincion(true)}
+                  tincion={editTincion}
+                  onTincionChange={setEditTincion}
+                  senalados={editSenalados}
+                  senaladosPos={editSenaladosPos}
+                  onSenaladoChange={(index, value) => {
+                    const updated = [...editSenalados];
+                    updated[index] = value;
+                    setEditSenalados(updated);
+                  }}
+                  onRemoveSenalado={(index) => {
+                    setEditSenalados(prev => prev.filter((_, i) => i !== index));
+                    setEditSenaladosPos(prev => prev.filter((_, i) => i !== index));
+                  }}
+                  onOpenSenaladoLocation={(index) => {
+                    const groupIndices = getSenaladoGroupIndices(index);
 
-                {/* ── Señalados ── */}
-                <div style={s.editFieldGroup}>
-                  <label style={s.selectLabel}>📌 Señalados</label>
-                  {editSenalados.map((val, idx) => (
-                    <div key={idx} style={s.senalRow}>
-                      <span style={s.senalNumber}>{idx + 1}</span>
-                      <BoldField
-                        as="input"
-                        inline
-                        style={s.senalInput}
-                        value={val}
-                        placeholder={`Señalado ${idx + 1}`}
-                        onChange={v => {
-                          const updated = [...editSenalados];
-                          updated[idx] = v;
-                          setEditSenalados(updated);
-                        }}
-                        onFocus={e => (e.currentTarget.style.borderColor = '#818cf8')}
-                        onBlur={e => (e.currentTarget.style.borderColor = '#cbd5e1')}
-                      />
-                      <button
-                        type="button"
-                        style={s.senalRemoveBtn}
-                        title="Eliminar señalado"
-                        onClick={() => {
-                          setEditSenalados(prev => prev.filter((_, i) => i !== idx));
-                          setEditSenaladosPos(prev => prev.filter((_, i) => i !== idx));
-                        }}
-                      >✕</button>
-                      <button
-                        type="button"
-                        style={{ ...s.addSenalBtn, padding: '6px 10px' }}
-                        onClick={() => {
-                          setForceLocationAssignment(false);
-                          setEditingSenaladoIndex(idx);
-                        }}
-                      >
-                        {editSenaladosPos[idx] ? '📍 Editar ubicación' : '📍 Ubicar'}
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    style={s.addSenalBtn}
-                    onClick={() => {
-                      const nextIndex = editSenalados.length;
-                      setEditSenalados(prev => [...prev, '']);
-                      setEditSenaladosPos(prev => [...prev, null]);
-                      setForceLocationAssignment(true);
-                      setEditingSenaladoIndex(nextIndex);
-                    }}
-                  >
-                    + Añadir señalado
-                  </button>
-                </div>
-
-                {/* ── Comentario ── */}
-                <div style={s.editFieldGroup}>
-                  {!showEditComentario ? (
-                    <button
-                      type="button"
-                      style={s.addComentarioBtn}
-                      onClick={() => setShowEditComentario(true)}
-                    >
-                      💬 Añadir / editar comentario
-                    </button>
-                  ) : (
-                    <>
-                      <label style={{ ...s.selectLabel, color: '#4f46e5' }}>💬 Comentario</label>
-                      <BoldField
-                        as="textarea"
-                        style={s.comentarioField}
-                        value={editComentario}
-                        placeholder="Escribe un comentario para esta placa..."
-                        onChange={setEditComentario}
-                      />
-                      {editComentario && (
-                        <button
-                          type="button"
-                          style={s.clearComentarioBtn}
-                          onClick={() => { setEditComentario(''); setShowEditComentario(false); }}
-                        >
-                          🗑️ Eliminar comentario
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
+                    setForceLocationAssignment(false);
+                    setEditingSenaladoIndex(groupIndices[0] ?? index);
+                  }}
+                  onAddSenalado={() => {
+                    const nextIndex = editSenalados.length;
+                    setEditSenalados(prev => [...prev, '']);
+                    setEditSenaladosPos(prev => [...prev, null]);
+                    setForceLocationAssignment(true);
+                    setEditingSenaladoIndex(nextIndex);
+                  }}
+                  onAddMultipleSenalado={handleAddMultipleSenalado}
+                  showComentario={showEditComentario}
+                  onShowComentario={() => setShowEditComentario(true)}
+                  comentario={editComentario}
+                  onComentarioChange={setEditComentario}
+                  onClearComentario={() => { setEditComentario(''); setShowEditComentario(false); }}
+                  onRequestClose={() => {
+                    setMultipleSenaladoActivo(false);
+                    setMultipleSenaladoLabel('');
+                    setMultipleSenaladoPromptOpen(false);
+                    setMultipleSenaladoBatchOpen(false);
+                    setSelectedPlaca(null);
+                  }}
+                  labels={{
+                    aumento: '🔬 Aumento',
+                    addTincion: '🧪 Añadir / editar tinción',
+                    addComentario: '💬 Añadir / editar comentario',
+                    comentario: '💬 Comentario',
+                    removeComentario: '🗑️ Eliminar comentario',
+                    senalados: '📌 Señalados',
+                  }}
+                />
 
                 {/* Destino */}
                 {editTema && editSubtema && (
@@ -1146,21 +1130,6 @@ const MoverPlaca: React.FC = () => {
                 {saveSuccess && (
                   <p style={s.successMsg}>✅ Placa reasignada correctamente</p>
                 )}
-
-                {/* Botón guardar */}
-                <button
-                  style={hasChanges && !isSaving && editTemaId && editSubtemaId
-                    ? s.saveBtn
-                    : s.saveBtnDisabled}
-                  disabled={!hasChanges || isSaving || !editTemaId || !editSubtemaId}
-                  onClick={handleSave}
-                >
-                  {isSaving
-                    ? 'Guardando...'
-                    : hasChanges
-                    ? '💾 Guardar cambios'
-                    : '— Sin cambios —'}
-                </button>
               </div>
             </div>
           </div>
@@ -1183,6 +1152,10 @@ const MoverPlaca: React.FC = () => {
             setEditingSenaladoIndex(null);
             setNamingSenaladoIndex(null);
             setForceLocationAssignment(false);
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
+            setMultipleSenaladoPromptOpen(false);
+            setMultipleSenaladoBatchOpen(false);
           }}
           onSave={(location) => {
             const targetIndex = editingSenaladoIndex;
@@ -1195,6 +1168,14 @@ const MoverPlaca: React.FC = () => {
             const currentLabel = (editSenalados[targetIndex] ?? '').trim();
             if (!currentLabel) {
               setNamingSenaladoIndex(targetIndex);
+              setEditingSenaladoIndex(null);
+              return;
+            }
+
+            if (multipleSenaladoActivo) {
+              setMultipleSenaladoLabel(currentLabel);
+              appendMultipleSenaladoSlot(currentLabel);
+              return;
             }
 
             setForceLocationAssignment(false);
@@ -1223,6 +1204,50 @@ const MoverPlaca: React.FC = () => {
               return next;
             });
             setNamingSenaladoIndex(null);
+          }}
+        />
+      )}
+
+      {multipleSenaladoPromptOpen && selectedPlaca && (
+        <RequiredTextPromptModal
+          title="Nombre del grupo de señalados"
+          description="Escribe el nombre común que se repetirá para todos los puntos que vas a capturar ahora."
+          placeholder="Ej: Células basales"
+          required
+          cancelLabel="Cancelar"
+          onCancel={() => {
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
+            setMultipleSenaladoPromptOpen(false);
+          }}
+          onSubmit={(value) => {
+            const normalized = value.trim();
+            setMultipleSenaladoLabel(normalized);
+            setMultipleSenaladoPromptOpen(false);
+            setMultipleSenaladoBatchOpen(true);
+          }}
+        />
+      )}
+
+      {multipleSenaladoBatchOpen && selectedPlaca && (
+        <SenaladoLocationPicker
+          imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
+          senaladoLabel={multipleSenaladoLabel}
+          batchMode
+          batchSaveLabel="Guardar todos"
+          onCancel={() => {
+            setMultipleSenaladoBatchOpen(false);
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
+          }}
+          onSave={() => {}}
+          onBatchSave={(locations) => {
+            if (locations.length === 0) return;
+            setEditSenalados(prev => [...prev, ...locations.map(() => multipleSenaladoLabel)]);
+            setEditSenaladosPos(prev => [...prev, ...locations]);
+            setMultipleSenaladoBatchOpen(false);
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
           }}
         />
       )}

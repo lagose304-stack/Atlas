@@ -26,4 +26,71 @@ VALUES
   ('PAS', 110, TRUE)
 ON CONFLICT (nombre) DO NOTHING;
 
-GRANT SELECT ON TABLE public.tinciones TO anon, authenticated;
+ALTER TABLE public.tinciones ENABLE ROW LEVEL SECURITY;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.tinciones TO anon, authenticated;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'tinciones'
+      AND policyname = 'Permitir lectura de tinciones'
+  ) THEN
+    CREATE POLICY "Permitir lectura de tinciones"
+      ON public.tinciones
+      FOR SELECT
+      USING (true);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'tinciones'
+      AND policyname = 'Permitir insercion de tinciones'
+  ) THEN
+    CREATE POLICY "Permitir insercion de tinciones"
+      ON public.tinciones
+      FOR INSERT
+      WITH CHECK (true);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'tinciones'
+      AND policyname = 'Permitir actualizacion de tinciones'
+  ) THEN
+    CREATE POLICY "Permitir actualizacion de tinciones"
+      ON public.tinciones
+      FOR UPDATE
+      USING (true)
+      WITH CHECK (true);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'tinciones'
+      AND policyname = 'Permitir eliminacion de tinciones'
+  ) THEN
+    CREATE POLICY "Permitir eliminacion de tinciones"
+      ON public.tinciones
+      FOR DELETE
+      USING (true);
+  END IF;
+END $$;

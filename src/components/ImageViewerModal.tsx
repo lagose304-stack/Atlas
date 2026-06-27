@@ -51,6 +51,21 @@ const SIDEBAR_BREAKPOINT = 900;
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 type PointerEdge = 'left' | 'right' | 'top' | 'bottom';
 type MarkerVisualMode = 'pointer' | 'arrow';
+type MarkerColorKey = 'black' | 'white' | 'red' | 'lime';
+
+interface MarkerColorOption {
+  key: MarkerColorKey;
+  label: string;
+  fill: string;
+  edge: string;
+}
+
+const MARKER_COLOR_OPTIONS: MarkerColorOption[] = [
+  { key: 'black', label: 'Negro', fill: '#0a0a0a', edge: '#ffffff' },
+  { key: 'white', label: 'Blanco', fill: '#ffffff', edge: '#0f172a' },
+  { key: 'red', label: 'Rojo', fill: '#dc2626', edge: '#ffffff' },
+  { key: 'lime', label: 'Verde lima', fill: '#84cc16', edge: '#0f172a' },
+];
 
 const getPointerStartPx = (x: number, y: number, width: number, height: number) => {
   const distances = [
@@ -255,6 +270,35 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     }));
   }, [senalados, senaladosMeta]);
 
+  const groupedSenaladosItems = useMemo(() => {
+    const groups = new Map<string, { label: string; count: number; firstIndex: number; representativeIndex: number; representative: SenaladoMetaItem }>();
+
+    senaladosItems.forEach((item, index) => {
+      const label = item.label.trim();
+      if (!label) return;
+
+      const existing = groups.get(label);
+      if (!existing) {
+        groups.set(label, {
+          label,
+          count: 1,
+          firstIndex: index,
+          representativeIndex: index,
+          representative: item,
+        });
+        return;
+      }
+
+      existing.count += 1;
+      if (existing.representative.x == null && item.x != null && item.y != null) {
+        existing.representativeIndex = index;
+        existing.representative = item;
+      }
+    });
+
+    return Array.from(groups.values()).sort((a, b) => a.firstIndex - b.firstIndex);
+  }, [senaladosItems]);
+
   const hasInfo = !!(
     senaladosItems.length > 0 ||
     comentario ||
@@ -278,6 +322,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [hoveredMarkerIndex, setHoveredMarkerIndex] = useState<number | null>(null);
   const [focusedMarkerIndex, setFocusedMarkerIndex] = useState<number | null>(null);
   const [markerVisualMode, setMarkerVisualMode] = useState<MarkerVisualMode>('arrow');
+  const [markerColorKey, setMarkerColorKey] = useState<MarkerColorKey>('black');
   const [isDragging, setIsDragging] = useState(false);
   const [isPinching, setIsPinching] = useState(false);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
@@ -287,6 +332,26 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [showInteractiveMapViewer, setShowInteractiveMapViewer] = useState(false);
   const [isInteractiveMapCtaHovered, setIsInteractiveMapCtaHovered] = useState(false);
   const pointerClipId = useId();
+
+  const activeMarkerIndices = useMemo(() => {
+    if (activeMarkerIndex === null) return [];
+
+    const activeMarker = senaladosItems[activeMarkerIndex];
+    if (!activeMarker || !activeMarker.label.trim()) return [activeMarkerIndex];
+
+    const activeLabel = activeMarker.label.trim();
+    return senaladosItems
+      .map((item, index) => {
+        if (item.label.trim() !== activeLabel) return null;
+        if (item.x == null || item.y == null) return null;
+        return index;
+      })
+      .filter((index): index is number => index !== null);
+  }, [activeMarkerIndex, senaladosItems]);
+
+  const activeMarkerColor = useMemo(() => {
+    return MARKER_COLOR_OPTIONS.find(option => option.key === markerColorKey) ?? MARKER_COLOR_OPTIONS[0];
+  }, [markerColorKey]);
 
   const containerRef   = useRef<HTMLDivElement>(null);
   const imageRef       = useRef<HTMLImageElement>(null);
@@ -341,6 +406,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     setMarkerVisible(false);
     setHoveredMarkerIndex(null);
     setFocusedMarkerIndex(null);
+    setMarkerColorKey('black');
   }, [src, senaladosMeta, senalados]);
 
   useEffect(() => {
@@ -1129,86 +1195,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               />
             )}
 
-            {displayedMarkerIndex !== null && imageSize && (() => {
-              const marker = senaladosItems[displayedMarkerIndex];
-              if (!marker || marker.x == null || marker.y == null) return null;
-              const endPx = {
-                x: marker.x * imageSize.width,
-                y: marker.y * imageSize.height,
-              };
-              const hasManualStart = marker.startX != null && marker.startY != null;
-              const manualStart = hasManualStart
-                ? clampPointToNearestEdge(
-                  (marker.startX ?? 0) * imageSize.width,
-                  (marker.startY ?? 0) * imageSize.height,
-                  imageSize.width,
-                  imageSize.height
-                )
-                : null;
-              const autoStart = getPointerStartPx(endPx.x, endPx.y, imageSize.width, imageSize.height);
-              const startPx = manualStart
-                ? manualStart
-                : enforceMinimumInclination(
-                  autoStart,
-                  endPx,
-                  imageSize.width,
-                  imageSize.height,
-                  POINTER_MIN_ANGLE_DEG
-                );
-              const directionLen = Math.hypot(endPx.x - startPx.x, endPx.y - startPx.y) || 1;
-              const ux = (endPx.x - startPx.x) / directionLen;
-              const uy = (endPx.y - startPx.y) / directionLen;
-              const drawStartPx = {
-                x: startPx.x - ux * POINTER_BASE_OUTSET_PX,
-                y: startPx.y - uy * POINTER_BASE_OUTSET_PX,
-              };
-              const tipInsetPoint = {
-                x: endPx.x - ux * POINTER_OUTLINE_TIP_BACKOFF_PX,
-                y: endPx.y - uy * POINTER_OUTLINE_TIP_BACKOFF_PX,
-              };
-              const outline = getPointerPolygon(drawStartPx, tipInsetPoint, POINTER_OUTLINE_WIDTH_PX, POINTER_TAPER_PX);
-              const core = getPointerPolygon(drawStartPx, endPx, POINTER_CORE_WIDTH_PX, POINTER_TAPER_PX);
-              // SVG base: puntos fijos del SVG de referencia
-              const svgPoints = [
-                { x: 140, y: 80 },
-                { x: 30, y: 20 },
-                { x: 55, y: 80 },
-                { x: 30, y: 140 }
-              ];
-              // Calcula la transformación para alinear la punta y la cola
-              // Punta SVG: (140,80), Cola SVG: (30,80) (punto medio entre 30,20 y 30,140)
-              const svgTip = { x: 140, y: 80 };
-              const svgTail = { x: 30, y: 80 };
-              const actualTip = endPx;
-              const actualTail = {
-                x: endPx.x - ux * Math.min(ARROW_TAIL_DISTANCE_PX, directionLen * 0.95),
-                y: endPx.y - uy * Math.min(ARROW_TAIL_DISTANCE_PX, directionLen * 0.95)
-              };
-              // Vector SVG y real
-              const vSvg = { x: svgTip.x - svgTail.x, y: svgTip.y - svgTail.y };
-              const vReal = { x: actualTip.x - actualTail.x, y: actualTip.y - actualTail.y };
-              const lenSvg = Math.hypot(vSvg.x, vSvg.y);
-              const lenReal = Math.hypot(vReal.x, vReal.y);
-              const scale = lenReal / lenSvg;
-              const angleSvg = Math.atan2(vSvg.y, vSvg.x);
-              const angleReal = Math.atan2(vReal.y, vReal.x);
-              const rotation = angleReal - angleSvg;
-              // Matriz de transformación SVG
-              const cos = Math.cos(rotation);
-              const sin = Math.sin(rotation);
-              function transformPoint(pt: { x: number; y: number }) {
-                // Trasladar al origen (cola SVG), rotar, escalar, trasladar a actualTail
-                const x0 = pt.x - svgTail.x;
-                const y0 = pt.y - svgTail.y;
-                const xr = x0 * cos - y0 * sin;
-                const yr = x0 * sin + y0 * cos;
-                return {
-                  x: actualTail.x + xr * scale,
-                  y: actualTail.y + yr * scale
-                };
-              }
-              const transformedPoints = svgPoints.map(transformPoint);
-              const pointsStr = transformedPoints.map(p => `${p.x},${p.y}`).join(' ');
+            {activeMarkerIndices.length > 0 && imageSize && (() => {
               return (
                 <svg
                   style={{
@@ -1219,7 +1206,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                     overflow: 'visible',
                     opacity: markerVisible ? 1 : 0,
                     transform: markerVisible ? 'translateY(0px) scale(1)' : 'translateY(2px) scale(0.992)',
-                    transformOrigin: `${endPx.x}px ${endPx.y}px`,
                     filter: markerVisible ? 'blur(0px)' : 'blur(0.4px)',
                     transition: `opacity ${MARKER_FADE_IN_MS}ms ease, transform ${MARKER_FADE_IN_MS}ms ease, filter ${MARKER_FADE_IN_MS}ms ease`,
                   }}
@@ -1233,37 +1219,121 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                     </clipPath>
                   </defs>
                   <g clipPath={`url(#${pointerClipId})`}>
-                    {markerVisualMode === 'arrow' ? (
-                      <>
-                        <polygon
-                          points={pointsStr}
-                          fill="none"
-                          stroke="white"
-                          strokeWidth={1.2}
-                          strokeLinejoin="round"
-                          shapeRendering="geometricPrecision"
-                        />
-                        <polygon
-                          points={pointsStr}
-                          fill="black"
-                          stroke="none"
-                          shapeRendering="geometricPrecision"
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <polygon
-                          points={polygonPoints(outline)}
-                          fill="rgba(255,255,255,0.6)"
-                          shapeRendering="geometricPrecision"
-                        />
-                        <polygon
-                          points={polygonPoints(core)}
-                          fill="#0a0a0a"
-                          shapeRendering="geometricPrecision"
-                        />
-                      </>
-                    )}
+                    {activeMarkerIndices.map((markerIndex) => {
+                      const marker = senaladosItems[markerIndex];
+                      if (!marker || marker.x == null || marker.y == null) return null;
+                      const endPx = {
+                        x: marker.x * imageSize.width,
+                        y: marker.y * imageSize.height,
+                      };
+                      const hasManualStart = marker.startX != null && marker.startY != null;
+                      const manualStart = hasManualStart
+                        ? clampPointToNearestEdge(
+                          (marker.startX ?? 0) * imageSize.width,
+                          (marker.startY ?? 0) * imageSize.height,
+                          imageSize.width,
+                          imageSize.height
+                        )
+                        : null;
+                      const autoStart = getPointerStartPx(endPx.x, endPx.y, imageSize.width, imageSize.height);
+                      const startPx = manualStart
+                        ? manualStart
+                        : enforceMinimumInclination(
+                          autoStart,
+                          endPx,
+                          imageSize.width,
+                          imageSize.height,
+                          POINTER_MIN_ANGLE_DEG
+                        );
+                      const directionLen = Math.hypot(endPx.x - startPx.x, endPx.y - startPx.y) || 1;
+                      const ux = (endPx.x - startPx.x) / directionLen;
+                      const uy = (endPx.y - startPx.y) / directionLen;
+                      const drawStartPx = {
+                        x: startPx.x - ux * POINTER_BASE_OUTSET_PX,
+                        y: startPx.y - uy * POINTER_BASE_OUTSET_PX,
+                      };
+                      const tipInsetPoint = {
+                        x: endPx.x - ux * POINTER_OUTLINE_TIP_BACKOFF_PX,
+                        y: endPx.y - uy * POINTER_OUTLINE_TIP_BACKOFF_PX,
+                      };
+                      const outline = getPointerPolygon(drawStartPx, tipInsetPoint, POINTER_OUTLINE_WIDTH_PX, POINTER_TAPER_PX);
+                      const core = getPointerPolygon(drawStartPx, endPx, POINTER_CORE_WIDTH_PX, POINTER_TAPER_PX);
+                      const svgPoints = [
+                        { x: 140, y: 80 },
+                        { x: 30, y: 20 },
+                        { x: 55, y: 80 },
+                        { x: 30, y: 140 }
+                      ];
+                      const svgTip = { x: 140, y: 80 };
+                      const svgTail = { x: 30, y: 80 };
+                      const actualTip = endPx;
+                      const actualTail = {
+                        x: endPx.x - ux * Math.min(ARROW_TAIL_DISTANCE_PX, directionLen * 0.95),
+                        y: endPx.y - uy * Math.min(ARROW_TAIL_DISTANCE_PX, directionLen * 0.95)
+                      };
+                      const vSvg = { x: svgTip.x - svgTail.x, y: svgTip.y - svgTail.y };
+                      const vReal = { x: actualTip.x - actualTail.x, y: actualTip.y - actualTail.y };
+                      const lenSvg = Math.hypot(vSvg.x, vSvg.y);
+                      const lenReal = Math.hypot(vReal.x, vReal.y);
+                      const scale = lenReal / lenSvg;
+                      const angleSvg = Math.atan2(vSvg.y, vSvg.x);
+                      const angleReal = Math.atan2(vReal.y, vReal.x);
+                      const rotation = angleReal - angleSvg;
+                      const cos = Math.cos(rotation);
+                      const sin = Math.sin(rotation);
+                      function transformPoint(pt: { x: number; y: number }) {
+                        const x0 = pt.x - svgTail.x;
+                        const y0 = pt.y - svgTail.y;
+                        const xr = x0 * cos - y0 * sin;
+                        const yr = x0 * sin + y0 * cos;
+                        return {
+                          x: actualTail.x + xr * scale,
+                          y: actualTail.y + yr * scale
+                        };
+                      }
+                      const transformedPoints = svgPoints.map(transformPoint);
+                      const pointsStr = transformedPoints.map(p => `${p.x},${p.y}`).join(' ');
+
+                      const selectedFill = activeMarkerColor.fill;
+                      const selectedEdge = activeMarkerColor.edge;
+
+                      return (
+                        <g key={markerIndex} opacity={markerVisible ? 1 : 0}>
+                          {markerVisualMode === 'arrow' ? (
+                            <>
+                              <polygon
+                                points={pointsStr}
+                                fill="none"
+                                stroke={selectedEdge}
+                                strokeWidth={1.2}
+                                strokeLinejoin="round"
+                                shapeRendering="geometricPrecision"
+                              />
+                              <polygon
+                                points={pointsStr}
+                                fill={selectedFill}
+                                stroke="none"
+                                shapeRendering="geometricPrecision"
+                              />
+                            </>
+                          ) : (
+                            <>
+                              <polygon
+                                points={polygonPoints(outline)}
+                                fill={selectedEdge}
+                                opacity={selectedFill === '#ffffff' ? 0.85 : 0.55}
+                                shapeRendering="geometricPrecision"
+                              />
+                              <polygon
+                                points={polygonPoints(core)}
+                                fill={selectedFill}
+                                shapeRendering="geometricPrecision"
+                              />
+                            </>
+                          )}
+                        </g>
+                      );
+                    })}
                   </g>
                 </svg>
               );
@@ -1535,7 +1605,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               </div>
             )}
 
-            {senaladosItems.length > 0 && (
+            {groupedSenaladosItems.length > 0 && (
               <div style={sidebarSectionStyle}>
                 <span style={labelStyle}>Señalados</span>
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
@@ -1580,14 +1650,44 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                     Señalador
                   </button>
                 </div>
-                <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {senaladosItems.map((item, i) => {
-                    const hasMarker = item.x != null && item.y != null;
-                    const isActive = activeMarkerIndex === i;
-                    const isHovered = hoveredMarkerIndex === i;
-                    const isFocused = focusedMarkerIndex === i;
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.72em', fontWeight: 800, color: '#64748b', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Color</span>
+                  {MARKER_COLOR_OPTIONS.map(option => {
+                    const isActiveColor = markerColorKey === option.key;
                     return (
-                    <li key={i} style={{
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => setMarkerColorKey(option.key)}
+                        title={option.label}
+                        aria-label={`Cambiar color a ${option.label}`}
+                        style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '999px',
+                          border: isActiveColor ? `2px solid ${option.edge}` : '1px solid #cbd5e1',
+                          background: option.fill,
+                          boxShadow: isActiveColor ? '0 0 0 3px rgba(96,165,250,0.18)' : 'none',
+                          cursor: 'pointer',
+                          padding: 0,
+                          outline: 'none',
+                          transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease',
+                          transform: isActiveColor ? 'scale(1.08)' : 'scale(1)',
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {groupedSenaladosItems.map((group, groupIndex) => {
+                    const item = group.representative;
+                    const hasMarker = item.x != null && item.y != null;
+                    const indexToUse = group.representativeIndex;
+                    const isActive = activeMarkerIndex === indexToUse;
+                    const isHovered = hoveredMarkerIndex === indexToUse;
+                    const isFocused = focusedMarkerIndex === indexToUse;
+                    return (
+                    <li key={`${group.label}-${groupIndex}`} style={{
                       display: 'flex',
                       alignItems: 'stretch',
                       gap: '10px',
@@ -1598,7 +1698,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                       boxShadow: isActive ? '0 8px 18px rgba(37,99,235,0.12)' : '0 1px 0 rgba(148,163,184,0.12)',
                       transition: 'all 0.2s ease',
                       animation: 'senaladoCardIn 320ms ease both',
-                      animationDelay: `${i * 45}ms`,
+                      animationDelay: `${group.firstIndex * 45}ms`,
                     }}>
                       <span style={{
                         minWidth: '24px',
@@ -1618,21 +1718,21 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                         flexShrink: 0,
                         marginTop: '6px',
                         boxShadow: isActive ? '0 4px 10px rgba(37,99,235,0.35)' : 'none',
-                      }}>{i + 1}</span>
+                      }}>{groupIndex + 1}</span>
                       <button
                         type="button"
                         disabled={!hasMarker}
                         onClick={() => {
                           if (!hasMarker) return;
-                          if (activeMarkerIndex === i) {
+                          if (activeMarkerIndex === indexToUse) {
                             setMarkerRecenterRequest(prev => prev + 1);
                             return;
                           }
-                          setActiveMarkerIndex(i);
+                          setActiveMarkerIndex(indexToUse);
                         }}
-                        onMouseEnter={() => { if (hasMarker) setHoveredMarkerIndex(i); }}
+                        onMouseEnter={() => { if (hasMarker) setHoveredMarkerIndex(indexToUse); }}
                         onMouseLeave={() => setHoveredMarkerIndex(null)}
-                        onFocus={() => setFocusedMarkerIndex(i)}
+                        onFocus={() => setFocusedMarkerIndex(indexToUse)}
                         onBlur={() => setFocusedMarkerIndex(null)}
                         aria-pressed={isActive}
                         style={{
@@ -1666,7 +1766,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                           outlineOffset: '1px',
                         }}
                       >
-                        <span style={{ flex: 1, minWidth: 0, letterSpacing: '0.01em', textAlign: 'center' }}>{renderBoldText(item.label)}</span>
+                        <span style={{ flex: 1, minWidth: 0, letterSpacing: '0.01em', textAlign: 'center' }}>
+                          {renderBoldText(item.label)}
+                          {group.count > 1 ? ` (${group.count})` : ''}
+                        </span>
                         <span style={{
                           fontSize: '0.66em',
                           fontWeight: 700,

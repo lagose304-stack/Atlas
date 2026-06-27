@@ -15,22 +15,74 @@ CREATE INDEX IF NOT EXISTS idx_placas_tema_id ON placas(tema_id);
 CREATE INDEX IF NOT EXISTS idx_placas_subtema_id ON placas(subtema_id);
 
 -- Habilitar Row Level Security
-ALTER TABLE placas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.placas ENABLE ROW LEVEL SECURITY;
 
--- Permitir lectura pública
-CREATE POLICY "Permitir lectura de placas" ON placas
-  FOR SELECT
-  USING (true);
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.placas TO anon, authenticated;
 
--- Permitir inserción (para usuarios autenticados o anónimos según tu config)
-CREATE POLICY "Permitir inserción de placas" ON placas
-  FOR INSERT
-  WITH CHECK (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'placas'
+      AND policyname = 'Permitir lectura de placas'
+  ) THEN
+    CREATE POLICY "Permitir lectura de placas"
+      ON public.placas
+      FOR SELECT
+      USING (true);
+  END IF;
+END $$;
 
--- Permitir eliminación
-CREATE POLICY "Permitir eliminación de placas" ON placas
-  FOR DELETE
-  USING (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'placas'
+      AND policyname = 'Permitir inserción de placas'
+  ) THEN
+    CREATE POLICY "Permitir inserción de placas"
+      ON public.placas
+      FOR INSERT
+      WITH CHECK (true);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'placas'
+      AND policyname = 'Permitir actualización de placas'
+  ) THEN
+    CREATE POLICY "Permitir actualización de placas"
+      ON public.placas
+      FOR UPDATE
+      USING (true)
+      WITH CHECK (true);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'placas'
+      AND policyname = 'Permitir eliminación de placas'
+  ) THEN
+    CREATE POLICY "Permitir eliminación de placas"
+      ON public.placas
+      FOR DELETE
+      USING (true);
+  END IF;
+END $$;
 
 -- Nota: La foto se guarda en Cloudinary en la carpeta:
 --   placas/{nombre_del_tema}/{nombre_del_subtema}

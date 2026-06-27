@@ -5,10 +5,9 @@ import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
-import BoldField from '../components/BoldField';
-import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
+import SenaladoLocationPicker from '../components/SenaladoLocationPicker.tsx';
 import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
-import TincionAccordionSelector from '../components/TincionAccordionSelector';
+import PlateEditorPanel from '../components/PlateEditorPanel';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
@@ -119,6 +118,12 @@ const ListaEspera: React.FC = () => {
 
   // ── Placa seleccionada ────────────────────────────────────────────────
   const [selected, setSelected] = useState<PlacaSinClasificar | null>(null);
+  const [preselectPlate, setPreselectPlate] = useState<PlacaSinClasificar | null>(null);
+  const [preselectModalOpen, setPreselectModalOpen] = useState(false);
+  const [temaIdTemp, setTemaIdTemp] = useState<number | null>(null);
+  const [subtemaIdTemp, setSubtemaIdTemp] = useState<number | null>(null);
+  const [tempSubtemas, setTempSubtemas] = useState<Subtema[]>([]);
+  const [loadingTempSubtemas, setLoadingTempSubtemas] = useState(false);
 
   // ── Formulario de clasificación ───────────────────────────────────────
   const [subtemas,        setSubtemas]        = useState<Subtema[]>([]);
@@ -134,6 +139,10 @@ const ListaEspera: React.FC = () => {
   const [showComentario,  setShowComentario]  = useState(false);
   const [tincion,         setTincion]         = useState('');
   const [showTincion,     setShowTincion]     = useState(false);
+  const [multipleSenaladoActivo, setMultipleSenaladoActivo] = useState(false);
+  const [multipleSenaladoLabel, setMultipleSenaladoLabel] = useState('');
+  const [multipleSenaladoPromptOpen, setMultipleSenaladoPromptOpen] = useState(false);
+  const [multipleSenaladoBatchOpen, setMultipleSenaladoBatchOpen] = useState(false);
 
   const [isSaving,    setIsSaving]    = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -180,6 +189,10 @@ const ListaEspera: React.FC = () => {
     setShowComentario(false);
     setTincion('');
     setShowTincion(false);
+    setMultipleSenaladoActivo(false);
+    setMultipleSenaladoLabel('');
+    setMultipleSenaladoPromptOpen(false);
+    setMultipleSenaladoBatchOpen(false);
     setSaveSuccess(false);
     setSaveError('');
   };
@@ -189,11 +202,14 @@ const ListaEspera: React.FC = () => {
       setSelected(null);
       resetForm();
       setMiniPage(1);
-    } else {
-      setSelected(placa);
-      resetForm();
-      setMiniPage(1);
+      return;
     }
+
+    // Abrir modal para elegir Tema/Subtema antes de abrir el editor
+    setPreselectPlate(placa);
+    setTemaIdTemp(null);
+    setSubtemaIdTemp(null);
+    setPreselectModalOpen(true);
   };
 
   // ── Cambio de tema en el form ─────────────────────────────────────────
@@ -211,6 +227,44 @@ const ListaEspera: React.FC = () => {
     if (data) setSubtemas(data);
     setLoadingSubtemas(false);
   };
+
+  const handleTemaTempChange = async (id: number | null) => {
+    setTemaIdTemp(id);
+    setSubtemaIdTemp(null);
+    setTempSubtemas([]);
+    if (!id) return;
+    setLoadingTempSubtemas(true);
+    const { data } = await supabase
+      .from('subtemas')
+      .select('id, nombre, tema_id')
+      .eq('tema_id', id)
+      .order('sort_order', { ascending: true });
+    if (data) setTempSubtemas(data);
+    setLoadingTempSubtemas(false);
+  };
+
+  const appendMultipleSenaladoSlot = useCallback((label: string) => {
+    const nextIndex = senalados.length;
+    setSenalados(prev => [...prev, label]);
+    setSenaladosPos(prev => [...prev, null]);
+    setEditingSenaladoIndex(nextIndex);
+    return nextIndex;
+  }, [senalados.length]);
+
+  const handleAddMultipleSenalado = useCallback(() => {
+    setMultipleSenaladoActivo(true);
+    setMultipleSenaladoPromptOpen(true);
+  }, []);
+
+  const getSenaladoGroupIndices = useCallback((index: number) => {
+    const targetLabel = (senalados[index] ?? '').trim();
+    return targetLabel
+      ? senalados.reduce<number[]>((acc, value, currentIndex) => {
+          if ((value ?? '').trim() === targetLabel) acc.push(currentIndex);
+          return acc;
+        }, [])
+      : [index];
+  }, [senalados]);
 
   // ── Clasificar y guardar ───────────────────────────────────────────────
   const handleClasificar = useCallback(async () => {
@@ -692,109 +746,68 @@ const ListaEspera: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Tinción */}
-                    <div style={s.fieldGroup}>
-                      {!showTincion ? (
-                        <button type="button" style={s.addOptBtn} onClick={() => setShowTincion(true)}>
-                          🧪 Añadir tinción
-                        </button>
-                      ) : (
-                        <>
-                          <label style={{ ...s.label, color: '#b45309' }}>🧪 Tinción</label>
-                          <TincionAccordionSelector value={tincion} onChange={setTincion} />
-                        </>
-                      )}
-                    </div>
+                    <PlateEditorPanel
+                      title="Clasificar placa"
+                      imageSrc={getCloudinaryImageUrl(selected.photo_url, 'thumb')}
+                      imageAlt="Miniatura de la placa en lista de espera"
+                      primaryActionLabel="💾 Clasificar y guardar placa"
+                      primaryActionLoading={isSaving}
+                      primaryActionDisabled={!canSave || isSaving}
+                      primaryActionFeedback={saveError || (saveSuccess ? 'Placa clasificada correctamente.' : '')}
+                      primaryActionFeedbackTone={saveError ? 'error' : saveSuccess ? 'success' : 'info'}
+                      onPrimaryAction={handleClasificar}
+                      aumento={aumento}
+                      onAumentoChange={setAumento}
+                      showTincion={showTincion}
+                      onShowTincion={() => setShowTincion(true)}
+                      tincion={tincion}
+                      onTincionChange={setTincion}
+                      senalados={senalados}
+                      senaladosPos={senaladosPos}
+                      onSenaladoChange={(index, value) => {
+                        const updated = [...senalados];
+                        updated[index] = value;
+                        setSenalados(updated);
+                      }}
+                      onRemoveSenalado={(index) => {
+                        const groupIndices = getSenaladoGroupIndices(index);
 
-                    {/* Señalados */}
-                    <div style={s.fieldGroup}>
-                      <label style={s.label}>📌 Señalados</label>
-                      {senalados.map((val, idx) => (
-                        <div key={idx} style={s.senalRow}>
-                          <span style={s.senalNum}>{idx + 1}</span>
-                          <BoldField
-                            as="input"
-                            inline
-                            style={s.senalInput}
-                            value={val}
-                            placeholder={`Señalado ${idx + 1}`}
-                            onChange={v => {
-                              const u = [...senalados];
-                              u[idx] = v;
-                              setSenalados(u);
-                            }}
-                            onFocus={e => (e.currentTarget.style.borderColor = '#818cf8')}
-                            onBlur={e => (e.currentTarget.style.borderColor = '#cbd5e1')}
-                          />
-                          <button type="button" style={s.senalRemBtn}
-                            onClick={() => {
-                              setSenalados(prev => prev.filter((_, i) => i !== idx));
-                              setSenaladosPos(prev => prev.filter((_, i) => i !== idx));
-                            }}>✕</button>
-                          <button
-                            type="button"
-                            style={{ ...s.addSenalBtn, padding: '6px 10px' }}
-                            onClick={() => setEditingSenaladoIndex(idx)}
-                          >
-                            {senaladosPos[idx] ? '📍 Editar ubicación' : '📍 Ubicar'}
-                          </button>
-                        </div>
-                      ))}
-                      <button type="button" style={s.addSenalBtn}
-                        onClick={() => {
-                          const nextIndex = senalados.length;
-                          setSenalados(prev => [...prev, '']);
-                          setSenaladosPos(prev => [...prev, null]);
-                          setEditingSenaladoIndex(nextIndex);
-                        }}>
-                        + Añadir señalado
-                      </button>
-                    </div>
+                        if (groupIndices.length > 1) {
+                          setSenalados(prev => prev.filter((_, currentIndex) => !groupIndices.includes(currentIndex)));
+                          setSenaladosPos(prev => prev.filter((_, currentIndex) => !groupIndices.includes(currentIndex)));
+                          return;
+                        }
 
-                    {/* Comentario */}
-                    <div style={s.fieldGroup}>
-                      {!showComentario ? (
-                        <button type="button" style={s.addComentBtn}
-                          onClick={() => setShowComentario(true)}>
-                          💬 Añadir comentario
-                        </button>
-                      ) : (
-                        <>
-                          <label style={{ ...s.label, color: '#4f46e5' }}>💬 Comentario</label>
-                          <BoldField
-                            as="textarea"
-                            style={s.comentarioField}
-                            value={comentario}
-                            placeholder="Escribe un comentario para esta placa..."
-                            onChange={setComentario}
-                          />
-                          {comentario && (
-                            <button type="button" style={s.clearOptBtn}
-                              onClick={() => { setComentario(''); setShowComentario(false); }}>
-                              🗑️ Quitar comentario
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
+                        setSenalados(prev => prev.filter((_, i) => i !== index));
+                        setSenaladosPos(prev => prev.filter((_, i) => i !== index));
+                      }}
+                      onOpenSenaladoLocation={(index) => {
+                        const groupIndices = getSenaladoGroupIndices(index);
 
-                    {/* Errores */}
-                    {saveError && (
-                      <div style={s.errorMsg}>{saveError}</div>
-                    )}
+                        if (groupIndices.length > 1) {
+                          setEditingSenaladoIndex(groupIndices[0]);
+                          return;
+                        }
 
-                    {/* Botón guardar */}
-                    <button
-                      style={canSave ? s.saveBtn : s.saveBtnDisabled}
-                      onClick={handleClasificar}
-                      disabled={!canSave}
-                    >
-                      {isSaving
-                        ? '⏳ Clasificando...'
-                        : !temaId || !subtemaId
-                        ? '— Elige tema y subtema para guardar —'
-                        : '💾 Clasificar y guardar placa'}
-                    </button>
+                        setEditingSenaladoIndex(index);
+                      }}
+                      onAddSenalado={() => {
+                        const nextIndex = senalados.length;
+                        setSenalados(prev => [...prev, '']);
+                        setSenaladosPos(prev => [...prev, null]);
+                        setEditingSenaladoIndex(nextIndex);
+                      }}
+                      onAddMultipleSenalado={handleAddMultipleSenalado}
+                      showComentario={showComentario}
+                      onShowComentario={() => setShowComentario(true)}
+                      comentario={comentario}
+                      onComentarioChange={setComentario}
+                      onClearComentario={() => { setComentario(''); setShowComentario(false); }}
+                      onRequestClose={() => {
+                        setSelected(null);
+                        resetForm();
+                      }}
+                    />
                   </div>
                 </div>
               </div>
@@ -808,16 +821,28 @@ const ListaEspera: React.FC = () => {
 
       {editingSenaladoIndex !== null && selected && (
         <SenaladoLocationPicker
+          key={`senalado-${editingSenaladoIndex}`}
           imageSrc={getCloudinaryImageUrl(selected.photo_url, 'view')}
           senaladoLabel={senalados[editingSenaladoIndex] ?? ''}
           initialLocation={senaladosPos[editingSenaladoIndex] ?? null}
-          onCancel={() => setEditingSenaladoIndex(null)}
+          onCancel={() => {
+            setEditingSenaladoIndex(null);
+            setNamingSenaladoIndex(null);
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
+            setMultipleSenaladoPromptOpen(false);
+            setMultipleSenaladoBatchOpen(false);
+          }}
           onRemove={() => {
             const targetIndex = editingSenaladoIndex;
             setSenalados(prev => prev.filter((_, i) => i !== targetIndex));
             setSenaladosPos(prev => prev.filter((_, i) => i !== targetIndex));
             setEditingSenaladoIndex(null);
             setNamingSenaladoIndex(null);
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
+            setMultipleSenaladoPromptOpen(false);
+            setMultipleSenaladoBatchOpen(false);
           }}
           onSave={(location) => {
             const targetIndex = editingSenaladoIndex;
@@ -830,6 +855,14 @@ const ListaEspera: React.FC = () => {
             const currentLabel = (senalados[targetIndex] ?? '').trim();
             if (!currentLabel) {
               setNamingSenaladoIndex(targetIndex);
+              setEditingSenaladoIndex(null);
+              return;
+            }
+
+            if (multipleSenaladoActivo) {
+              setMultipleSenaladoLabel(currentLabel);
+              appendMultipleSenaladoSlot(currentLabel);
+              return;
             }
 
             setEditingSenaladoIndex(null);
@@ -850,14 +883,174 @@ const ListaEspera: React.FC = () => {
             setEditingSenaladoIndex(targetIndex);
           }}
           onSubmit={(value) => {
+            const normalized = value.trim();
             setSenalados(prev => {
               const next = [...prev];
-              next[namingSenaladoIndex] = value;
+              next[namingSenaladoIndex] = normalized;
               return next;
             });
             setNamingSenaladoIndex(null);
+            if (multipleSenaladoActivo) {
+              appendMultipleSenaladoSlot(normalized);
+            }
           }}
         />
+      )}
+
+      {multipleSenaladoPromptOpen && (
+        <RequiredTextPromptModal
+          title="Nombre del grupo de señalados"
+          description="Escribe el nombre común que se repetirá para todos los puntos que vas a capturar ahora."
+          placeholder="Ej: Células basales"
+          required
+          cancelLabel="Cancelar"
+          onCancel={() => {
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
+            setMultipleSenaladoPromptOpen(false);
+          }}
+          onSubmit={(value) => {
+            const normalized = value.trim();
+            setMultipleSenaladoLabel(normalized);
+            setMultipleSenaladoPromptOpen(false);
+            setMultipleSenaladoBatchOpen(true);
+          }}
+        />
+      )}
+
+      {multipleSenaladoBatchOpen && selected && (
+        <SenaladoLocationPicker
+          imageSrc={getCloudinaryImageUrl(selected.photo_url, 'view')}
+          senaladoLabel={multipleSenaladoLabel}
+          batchMode
+          batchSaveLabel="Guardar todos"
+          onCancel={() => {
+            setMultipleSenaladoBatchOpen(false);
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
+          }}
+          onSave={() => {}}
+          onBatchSave={(locations) => {
+            if (locations.length === 0) return;
+            setSenalados(prev => [...prev, ...locations.map(() => multipleSenaladoLabel)]);
+            setSenaladosPos(prev => [...prev, ...locations]);
+            setMultipleSenaladoBatchOpen(false);
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
+          }}
+        />
+      )}
+
+      {preselectModalOpen && preselectPlate && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}
+          onClick={() => { setPreselectModalOpen(false); setPreselectPlate(null); }}
+        >
+          <div style={{ maxWidth: '720px', width: '92%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ background: 'rgba(248,250,252,0.9)', borderRadius: '12px', border: '1px solid rgba(15,23,42,0.08)', overflow: 'hidden', marginTop: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', borderBottom: '1px solid rgba(15,23,42,0.07)', background: 'rgba(255,255,255,0.6)' }}>
+                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg,#10b981,#34d399)' }} />
+                <span style={{ fontSize: '0.9em', fontWeight: 700, color: '#0f172a' }}>Selecciona tema y subtema</span>
+              </div>
+
+              <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'minmax(220px, 280px) minmax(0, 1fr)', gap: '16px', alignItems: 'start' }}>
+                <aside style={{ borderRadius: '18px', border: '1px solid #dbeafe', background: 'linear-gradient(180deg, #eff6ff 0%, #ffffff 100%)', boxShadow: '0 16px 40px rgba(15, 23, 42, 0.10)', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ fontSize: '0.88em', fontWeight: 900, color: '#1e293b' }}>Miniatura</div>
+                    <div style={{ fontSize: '0.82em', color: '#64748b' }}>Placa que esta editando</div>
+                  </div>
+                  <div style={{ borderRadius: '18px', overflow: 'hidden', background: '#0f172a', border: '1px solid rgba(148, 163, 184, 0.35)', aspectRatio: '3 / 4', minHeight: '340px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <img
+                      src={getCloudinaryImageUrl(preselectPlate.photo_url, 'view')}
+                      alt="Miniatura de la placa en lista de espera"
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                    />
+                  </div>
+                </aside>
+
+                <div style={{ minHeight: 0, overflow: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                  <div style={{ padding: '12px 14px', borderRadius: '10px', background: '#eff6ff', border: '1.5px solid #bfdbfe', color: '#1d4ed8', fontSize: '0.88em', fontWeight: 600, lineHeight: 1.5 }}>
+                    Esta selección solo prepara la placa dentro del editor. Nada se guarda hasta pulsar <strong>💾 Clasificar y guardar placa</strong>.
+                  </div>
+
+                  <div style={s.fieldGroup}>
+                    <label style={{ ...s.label, color: '#6366f1' }}>
+                      Tema <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <select
+                      style={s.select}
+                      value={temaIdTemp ?? ''}
+                      onChange={e => handleTemaTempChange(e.target.value ? Number(e.target.value) : null)}
+                    >
+                      <option value="">— Elige un tema —</option>
+                      {PARCIALES.map(({ key, label }) =>
+                        temasByParcial[key].length > 0 ? (
+                          <optgroup key={key} label={label}>
+                            {temasByParcial[key].map(t => (
+                              <option key={t.id} value={t.id}>{t.nombre}</option>
+                            ))}
+                          </optgroup>
+                        ) : null
+                      )}
+                    </select>
+                  </div>
+
+                  <div style={s.fieldGroup}>
+                    <label style={{ ...s.label, color: '#6366f1' }}>
+                      Subtema <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    {temaIdTemp ? (
+                      loadingTempSubtemas ? (
+                        <div style={s.inlineLoading}>
+                          <div style={s.spinnerSm} />
+                          Cargando subtemas...
+                        </div>
+                      ) : (
+                        <select
+                          style={{
+                            ...s.select,
+                            ...(!temaIdTemp ? s.selectDisabled : {}),
+                          }}
+                          value={subtemaIdTemp ?? ''}
+                          onChange={e => setSubtemaIdTemp(e.target.value ? Number(e.target.value) : null)}
+                          disabled={tempSubtemas.length === 0}
+                        >
+                          <option value="">
+                            {tempSubtemas.length === 0 ? '— Sin subtemas —' : '— Elige un subtema —'}
+                          </option>
+                          {tempSubtemas.map(s => (
+                            <option key={s.id} value={s.id}>{s.nombre}</option>
+                          ))}
+                        </select>
+                      )
+                    ) : (
+                      <div style={s.inlineLoading}>
+                        — Primero elige un tema —
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px', flexWrap: 'wrap' }}>
+                    <button type="button" style={{ padding: '9px 20px', borderRadius: '8px', border: '1.5px solid #cbd5e1', background: '#f8fafc', color: '#475569', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.92em' }} onClick={() => { setPreselectModalOpen(false); setPreselectPlate(null); setTemaIdTemp(null); setSubtemaIdTemp(null); setTempSubtemas([]); }}>Cancelar</button>
+                    <button type="button" style={{ padding: '9px 20px', borderRadius: '8px', border: 'none', background: (temaIdTemp && subtemaIdTemp) ? 'linear-gradient(135deg,#10b981,#34d399)' : '#e2e8f0', color: (temaIdTemp && subtemaIdTemp) ? '#fff' : '#94a3b8', fontWeight: 700, cursor: (temaIdTemp && subtemaIdTemp) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: '0.92em' }} disabled={!temaIdTemp || !subtemaIdTemp} onClick={() => {
+                      if (!preselectPlate) return;
+                      resetForm();
+                      setSelected(preselectPlate);
+                      setTemaId(temaIdTemp);
+                      setSubtemaId(subtemaIdTemp);
+                      setSubtemas(tempSubtemas);
+                      setPreselectModalOpen(false);
+                      setPreselectPlate(null);
+                      setMiniPage(1);
+                    }}>
+                      Abrir editor
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal confirmación borrar placa de espera */}

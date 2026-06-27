@@ -8,7 +8,7 @@ import bombillaIcon from '../assets/icons/bombilla.ico';
 
 const Home: React.FC = () => {
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
-  const [showDeviceTip, setShowDeviceTip] = useState(true);
+  const [showDeviceTip, setShowDeviceTip] = useState(false);
   const [isDeviceTipLeaving, setIsDeviceTipLeaving] = useState(false);
 
   useEffect(() => {
@@ -25,6 +25,27 @@ const Home: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 640px)');
+
+    const syncDeviceTipVisibility = () => {
+      const isPhoneViewport = mediaQuery.matches;
+      setShowDeviceTip(isPhoneViewport);
+      setIsDeviceTipLeaving(false);
+    };
+
+    syncDeviceTipVisibility();
+    mediaQuery.addEventListener('change', syncDeviceTipVisibility);
+
+    return () => {
+      mediaQuery.removeEventListener('change', syncDeviceTipVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showDeviceTip) {
+      return;
+    }
+
     let exitTimer: number | undefined;
 
     const hideTimer = window.setTimeout(() => {
@@ -40,7 +61,7 @@ const Home: React.FC = () => {
         window.clearTimeout(exitTimer);
       }
     };
-  }, []);
+  }, [showDeviceTip]);
 
   return (
     <div style={styles.container}>

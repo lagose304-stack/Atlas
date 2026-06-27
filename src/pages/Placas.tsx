@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageUploader from '../components/ImageUploader';
 import { supabase } from '../services/supabase';
@@ -10,6 +10,7 @@ import LoadingToast from '../components/LoadingToast';
 import BoldField from '../components/BoldField';
 import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
 import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
+import PlateEditorPanel from '../components/PlateEditorPanel';
 import TincionAccordionSelector from '../components/TincionAccordionSelector';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
@@ -316,6 +317,17 @@ const Placas: React.FC = () => {
   const [showComentario, setShowComentario] = useState(false);
   const [tincion, setTincion] = useState('');
   const [showTincion, setShowTincion] = useState(false);
+  const [multipleSenaladoActivo, setMultipleSenaladoActivo] = useState(false);
+  const [multipleSenaladoLabel, setMultipleSenaladoLabel] = useState('');
+  const [multipleSenaladoPromptOpen, setMultipleSenaladoPromptOpen] = useState(false);
+  const [multipleSenaladoBatchOpen, setMultipleSenaladoBatchOpen] = useState(false);
+  const [editingSenaladoGroup, setEditingSenaladoGroup] = useState<{ label: string; indices: number[] } | null>(null);
+  const [editingSenaladoGroupLocations, setEditingSenaladoGroupLocations] = useState<Array<MarkerLocation | null>>([]);
+
+  const handleAddMultipleSenalado = useCallback(() => {
+    setMultipleSenaladoActivo(true);
+    setMultipleSenaladoPromptOpen(true);
+  }, []);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -485,10 +497,15 @@ const Placas: React.FC = () => {
       setSenaladosPos([]);
       setEditingSenaladoIndex(null);
       setNamingSenaladoIndex(null);
+      setMultipleSenaladoActivo(false);
+      setMultipleSenaladoLabel('');
+      setMultipleSenaladoPromptOpen(false);
+      setMultipleSenaladoBatchOpen(false);
       setComentario('');
       setShowComentario(false);
       setTincion('');
       setShowTincion(false);
+      setShowClasificadasForm(false);
     } catch (err) {
       console.error('Error al guardar placa:', err);
       setSaveError('Error al guardar. Por favor intenta de nuevo.');
@@ -595,6 +612,12 @@ const Placas: React.FC = () => {
     setSenaladosPos([]);
     setEditingSenaladoIndex(null);
     setNamingSenaladoIndex(null);
+    setMultipleSenaladoActivo(false);
+    setMultipleSenaladoLabel('');
+    setMultipleSenaladoPromptOpen(false);
+    setMultipleSenaladoBatchOpen(false);
+    setEditingSenaladoGroup(null);
+    setEditingSenaladoGroupLocations([]);
     setComentario('');
     setShowComentario(false);
     setTincion('');
@@ -768,117 +791,105 @@ const Placas: React.FC = () => {
                         </div>
                       )}
 
-                      {/* --- Tinción --- */}
                       {selectedSubtema && (
-                        <div style={styles.editFieldGroup}>
-                          {!showTincion ? (
-                            <button
-                              type="button"
-                              style={styles.addTincionBtn}
-                              onClick={() => setShowTincion(true)}
-                            >
-                              🧪 Añadir tinción
-                            </button>
-                          ) : (
-                            <>
-                              <label style={{ ...styles.accordionLabel, color: '#b45309' }}>🧪 Tinción</label>
-                              <TincionAccordionSelector value={tincion} onChange={setTincion} />
-                            </>
-                          )}
-                        </div>
-                      )}
+                        <PlateEditorPanel
+                          title="Subir placa clasificada"
+                          imageSrc={selectedFilePreviewUrl ?? undefined}
+                          imageAlt={selectedFile?.name ? `Vista previa de ${selectedFile.name}` : 'Vista previa de la placa seleccionada'}
+                          primaryActionLabel="💾 Guardar placa"
+                          primaryActionLoading={isSaving}
+                          primaryActionDisabled={isSaving}
+                          primaryActionFeedback={saveError || (saveSuccess ? 'Placa guardada correctamente.' : '')}
+                          primaryActionFeedbackTone={saveError ? 'error' : saveSuccess ? 'success' : 'info'}
+                          onPrimaryAction={handleGuardar}
+                          aumento={selectedAumento}
+                          onAumentoChange={setSelectedAumento}
+                          showTincion={showTincion}
+                          onShowTincion={() => setShowTincion(true)}
+                          tincion={tincion}
+                          onTincionChange={setTincion}
+                          senalados={senalados}
+                          senaladosPos={senaladosPos}
+                          onSenaladoChange={(index, value) => {
+                            const updated = [...senalados];
+                            updated[index] = value;
+                            setSenalados(updated);
+                          }}
+                          onRemoveSenalado={(index) => {
+                            const targetLabel = (senalados[index] ?? '').trim();
+                            const groupIndices = targetLabel
+                              ? senalados.reduce<number[]>((acc, value, currentIndex) => {
+                                  if ((value ?? '').trim() === targetLabel) acc.push(currentIndex);
+                                  return acc;
+                                }, [])
+                              : [index];
 
-                      {/* --- Señalados --- */}
-                      {selectedSubtema && (
-                        <div style={styles.editFieldGroup}>
-                          <label style={styles.accordionLabel}>📌 Señalados</label>
-                          {senalados.map((val, idx) => (
-                            <div key={idx} style={styles.senalRow}>
-                              <span style={styles.senalNumber}>{idx + 1}</span>
-                              <BoldField
-                                as="input"
-                                inline
-                                style={styles.senalTextField}
-                                value={val}
-                                placeholder={`Señalado ${idx + 1}`}
-                                onChange={v => {
-                                  const updated = [...senalados];
-                                  updated[idx] = v;
-                                  setSenalados(updated);
-                                }}
-                                onFocus={e => (e.currentTarget.style.borderColor = '#818cf8')}
-                                onBlur={e => (e.currentTarget.style.borderColor = '#cbd5e1')}
-                              />
-                              <button
-                                type="button"
-                                style={styles.removeBtn}
-                                title="Eliminar señalado"
-                                onClick={() => {
-                                  setSenalados(prev => prev.filter((_, i) => i !== idx));
-                                  setSenaladosPos(prev => prev.filter((_, i) => i !== idx));
-                                }}
-                              >✕</button>
-                              <button
-                                type="button"
-                                style={{ ...styles.addBtn, padding: '6px 10px', marginTop: 0, borderStyle: 'solid' }}
-                                onClick={() => setEditingSenaladoIndex(idx)}
-                              >
-                                {senaladosPos[idx] ? '📍 Editar ubicación' : '📍 Ubicar'}
-                              </button>
-                            </div>
-                          ))}
-                          <button
-                            type="button"
-                            style={styles.addBtn}
-                            onClick={() => {
-                              const nextIndex = senalados.length;
-                              setSenalados(prev => [...prev, '']);
-                              setSenaladosPos(prev => [...prev, null]);
-                              setEditingSenaladoIndex(nextIndex);
-                            }}
-                          >
-                            + Añadir señalado
-                          </button>
-                        </div>
-                      )}
+                            if (groupIndices.length > 1) {
+                              setSenalados(prev => prev.filter((_, currentIndex) => !groupIndices.includes(currentIndex)));
+                              setSenaladosPos(prev => prev.filter((_, currentIndex) => !groupIndices.includes(currentIndex)));
+                              return;
+                            }
 
-                      {/* --- Comentario --- */}
-                      {selectedSubtema && (
-                        <div style={styles.editFieldGroup}>
-                          {!showComentario ? (
-                            <button
-                              type="button"
-                              style={styles.addComentarioBtn}
-                              onClick={() => setShowComentario(true)}
-                            >
-                              💬 Añadir comentario
-                            </button>
-                          ) : (
-                            <>
-                              <label style={{ ...styles.accordionLabel, color: '#4f46e5' }}>💬 Comentario</label>
-                              <BoldField
-                                as="textarea"
-                                style={styles.comentarioField}
-                                value={comentario}
-                                placeholder="Escribe un comentario para esta placa..."
-                                onChange={setComentario}
-                              />
-                            </>
-                          )}
-                        </div>
-                      )}
+                            setSenalados(prev => prev.filter((_, i) => i !== index));
+                            setSenaladosPos(prev => prev.filter((_, i) => i !== index));
+                          }}
+                          onOpenSenaladoLocation={(index) => {
+                            const targetLabel = (senalados[index] ?? '').trim();
+                            const groupIndices = targetLabel
+                              ? senalados.reduce<number[]>((acc, value, currentIndex) => {
+                                  if ((value ?? '').trim() === targetLabel) acc.push(currentIndex);
+                                  return acc;
+                                }, [])
+                              : [index];
 
-                      {selectedFile && selectedTema && selectedSubtema && (
-                        <button
-                          style={isSaving ? styles.saveButtonDisabled : styles.saveButton}
-                          onClick={handleGuardar}
-                          disabled={isSaving}
-                        >
-                          {isSaving ? 'Guardando...' : '💾 Guardar placa'}
-                        </button>
+                            if (groupIndices.length > 1) {
+                              setEditingSenaladoGroup({ label: targetLabel, indices: groupIndices });
+                              setEditingSenaladoGroupLocations(groupIndices.map(currentIndex => senaladosPos[currentIndex] ?? null));
+                              return;
+                            }
+
+                            setEditingSenaladoIndex(index);
+                          }}
+                          onAddSenalado={() => {
+                            setMultipleSenaladoActivo(false);
+                            setMultipleSenaladoLabel('');
+                            const nextIndex = senalados.length;
+                            setSenalados(prev => [...prev, '']);
+                            setSenaladosPos(prev => [...prev, null]);
+                            setEditingSenaladoIndex(nextIndex);
+                          }}
+                          onAddMultipleSenalado={handleAddMultipleSenalado}
+                          showComentario={showComentario}
+                          onShowComentario={() => setShowComentario(true)}
+                          comentario={comentario}
+                          onComentarioChange={setComentario}
+                          onClearComentario={() => {
+                            setComentario('');
+                            setShowComentario(false);
+                          }}
+                          onRequestClose={handleCancelForm}
+                        />
                       )}
-                      {saveSuccess && <div style={styles.successMsg}>✅ Placa guardada correctamente.</div>}
-                      {saveError && <div style={styles.errorMsg}>❌ {saveError}</div>}
+                      {multipleSenaladoPromptOpen && (
+                        <RequiredTextPromptModal
+                          title="Nombre del grupo de señalados"
+                          description="Escribe el nombre común que se repetirá para todos los puntos que vas a capturar ahora."
+                          placeholder="Ej: Células basales"
+                          required
+                          cancelLabel="Cancelar"
+                          onCancel={() => {
+                            setMultipleSenaladoActivo(false);
+                            setMultipleSenaladoLabel('');
+                            setMultipleSenaladoPromptOpen(false);
+                          }}
+                          onSubmit={(value) => {
+                            const normalized = value.trim();
+                            setMultipleSenaladoLabel(normalized);
+                            setMultipleSenaladoPromptOpen(false);
+                            setMultipleSenaladoBatchOpen(true);
+                          }}
+                        />
+                      )}
                     </>
                   )}
                   <button style={p.cancelBtn} onClick={handleCancelForm}>✕ Cancelar</button>
@@ -1108,16 +1119,24 @@ const Placas: React.FC = () => {
 
       {editingSenaladoIndex !== null && selectedFilePreviewUrl && (
         <SenaladoLocationPicker
+          key={`senalado-${editingSenaladoIndex}`}
           imageSrc={selectedFilePreviewUrl}
           senaladoLabel={senalados[editingSenaladoIndex] ?? ''}
           initialLocation={senaladosPos[editingSenaladoIndex] ?? null}
-          onCancel={() => setEditingSenaladoIndex(null)}
+          onCancel={() => {
+            setEditingSenaladoIndex(null);
+            setNamingSenaladoIndex(null);
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
+          }}
           onRemove={() => {
             const targetIndex = editingSenaladoIndex;
             setSenalados(prev => prev.filter((_, i) => i !== targetIndex));
             setSenaladosPos(prev => prev.filter((_, i) => i !== targetIndex));
             setEditingSenaladoIndex(null);
             setNamingSenaladoIndex(null);
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
           }}
           onSave={(location) => {
             const targetIndex = editingSenaladoIndex;
@@ -1130,6 +1149,14 @@ const Placas: React.FC = () => {
             const currentLabel = (senalados[targetIndex] ?? '').trim();
             if (!currentLabel) {
               setNamingSenaladoIndex(targetIndex);
+              setEditingSenaladoIndex(null);
+              return;
+            }
+
+            if (multipleSenaladoActivo) {
+              setMultipleSenaladoLabel(currentLabel);
+              appendMultipleSenaladoSlot(currentLabel);
+              return;
             }
 
             setEditingSenaladoIndex(null);
@@ -1150,12 +1177,70 @@ const Placas: React.FC = () => {
             setEditingSenaladoIndex(targetIndex);
           }}
           onSubmit={(value) => {
+            const normalized = value.trim();
             setSenalados(prev => {
               const next = [...prev];
-              next[namingSenaladoIndex] = value;
+              next[namingSenaladoIndex] = normalized;
               return next;
             });
             setNamingSenaladoIndex(null);
+          }}
+        />
+      )}
+
+      {multipleSenaladoBatchOpen && selectedFilePreviewUrl && (
+        <SenaladoLocationPicker
+          imageSrc={selectedFilePreviewUrl}
+          senaladoLabel={multipleSenaladoLabel}
+          batchMode
+          batchSaveLabel="Guardar todos"
+          onCancel={() => {
+            setMultipleSenaladoBatchOpen(false);
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
+          }}
+          onSave={() => {}}
+          onBatchSave={(locations) => {
+            if (locations.length === 0) return;
+            setSenalados(prev => [...prev, ...locations.map(() => multipleSenaladoLabel)]);
+            setSenaladosPos(prev => [...prev, ...locations]);
+            setMultipleSenaladoBatchOpen(false);
+            setMultipleSenaladoActivo(false);
+            setMultipleSenaladoLabel('');
+          }}
+        />
+      )}
+
+      {editingSenaladoGroup && selectedFilePreviewUrl && (
+        <SenaladoLocationPicker
+          imageSrc={selectedFilePreviewUrl}
+          senaladoLabel={editingSenaladoGroup.label}
+          batchMode
+          batchSaveLabel="Guardar cambios del grupo"
+          initialBatchLocations={editingSenaladoGroupLocations}
+          onCancel={() => {
+            setEditingSenaladoGroup(null);
+            setEditingSenaladoGroupLocations([]);
+          }}
+          onSave={() => {}}
+          onBatchSave={(locations) => {
+            const targetIndices = editingSenaladoGroup.indices;
+            const firstIndex = targetIndices[0] ?? 0;
+
+            setSenalados(prev => {
+              const remaining = prev.filter((_, currentIndex) => !targetIndices.includes(currentIndex));
+              remaining.splice(firstIndex, 0, ...locations.map(() => editingSenaladoGroup.label));
+              return remaining;
+            });
+
+            setSenaladosPos(prev => {
+              const remaining = prev.filter((_, currentIndex) => !targetIndices.includes(currentIndex));
+              remaining.splice(firstIndex, 0, ...locations);
+              return remaining;
+            });
+
+            setEditingSenaladoGroup(null);
+            setEditingSenaladoGroupLocations([]);
           }}
         />
       )}
