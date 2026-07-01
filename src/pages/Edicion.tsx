@@ -222,12 +222,6 @@ const Edicion: React.FC = () => {
               <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas/crear')}>
                 Crear
               </button>
-              <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas')}>
-                Editar
-              </button>
-              <button type="button" style={{ ...s.pagesBtn, borderColor: '#d8b4fe', background: '#faf5ff', color: '#7c3aed', cursor: 'default' }}>
-                Borrar
-              </button>
             </div>
           </div>}
 
