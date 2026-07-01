@@ -20,6 +20,8 @@ interface ImageViewerModalProps {
   onClose: () => void;
   placaId?: number | string | null;
   hasInteractiveMapHint?: boolean;
+  hideSidebar?: boolean;
+  initialMarkerVisualMode?: 'pointer' | 'arrow';
   temaNombre?: string;
   subtemaNombre?: string;
   aumento?: string | null;
@@ -242,6 +244,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   onClose,
   placaId,
   hasInteractiveMapHint,
+  hideSidebar = false,
+  initialMarkerVisualMode = 'arrow',
   temaNombre,
   subtemaNombre,
   aumento,
@@ -250,6 +254,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   comentario,
   tincion,
 }) => {
+  const resolvedInitialMarkerVisualMode: MarkerVisualMode = hideSidebar ? 'pointer' : initialMarkerVisualMode;
+  const resolvedInitialMarkerIndex = hideSidebar && ((senaladosMeta?.length ?? senalados?.length ?? 0) > 0) ? 0 : null;
+
   const senaladosItems = useMemo<SenaladoMetaItem[]>(() => {
     if (senaladosMeta && senaladosMeta.length > 0) {
       return senaladosMeta.map(item => ({
@@ -313,7 +320,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const [zoomLevel, setZoomLevel]   = useState(1);
   const [position, setPosition]     = useState({ x: 0, y: 0 });
-  const [activeMarkerIndex, setActiveMarkerIndex] = useState<number | null>(null);
+  const [activeMarkerIndex, setActiveMarkerIndex] = useState<number | null>(resolvedInitialMarkerIndex);
   const [markerRecenterRequest, setMarkerRecenterRequest] = useState(0);
   const [displayedMarkerIndex, setDisplayedMarkerIndex] = useState<number | null>(null);
   const [markerVisible, setMarkerVisible] = useState(false);
@@ -321,7 +328,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [isCommentHintExiting, setIsCommentHintExiting] = useState(false);
   const [hoveredMarkerIndex, setHoveredMarkerIndex] = useState<number | null>(null);
   const [focusedMarkerIndex, setFocusedMarkerIndex] = useState<number | null>(null);
-  const [markerVisualMode, setMarkerVisualMode] = useState<MarkerVisualMode>('arrow');
+  const [markerVisualMode, setMarkerVisualMode] = useState<MarkerVisualMode>(resolvedInitialMarkerVisualMode);
   const [markerColorKey, setMarkerColorKey] = useState<MarkerColorKey>('black');
   const [isDragging, setIsDragging] = useState(false);
   const [isPinching, setIsPinching] = useState(false);
@@ -407,7 +414,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     setHoveredMarkerIndex(null);
     setFocusedMarkerIndex(null);
     setMarkerColorKey('black');
-  }, [src, senaladosMeta, senalados]);
+    setMarkerVisualMode(resolvedInitialMarkerVisualMode);
+    setActiveMarkerIndex(resolvedInitialMarkerIndex);
+  }, [src, senaladosMeta, senalados, resolvedInitialMarkerVisualMode, resolvedInitialMarkerIndex]);
 
   useEffect(() => {
     if (commentHintTimeoutRef.current !== null) {
@@ -878,7 +887,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     };
   }, [hasInfo, imageSize, isDesktop, position.x, position.y, zoomLevel]);
 
-  const showSidebar = hasInfo && (isDesktop || sidebarOpen);
+  const showSidebar = !hideSidebar && hasInfo && (isDesktop || sidebarOpen);
 
   return (
     <div
@@ -1028,7 +1037,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           Cerrar
         </button>
 
-        {hasInfo && !isDesktop && (
+        {!hideSidebar && hasInfo && !isDesktop && (
           <button
             onClick={() => setSidebarOpen(o => !o)}
             style={{

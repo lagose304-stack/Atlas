@@ -14,7 +14,6 @@ const Edicion: React.FC = () => {
   const canTemario = hasPermission(user?.rol, 'temario');
   const canPlacas = hasPermission(user?.rol, 'placas');
   const canEditarPaginas = hasPermission(user?.rol, 'editar_paginas');
-  const canPruebas = hasPermission(user?.rol, 'pruebas');
   const canGestionUsuarios = hasPermission(user?.rol, 'gestion_usuarios');
   const canEstadisticas = hasPermission(user?.rol, 'estadisticas');
 
@@ -207,35 +206,29 @@ const Edicion: React.FC = () => {
             </div>
           </div>}
 
-          {/* Tarjeta: Realizar pruebas */}
-          {canPruebas && <div style={s.card} className="edicion-card">
+          {canEditarPaginas && <div style={s.card} className="edicion-card">
             <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #8b5cf6, #a78bfa)' }} />
             <div style={s.cardIcon}>🧪</div>
             <div style={s.cardBody}>
-              <h2 style={s.cardTitle}>Realizar pruebas</h2>
+              <h2 style={s.cardTitle}>Pruebas</h2>
               <p style={s.cardDesc}>
-                Ejecuta pruebas y verificaciones sobre el contenido del atlas.
+                Espacio reservado para administrar el flujo de pruebas desde cero.
               </p>
             </div>
-            <button
-              style={s.testBtnEnabled}
-              className="edicion-action-btn"
-              onClick={() => navigate('/pruebas')}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #8b5cf6, #a78bfa)';
-                e.currentTarget.style.color = '#fff';
-                e.currentTarget.style.borderColor = 'transparent';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = '#f5f3ff';
-                e.currentTarget.style.color = '#8b5cf6';
-                e.currentTarget.style.borderColor = '#ddd6fe';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              Gestionar pruebas →
-            </button>
+            <div style={s.pagesBtnGroup} className="edicion-pages-btn-group">
+              <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas')}>
+                Administración
+              </button>
+              <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas/crear')}>
+                Crear
+              </button>
+              <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas')}>
+                Editar
+              </button>
+              <button type="button" style={{ ...s.pagesBtn, borderColor: '#d8b4fe', background: '#faf5ff', color: '#7c3aed', cursor: 'default' }}>
+                Borrar
+              </button>
+            </div>
           </div>}
 
           {/* Tarjeta: Gestión de usuarios */}
@@ -299,7 +292,7 @@ const Edicion: React.FC = () => {
             </Link>
           </div>}
 
-          {!canTemario && !canPlacas && !canEditarPaginas && !canPruebas && !canGestionUsuarios && !canEstadisticas && (
+          {!canTemario && !canPlacas && !canEditarPaginas && !canGestionUsuarios && !canEstadisticas && (
             <div style={{ ...s.card, gridColumn: '1 / -1' }} className="edicion-card edicion-card-wide">
               <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #dc2626, #f87171)' }} />
               <div style={s.cardIcon}>⛔</div>
@@ -503,7 +496,6 @@ const s: { [key: string]: React.CSSProperties } = {
     letterSpacing: '0.01em',
   } as React.CSSProperties,
 
-  // Botón deshabilitado de "Realizar pruebas"
   testBtn: {
     display: 'inline-flex',
     alignItems: 'center',

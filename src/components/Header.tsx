@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, House, Phone, Search } from 'lucide-react';
+import { BookOpen, ClipboardList, House, Search } from 'lucide-react';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { supabase } from '../services/supabase';
 
@@ -11,7 +11,7 @@ import fondoHeader from '../assets/imagenes/fondo.webp';
 const MENU_ITEMS = [
   { key: 'inicio', label: 'Inicio', icon: House, path: '/' },
   { key: 'temario', label: 'Temario', icon: BookOpen, path: '/temario' },
-  { key: 'contacto', label: 'Contacto', icon: Phone },
+  { key: 'evaluaciones', label: 'Evaluaciones', icon: ClipboardList, path: '/evaluaciones' },
 ] as const;
 
 interface SearchTemaRecord {
@@ -32,6 +32,10 @@ interface SearchSuggestion {
   title: string;
   targetPath: string;
   score: number;
+}
+
+interface HeaderProps {
+  disableInteractions?: boolean;
 }
 
 const stripDiacritics = (value: string): string =>
@@ -186,7 +190,7 @@ const buildSearchSuggestions = (
     .slice(0, limit);
 };
 
-const Header: React.FC = () => {
+const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const headerRef = React.useRef<HTMLElement | null>(null);
@@ -205,6 +209,7 @@ const Header: React.FC = () => {
   const [searchIndexLoaded, setSearchIndexLoaded] = React.useState(false);
   const [searchSuggestionsFrame, setSearchSuggestionsFrame] = React.useState<{ top: number; left: number; width: number } | null>(null);
   const isImageViewerOpen = openImageViewerCount > 0;
+  const isHeaderLocked = disableInteractions;
 
   const isInAdminEditingFlow = React.useMemo(() => {
     const adminPaths = [
@@ -222,20 +227,23 @@ const Header: React.FC = () => {
       '/mapas-interactivos',
       '/gestion-usuarios',
       '/estadisticas',
-      '/pruebas',
     ];
 
     return adminPaths.some((basePath) => pathname === basePath || pathname.startsWith(`${basePath}/`));
   }, [pathname]);
 
   const navigateFromHeader = React.useCallback((targetPath: string) => {
+    if (isHeaderLocked) {
+      return;
+    }
+
     if (isInAdminEditingFlow) {
       window.location.replace(targetPath);
       return;
     }
 
     navigate(targetPath);
-  }, [isInAdminEditingFlow, navigate]);
+  }, [isHeaderLocked, isInAdminEditingFlow, navigate]);
 
   React.useEffect(() => {
     const handleScroll = () => {
@@ -402,7 +410,8 @@ const Header: React.FC = () => {
                 type="button"
                 onClick={() => navigateFromHeader('/')}
                 className="atlas-header-logo-action-button"
-                style={styles.logoActionButton}
+                style={{ ...styles.logoActionButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
+                disabled={isHeaderLocked}
                 onMouseEnter={() => setIsLeftLogoHover(true)}
                 onMouseLeave={() => setIsLeftLogoHover(false)}
                 aria-label="Ir a inicio"
@@ -425,7 +434,8 @@ const Header: React.FC = () => {
                 type="button"
                 onClick={() => navigateFromHeader('/')}
                 className="atlas-header-logo-action-button"
-                style={styles.logoActionButton}
+                style={{ ...styles.logoActionButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
+                disabled={isHeaderLocked}
                 onMouseEnter={() => setIsRightLogoHover(true)}
                 onMouseLeave={() => setIsRightLogoHover(false)}
                 aria-label="Ir a inicio"
@@ -438,7 +448,8 @@ const Header: React.FC = () => {
               <button
                 type="button"
                 className="atlas-header-search-button"
-                style={styles.searchButton}
+                style={{ ...styles.searchButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
+                disabled={isHeaderLocked}
                 onClick={() => setShowSearchBar((prev) => !prev)}
                 aria-label="Buscar"
                 aria-expanded={showSearchBar}
@@ -471,7 +482,8 @@ const Header: React.FC = () => {
                     className="atlas-header-search-close-button"
                     onClick={() => setShowSearchBar(false)}
                     aria-label="Cerrar búsqueda"
-                    style={styles.searchCloseButton}
+                    style={{ ...styles.searchCloseButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
+                    disabled={isHeaderLocked}
                   >
                     ×
                   </button>
@@ -533,7 +545,8 @@ const Header: React.FC = () => {
                   <button
                     type="button"
                     className="atlas-header-nav-button"
-                    style={styles.navButton}
+                    style={{ ...styles.navButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
+                    disabled={isHeaderLocked}
                     onClick={() => {
                       if ('path' in item && item.path) navigateFromHeader(item.path);
                     }}
@@ -560,7 +573,8 @@ const Header: React.FC = () => {
         <button
           type="button"
           className="atlas-compact-brand-button"
-          style={styles.compactBrandButton}
+            style={{ ...styles.compactBrandButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
+            disabled={isHeaderLocked}
           onClick={() => navigateFromHeader('/')}
           aria-label="Ir a inicio"
         >
@@ -581,7 +595,8 @@ const Header: React.FC = () => {
                 <button
                   type="button"
                   className="atlas-compact-nav-button"
-                  style={styles.compactNavButton}
+                  style={{ ...styles.compactNavButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
+                  disabled={isHeaderLocked}
                   onClick={() => {
                     if ('path' in item && item.path) navigateFromHeader(item.path);
                   }}
@@ -801,6 +816,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     backdropFilter: 'blur(2px)',
+  },
+  lockedActionButton: {
+    opacity: 0.55,
+    cursor: 'not-allowed',
+    pointerEvents: 'none',
   },
   searchPanel: {
     width: '100%',

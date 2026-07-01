@@ -399,6 +399,25 @@ body {
   }
 }
 
+/* Evaluaciones: grid de tarjetas similar a TemarioPublico: por defecto 3 columnas */
+.evaluaciones-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 1100px) {
+  .evaluaciones-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 680px) {
+  .evaluaciones-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ========================================
    RESPONSIVE - Páginas (Edicion, Placas, Temario)
    ======================================== */

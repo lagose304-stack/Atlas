@@ -21,6 +21,10 @@ import GestionTinciones from './pages/GestionTinciones';
 import MapasInteractivos from './pages/MapasInteractivos';
 import GestionUsuarios from './pages/GestionUsuarios';
 import Pruebas from './pages/Pruebas';
+import GestionPruebas from './pages/GestionPruebas';
+import EditorDePruebas from './pages/EditorDePruebas';
+import EjecutarPrueba from './pages/EjecutarPrueba';
+import Evaluaciones from './pages/Evaluaciones';
 import AccesoDenegado from './pages/AccesoDenegado';
 import Estadisticas from './pages/Estadisticas';
 import { logSiteVisitOncePerSession } from './services/analytics';
@@ -220,13 +224,39 @@ const App: React.FC = () => {
             }
           />
           <Route
-            path="/pruebas"
+            path="/pruebas/crear"
             element={
-              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO, ROLE_INSTRUCTOR]}>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <Pruebas />
               </PrivateRoute>
             }
           />
+          <Route
+            path="/pruebas"
+            element={
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
+                <GestionPruebas />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/pruebas/editor/:pruebaId"
+            element={
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
+                <EditorDePruebas />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/pruebas/ejecutar/:pruebaId"
+            element={
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
+                <EjecutarPrueba />
+              </PrivateRoute>
+            }
+          />
+          <Route path="/evaluaciones" element={<Evaluaciones />} />
+          <Route path="/evaluaciones/ejecutar/:pruebaId" element={<EjecutarPrueba />} />
           <Route
             path="/acceso-denegado"
             element={

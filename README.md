@@ -33,7 +33,7 @@ Run this SQL script in Supabase before using publish buttons:
 
 If this table does not exist yet, the app falls back to reading live draft blocks from `content_blocks`.
 
-## Test system (tests by tema/subtema)
+## Test system (pruebas by tema/subtema)
 
 To persist multiple tests classified by topic, run this script in Supabase:
 
@@ -41,8 +41,8 @@ To persist multiple tests classified by topic, run this script in Supabase:
 
 This creates:
 
-- `tests`: one row per test (linked to `tema_id`, optional `subtema_id`)
-- `test_question_blocks`: blocks/questions per test with `block_type`, `config` and `answer_key`
+- `pruebas`: one row per test with `nombre`, `instrucciones`, `scope`, `parcial_key`, optional `tema_id` and `subtema_id`
+- A future child table for questions can be added later without changing the base `pruebas` table
 
 This project runs in two environments:
 

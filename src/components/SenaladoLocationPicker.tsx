@@ -35,6 +35,7 @@ const POINTER_TAPER_PX = 18;
 const POINTER_MIN_ANGLE_DEG = 7;
 const POINTER_OUTLINE_TIP_BACKOFF_PX = 1.1;
 const POINTER_BASE_OUTSET_PX = 3;
+const POINTER_BATCH_RADIUS_PX = 7.5;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -143,6 +144,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   const [zoomLevel, setZoomLevel] = useState(1);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
   const [draggingPointerStart, setDraggingPointerStart] = useState(false);
+  const [draggingBatchPointerStartIndex, setDraggingBatchPointerStartIndex] = useState<number | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const pointerClipId = useId();
@@ -249,6 +251,32 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
     });
   };
 
+  const updateBatchPointerStartFromClient = (index: number, clientX: number, clientY: number) => {
+    const imageEl = imageRef.current;
+    if (!imageEl || !imageSize) return;
+
+    const rect = imageEl.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const relX = clamp((clientX - rect.left) / rect.width, 0, 1);
+    const relY = clamp((clientY - rect.top) / rect.height, 0, 1);
+    const startPx = clampPointToNearestEdge(
+      relX * imageSize.width,
+      relY * imageSize.height,
+      imageSize.width,
+      imageSize.height
+    );
+
+    setBatchLocations(prev => prev.map((item, currentIndex) => {
+      if (currentIndex !== index) return item;
+      return {
+        ...item,
+        startX: startPx.x / imageSize.width,
+        startY: startPx.y / imageSize.height,
+      };
+    }));
+  };
+
   useEffect(() => {
     if (!draggingPointerStart) return;
 
@@ -267,6 +295,25 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
       window.removeEventListener('pointerup', handlePointerUp);
     };
   }, [draggingPointerStart, imageSize]);
+
+  useEffect(() => {
+    if (draggingBatchPointerStartIndex == null) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      event.preventDefault();
+      updateBatchPointerStartFromClient(draggingBatchPointerStartIndex, event.clientX, event.clientY);
+    };
+
+    const handlePointerUp = () => setDraggingBatchPointerStartIndex(null);
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [draggingBatchPointerStartIndex, imageSize]);
 
   const handleImageClick = (event: React.MouseEvent<HTMLImageElement>) => {
     if (batchMode) {
@@ -321,6 +368,42 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
       height: imageSize.height,
     };
   }, [imageSize]);
+
+  const resolvePointerGeometry = (locationItem: MarkerLocation) => {
+    if (!contentSize) return null;
+
+    const endPx = {
+      x: locationItem.x * contentSize.width,
+      y: locationItem.y * contentSize.height,
+    };
+    const manualStart =
+      locationItem.startX != null && locationItem.startY != null
+        ? clampPointToNearestEdge(
+            (locationItem.startX ?? 0) * contentSize.width,
+            (locationItem.startY ?? 0) * contentSize.height,
+            contentSize.width,
+            contentSize.height
+          )
+        : null;
+    const autoStart = getPointerStartPx(endPx.x, endPx.y, contentSize.width, contentSize.height);
+    const startPx = manualStart ?? enforceMinimumInclination(autoStart, endPx, contentSize.width, contentSize.height, POINTER_MIN_ANGLE_DEG);
+    const directionLen = Math.hypot(endPx.x - startPx.x, endPx.y - startPx.y) || 1;
+    const drawStartPx = {
+      x: startPx.x - ((endPx.x - startPx.x) / directionLen) * POINTER_BASE_OUTSET_PX,
+      y: startPx.y - ((endPx.y - startPx.y) / directionLen) * POINTER_BASE_OUTSET_PX,
+    };
+    const tipInsetPoint = {
+      x: endPx.x - ((endPx.x - startPx.x) / directionLen) * POINTER_OUTLINE_TIP_BACKOFF_PX,
+      y: endPx.y - ((endPx.y - startPx.y) / directionLen) * POINTER_OUTLINE_TIP_BACKOFF_PX,
+    };
+
+    return {
+      startPx,
+      endPx,
+      outline: getPointerPolygon(drawStartPx, tipInsetPoint, POINTER_OUTLINE_WIDTH_PX, POINTER_TAPER_PX),
+      core: getPointerPolygon(drawStartPx, endPx, POINTER_CORE_WIDTH_PX, POINTER_TAPER_PX),
+    };
+  };
 
   return (
     <div
@@ -512,18 +595,49 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                   height={contentSize.height}
                   viewBox={`0 0 ${contentSize.width} ${contentSize.height}`}
                 >
-                  {batchLocations.map((item, index) => (
-                    <circle
-                      key={`${index}-${item.x}-${item.y}`}
-                      cx={item.x * contentSize.width}
-                      cy={item.y * contentSize.height}
-                      r={8}
-                      fill={index === batchLocations.length - 1 ? '#2563eb' : '#0ea5e9'}
-                      stroke="#ffffff"
-                      strokeWidth={2}
-                      style={{ cursor: 'pointer' }}
-                    />
-                  ))}
+                  {batchLocations.map((item, index) => {
+                    const geometry = resolvePointerGeometry(item);
+                    if (!geometry) return null;
+
+                    return (
+                      <g key={`${index}-${item.x}-${item.y}`}>
+                        <defs>
+                          <clipPath id={`${pointerClipId}-batch-${index}`}>
+                            <rect x="0" y="0" width={contentSize.width} height={contentSize.height} />
+                          </clipPath>
+                        </defs>
+                        <g clipPath={`url(#${pointerClipId}-batch-${index})`}>
+                          <polygon
+                            points={geometry.outline.map(point => `${point.x},${point.y}`).join(' ')}
+                            fill="rgba(255,255,255,0.6)"
+                            pointerEvents="none"
+                            shapeRendering="geometricPrecision"
+                          />
+                          <polygon
+                            points={geometry.core.map(point => `${point.x},${point.y}`).join(' ')}
+                            fill={index === batchLocations.length - 1 ? '#111827' : '#0f172a'}
+                            pointerEvents="none"
+                            shapeRendering="geometricPrecision"
+                          />
+                        </g>
+                        <circle
+                          cx={geometry.startPx.x}
+                          cy={geometry.startPx.y}
+                          r={POINTER_BATCH_RADIUS_PX}
+                          fill={draggingBatchPointerStartIndex === index ? '#2563eb' : '#0ea5e9'}
+                          stroke="#ffffff"
+                          strokeWidth={2}
+                          style={{ cursor: draggingBatchPointerStartIndex === index ? 'grabbing' : 'grab' }}
+                          onPointerDown={event => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setDraggingBatchPointerStartIndex(index);
+                            updateBatchPointerStartFromClient(index, event.clientX, event.clientY);
+                          }}
+                        />
+                      </g>
+                    );
+                  })}
                 </svg>
               )}
             </div>
