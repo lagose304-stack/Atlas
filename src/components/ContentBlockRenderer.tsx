@@ -56,7 +56,10 @@ const getBlockShellStyle = (content: Record<string, string>): React.CSSPropertie
   };
 
   const align = content.style_align || 'left';
-  const maxWidth = maxWidthMap[content.style_max_width || 'full'] || '100%';
+  const requestedMaxWidth = maxWidthMap[content.style_max_width || 'full'] || '100%';
+  const maxWidth = (align !== 'left' && (hasBg || hasBorder) && requestedMaxWidth === '100%')
+    ? 'clamp(320px, 90vw, 760px)'
+    : requestedMaxWidth;
   const alignSelf: React.CSSProperties['alignSelf'] = align === 'right'
     ? 'flex-end'
     : align === 'center'
@@ -73,6 +76,7 @@ const getBlockShellStyle = (content: Record<string, string>): React.CSSPropertie
     width: '100%',
     maxWidth,
     alignSelf,
+    textAlign: align as React.CSSProperties['textAlign'],
     fontSize: fontSizeMap[content.style_font_size || 'default'] || 'inherit',
     fontWeight: content.style_font_weight && content.style_font_weight !== 'default'
       ? Number(content.style_font_weight)
@@ -656,42 +660,88 @@ const BlockItem: React.FC<{
 
     case 'callout': {
       if (!c.text) return null;
-      const variants: Record<string, { icon: string; bg: string; border: string; color: string }> = {
-        info:     { icon: 'ℹ️',  bg: '#eff6ff', border: '#93c5fd', color: '#1d4ed8' },
-        tip:      { icon: '💡',  bg: '#f0fdf4', border: '#86efac', color: '#15803d' },
-        warning:  { icon: '⚠️',  bg: '#fffbeb', border: '#fcd34d', color: '#b45309' },
-        clinical: { icon: '🔬',  bg: '#fdf4ff', border: '#d8b4fe', color: '#7e22ce' },
+      const align = ((c.text_align as React.CSSProperties['textAlign']) ?? (c.style_align as React.CSSProperties['textAlign']) ?? 'left');
+      const variants: Record<string, { icon: string; label: string; bgStart: string; bgEnd: string; border: string; color: string; accent: string }> = {
+        info:     { icon: 'ℹ️', label: 'Información', bgStart: '#dbeafe', bgEnd: '#f8fbff', border: '#60a5fa', color: '#1d4ed8', accent: '#2563eb' },
+        tip:      { icon: '💡', label: 'Consejo', bgStart: '#dcfce7', bgEnd: '#f8fff8', border: '#4ade80', color: '#15803d', accent: '#16a34a' },
+        warning:  { icon: '⚠️', label: 'Importante', bgStart: '#fef3c7', bgEnd: '#fffdf2', border: '#f59e0b', color: '#b45309', accent: '#d97706' },
+        clinical: { icon: '🔬', label: 'Dato clínico', bgStart: '#f3e8ff', bgEnd: '#fff8ff', border: '#c084fc', color: '#7e22ce', accent: '#9333ea' },
       };
       const v = variants[(c.variant as string) ?? 'info'] ?? variants.info;
       return (
-        <div style={{ background: v.bg, border: `1.5px solid ${v.border}`, borderRadius: 'clamp(10px, 1.5vw, 14px)', padding: 'clamp(12px, 2vw, 18px) clamp(14px, 2.5vw, 22px)', display: 'flex', flexDirection: 'column', gap: 'clamp(10px, 2vw, 16px)' }}>
+        <div style={{
+          position: 'relative',
+          background: `linear-gradient(135deg, ${v.bgStart}, ${v.bgEnd})`,
+          border: `1.5px solid ${v.border}`,
+          borderRadius: 'clamp(16px, 2vw, 22px)',
+          padding: 'clamp(28px, 3.2vw, 34px) clamp(13px, 1.8vw, 18px) clamp(11px, 1.5vw, 14px)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'clamp(6px, 1vw, 10px)',
+          textAlign: align,
+          boxShadow: '0 18px 40px rgba(15,23,42,0.12)',
+          overflow: 'hidden',
+          minHeight: '0',
+          width: 'min(100%, 660px)',
+          marginInline: 'auto',
+        }}>
+          <div aria-hidden style={{ position: 'absolute', inset: '0 auto auto 0', height: '6px', width: '100%', background: `linear-gradient(90deg, ${v.border}, ${v.color})` }} />
+          <div aria-hidden style={{ position: 'absolute', top: '-18px', right: '-20px', width: '100px', height: '100px', borderRadius: '50%', background: 'rgba(255,255,255,0.34)', filter: 'blur(2px)' }} />
+          <div aria-hidden style={{ position: 'absolute', bottom: '-28px', left: '-18px', width: '120px', height: '120px', borderRadius: '50%', background: `radial-gradient(circle, ${v.border}66 0%, transparent 70%)` }} />
+          <div aria-hidden style={{ position: 'absolute', inset: '0 auto 0 0', width: '8px', background: `linear-gradient(180deg, ${v.accent}, ${v.border})`, opacity: 0.95 }} />
           {inlineCtas && inlineCtaPosition === 'before' && inlineCtas}
-          <div style={{ display: 'flex', gap: 'clamp(10px, 2vw, 16px)', alignItems: 'center' }}>
-            <span
-              aria-hidden
-              style={{ fontSize: 'clamp(1em, 1.5vw, 1.3em)', flexShrink: 0, lineHeight: 1, display: 'inline-flex', alignItems: 'center' }}
-            >
-              {v.icon}
-            </span>
+          <div style={{ position: 'absolute', top: '10px', left: '12px', display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 11px', borderRadius: '999px', background: 'rgba(255,255,255,0.92)', border: `1px solid ${v.border}`, color: v.color, fontSize: '0.7em', fontWeight: 900, letterSpacing: '0.05em', textTransform: 'uppercase', boxShadow: '0 8px 18px rgba(15,23,42,0.12)', zIndex: 1 }}>
+              <span aria-hidden>{v.icon}</span>
+              {v.label}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto', gap: 'clamp(8px, 1.2vw, 12px)', alignItems: 'center', width: '100%', minHeight: '2.1em' }}>
+            <span aria-hidden style={{
+              fontSize: 'clamp(0.96em, 1.3vw, 1.12em)',
+              flexShrink: 0,
+              lineHeight: 1,
+              width: '1.45em',
+              height: '1.45em',
+              borderRadius: '999px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: `linear-gradient(180deg, rgba(255,255,255,0.98), ${v.bgEnd})`,
+              border: `1px solid ${v.border}`,
+              boxShadow: `0 7px 16px ${v.border}26`,
+            }}>{v.icon}</span>
             <RichTextValue
               style={{
                 margin: 0,
-                color: userTextColor || v.color,
-                fontSize: userFontSize || '0.9em',
-                lineHeight: 1.8,
-                fontWeight: userFontWeight || 500,
+                minWidth: 0,
+                width: '100%',
+                maxWidth: '42rem',
+                color: userTextColor || '#0f2942',
+                fontSize: userFontSize || '1.18em',
+                lineHeight: 1.28,
+                fontWeight: userFontWeight || 800,
                 whiteSpace: 'pre-wrap' as const,
                 wordBreak: 'break-word' as const,
                 fontFamily: '"Montserrat", "Segoe UI", sans-serif',
+                textAlign: align,
+                textShadow: '0 1px 0 rgba(255,255,255,0.5)',
+                justifySelf: align === 'center' ? 'center' : align === 'right' ? 'end' : 'start',
               }}
               value={c.text}
             />
-            <span
-              aria-hidden
-              style={{ fontSize: 'clamp(1em, 1.5vw, 1.3em)', flexShrink: 0, lineHeight: 1, display: 'inline-flex', alignItems: 'center' }}
-            >
-              {v.icon}
-            </span>
+            <span aria-hidden style={{
+              fontSize: 'clamp(0.96em, 1.3vw, 1.12em)',
+              flexShrink: 0,
+              lineHeight: 1,
+              width: '1.45em',
+              height: '1.45em',
+              borderRadius: '999px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: `linear-gradient(180deg, rgba(255,255,255,0.98), ${v.bgEnd})`,
+              border: `1px solid ${v.border}`,
+              boxShadow: `0 7px 16px ${v.border}26`,
+            }}>{v.icon}</span>
           </div>
           {inlineCtas && inlineCtaPosition === 'after' && inlineCtas}
         </div>

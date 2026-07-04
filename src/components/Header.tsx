@@ -216,8 +216,6 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
       '/edicion',
       '/temario-admin',
       '/placas',
-      '/editar-home',
-      '/editar-inicio',
       '/editar-temario',
       '/editar-subtemas',
       '/editar-placas',

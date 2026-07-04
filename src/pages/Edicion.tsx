@@ -129,29 +129,12 @@ const Edicion: React.FC = () => {
             <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #f59e0b, #fbbf24)' }} />
             <div style={s.cardIcon}>✏️</div>
             <div style={s.cardBody}>
-              <h2 style={s.cardTitle}>Editar páginas</h2>
+              <h2 style={s.cardTitle}>Ordenar contenido</h2>
               <p style={s.cardDesc}>
-                Añade y edita bloques de contenido editorial (textos, imágenes, títulos) en cada sección del atlas.
+                Ajusta el orden en que se presentarán los temas y subtemas del atlas.
               </p>
             </div>
             <div style={s.pagesBtnGroup} className="edicion-pages-btn-group">
-              <button
-                style={s.pagesBtn}
-                className="edicion-pages-btn"
-                onClick={() => navigate('/editar-inicio')}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #f59e0b, #fbbf24)';
-                  e.currentTarget.style.color = '#fff';
-                  e.currentTarget.style.borderColor = 'transparent';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = '#fffbeb';
-                  e.currentTarget.style.color = '#b45309';
-                  e.currentTarget.style.borderColor = '#fde68a';
-                }}
-              >
-                🏠 Editar Inicio
-              </button>
               <button
                 style={s.pagesBtn}
                 className="edicion-pages-btn"
@@ -167,7 +150,7 @@ const Edicion: React.FC = () => {
                   e.currentTarget.style.borderColor = '#fde68a';
                 }}
               >
-                📚 Editar Temario
+                Ordenar temas
               </button>
               <button
                 style={s.pagesBtn}
@@ -184,26 +167,39 @@ const Edicion: React.FC = () => {
                   e.currentTarget.style.borderColor = '#fde68a';
                 }}
               >
-                📂 Editar Subtemas
-              </button>
-              <button
-                style={s.pagesBtn}
-                className="edicion-pages-btn"
-                onClick={() => navigate('/editar-placas')}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #f59e0b, #fbbf24)';
-                  e.currentTarget.style.color = '#fff';
-                  e.currentTarget.style.borderColor = 'transparent';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = '#fffbeb';
-                  e.currentTarget.style.color = '#b45309';
-                  e.currentTarget.style.borderColor = '#fde68a';
-                }}
-              >
-                🔬 Editar Placas
+                Ordenar subtemas
               </button>
             </div>
+          </div>}
+
+          {canEditarPaginas && <div style={s.card} className="edicion-card">
+            <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #0ea5e9, #38bdf8)' }} />
+            <div style={s.cardIcon}>🗂️</div>
+            <div style={s.cardBody}>
+              <h2 style={s.cardTitle}>Editor de páginas</h2>
+              <p style={s.cardDesc}>
+                Primero eliges qué página quieres editar y después abres las herramientas correspondientes.
+              </p>
+            </div>
+            <Link
+              to="/editor-paginas"
+              style={{ ...s.cardBtn, color: '#0ea5e9', background: '#f0f9ff', borderColor: '#bae6fd' }}
+              className="edicion-action-btn"
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, #0ea5e9, #38bdf8)';
+                (e.currentTarget as HTMLAnchorElement).style.color = '#fff';
+                (e.currentTarget as HTMLAnchorElement).style.borderColor = 'transparent';
+                (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLAnchorElement).style.background = '#f0f9ff';
+                (e.currentTarget as HTMLAnchorElement).style.color = '#0ea5e9';
+                (e.currentTarget as HTMLAnchorElement).style.borderColor = '#bae6fd';
+                (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(0)';
+              }}
+            >
+              Abrir editor →
+            </Link>
           </div>}
 
           {canEditarPaginas && <div style={s.card} className="edicion-card">

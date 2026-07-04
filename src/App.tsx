@@ -9,11 +9,10 @@ import Temario from './pages/Temario';
 import Placas from './pages/Placas';
 import Subtemas from './pages/Subtemas';
 import PlacasSubtema from './pages/PlacasSubtema';
-import EditarHome from './pages/EditarHome';
-import EditarInicio from './pages/EditarInicio';
 import EditarTemario from './pages/EditarTemario';
 import EditarSubtemas from './pages/EditarSubtemas';
 import EditarPlacas from './pages/EditarPlacas';
+import EditorPaginas from './pages/EditorPaginas';
 import EliminarPlacas from './pages/EliminarPlacas';
 import MoverPlaca from './pages/MoverPlaca';
 import ListaEspera from './pages/ListaEspera';
@@ -128,22 +127,6 @@ const App: React.FC = () => {
             }
           />
           <Route
-            path="/editar-home"
-            element={
-              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
-                <EditarHome />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/editar-inicio"
-            element={
-              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
-                <EditarInicio />
-              </PrivateRoute>
-            }
-          />
-          <Route
             path="/editar-temario"
             element={
               <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
@@ -164,6 +147,14 @@ const App: React.FC = () => {
             element={
               <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <EditarPlacas />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/editor-paginas"
+            element={
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
+                <EditorPaginas />
               </PrivateRoute>
             }
           />

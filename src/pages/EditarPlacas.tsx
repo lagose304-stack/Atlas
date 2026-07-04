@@ -6,7 +6,6 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useDraggableList } from '../hooks/useDraggableList';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
-import PageContentEditor from '../components/PageContentEditor';
 import LoadingToast from '../components/LoadingToast';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 
@@ -550,7 +549,6 @@ const EditarPlacas: React.FC = () => {
 
         {/* Grid de placas */}
         {selectedSubtema && (
-          <>
           <div style={s.card}>
             <div style={s.cardHeader}>
               <h2 style={s.cardTitle}>
@@ -609,13 +607,6 @@ const EditarPlacas: React.FC = () => {
               </div>
             )}
           </div>
-
-          {/* Editor de contenido de la página */}
-          <PageContentEditor
-            entityType="placas_page"
-            entityId={selectedSubtemaId!}
-          />
-          </>
         )}
       </main>
 

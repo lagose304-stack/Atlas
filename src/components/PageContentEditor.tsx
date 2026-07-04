@@ -1059,6 +1059,11 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       setBlocks(persistedBlocks);
       pendingAssetDeleteIdsRef.current.clear();
       setHasChanges(false);
+      if (publicationStatus === 'published') {
+        await setPublicationDraft(entityType, entityId);
+        setPublicationStatus('draft');
+        setPublishedAt(null);
+      }
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err) {
@@ -2112,20 +2117,8 @@ const AutoTextarea: React.FC<{
         <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleBold().run()}>
           Negrita
         </button>
-        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleItalic().run()}>
-          Cursiva
-        </button>
         <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleUnderline().run()}>
           Subrayado
-        </button>
-        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleStrike().run()}>
-          Tachado
-        </button>
-        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleBulletList().run()}>
-          Lista
-        </button>
-        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
-          Numerada
         </button>
         <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().setTextAlign('left').run()}>
           Izq
@@ -2136,30 +2129,6 @@ const AutoTextarea: React.FC<{
         <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().setTextAlign('right').run()}>
           Der
         </button>
-        <button type="button" style={es.richQuickActionBtn} onClick={setLink}>
-          Enlace
-        </button>
-        <label style={es.richQuickLabel}>
-          Tamaño seleccionado
-          <select
-            defaultValue=""
-            onChange={e => {
-              if (!e.currentTarget.value) return;
-              applySelectionFontSize(e.currentTarget.value);
-              e.currentTarget.value = '';
-            }}
-            style={{ ...es.styleSelect, minWidth: '122px' }}
-            title="Cambiar tamaño solo del texto seleccionado"
-          >
-            <option value="">Tamaño...</option>
-            <option value="12">12 px</option>
-            <option value="14">14 px</option>
-            <option value="16">16 px</option>
-            <option value="18">18 px</option>
-            <option value="22">22 px</option>
-            <option value="28">28 px</option>
-          </select>
-        </label>
         <label style={es.richQuickLabel}>
           Color texto
           <input
@@ -2170,25 +2139,66 @@ const AutoTextarea: React.FC<{
             title="Aplicar color al texto seleccionado"
           />
         </label>
-        <label style={es.richQuickLabel}>
-          Fondo texto
-          <input
-            type="color"
-            defaultValue="#fff59d"
-            onChange={e => applyColor('highlight', e.currentTarget.value)}
-            style={es.richQuickColorInput}
-            title="Aplicar resaltado al texto seleccionado"
-          />
-        </label>
-        <button type="button" style={es.richQuickResetBtn} onClick={() => applyColor('text', false)}>
-          Limpiar color
-        </button>
-        <button type="button" style={es.richQuickResetBtn} onClick={clearSelectionFontSize}>
-          Limpiar tamaño
-        </button>
-        <button type="button" style={es.richQuickResetBtn} onClick={() => applyColor('highlight', false)}>
-          Limpiar fondo
-        </button>
+        <details style={{ width: '100%' }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 700, color: '#0f172a' }}>Más opciones</summary>
+          <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '8px', marginTop: '10px' }}>
+            <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleItalic().run()}>
+              Cursiva
+            </button>
+            <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleStrike().run()}>
+              Tachado
+            </button>
+            <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleBulletList().run()}>
+              Lista
+            </button>
+            <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
+              Numerada
+            </button>
+            <button type="button" style={es.richQuickActionBtn} onClick={setLink}>
+              Enlace
+            </button>
+            <label style={es.richQuickLabel}>
+              Tamaño seleccionado
+              <select
+                defaultValue=""
+                onChange={e => {
+                  if (!e.currentTarget.value) return;
+                  applySelectionFontSize(e.currentTarget.value);
+                  e.currentTarget.value = '';
+                }}
+                style={{ ...es.styleSelect, minWidth: '122px' }}
+                title="Cambiar tamaño solo del texto seleccionado"
+              >
+                <option value="">Tamaño...</option>
+                <option value="12">12 px</option>
+                <option value="14">14 px</option>
+                <option value="16">16 px</option>
+                <option value="18">18 px</option>
+                <option value="22">22 px</option>
+                <option value="28">28 px</option>
+              </select>
+            </label>
+            <label style={es.richQuickLabel}>
+              Fondo texto
+              <input
+                type="color"
+                defaultValue="#fff59d"
+                onChange={e => applyColor('highlight', e.currentTarget.value)}
+                style={es.richQuickColorInput}
+                title="Aplicar resaltado al texto seleccionado"
+              />
+            </label>
+            <button type="button" style={es.richQuickResetBtn} onClick={() => applyColor('text', false)}>
+              Limpiar color
+            </button>
+            <button type="button" style={es.richQuickResetBtn} onClick={clearSelectionFontSize}>
+              Limpiar tamaño
+            </button>
+            <button type="button" style={es.richQuickResetBtn} onClick={() => applyColor('highlight', false)}>
+              Limpiar fondo
+            </button>
+          </div>
+        </details>
       </div>
       <EditorContent
         editor={editor}
@@ -2294,15 +2304,6 @@ const BlockStyleEditor: React.FC<BlockStyleEditorProps> = ({
         />
       </label>
       <label style={es.styleFieldLabel}>
-        Texto
-        <input
-          type="color"
-          value={textColor || '#0f172a'}
-          onChange={e => onChange({ style_text: e.target.value })}
-          style={es.colorInput}
-        />
-      </label>
-      <label style={es.styleFieldLabel}>
         Borde
         <input
           type="color"
@@ -2348,127 +2349,141 @@ const BlockStyleEditor: React.FC<BlockStyleEditorProps> = ({
           <option value="right">Derecha</option>
         </select>
       </label>
-      <label style={es.styleFieldLabel}>
-        Sombra
-        <select value={shadow} onChange={e => onChange({ style_shadow: e.target.value })} style={es.styleSelect}>
-          <option value="none">Sin sombra</option>
-          <option value="sm">Suave</option>
-          <option value="md">Media</option>
-        </select>
-      </label>
-      <label style={es.styleFieldLabel}>
-        Tamaño texto
-        <select value={fontSize} onChange={e => onChange({ style_font_size: e.target.value })} style={es.styleSelect}>
-          <option value="default">Por defecto</option>
-          <option value="sm">Pequeño</option>
-          <option value="md">Medio</option>
-          <option value="lg">Grande</option>
-        </select>
-      </label>
-      <label style={es.styleFieldLabel}>
-        Peso texto
-        <select value={fontWeight} onChange={e => onChange({ style_font_weight: e.target.value })} style={es.styleSelect}>
-          <option value="default">Normal</option>
-          <option value="500">Semi</option>
-          <option value="700">Negrita</option>
-        </select>
-      </label>
-      <div style={es.stylePreviewWrap}>
-        <span style={es.stylePreviewTitle}>Vista previa del bloque</span>
-        <div
-          style={{
-            ...es.stylePreviewCard,
-            background: bgColor || '#ffffff',
-            color: textColor || '#0f172a',
-            border: `1px solid ${borderColor || '#e2e8f0'}`,
-            borderRadius: `${Number.isFinite(previewRadius) ? previewRadius : 0}px`,
-            padding: `${Number.isFinite(previewPadding) ? previewPadding : 0}px`,
-            boxShadow: previewShadow,
-            fontSize: previewFontSize,
-            fontWeight: previewFontWeight,
-          }}
-        >
-          Este es el fondo del bloque
+      <details style={{ gridColumn: '1 / -1' }}>
+        <summary style={{ cursor: 'pointer', color: '#1d4ed8', fontWeight: 700 }}>Opciones avanzadas</summary>
+        <div style={{ display: 'grid', gap: '12px', marginTop: '12px' }}>
+          <label style={es.styleFieldLabel}>
+            Texto
+            <input
+              type="color"
+              value={textColor || '#0f172a'}
+              onChange={e => onChange({ style_text: e.target.value })}
+              style={es.colorInput}
+            />
+          </label>
+          <label style={es.styleFieldLabel}>
+            Sombra
+            <select value={shadow} onChange={e => onChange({ style_shadow: e.target.value })} style={es.styleSelect}>
+              <option value="none">Sin sombra</option>
+              <option value="sm">Suave</option>
+              <option value="md">Media</option>
+            </select>
+          </label>
+          <label style={es.styleFieldLabel}>
+            Tamaño texto
+            <select value={fontSize} onChange={e => onChange({ style_font_size: e.target.value })} style={es.styleSelect}>
+              <option value="default">Por defecto</option>
+              <option value="sm">Pequeño</option>
+              <option value="md">Medio</option>
+              <option value="lg">Grande</option>
+            </select>
+          </label>
+          <label style={es.styleFieldLabel}>
+            Peso texto
+            <select value={fontWeight} onChange={e => onChange({ style_font_weight: e.target.value })} style={es.styleSelect}>
+              <option value="default">Normal</option>
+              <option value="500">Semi</option>
+              <option value="700">Negrita</option>
+            </select>
+          </label>
+          <div style={es.stylePreviewWrap}>
+            <span style={es.stylePreviewTitle}>Vista previa del bloque</span>
+            <div
+              style={{
+                ...es.stylePreviewCard,
+                background: bgColor || '#ffffff',
+                color: textColor || '#0f172a',
+                border: `1px solid ${borderColor || '#e2e8f0'}`,
+                borderRadius: `${Number.isFinite(previewRadius) ? previewRadius : 0}px`,
+                padding: `${Number.isFinite(previewPadding) ? previewPadding : 0}px`,
+                boxShadow: previewShadow,
+                fontSize: previewFontSize,
+                fontWeight: previewFontWeight,
+              }}
+            >
+              Este es el fondo del bloque
+            </div>
+          </div>
+          <div style={es.styleActionsRow}>
+            <button type="button" style={es.styleActionBtn} onClick={onCopyStyle}>
+              Copiar estilo
+            </button>
+            <button
+              type="button"
+              style={canPasteStyle ? es.styleActionBtn : es.styleActionBtnDisabled}
+              onClick={onPasteStyle}
+              disabled={!canPasteStyle}
+            >
+              Pegar estilo
+            </button>
+            <button
+              type="button"
+              style={canPasteStyleToSelection ? es.styleActionBtn : es.styleActionBtnDisabled}
+              onClick={onPasteStyleToSelection}
+              disabled={!canPasteStyleToSelection}
+            >
+              Pegar en seleccion ({selectedCount})
+            </button>
+            <button type="button" style={es.styleActionBtn} onClick={onSavePreset}>
+              Guardar preset
+            </button>
+          </div>
+          <div style={es.stylePresetRow}>
+            <label style={es.styleFieldLabel}>
+              Presets
+              <select
+                defaultValue=""
+                onChange={e => {
+                  if (!e.target.value) return;
+                  onApplyPreset(e.target.value);
+                  e.currentTarget.value = '';
+                }}
+                style={es.styleSelect}
+              >
+                <option value="">Aplicar preset...</option>
+                {presets.map(preset => (
+                  <option key={preset.id} value={preset.id}>{preset.name}</option>
+                ))}
+              </select>
+            </label>
+            <label style={es.styleFieldLabel}>
+              Eliminar preset
+              <select
+                defaultValue=""
+                onChange={e => {
+                  if (!e.target.value) return;
+                  onDeletePreset(e.target.value);
+                  e.currentTarget.value = '';
+                }}
+                style={es.styleSelect}
+              >
+                <option value="">Selecciona para borrar...</option>
+                {presets.map(preset => (
+                  <option key={`del-${preset.id}`} value={preset.id}>{preset.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <button
+            type="button"
+            style={es.styleResetBtn}
+            onClick={() => onChange({
+              style_bg: '',
+              style_text: '',
+              style_border: '',
+              style_radius: '0',
+              style_padding: '0',
+              style_max_width: 'full',
+              style_align: 'left',
+              style_shadow: 'none',
+              style_font_size: 'default',
+              style_font_weight: 'default',
+            })}
+          >
+            Restablecer
+          </button>
         </div>
-      </div>
-      <div style={es.styleActionsRow}>
-        <button type="button" style={es.styleActionBtn} onClick={onCopyStyle}>
-          Copiar estilo
-        </button>
-        <button
-          type="button"
-          style={canPasteStyle ? es.styleActionBtn : es.styleActionBtnDisabled}
-          onClick={onPasteStyle}
-          disabled={!canPasteStyle}
-        >
-          Pegar estilo
-        </button>
-        <button
-          type="button"
-          style={canPasteStyleToSelection ? es.styleActionBtn : es.styleActionBtnDisabled}
-          onClick={onPasteStyleToSelection}
-          disabled={!canPasteStyleToSelection}
-        >
-          Pegar en seleccion ({selectedCount})
-        </button>
-        <button type="button" style={es.styleActionBtn} onClick={onSavePreset}>
-          Guardar preset
-        </button>
-      </div>
-      <div style={es.stylePresetRow}>
-        <label style={es.styleFieldLabel}>
-          Presets
-          <select
-            defaultValue=""
-            onChange={e => {
-              if (!e.target.value) return;
-              onApplyPreset(e.target.value);
-              e.currentTarget.value = '';
-            }}
-            style={es.styleSelect}
-          >
-            <option value="">Aplicar preset...</option>
-            {presets.map(preset => (
-              <option key={preset.id} value={preset.id}>{preset.name}</option>
-            ))}
-          </select>
-        </label>
-        <label style={es.styleFieldLabel}>
-          Eliminar preset
-          <select
-            defaultValue=""
-            onChange={e => {
-              if (!e.target.value) return;
-              onDeletePreset(e.target.value);
-              e.currentTarget.value = '';
-            }}
-            style={es.styleSelect}
-          >
-            <option value="">Selecciona para borrar...</option>
-            {presets.map(preset => (
-              <option key={`del-${preset.id}`} value={preset.id}>{preset.name}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <button
-        type="button"
-        style={es.styleResetBtn}
-        onClick={() => onChange({
-          style_bg: '',
-          style_text: '',
-          style_border: '',
-          style_radius: '0',
-          style_padding: '0',
-          style_max_width: 'full',
-          style_align: 'left',
-          style_shadow: 'none',
-          style_font_size: 'default',
-          style_font_weight: 'default',
-        })}
-      >
-        Restablecer
-      </button>
+      </details>
     </div>
   </div>
   );
@@ -2613,65 +2628,65 @@ const BlockCtaLinksEditor: React.FC<BlockCtaLinksEditorProps> = ({ content, allT
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px' }}>
-        <label style={es.fieldLabel}>
-          Espaciado
-          <input
-            type="number"
-            min={0}
-            max={32}
-            step={1}
-            value={gap}
-            onChange={e => onContentChange({ cta_gap: e.currentTarget.value || '12' })}
-            style={{ ...es.captionInput, marginTop: '4px' }}
-          />
-        </label>
-        <label style={es.fieldLabel}>
-          Estilo
-          <select value={style} onChange={e => onContentChange({ cta_style: e.currentTarget.value })} style={{ ...es.styleSelect, marginTop: '4px' }}>
-            <option value="solid">Sólido</option>
-            <option value="outline">Borde</option>
-            <option value="soft">Suave</option>
-          </select>
-        </label>
-        <label style={es.fieldLabel}>
-          Tamaño
-          <select value={size} onChange={e => onContentChange({ cta_size: e.currentTarget.value })} style={{ ...es.styleSelect, marginTop: '4px' }}>
-            <option value="sm">Pequeño</option>
-            <option value="md">Mediano</option>
-            <option value="lg">Grande</option>
-          </select>
-        </label>
-        <label style={es.fieldLabel}>
-          Forma
-          <select value={shape} onChange={e => onContentChange({ cta_shape: e.currentTarget.value })} style={{ ...es.styleSelect, marginTop: '4px' }}>
-            <option value="rounded">Redondeado</option>
-            <option value="pill">Píldora</option>
-            <option value="square">Recto</option>
-          </select>
-        </label>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px' }}>
-        <label style={es.fieldLabel}>
-          Color del botón
-          <input
-            type="color"
-            value={content.cta_color ?? '#2563eb'}
-            onChange={e => onContentChange({ cta_color: e.currentTarget.value })}
-            style={{ ...es.colorInput, marginTop: '4px' }}
-          />
-        </label>
-        <label style={es.fieldLabel}>
-          Color del texto
-          <input
-            type="color"
-            value={content.cta_text_color ?? '#ffffff'}
-            onChange={e => onContentChange({ cta_text_color: e.currentTarget.value })}
-            style={{ ...es.colorInput, marginTop: '4px' }}
-          />
-        </label>
-      </div>
+      <details style={{ marginTop: '6px' }}>
+        <summary style={{ cursor: 'pointer', color: '#1d4ed8', fontWeight: 700 }}>Opciones avanzadas</summary>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginTop: '10px' }}>
+          <label style={es.fieldLabel}>
+            Espaciado
+            <input
+              type="number"
+              min={0}
+              max={32}
+              step={1}
+              value={gap}
+              onChange={e => onContentChange({ cta_gap: e.currentTarget.value || '12' })}
+              style={{ ...es.captionInput, marginTop: '4px' }}
+            />
+          </label>
+          <label style={es.fieldLabel}>
+            Estilo
+            <select value={style} onChange={e => onContentChange({ cta_style: e.currentTarget.value })} style={{ ...es.styleSelect, marginTop: '4px' }}>
+              <option value="solid">Sólido</option>
+              <option value="outline">Borde</option>
+              <option value="soft">Suave</option>
+            </select>
+          </label>
+          <label style={es.fieldLabel}>
+            Tamaño
+            <select value={size} onChange={e => onContentChange({ cta_size: e.currentTarget.value })} style={{ ...es.styleSelect, marginTop: '4px' }}>
+              <option value="sm">Pequeño</option>
+              <option value="md">Mediano</option>
+              <option value="lg">Grande</option>
+            </select>
+          </label>
+          <label style={es.fieldLabel}>
+            Forma
+            <select value={shape} onChange={e => onContentChange({ cta_shape: e.currentTarget.value })} style={{ ...es.styleSelect, marginTop: '4px' }}>
+              <option value="rounded">Redondeado</option>
+              <option value="pill">Píldora</option>
+              <option value="square">Recto</option>
+            </select>
+          </label>
+          <label style={es.fieldLabel}>
+            Color del botón
+            <input
+              type="color"
+              value={content.cta_color ?? '#2563eb'}
+              onChange={e => onContentChange({ cta_color: e.currentTarget.value })}
+              style={{ ...es.colorInput, marginTop: '4px' }}
+            />
+          </label>
+          <label style={es.fieldLabel}>
+            Color del texto
+            <input
+              type="color"
+              value={content.cta_text_color ?? '#ffffff'}
+              onChange={e => onContentChange({ cta_text_color: e.currentTarget.value })}
+              style={{ ...es.colorInput, marginTop: '4px' }}
+            />
+          </label>
+        </div>
+      </details>
 
       <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '10px' }}>
         {CTA_SLOTS.slice(0, visibleSlots).map(slot => {
@@ -2859,68 +2874,70 @@ const ImageBlockEditor: React.FC<ImageBlockEditorProps> = ({
         </button>
       )}
     </div>
-    {/* Tamaño y alineación */}
-    <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' as const, marginTop: '10px' }}>
-      <div>
-        <span style={es.fieldLabel}>Tamaño:</span>
-        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-          {(['small', 'medium', 'large'] as const).map(s => (
-            <button key={s} style={{ ...es.posBtn, ...(size === s ? es.posBtnActive : {}) }} onClick={() => onSizeChange(s)}>
-              {s === 'small' ? 'Pequeña' : s === 'medium' ? 'Mediana' : 'Grande'}
-            </button>
-          ))}
+    <details style={{ marginTop: '10px' }}>
+      <summary style={{ cursor: 'pointer', color: '#1d4ed8', fontWeight: 700 }}>Ajustes avanzados</summary>
+      <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' as const, marginTop: '10px' }}>
+        <div>
+          <span style={es.fieldLabel}>Tamaño:</span>
+          <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+            {(['small', 'medium', 'large'] as const).map(s => (
+              <button key={s} style={{ ...es.posBtn, ...(size === s ? es.posBtnActive : {}) }} onClick={() => onSizeChange(s)}>
+                {s === 'small' ? 'Pequeña' : s === 'medium' ? 'Mediana' : 'Grande'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <span style={es.fieldLabel}>Alineación:</span>
+          <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+            {(['left', 'center', 'right'] as const).map(a => {
+              const icons = { left: '⇤ Izq', center: '≡ Centro', right: 'Der ⇥' };
+              return (
+                <button key={a} style={{ ...es.alignBtn, ...(align === a ? es.alignBtnActive : {}) }} onClick={() => onAlignChange(a)}>{icons[a]}</button>
+              );
+            })}
+          </div>
         </div>
       </div>
-      <div>
-        <span style={es.fieldLabel}>Alineación:</span>
-        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-          {(['left', 'center', 'right'] as const).map(a => {
-            const icons = { left: '⇤ Izq', center: '≡ Centro', right: 'Der ⇥' };
-            return (
-              <button key={a} style={{ ...es.alignBtn, ...(align === a ? es.alignBtnActive : {}) }} onClick={() => onAlignChange(a)}>{icons[a]}</button>
-            );
-          })}
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginTop: '10px' }}>
+        <label style={es.fieldLabel}>
+          Ancho imagen (%)
+          <input
+            type="number"
+            min={20}
+            max={100}
+            step={1}
+            value={imageWidth || '100'}
+            onChange={e => onImageWidthChange(e.currentTarget.value || '100')}
+            style={{ ...es.captionInput, marginTop: '4px' }}
+          />
+        </label>
+        <label style={es.fieldLabel}>
+          Alto imagen (px)
+          <input
+            type="number"
+            min={0}
+            max={1200}
+            step={10}
+            value={imageHeight || ''}
+            onChange={e => onImageHeightChange(e.currentTarget.value)}
+            style={{ ...es.captionInput, marginTop: '4px' }}
+            placeholder="Auto"
+          />
+        </label>
+        <label style={es.fieldLabel}>
+          Ajuste imagen
+          <select
+            value={imageFit}
+            onChange={e => onImageFitChange(e.currentTarget.value as 'contain' | 'cover')}
+            style={{ ...es.styleSelect, marginTop: '4px' }}
+          >
+            <option value="contain">Contener (sin recorte)</option>
+            <option value="cover">Cubrir (puede recortar)</option>
+          </select>
+        </label>
       </div>
-    </div>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginTop: '10px' }}>
-      <label style={es.fieldLabel}>
-        Ancho imagen (%)
-        <input
-          type="number"
-          min={20}
-          max={100}
-          step={1}
-          value={imageWidth || '100'}
-          onChange={e => onImageWidthChange(e.currentTarget.value || '100')}
-          style={{ ...es.captionInput, marginTop: '4px' }}
-        />
-      </label>
-      <label style={es.fieldLabel}>
-        Alto imagen (px)
-        <input
-          type="number"
-          min={0}
-          max={1200}
-          step={10}
-          value={imageHeight || ''}
-          onChange={e => onImageHeightChange(e.currentTarget.value)}
-          style={{ ...es.captionInput, marginTop: '4px' }}
-          placeholder="Auto"
-        />
-      </label>
-      <label style={es.fieldLabel}>
-        Ajuste imagen
-        <select
-          value={imageFit}
-          onChange={e => onImageFitChange(e.currentTarget.value as 'contain' | 'cover')}
-          style={{ ...es.styleSelect, marginTop: '4px' }}
-        >
-          <option value="contain">Contener (sin recorte)</option>
-          <option value="cover">Cubrir (puede recortar)</option>
-        </select>
-      </label>
-    </div>
+    </details>
     <div style={es.captionRow}>
       <label style={es.fieldLabel}>Pie de foto (opcional)</label>
       <AutoTextarea
@@ -2975,24 +2992,27 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
       {/* Columna de texto */}
       <div style={es.tiCol}>
         <label style={es.fieldLabel}>Texto</label>
-        <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' as const }}>
-            {([
-              { key: 'start', label: '↑ Inicio' },
-              { key: 'center', label: '↕ Centro' },
-              { key: 'end', label: '↓ Final' },
-            ] as const).map(v => (
-              <button
-                key={v.key}
-                style={{ ...es.posBtn, ...(verticalAlign === v.key ? es.posBtnActive : {}) }}
-                onClick={() => onVerticalAlignChange(v.key)}
-                title={`Alineación vertical: ${v.label}`}
-              >
-                {v.label}
-              </button>
-            ))}
+        <details style={{ marginBottom: '8px' }}>
+          <summary style={{ cursor: 'pointer', color: '#1d4ed8', fontWeight: 700 }}>Ajustes avanzados</summary>
+          <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '8px', alignItems: 'center', marginTop: '8px' }}>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' as const }}>
+              {([
+                { key: 'start', label: '↑ Inicio' },
+                { key: 'center', label: '↕ Centro' },
+                { key: 'end', label: '↓ Final' },
+              ] as const).map(v => (
+                <button
+                  key={v.key}
+                  style={{ ...es.posBtn, ...(verticalAlign === v.key ? es.posBtnActive : {}) }}
+                  onClick={() => onVerticalAlignChange(v.key)}
+                  title={`Alineación vertical: ${v.label}`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        </details>
         <AutoTextarea
           value={text}
           onChange={onTextChange}
@@ -3040,44 +3060,47 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
           placeholder="Pie de foto..."
           extraStyle={{ ...es.captionInput, marginTop: '6px' }}
         />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '8px', marginTop: '8px' }}>
-          <label style={es.fieldLabel}>
-            Ancho imagen (%)
-            <input
-              type="number"
-              min={20}
-              max={70}
-              step={1}
-              value={imageWidth || '42'}
-              onChange={e => onImageWidthChange(e.currentTarget.value || '42')}
-              style={{ ...es.captionInput, marginTop: '4px' }}
-            />
-          </label>
-          <label style={es.fieldLabel}>
-            Alto imagen (px)
-            <input
-              type="number"
-              min={0}
-              max={1000}
-              step={10}
-              value={imageHeight || ''}
-              onChange={e => onImageHeightChange(e.currentTarget.value)}
-              placeholder="Auto"
-              style={{ ...es.captionInput, marginTop: '4px' }}
-            />
-          </label>
-          <label style={es.fieldLabel}>
-            Ajuste
-            <select
-              value={imageFit}
-              onChange={e => onImageFitChange(e.currentTarget.value as 'contain' | 'cover')}
-              style={{ ...es.styleSelect, marginTop: '4px' }}
-            >
-              <option value="cover">Cubrir</option>
-              <option value="contain">Contener</option>
-            </select>
-          </label>
-        </div>
+        <details style={{ marginTop: '8px' }}>
+          <summary style={{ cursor: 'pointer', color: '#1d4ed8', fontWeight: 700 }}>Ajustes avanzados</summary>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '8px', marginTop: '8px' }}>
+            <label style={es.fieldLabel}>
+              Ancho imagen (%)
+              <input
+                type="number"
+                min={20}
+                max={70}
+                step={1}
+                value={imageWidth || '42'}
+                onChange={e => onImageWidthChange(e.currentTarget.value || '42')}
+                style={{ ...es.captionInput, marginTop: '4px' }}
+              />
+            </label>
+            <label style={es.fieldLabel}>
+              Alto imagen (px)
+              <input
+                type="number"
+                min={0}
+                max={1000}
+                step={10}
+                value={imageHeight || ''}
+                onChange={e => onImageHeightChange(e.currentTarget.value)}
+                placeholder="Auto"
+                style={{ ...es.captionInput, marginTop: '4px' }}
+              />
+            </label>
+            <label style={es.fieldLabel}>
+              Ajuste
+              <select
+                value={imageFit}
+                onChange={e => onImageFitChange(e.currentTarget.value as 'contain' | 'cover')}
+                style={{ ...es.styleSelect, marginTop: '4px' }}
+              >
+                <option value="cover">Cubrir</option>
+                <option value="contain">Contener</option>
+              </select>
+            </label>
+          </div>
+        </details>
       </div>
     </div>
 
