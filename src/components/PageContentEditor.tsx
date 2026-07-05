@@ -1812,6 +1812,28 @@ const MemoBlockContentEditor = React.memo(({
               );
             })}
           </div>
+          <div style={es.alignRow}>
+            {([
+              { key: 'start', label: 'Arriba del bloque' },
+              { key: 'center', label: 'Centro del bloque' },
+              { key: 'end', label: 'Abajo del bloque' },
+            ] as const).map(v => {
+              const current = (block.content.text_vertical_align as 'start' | 'center' | 'end') ?? 'start';
+              return (
+                <button
+                  key={v.key}
+                  style={{ ...es.posBtn, ...(current === v.key ? es.posBtnActive : {}) }}
+                  onClick={() => onUpdateBlockContent(block.id, { text_vertical_align: v.key })}
+                  title={`Alineación vertical: ${v.label}`}
+                >
+                  {v.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ marginBottom: '8px', fontSize: '0.76em', color: '#64748b', fontWeight: 700 }}>
+            Alineación vertical del texto dentro del bloque
+          </div>
           <AutoTextarea
             value={block.content.text ?? ''}
             onChange={text => onUpdateBlockContent(block.id, { text })}

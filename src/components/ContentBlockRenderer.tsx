@@ -89,6 +89,17 @@ const getBlockShellStyle = (content: Record<string, string>): React.CSSPropertie
   };
 };
 
+const getTextVerticalAlignStyle = (value?: string): React.CSSProperties => {
+  const verticalAlign = (value as 'start' | 'center' | 'end') ?? 'start';
+  return {
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent:
+      verticalAlign === 'center' ? 'center' : verticalAlign === 'end' ? 'flex-end' : 'flex-start',
+    minHeight: verticalAlign === 'center' || verticalAlign === 'end' ? '120px' : undefined,
+  };
+};
+
 // Imagen con fallback visual cuando la URL ya no existe
 const BlockImg: React.FC<{
   src: string;
@@ -361,7 +372,7 @@ const BlockItem: React.FC<{
       const align = (c.text_align as React.CSSProperties['textAlign']) ?? 'left';
       return (
         <div>
-          <div style={{ ...rs.heading, textAlign: align, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }}>
+          <div style={{ ...rs.heading, ...getTextVerticalAlignStyle(c.text_vertical_align), textAlign: align, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }}>
             <RichTextValue value={c.text} />
           </div>
           <div style={{ ...rs.headingAccent, margin: align === 'center' ? '0 auto' : align === 'right' ? '0 0 0 auto' : undefined }} />
@@ -377,6 +388,7 @@ const BlockItem: React.FC<{
       return (
         <div style={{
           ...rs.subheading,
+          ...getTextVerticalAlignStyle(c.text_vertical_align),
           textAlign: align,
           paddingLeft: isCenter || isRight ? 0 : '14px',
           paddingRight: isRight ? '14px' : 0,
@@ -394,7 +406,7 @@ const BlockItem: React.FC<{
     case 'paragraph': {
       if (!c.text) return null;
       const align = (c.text_align as React.CSSProperties['textAlign']) ?? 'left';
-      return <RichTextValue className="cb-paragraph" style={{ ...rs.paragraph, textAlign: align, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }} value={c.text} />;
+      return <RichTextValue className="cb-paragraph" style={{ ...rs.paragraph, ...getTextVerticalAlignStyle(c.text_vertical_align), textAlign: align, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }} value={c.text} />;
     }
 
     case 'section': {
