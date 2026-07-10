@@ -512,7 +512,6 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
               {groupedSenalados.map((group, displayIndex) => {
                 const hasMarker = group.representativePos != null;
                 const idx = group.representativeIndex;
-                const displayLabel = group.count > 1 ? `${group.label} (${group.count})` : group.label;
 
                 return (
                   <div key={`${group.label}-${group.firstIndex}`} style={mergedStyles.senalRow}>

@@ -49,6 +49,13 @@ export type ClientRuntimeContext = {
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+export const ATLAS_SESSION_TOKEN_KEY = 'atlas_session_token';
+
+export const getAtlasSessionToken = (): string => {
+	if (typeof localStorage === 'undefined') return '';
+	return localStorage.getItem(ATLAS_SESSION_TOKEN_KEY) || '';
+};
+
 const wait = (ms: number): Promise<void> =>
 	new Promise((resolve) => {
 		window.setTimeout(resolve, ms);
@@ -146,16 +153,21 @@ const getMethod = (input: RequestInfo | URL, init?: RequestInit): string => {
 };
 
 const fetchWithRetry: typeof fetch = async (input, init) => {
+	const atlasToken = getAtlasSessionToken();
+	const headers = new Headers(input instanceof Request ? input.headers : undefined);
+	new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+	if (atlasToken) headers.set('X-Atlas-Session', atlasToken);
+	const requestInit: RequestInit = { ...init, headers };
 	const method = getMethod(input, init);
 	const canRetry = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
 	const maxAttempts = canRetry ? 3 : 1;
-	const { signal: requestSignal, ...initWithoutSignal } = init ?? {};
+	const { signal: requestSignal, ...initWithoutSignal } = requestInit;
 
 	let lastError: unknown;
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
 		try {
-			const nextInit = canRetry && attempt > 1 && requestSignal ? initWithoutSignal : init;
+			const nextInit = canRetry && attempt > 1 && requestSignal ? initWithoutSignal : requestInit;
 			const response = await fetch(input, nextInit);
 			if (canRetry && attempt < maxAttempts && isRetryableHttpStatus(response.status)) {
 				await wait(350 * attempt);

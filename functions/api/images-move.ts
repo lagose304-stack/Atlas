@@ -1,4 +1,5 @@
 import { callCloudinary, corsHeaders, json } from './_cloudinary';
+import { authorizeEditor } from './_auth';
 
 export async function onRequest(context: { request: Request; env: Record<string, string> }) {
   const { request, env } = context;
@@ -9,6 +10,10 @@ export async function onRequest(context: { request: Request; env: Record<string,
 
   if (request.method !== 'POST') {
     return json(405, { message: 'Method not allowed' });
+  }
+
+  if (!(await authorizeEditor(request, env))) {
+    return json(401, { message: 'Unauthorized' });
   }
 
   try {

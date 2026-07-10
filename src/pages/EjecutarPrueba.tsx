@@ -74,6 +74,19 @@ interface SelectedAnswersState {
   [questionId: string]: string;
 }
 
+interface PublicTestPayload {
+  test: PruebaRow;
+  questions: Array<Omit<QuestionRow, 'retroalimentacion'> & { options: Omit<QuestionOptionRow, 'is_correct'>[] }>;
+}
+
+interface GradeResult {
+  question_id: string;
+  is_correct: boolean;
+  correct_option_id: string;
+  correct_option_text: string;
+  feedback: string | null;
+}
+
 const parciales: Array<{ key: ParcialKey; label: string }> = [
   { key: 'primer', label: 'Primer parcial' },
   { key: 'segundo', label: 'Segundo parcial' },
@@ -92,6 +105,7 @@ const EjecutarPrueba: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCompletion, setShowCompletion] = useState(false);
+  const [isGraded, setIsGraded] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -105,73 +119,29 @@ const EjecutarPrueba: React.FC = () => {
       setIsLoading(true);
       setError('');
 
-      const { data: pruebaData, error: pruebaError } = await supabase
-        .from('pruebas')
-        .select('id, nombre, instrucciones, scope, parcial_key, created_at, estado')
-        .eq('id', pruebaId)
-        .single();
-
-      if (pruebaError || !pruebaData) {
+      const { data, error: pruebaError } = await supabase.rpc('atlas_get_public_test', {
+        p_prueba_id: pruebaId,
+      });
+      const payload = data as PublicTestPayload | null;
+      if (pruebaError || !payload?.test) {
         setError('No se pudo cargar la prueba.');
         setIsLoading(false);
         return;
       }
 
-      const nextPrueba = pruebaData as PruebaRow;
-      if (nextPrueba.estado !== 'publicada') {
-        setError('Esta prueba no está publicada.');
-        setIsLoading(false);
-        return;
-      }
+      const nextPrueba = payload.test;
       setPrueba(nextPrueba);
-
-      const { data: preguntasData, error: preguntasError } = await supabase
-        .from('prueba_preguntas')
-        .select('id, sort_order, titulo, retroalimentacion, required, reference_photo_url, reference_tema_name, reference_subtema_name, reference_senalado_x, reference_senalado_y, reference_senalado_start_x, reference_senalado_start_y')
-        .eq('prueba_id', nextPrueba.id)
-        .order('sort_order', { ascending: true });
-
-      if (preguntasError) {
-        setError('No se pudieron cargar las preguntas de la prueba.');
-        setIsLoading(false);
-        return;
-      }
-
-      const preguntaRows = (preguntasData ?? []) as QuestionRow[];
-      const preguntaIds = preguntaRows.map(pregunta => pregunta.id);
-      const { data: opcionesData, error: opcionesError } = await supabase
-        .from('prueba_pregunta_opciones')
-        .select('id, pregunta_id, sort_order, texto, is_correct')
-        .in('pregunta_id', preguntaIds)
-        .order('sort_order', { ascending: true });
-
-      if (opcionesError) {
-        setError('No se pudieron cargar las opciones de la prueba.');
-        setIsLoading(false);
-        return;
-      }
-
-      const opcionesPorPregunta = new Map<string, QuestionOptionRow[]>();
-      (opcionesData ?? []).forEach((opcion) => {
-        const row = opcion as QuestionOptionRow;
-        const current = opcionesPorPregunta.get(row.pregunta_id) ?? [];
-        current.push(row);
-        opcionesPorPregunta.set(row.pregunta_id, current);
-      });
-
-      setQuestions(preguntaRows.map((pregunta) => {
-        const opciones = opcionesPorPregunta.get(pregunta.id) ?? [];
-
+      setQuestions(payload.questions.map((pregunta) => {
         return {
           id: pregunta.id,
           sortOrder: pregunta.sort_order,
           title: pregunta.titulo,
-          retroalimentacion: pregunta.retroalimentacion ?? '',
+          retroalimentacion: '',
           required: pregunta.required,
-          options: opciones.map((opcion) => ({
+          options: pregunta.options.map((opcion) => ({
             id: opcion.id,
             text: opcion.texto,
-            isCorrect: opcion.is_correct,
+            isCorrect: false,
             sortOrder: opcion.sort_order,
           })),
           referencePhotoUrl: pregunta.reference_photo_url,
@@ -191,6 +161,7 @@ const EjecutarPrueba: React.FC = () => {
       }));
 
       setCurrentQuestionIndex(0);
+      setIsGraded(false);
 
       setIsLoading(false);
     };
@@ -217,7 +188,36 @@ const EjecutarPrueba: React.FC = () => {
   const progressPercent = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
   const currentQuestion = questions[currentQuestionIndex] ?? null;
   const canGoPrev = currentQuestionIndex > 0;
-  const canGoNext = currentQuestionIndex < questions.length - 1;
+
+  const gradeTest = async () => {
+    if (!pruebaId || isGraded) {
+      setShowCompletion(true);
+      return;
+    }
+    const { data, error: gradeError } = await supabase.rpc('atlas_grade_test', {
+      p_prueba_id: pruebaId,
+      p_answers: selectedAnswers,
+    });
+    if (gradeError || !data) {
+      setError('No se pudo corregir la prueba. Intenta nuevamente.');
+      return;
+    }
+    const results = ((data as { results?: GradeResult[] }).results ?? []);
+    const byQuestion = new Map(results.map(result => [result.question_id, result]));
+    setQuestions(previous => previous.map(question => {
+      const result = byQuestion.get(question.id);
+      return {
+        ...question,
+        retroalimentacion: result?.feedback ?? '',
+        options: question.options.map(option => ({
+          ...option,
+          isCorrect: option.id === result?.correct_option_id,
+        })),
+      };
+    }));
+    setIsGraded(true);
+    setShowCompletion(true);
+  };
 
   useEffect(() => {
     setReferenceThumbNaturalSize(null);
@@ -302,8 +302,8 @@ const EjecutarPrueba: React.FC = () => {
                             <h2 style={s.questionTitle}>{currentQuestion.title || 'Pregunta sin título'}</h2>
                           </div>
                         </div>
-                        <span style={isAnswered ? (isCorrect ? s.correctPill : s.wrongPill) : s.pendingPill}>
-                          {isAnswered ? (isCorrect ? 'Correcta' : 'Incorrecta') : 'Sin responder'}
+                        <span style={isAnswered && isGraded ? (isCorrect ? s.correctPill : s.wrongPill) : s.pendingPill}>
+                          {isAnswered ? (isGraded ? (isCorrect ? 'Correcta' : 'Incorrecta') : 'Respondida') : 'Sin responder'}
                         </span>
                       </div>
 
@@ -382,15 +382,15 @@ const EjecutarPrueba: React.FC = () => {
                               const isSelected = option.id === selectedId;
                               const optionIsCorrect = option.isCorrect;
                               const buttonStyle = isSelected
-                                ? (optionIsCorrect ? s.optionCorrect : s.optionWrong)
-                                : (isAnswered && optionIsCorrect ? s.optionCorrectGhost : s.optionButton);
+                                ? (isGraded ? (optionIsCorrect ? s.optionCorrect : s.optionWrong) : s.optionCorrectGhost)
+                                : (isGraded && optionIsCorrect ? s.optionCorrectGhost : s.optionButton);
 
                               return (
                                 <button
                                   key={option.id}
                                   type="button"
                                   style={buttonStyle}
-                                  onClick={() => setSelectedAnswers(prev => ({ ...prev, [currentQuestion.id]: option.id }))}
+                                  onClick={() => !isGraded && setSelectedAnswers(prev => ({ ...prev, [currentQuestion.id]: option.id }))}
                                 >
                                   <span style={s.optionLetter}>{String.fromCharCode(65 + option.sortOrder)}</span>
                                   <span style={s.optionText}>{option.text}</span>
@@ -399,7 +399,7 @@ const EjecutarPrueba: React.FC = () => {
                             })}
                           </div>
 
-                          {isAnswered && (
+                          {isAnswered && isGraded && (
                             <div style={isCorrect ? s.feedbackSuccess : s.feedbackError}>
                               {isCorrect
                                 ? 'Seleccionaste la respuesta correcta.'
@@ -407,7 +407,7 @@ const EjecutarPrueba: React.FC = () => {
                             </div>
                           )}
 
-                          {isAnswered && currentQuestion.retroalimentacion.trim().length > 0 && (
+                          {isAnswered && isGraded && currentQuestion.retroalimentacion.trim().length > 0 && (
                             <div style={s.feedbackNoteBox}>
                               <span style={s.feedbackNoteLabel}>Retroalimentación</span>
                               <p style={s.feedbackNoteText}>{currentQuestion.retroalimentacion}</p>
@@ -433,7 +433,7 @@ const EjecutarPrueba: React.FC = () => {
                                 if (currentQuestionIndex < questions.length - 1) {
                                   setCurrentQuestionIndex(index => Math.min(questions.length - 1, index + 1));
                                 } else {
-                                  setShowCompletion(true);
+                                  void gradeTest();
                                 }
                               }}
                               disabled={questions.length === 0}

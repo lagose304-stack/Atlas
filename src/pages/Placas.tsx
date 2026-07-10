@@ -7,11 +7,9 @@ import Footer from '../components/Footer';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import LoadingToast from '../components/LoadingToast';
-import BoldField from '../components/BoldField';
 import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
 import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
 import PlateEditorPanel from '../components/PlateEditorPanel';
-import TincionAccordionSelector from '../components/TincionAccordionSelector';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
@@ -323,6 +321,14 @@ const Placas: React.FC = () => {
   const [multipleSenaladoBatchOpen, setMultipleSenaladoBatchOpen] = useState(false);
   const [editingSenaladoGroup, setEditingSenaladoGroup] = useState<{ label: string; indices: number[] } | null>(null);
   const [editingSenaladoGroupLocations, setEditingSenaladoGroupLocations] = useState<Array<MarkerLocation | null>>([]);
+
+  const appendMultipleSenaladoSlot = useCallback((label: string) => {
+    const nextIndex = senalados.length;
+    setSenalados(previous => [...previous, label]);
+    setSenaladosPos(previous => [...previous, null]);
+    setEditingSenaladoIndex(nextIndex);
+    return nextIndex;
+  }, [senalados.length]);
 
   const handleAddMultipleSenalado = useCallback(() => {
     setMultipleSenaladoActivo(true);
@@ -1217,7 +1223,7 @@ const Placas: React.FC = () => {
           senaladoLabel={editingSenaladoGroup.label}
           batchMode
           batchSaveLabel="Guardar cambios del grupo"
-          initialBatchLocations={editingSenaladoGroupLocations}
+          initialBatchLocations={editingSenaladoGroupLocations.filter((location): location is MarkerLocation => location !== null)}
           onCancel={() => {
             setEditingSenaladoGroup(null);
             setEditingSenaladoGroupLocations([]);

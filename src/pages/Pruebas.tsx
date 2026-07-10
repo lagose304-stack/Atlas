@@ -149,10 +149,6 @@ const Pruebas: React.FC = () => {
     [selectedTemaId, temas],
   );
 
-  const selectedSubtema = useMemo(
-    () => subtemas.find(subtema => subtema.id === selectedSubtemaId) ?? null,
-    [selectedSubtemaId, subtemas],
-  );
 
   const visibleThemeSelection = scope === 'tema' || scope === 'subtema';
   const visibleSubtemaSelection = scope === 'subtema';

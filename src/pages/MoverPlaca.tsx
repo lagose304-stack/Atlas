@@ -6,7 +6,6 @@ import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import LoadingToast from '../components/LoadingToast';
-import BoldField from '../components/BoldField';
 import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
 import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
 import PlateEditorPanel from '../components/PlateEditorPanel';
@@ -217,8 +216,8 @@ const MoverPlaca: React.FC = () => {
   const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
   const [editingSenaladoGroup, setEditingSenaladoGroup] = useState<{ label: string; indices: number[] } | null>(null);
   const [editingSenaladoGroupLocations, setEditingSenaladoGroupLocations] = useState<Array<MarkerLocation | null>>([]);
+  const [, setForceLocationAssignment] = useState(false);
   const [namingSenaladoIndex, setNamingSenaladoIndex] = useState<number | null>(null);
-  const [forceLocationAssignment, setForceLocationAssignment] = useState(false);
   const [multipleSenaladoActivo, setMultipleSenaladoActivo] = useState(false);
   const [multipleSenaladoLabel, setMultipleSenaladoLabel] = useState('');
   const [multipleSenaladoPromptOpen, setMultipleSenaladoPromptOpen] = useState(false);
@@ -1206,7 +1205,7 @@ const MoverPlaca: React.FC = () => {
           senaladoLabel={editingSenaladoGroup.label}
           batchMode
           batchSaveLabel="Guardar cambios del grupo"
-          initialBatchLocations={editingSenaladoGroupLocations}
+          initialBatchLocations={editingSenaladoGroupLocations.filter((location): location is MarkerLocation => location !== null)}
           onCancel={() => {
             setEditingSenaladoGroup(null);
             setEditingSenaladoGroupLocations([]);

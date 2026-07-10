@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAtlasSessionToken } from './supabase';
 
 const cloudinaryCloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const cloudinaryUploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
@@ -33,6 +34,10 @@ const resolveBackendBaseUrl = () => {
 const backendBaseUrl = resolveBackendBaseUrl();
 const backendUrl = (path: string) => (backendBaseUrl ? `${backendBaseUrl}${path}` : path);
 const isUsingEdgeFunctions = !backendBaseUrl;
+const authHeaders = () => {
+  const token = getAtlasSessionToken();
+  return token ? { 'X-Atlas-Session': token } : {};
+};
 
 type UploadOptions = {
   folder?: string;
@@ -259,6 +264,7 @@ export const deleteFromCloudinary = async (input: DeleteFromCloudinaryInput) => 
 
   if (isUsingEdgeFunctions) {
     const response = await axios.delete('/api/images-delete', {
+      headers: authHeaders(),
       params: {
         ...(publicId ? { publicId } : {}),
         ...(imageUrl ? { imageUrl } : {}),
@@ -272,7 +278,7 @@ export const deleteFromCloudinary = async (input: DeleteFromCloudinaryInput) => 
     throw new Error('No se pudo resolver el publicId para eliminar en backend local.');
   }
 
-  const response = await axios.delete(backendUrl(`/api/images/${resolvedPublicId}`));
+  const response = await axios.delete(backendUrl(`/api/images/${resolvedPublicId}`), { headers: authHeaders() });
   return response.data;
 };
 
@@ -282,8 +288,8 @@ export const moveCloudinaryImage = async (fromPublicId: string, toPublicId: stri
     to_public_id: toPublicId,
   };
   const response = isUsingEdgeFunctions
-    ? await axios.post('/api/images-move', payload)
-    : await axios.post(backendUrl('/api/images/move'), payload);
+    ? await axios.post('/api/images-move', payload, { headers: authHeaders() })
+    : await axios.post(backendUrl('/api/images/move'), payload, { headers: authHeaders() });
   return response.data;
 };
 

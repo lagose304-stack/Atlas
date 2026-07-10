@@ -40,12 +40,39 @@ app.use(cors({
     return callback(new Error(`CORS bloqueado para origen: ${origin}`));
   },
   methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Atlas-Session'],
 }));
 app.use(express.json());
 
+const authorizeEditor = async (req, res, next) => {
+  const token = req.get('X-Atlas-Session') || '';
+  const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!token || !supabaseUrl || !serviceKey) {
+    return res.status(401).json({ message: 'No autorizado' });
+  }
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/atlas_authorize_token`, {
+      method: 'POST',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ p_token: token, p_roles: ['Administrador', 'Microscopía'] }),
+    });
+    if (!response.ok || await response.json() !== true) {
+      return res.status(403).json({ message: 'Permisos insuficientes' });
+    }
+    return next();
+  } catch (error) {
+    console.error('Error validando sesion administrativa:', error);
+    return res.status(503).json({ message: 'No se pudo validar la sesion' });
+  }
+};
+
 // Ruta para eliminar imagen de Cloudinary (soporta public_ids con sub-carpetas)
-app.delete(/^\/api\/images\/(.+)$/, async (req, res) => {
+app.delete(/^\/api\/images\/(.+)$/, authorizeEditor, async (req, res) => {
   // En Express 5 los grupos de regex no se exponen en req.params; extraemos de req.path
   const public_id = req.path.replace(/^\/api\/images\//, '').replace(/^\//, '')
     || (req.url || '').split('/api/images/')[1] || '';
@@ -65,7 +92,7 @@ app.delete(/^\/api\/images\/(.+)$/, async (req, res) => {
 });
 
 // Ruta para mover/renombrar imagen en Cloudinary (cambiar de carpeta)
-app.post('/api/images/move', async (req, res) => {
+app.post('/api/images/move', authorizeEditor, async (req, res) => {
   const { from_public_id, to_public_id } = req.body;
   if (!from_public_id || !to_public_id) {
     return res.status(400).json({ message: 'Faltan parámetros from_public_id o to_public_id' });

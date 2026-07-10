@@ -72,7 +72,7 @@ const TemasOrderManager: React.FC<TemasOrderManagerProps> = ({ title, subtitle }
     setIsSaving(true);
     setSaveSuccess(false);
     try {
-      const promises: Promise<unknown>[] = [];
+      const promises: Array<PromiseLike<unknown>> = [];
       for (const parcial of Object.keys(temasMap) as ParcialKey[]) {
         temasMap[parcial].forEach((tema, index) => {
           promises.push(supabase.from('temas').update({ sort_order: index }).eq('id', tema.id));

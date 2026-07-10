@@ -12,6 +12,7 @@ interface PruebaPublica {
   scope: 'parcial' | 'tema' | 'subtema';
   parcial_key: 'primer' | 'segundo' | 'tercer';
   created_at: string;
+  image_url?: string | null;
   tema?: { id: number; nombre: string } | null;
   subtema?: { id: number; nombre: string } | null;
 }
@@ -133,7 +134,7 @@ const Evaluaciones: React.FC = () => {
         setPruebas([]);
         setError('No se pudieron cargar las evaluaciones publicadas.');
       } else {
-        setPruebas((data ?? []) as PruebaPublica[]);
+        setPruebas((data ?? []) as unknown as PruebaPublica[]);
       }
 
       setIsLoading(false);

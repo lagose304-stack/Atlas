@@ -1,5 +1,19 @@
 # Atlas
 
+## Despliegue de seguridad (obligatorio)
+
+La aplicacion usa sesiones propias validadas por PostgreSQL y politicas RLS por rol. Para actualizar
+una instalacion existente sin perder usuarios:
+
+1. Ejecuta `database/security_hardening.sql` en el SQL Editor de Supabase.
+2. Configura `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` como secretos de Cloudflare Functions.
+3. Configura esas mismas variables en `backend/.env` si utilizas el backend local.
+4. Despliega el frontend solamente despues de aplicar la migracion.
+
+La migracion conserva nombres, roles y contrasenas actuales, pero cifra las contrasenas con bcrypt.
+Las sesiones antiguas de `localStorage` dejan de ser validas y los usuarios deben iniciar sesion de
+nuevo. La service-role key es exclusivamente de servidor y nunca debe tener prefijo `VITE_`.
+
 ## Deploy frontend (Cloudflare Pages) + image admin API
 
 ### Cloudflare Pages build settings
@@ -70,6 +84,8 @@ Also required for Cloudflare Functions (server-side secrets, no `VITE_` prefix):
 - `CLOUDINARY_CLOUD_NAME`
 - `CLOUDINARY_API_KEY`
 - `CLOUDINARY_API_SECRET`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY` (server-side only; never use a `VITE_` prefix)
 
 Example backend URL value: `https://YOUR_BACKEND_DOMAIN`
 

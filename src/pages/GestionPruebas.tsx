@@ -97,7 +97,7 @@ const GestionPruebas: React.FC = () => {
           setPruebas([]);
           setError('No se pudieron cargar las pruebas.');
         } else {
-          setPruebas((data ?? []) as PruebaResumen[]);
+          setPruebas((data ?? []) as unknown as PruebaResumen[]);
         }
 
         setIsLoading(false);
@@ -124,7 +124,6 @@ const GestionPruebas: React.FC = () => {
       const temaMap = new Map<string, TemaGroup>();
 
       parcialItems.forEach(prueba => {
-        const temaId = prueba.tema?.id ?? prueba.id;
         const temaKey = prueba.tema?.id ? String(prueba.tema.id) : `sin-tema-${prueba.id}`;
         const temaLabel = prueba.tema?.nombre ?? 'Tema sin identificar';
 

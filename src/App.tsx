@@ -29,7 +29,6 @@ import Estadisticas from './pages/Estadisticas';
 import { logSiteVisitOncePerSession } from './services/analytics';
 
 const ROLE_ADMIN = 'Administrador' as const;
-const ROLE_INSTRUCTOR = 'Instructor' as const;
 const ROLE_MICRO = 'Microscopía' as const;
 
 const ScrollToTop: React.FC = () => {

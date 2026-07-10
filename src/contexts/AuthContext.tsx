@@ -1,7 +1,6 @@
-import React, { createContext, useState, useContext, ReactNode } from 'react';
-import { supabase } from '../services/supabase';
+import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { ATLAS_SESSION_TOKEN_KEY, supabase } from '../services/supabase';
 import type { UserRole } from '../security/permissions';
-import { logSecurityEvent } from '../services/securityAudit';
 
 interface AuthUser {
   id: number;
@@ -10,18 +9,12 @@ interface AuthUser {
   activo?: boolean;
   session_version?: number;
   is_protected?: boolean;
-  auth_time?: number;
 }
 
 export type LoginStatus =
-  | 'success'
-  | 'missing_credentials'
-  | 'credentials_with_whitespace'
-  | 'locked'
-  | 'backend_unavailable'
-  | 'invalid_credentials'
-  | 'user_deactivated'
-  | 'login_exception';
+  | 'success' | 'missing_credentials' | 'credentials_with_whitespace'
+  | 'locked' | 'backend_unavailable' | 'invalid_credentials'
+  | 'user_deactivated' | 'login_exception';
 
 export interface LoginResult {
   ok: boolean;
@@ -38,503 +31,122 @@ interface AuthContextType {
   user: AuthUser | null;
 }
 
+type SessionResponse = {
+  ok?: boolean;
+  status?: LoginStatus;
+  token?: string;
+  user?: AuthUser;
+  lockout_remaining_ms?: number;
+};
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const USER_KEY = 'atlas_user';
+
+const messageForStatus = (status: LoginStatus, remainingMs?: number) => {
+  if (status === 'locked') {
+    const minutes = Math.max(1, Math.ceil((remainingMs || 0) / 60000));
+    return `Acceso temporalmente bloqueado. Intenta de nuevo en ${minutes} min.`;
+  }
+  if (status === 'user_deactivated') return 'Tu cuenta está desactivada. Contacta al administrador.';
+  if (status === 'backend_unavailable') return 'No se pudo conectar con el servicio de autenticación.';
+  return 'Usuario o contraseña incorrectos.';
+};
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
 
-  const SESSION_CHECK_INTERVAL_MS = 60 * 1000;
-  const SESSION_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000;
-  const MAX_LOGIN_ATTEMPTS = 5;
-  const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
-  const LEGACY_FAILED_ATTEMPTS_KEY = 'atlas_failed_attempts';
-  const LEGACY_LOCKOUT_UNTIL_KEY = 'atlas_lockout_until';
-
-  const normalizeUsername = (raw: string) => raw.trim().toLowerCase();
-
-  const getFailedAttemptsKey = (normalizedUsername: string) =>
-    `atlas_failed_attempts_${normalizedUsername || 'global'}`;
-
-  const getLockoutUntilKey = (normalizedUsername: string) =>
-    `atlas_lockout_until_${normalizedUsername || 'global'}`;
-
-  const persistSession = (nextUser: AuthUser) => {
-    localStorage.setItem('atlas_user', JSON.stringify(nextUser));
-    localStorage.setItem('atlas_auth', 'true');
-  };
-
-  const clearLegacyLockoutKeys = () => {
-    localStorage.removeItem(LEGACY_FAILED_ATTEMPTS_KEY);
-    localStorage.removeItem(LEGACY_LOCKOUT_UNTIL_KEY);
-  };
-
-  const formatLockoutRemaining = (remainingMs: number): string => {
-    const totalSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-
-    if (minutes <= 0) {
-      return `${seconds} segundos`;
-    }
-
-    if (seconds === 0) {
-      return `${minutes} min`;
-    }
-
-    return `${minutes} min ${seconds} s`;
-  };
-
-  const getLockoutState = (normalizedUsername: string): { isLocked: boolean; remainingMs: number } => {
-    const lockoutUntilKey = getLockoutUntilKey(normalizedUsername);
-    const failedAttemptsKey = getFailedAttemptsKey(normalizedUsername);
-    const lockoutUntilRaw = localStorage.getItem(lockoutUntilKey);
-    if (!lockoutUntilRaw) {
-      return { isLocked: false, remainingMs: 0 };
-    }
-
-    const lockoutUntil = Number(lockoutUntilRaw);
-    if (Number.isNaN(lockoutUntil)) {
-      localStorage.removeItem(lockoutUntilKey);
-      localStorage.removeItem(failedAttemptsKey);
-      return { isLocked: false, remainingMs: 0 };
-    }
-
-    const remainingMs = lockoutUntil - Date.now();
-    if (remainingMs <= 0) {
-      localStorage.removeItem(lockoutUntilKey);
-      localStorage.removeItem(failedAttemptsKey);
-      return { isLocked: false, remainingMs: 0 };
-    }
-
-    return { isLocked: true, remainingMs };
-  };
-
-  const incrementFailedAttempts = (normalizedUsername: string) => {
-    const failedAttemptsKey = getFailedAttemptsKey(normalizedUsername);
-    const lockoutUntilKey = getLockoutUntilKey(normalizedUsername);
-    const attempts = Number(localStorage.getItem(failedAttemptsKey) ?? '0');
-    const nextAttempts = Number.isNaN(attempts) ? 1 : attempts + 1;
-
-    localStorage.setItem(failedAttemptsKey, String(nextAttempts));
-    if (nextAttempts >= MAX_LOGIN_ATTEMPTS) {
-      const lockoutUntil = Date.now() + LOCKOUT_DURATION_MS;
-      localStorage.setItem(lockoutUntilKey, String(lockoutUntil));
-    }
-  };
-
-  const clearFailedAttempts = (normalizedUsername: string) => {
-    const failedAttemptsKey = getFailedAttemptsKey(normalizedUsername);
-    const lockoutUntilKey = getLockoutUntilKey(normalizedUsername);
-    localStorage.removeItem(failedAttemptsKey);
-    localStorage.removeItem(lockoutUntilKey);
-  };
-
-  const clearSession = () => {
-    setIsAuthenticated(false);
-    setUser(null);
-    localStorage.removeItem('atlas_user');
+  const clearLocalSession = () => {
+    localStorage.removeItem(ATLAS_SESSION_TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
     localStorage.removeItem('atlas_auth');
+    setUser(null);
+    setIsAuthenticated(false);
   };
 
-  const getUserById = async (
-    userId: number
-  ): Promise<{ user: AuthUser | null; fetchError: boolean }> => {
-    const primaryQuery = await supabase
-      .from('usuarios')
-      .select('id, username, rol, activo, session_version, is_protected')
-      .eq('id', userId)
-      .single();
-
-    if (!primaryQuery.error && primaryQuery.data) {
-      return { user: primaryQuery.data as AuthUser, fetchError: false };
-    }
-
-    if (primaryQuery.error && primaryQuery.error.code && primaryQuery.error.code !== 'PGRST116') {
-      return { user: null, fetchError: true };
-    }
-
-    const fallbackQuery = await supabase
-      .from('usuarios')
-      .select('id, username, rol, is_protected')
-      .eq('id', userId)
-      .single();
-
-    if (fallbackQuery.error) {
-      if (fallbackQuery.error.code === 'PGRST116') {
-        return { user: null, fetchError: false };
-      }
-      return { user: null, fetchError: true };
-    }
-
-    if (!fallbackQuery.data) {
-      return { user: null, fetchError: false };
-    }
-
-    const fallbackUser = fallbackQuery.data as AuthUser;
-    return {
-      user: {
-        ...fallbackUser,
-        activo: true,
-        session_version: 1,
-        is_protected: fallbackUser.is_protected ?? false,
-      },
-      fetchError: false,
-    };
+  const acceptSession = (nextUser: AuthUser, token?: string) => {
+    if (token) localStorage.setItem(ATLAS_SESSION_TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+    localStorage.setItem('atlas_auth', 'true');
+    setUser(nextUser);
+    setIsAuthenticated(true);
   };
 
-  const validatePersistedSession = async (): Promise<boolean> => {
-    const savedAuth = localStorage.getItem('atlas_auth');
-    const savedUser = localStorage.getItem('atlas_user');
-
-    if (savedAuth !== 'true' || !savedUser) {
+  const validateSession = async () => {
+    if (!localStorage.getItem(ATLAS_SESSION_TOKEN_KEY)) {
+      clearLocalSession();
       return false;
     }
-
-    try {
-      const parsedUser = JSON.parse(savedUser) as AuthUser;
-      if (!parsedUser?.id) {
-        void logSecurityEvent('session_invalidated', {
-          details: { reason: 'invalid_saved_user_payload' },
-        });
-        clearSession();
-        return false;
-      }
-
-      const authTime = Number(parsedUser.auth_time);
-      if (!authTime || Number.isNaN(authTime)) {
-        void logSecurityEvent('session_invalidated', {
-          userId: parsedUser.id,
-          username: parsedUser.username,
-          details: { reason: 'missing_auth_time' },
-        });
-        clearSession();
-        return false;
-      }
-
-      if (Date.now() - authTime > SESSION_TIMEOUT_MS) {
-        void logSecurityEvent('session_invalidated', {
-          userId: parsedUser.id,
-          username: parsedUser.username,
-          details: { reason: 'session_timeout' },
-        });
-        clearSession();
-        return false;
-      }
-
-      const userLookup = await getUserById(parsedUser.id);
-      if (userLookup.fetchError) {
-        // Mantener la sesión local ante fallos transitorios de red o backend.
-        const optimisticUser: AuthUser = {
-          ...parsedUser,
-          activo: true,
-          session_version: parsedUser.session_version ?? 1,
-          is_protected: parsedUser.is_protected ?? false,
-          auth_time: authTime,
-        };
-        setUser(optimisticUser);
-        setIsAuthenticated(true);
-        persistSession(optimisticUser);
-        return true;
-      }
-
-      const dbUser = userLookup.user;
-      if (!dbUser) {
-        void logSecurityEvent('session_invalidated', {
-          userId: parsedUser.id,
-          username: parsedUser.username,
-          details: { reason: 'user_not_found' },
-        });
-        clearSession();
-        return false;
-      }
-
-      const isActive = dbUser.activo !== false;
-      if (!isActive) {
-        void logSecurityEvent('session_invalidated', {
-          userId: parsedUser.id,
-          username: parsedUser.username,
-          details: { reason: 'user_deactivated' },
-        });
-        clearSession();
-        return false;
-      }
-
-      const previousSessionVersion = parsedUser.session_version ?? 1;
-      const currentSessionVersion = dbUser.session_version ?? 1;
-      if (currentSessionVersion !== previousSessionVersion) {
-        void logSecurityEvent('session_invalidated', {
-          userId: parsedUser.id,
-          username: parsedUser.username,
-          details: {
-            reason: 'session_version_mismatch',
-            previousSessionVersion,
-            currentSessionVersion,
-          },
-        });
-        clearSession();
-        return false;
-      }
-
-      const normalizedUser: AuthUser = {
-        ...dbUser,
-        activo: true,
-        session_version: currentSessionVersion,
-        // Sesión deslizante: si el usuario sigue activo se renueva el tiempo de autenticación.
-        auth_time: Date.now(),
-      };
-
-      setUser(normalizedUser);
-      setIsAuthenticated(true);
-      persistSession(normalizedUser);
-      return true;
-    } catch (error) {
-      console.error('Error validando sesion persistida:', error);
-      void logSecurityEvent('session_invalidated', {
-        details: { reason: 'validation_exception' },
-      });
-      clearSession();
+    const { data, error } = await supabase.rpc('atlas_validate_session');
+    const result = data as SessionResponse | null;
+    if (error || !result?.ok || !result.user) {
+      clearLocalSession();
       return false;
     }
+    acceptSession(result.user);
+    return true;
   };
 
   const login = async (username: string, password: string): Promise<LoginResult> => {
+    const normalizedUsername = username.trim().toLowerCase();
+    if (!normalizedUsername || !password) {
+      return { ok: false, status: 'missing_credentials', message: 'Debes ingresar usuario y contraseña.' };
+    }
+    if (/\s/.test(username) || /\s/.test(password)) {
+      return { ok: false, status: 'credentials_with_whitespace', message: 'Usuario y contraseña no pueden contener espacios en blanco.' };
+    }
+
     try {
       setIsLoading(true);
-      const normalizedUsername = normalizeUsername(username);
-
-      // Validación básica
-      if (!username || !password) {
-        void logSecurityEvent('login_failed', {
-          username: normalizedUsername || null,
-          details: { reason: 'missing_credentials' },
-        });
-        setIsLoading(false);
-        return {
-          ok: false,
-          status: 'missing_credentials',
-          message: 'Debes ingresar usuario y contraseña.',
-        };
-      }
-
-      if (/\s/.test(username) || /\s/.test(password)) {
-        void logSecurityEvent('login_failed', {
-          username: normalizedUsername || null,
-          details: { reason: 'credentials_with_whitespace' },
-        });
-        setIsLoading(false);
-        return {
-          ok: false,
-          status: 'credentials_with_whitespace',
-          message: 'Usuario y contraseña no pueden contener espacios en blanco.',
-        };
-      }
-
-      const lockoutState = getLockoutState(normalizedUsername);
-      if (lockoutState.isLocked) {
-        void logSecurityEvent('login_locked', {
-          username: normalizedUsername,
-          details: {
-            reason: 'lockout_active',
-            remainingMs: lockoutState.remainingMs,
-          },
-        });
-        setIsLoading(false);
-        return {
-          ok: false,
-          status: 'locked',
-          message: `Acceso temporalmente bloqueado. Intenta de nuevo en ${formatLockoutRemaining(lockoutState.remainingMs)}.`,
-          lockoutRemainingMs: lockoutState.remainingMs,
-        };
-      }
-
-      // Consultar la base de datos
-      const { data, error } = await supabase
-        .from('usuarios')
-        .select('id, username, rol, activo, session_version, is_protected')
-        .ilike('username', normalizedUsername)
-        .eq('password', password)
-        .order('id', { ascending: true })
-        .limit(1);
-
-      let authUser: AuthUser | null = null;
-      let backendAuthError = false;
-
-      if (!error && data && data.length > 0) {
-        authUser = data[0] as AuthUser;
-      } else {
-        if (error) {
-          backendAuthError = true;
-        }
-
-        const fallback = await supabase
-          .from('usuarios')
-          .select('id, username, rol, is_protected')
-          .ilike('username', normalizedUsername)
-          .eq('password', password)
-          .order('id', { ascending: true })
-          .limit(1);
-
-        if (!fallback.error && fallback.data && fallback.data.length > 0) {
-          const fallbackRecord = fallback.data[0] as AuthUser;
-          authUser = {
-            ...fallbackRecord,
-            activo: true,
-            session_version: 1,
-            is_protected: fallbackRecord.is_protected ?? false,
-          };
-          backendAuthError = false;
-        } else if (fallback.error) {
-          backendAuthError = true;
-        }
-      }
-
-      if (!authUser) {
-        if (backendAuthError) {
-          void logSecurityEvent('login_failed', {
-            username: normalizedUsername,
-            details: { reason: 'auth_backend_unavailable' },
-          });
-          setIsLoading(false);
-          return {
-            ok: false,
-            status: 'backend_unavailable',
-            message: 'No se pudo conectar con el servicio de autenticacion. Intenta de nuevo en unos segundos.',
-          };
-        }
-
-        incrementFailedAttempts(normalizedUsername);
-        const nextLockout = getLockoutState(normalizedUsername);
-        if (nextLockout.isLocked) {
-          void logSecurityEvent('login_locked', {
-            username: normalizedUsername,
-            details: {
-              reason: 'lockout_triggered',
-              remainingMs: nextLockout.remainingMs,
-            },
-          });
-        }
-        void logSecurityEvent('login_failed', {
-          username: normalizedUsername,
-          details: { reason: 'invalid_credentials' },
-        });
-        setIsLoading(false);
-        if (nextLockout.isLocked) {
-          return {
-            ok: false,
-            status: 'locked',
-            message: `Acceso temporalmente bloqueado por multiples intentos fallidos. Intenta de nuevo en ${formatLockoutRemaining(nextLockout.remainingMs)}.`,
-            lockoutRemainingMs: nextLockout.remainingMs,
-          };
-        }
-        return {
-          ok: false,
-          status: 'invalid_credentials',
-          message: 'Usuario o contraseña incorrectos.',
-        };
-      }
-
-      if (authUser.activo === false) {
-        incrementFailedAttempts(normalizedUsername);
-        void logSecurityEvent('login_failed', {
-          userId: authUser.id,
-          username: authUser.username,
-          details: { reason: 'user_deactivated' },
-        });
-        setIsLoading(false);
-        return {
-          ok: false,
-          status: 'user_deactivated',
-          message: 'Tu cuenta esta desactivada. Contacta al administrador.',
-        };
-      }
-
-      // Login exitoso
-      clearFailedAttempts(normalizedUsername);
-      const normalizedUser: AuthUser = {
-        ...authUser,
-        activo: true,
-        session_version: authUser.session_version ?? 1,
-        is_protected: authUser.is_protected ?? false,
-        auth_time: Date.now(),
-      };
-
-      setUser(normalizedUser);
-      setIsAuthenticated(true);
-      
-      // Guardar en localStorage para persistencia
-      persistSession(normalizedUser);
-      void logSecurityEvent('login_success', {
-        userId: normalizedUser.id,
-        username: normalizedUser.username,
-        details: { role: normalizedUser.rol ?? null },
+      const { data, error } = await supabase.rpc('atlas_login', {
+        p_username: normalizedUsername,
+        p_password: password,
       });
-      
+      if (error) {
+        return { ok: false, status: 'backend_unavailable', message: messageForStatus('backend_unavailable') };
+      }
+      const result = data as SessionResponse;
+      const status = result.status || 'invalid_credentials';
+      if (!result.ok || !result.token || !result.user) {
+        return {
+          ok: false,
+          status,
+          message: messageForStatus(status, result.lockout_remaining_ms),
+          lockoutRemainingMs: result.lockout_remaining_ms,
+        };
+      }
+      acceptSession(result.user, result.token);
+      return { ok: true, status: 'success', message: 'Inicio de sesión exitoso.' };
+    } catch {
+      return { ok: false, status: 'login_exception', message: 'Error de conexión al iniciar sesión.' };
+    } finally {
       setIsLoading(false);
-      return {
-        ok: true,
-        status: 'success',
-        message: 'Inicio de sesion exitoso.',
-      };
-    } catch (error) {
-      console.error('Error en login:', error);
-      const normalizedUsername = normalizeUsername(username);
-      void logSecurityEvent('login_failed', {
-        username: normalizedUsername || null,
-        details: { reason: 'login_exception' },
-      });
-      setIsLoading(false);
-      return {
-        ok: false,
-        status: 'login_exception',
-        message: 'Error de conexion al intentar iniciar sesion. Revisa tu red e intenta de nuevo.',
-      };
     }
   };
 
   const logout = () => {
-    void logSecurityEvent('logout', {
-      userId: user?.id ?? null,
-      username: user?.username ?? null,
-    });
-    clearSession();
+    void (async () => {
+      try {
+        await supabase.rpc('atlas_logout');
+      } finally {
+        clearLocalSession();
+      }
+    })();
   };
 
-  // Verificar sesión al iniciar
-  React.useEffect(() => {
-    clearLegacyLockoutKeys();
-
-    const checkAuth = async () => {
-      await validatePersistedSession();
-      setIsLoading(false);
-    };
-
-    checkAuth();
+  useEffect(() => {
+    void validateSession().finally(() => setIsLoading(false));
   }, []);
 
-  React.useEffect(() => {
-    if (!isAuthenticated) {
-      return;
-    }
-
-    const intervalId = window.setInterval(() => {
-      void validatePersistedSession();
-    }, SESSION_CHECK_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const id = window.setInterval(() => void validateSession(), 60_000);
+    return () => window.clearInterval(id);
   }, [isAuthenticated]);
 
   return (
-    <AuthContext.Provider value={{
-      isAuthenticated,
-      isLoading,
-      login,
-      logout,
-      user
-    }}>
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, login, logout, user }}>
       {children}
     </AuthContext.Provider>
   );
@@ -542,8 +154,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth debe ser usado dentro de un AuthProvider');
-  }
+  if (!context) throw new Error('useAuth debe ser usado dentro de un AuthProvider');
   return context;
 };
