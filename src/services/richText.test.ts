@@ -19,4 +19,11 @@ describe('texto enriquecido seguro', () => {
     expect(result).toContain('rel="noopener noreferrer"');
     expect(result).toContain('target="_blank"');
   });
+
+  it('conserva el contorno seguro del texto para las vistas públicas', () => {
+    const result = toSafeHtml('<span style="-webkit-text-stroke-color: #123456; -webkit-text-stroke-width: 2px; paint-order: stroke fill">Atlas</span>');
+    expect(result).toContain('-webkit-text-stroke-color: #123456');
+    expect(result).toContain('-webkit-text-stroke-width: 2px');
+    expect(result).toContain('paint-order: stroke fill');
+  });
 });

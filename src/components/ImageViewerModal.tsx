@@ -1,5 +1,6 @@
 ﻿import React, { useId, useState, useEffect, useMemo, useRef } from 'react';
 import { MousePointerClick } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { renderBoldText } from './BoldField';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
@@ -889,7 +890,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const showSidebar = !hideSidebar && hasInfo && (isDesktop || sidebarOpen);
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
@@ -1888,7 +1889,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           returnToInfoLabel="Volver a info de la placa"
         />
       )}
-    </div>
+    </div>,
+    document.body
   );
 };
 

@@ -60,6 +60,16 @@ const FontSize = Extension.create({
             parseHTML: element => element.style.textTransform || null,
             renderHTML: attributes => attributes.textTransform ? { style: `text-transform: ${attributes.textTransform}` } : {},
           },
+          textStrokeColor: {
+            default: null,
+            parseHTML: element => element.style.webkitTextStrokeColor || null,
+            renderHTML: attributes => attributes.textStrokeColor ? { style: `-webkit-text-stroke-color: ${attributes.textStrokeColor}` } : {},
+          },
+          textStrokeWidth: {
+            default: null,
+            parseHTML: element => element.style.webkitTextStrokeWidth || null,
+            renderHTML: attributes => attributes.textStrokeWidth ? { style: `-webkit-text-stroke-width: ${attributes.textStrokeWidth}; paint-order: stroke fill` } : {},
+          },
         },
       },
     ];
@@ -107,6 +117,9 @@ interface PickerPlaca {
 interface AllTema {
   id: number;
   nombre: string;
+  logo_url?: string | null;
+  parcial?: string | null;
+  sort_order?: number | null;
 }
 
 interface AllSubtema {
@@ -182,10 +195,14 @@ const pickStyleContent = (content: Record<string, string>): Record<string, strin
 };
 
 const getAtlasContentPublicIdsFromBlock = (block: Pick<ContentBlock, 'content'>): string[] => {
-  const values = Object.values(block.content ?? {});
-  const ids = values
-    .filter((v): v is string => typeof v === 'string' && v.length > 0)
-    .map(url => getCloudinaryPublicId(url))
+  const content = block.content ?? {};
+  const ids = Object.entries(content)
+    .filter(([key, value]) => {
+      if (typeof value !== 'string' || !value) return false;
+      if (key === 'image_url' && content.weekly_image_source === 'existing') return false;
+      return true;
+    })
+    .map(([, url]) => getCloudinaryPublicId(url))
     .filter(pid => pid.startsWith(ATLAS_CONTENT_PREFIX));
   return [...new Set(ids)];
 };
@@ -212,7 +229,7 @@ export interface PageContentEditorHandle {
 const BLOCK_TOOLBAR_GROUPS: Array<{ title: string; types: BlockType[] }> = [
   {
     title: 'Texto',
-    types: ['heading', 'subheading', 'paragraph', 'list', 'callout'],
+    types: ['heading', 'subheading', 'paragraph', 'list', 'callout', 'weekly_publication'],
   },
   {
     title: 'Imagenes y galerias',
@@ -239,6 +256,7 @@ const BLOCK_TYPE_VISUAL_ICON: Record<BlockType, string> = {
   two_images: '2IMG',
   three_images: '3IMG',
   callout: 'TIP',
+  weekly_publication: 'SEM',
   list: 'LIST',
   divider: 'SEP',
   carousel: 'GAL',
@@ -386,7 +404,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
 
     const loadRouteReferences = async () => {
       const [{ data: temasData }, { data: subtemasData }] = await Promise.all([
-        supabase.from('temas').select('id, nombre').order('nombre', { ascending: true }),
+        supabase.from('temas').select('id, nombre, logo_url, parcial, sort_order').order('sort_order', { ascending: true }),
         supabase.from('subtemas').select('id, nombre, tema_id').order('nombre', { ascending: true }),
       ]);
 
@@ -859,7 +877,8 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
             const prevValue = b.content[key];
             if (typeof prevValue !== 'string' || !prevValue || prevValue === nextValue) return;
             const oldPublicId = getCloudinaryPublicId(prevValue);
-            if (oldPublicId.startsWith(ATLAS_CONTENT_PREFIX)) {
+            const isSharedWeeklyImage = key === 'image_url' && b.block_type === 'weekly_publication' && b.content.weekly_image_source === 'existing';
+            if (!isSharedWeeklyImage && oldPublicId.startsWith(ATLAS_CONTENT_PREFIX)) {
               replacedAtlasContentIds.push(oldPublicId);
             }
           });
@@ -1078,8 +1097,8 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     // Cargar temas para la pestaña "Todas"
     supabase
       .from('temas')
-      .select('id, nombre')
-      .order('nombre', { ascending: true })
+      .select('id, nombre, logo_url, parcial, sort_order')
+      .order('sort_order', { ascending: true })
       .then(({ data }) => setAllTemas(data ?? []));
     supabase
       .from('subtemas')
@@ -1146,6 +1165,9 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       const result = await uploadToCloudinary(file, { folder: 'atlas-content', optimizeImage: true });
       updateBlockContent(imageModal.blockId, {
         [imageModal.fieldKey]: result.secure_url,
+        ...(imageModal.fieldKey === 'image_url' && blocksRef.current.find(block => block.id === imageModal.blockId)?.block_type === 'weekly_publication'
+          ? { weekly_image_source: 'uploaded', weekly_placa_id: '' }
+          : {}),
       });
       closeImageModal();
     } catch (err) {
@@ -1157,9 +1179,13 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     }
   };
 
-  const handlePickPlaca = (photoUrl: string) => {
+  const handlePickPlaca = (placa: PickerPlaca) => {
     if (!imageModal) return;
-    updateBlockContent(imageModal.blockId, { [imageModal.fieldKey]: photoUrl });
+    const isWeeklyImage = imageModal.fieldKey === 'image_url' && blocksRef.current.find(block => block.id === imageModal.blockId)?.block_type === 'weekly_publication';
+    updateBlockContent(imageModal.blockId, {
+      [imageModal.fieldKey]: placa.photo_url,
+      ...(isWeeklyImage ? { weekly_image_source: 'existing', weekly_placa_id: String(placa.id) } : {}),
+    });
     closeImageModal();
   };
 
@@ -1939,6 +1965,39 @@ PageContentEditor.displayName = 'PageContentEditor';
 
 // ── Sub-componentes ───────────────────────────────────────────────────────────
 
+const getParcialGroup = (value?: string | null) => {
+  const normalized = (value || '').trim().toLowerCase();
+  if (normalized.startsWith('prim')) return { key: 'primer', label: 'Primer parcial', order: 1 };
+  if (normalized.startsWith('seg')) return { key: 'segundo', label: 'Segundo parcial', order: 2 };
+  if (normalized.startsWith('ter')) return { key: 'tercer', label: 'Tercer parcial', order: 3 };
+  return { key: normalized || 'otros', label: normalized ? value || 'Otros temas' : 'Otros temas', order: 4 };
+};
+
+const WeeklyTemaPicker: React.FC<{ label: string; value: string; temas: AllTema[]; optional?: boolean; onSelect: (tema: AllTema | null) => void }> = ({ label, value, temas, optional, onSelect }) => {
+  const [isChoosing, setIsChoosing] = React.useState(!value);
+  const selectedTema = temas.find(tema => String(tema.id) === value);
+  const groups = Array.from(temas.reduce<Map<string, { label: string; order: number; items: AllTema[] }>>((map, tema) => {
+    const group = getParcialGroup(tema.parcial);
+    const current = map.get(group.key) || { label: group.label, order: group.order, items: [] };
+    current.items.push(tema);
+    map.set(group.key, current);
+    return map;
+  }, new Map()).values()).sort((a, b) => a.order - b.order);
+  return <div style={{ display: 'grid', gap: '7px' }}>
+    <strong style={{ color: '#315676', fontSize: '.78em' }}>{label}</strong>
+    {selectedTema && !isChoosing ? <button type="button" onClick={() => setIsChoosing(true)} title="Cambiar tema" style={{ display: 'grid', gridTemplateColumns: '40px minmax(0,1fr) auto', alignItems: 'center', gap: '9px', width: '100%', padding: '9px', border: '2px solid #60a5fa', borderRadius: '12px', background: '#eff6ff', color: '#173a60', textAlign: 'left', cursor: 'pointer', fontWeight: 800 }}>
+      {selectedTema.logo_url ? <img src={getCloudinaryImageUrl(selectedTema.logo_url, 'thumbSmall')} alt="" style={{ width: '38px', height: '38px', objectFit: 'cover', borderRadius: '9px' }} /> : <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: '38px', height: '38px', borderRadius: '9px', background: '#dbeafe' }}>⌬</span>}
+      <span>{selectedTema.nombre}</span><span style={{ color: '#2563eb', fontSize: '.76em' }}>Cambiar</span>
+    </button> : <div style={{ padding: '9px', border: '1px solid #c9d9e9', borderRadius: '12px', background: '#fff' }}>
+      {optional && <button type="button" style={{ ...es.selectionBtn, width: '100%', marginBottom: '7px' }} onClick={() => { onSelect(null); setIsChoosing(false); }}>Sin segundo tema</button>}
+      {groups.map((group, index) => <details key={group.label} style={{ borderTop: index ? '1px solid #e2e8f0' : undefined, paddingBlock: '6px' }}>
+        <summary style={{ cursor: 'pointer', color: '#17466f', fontSize: '.78em', fontWeight: 850 }}>{group.label}</summary>
+        <div style={{ display: 'grid', gap: '5px', marginTop: '7px' }}>{group.items.sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999)).map(tema => <button key={tema.id} type="button" onClick={event => { onSelect(tema); setIsChoosing(false); event.currentTarget.closest('details')?.removeAttribute('open'); }} style={{ display: 'grid', gridTemplateColumns: '34px minmax(0,1fr)', alignItems: 'center', gap: '8px', padding: '7px', border: String(tema.id) === value ? '2px solid #2563eb' : '1px solid #dbe5ef', borderRadius: '9px', background: String(tema.id) === value ? '#eff6ff' : '#fff', color: '#173a60', textAlign: 'left', cursor: 'pointer', fontWeight: 750 }}>{tema.logo_url ? <img src={getCloudinaryImageUrl(tema.logo_url, 'thumbSmall')} alt="" style={{ width: '32px', height: '32px', objectFit: 'cover', borderRadius: '8px' }} /> : <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: '32px', height: '32px', borderRadius: '8px', background: '#e0f2fe' }}>⌬</span>}<span>{tema.nombre}</span></button>)}</div>
+      </details>)}
+    </div>}
+  </div>;
+};
+
 interface MemoBlockContentEditorProps {
   block: EditorBlock;
   styleClipboard: Record<string, string> | null;
@@ -2188,6 +2247,22 @@ const MemoBlockContentEditor = React.memo(({
         />
       )}
 
+      {block.block_type === 'weekly_publication' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(220px, .85fr)', gap: '18px', padding: '18px', border: '1px solid #bfdbfe', borderRadius: '18px', background: 'linear-gradient(135deg,#eef8ff,#ffffff)' }}>
+          <div style={{ display: 'grid', gap: '10px' }}>
+            <AutoTextarea editorId={`${block.id}:eyebrow`} showToolbar={false} value={block.content.eyebrow ?? ''} onChange={eyebrow => onUpdateBlockContent(block.id, { eyebrow })} placeholder="Fecha, por ejemplo: 13–17 de julio de 2026" />
+            <AutoTextarea editorId={`${block.id}:title`} showToolbar={false} extraStyle={{ fontSize: '1.2em', fontWeight: 800 }} value={block.content.title ?? ''} onChange={title => onUpdateBlockContent(block.id, { title })} placeholder="Título de la publicación" />
+            <WeeklyTemaPicker label="Primer tema de la semana" value={block.content.topic_1_id ?? ''} temas={allTemas} onSelect={tema => onUpdateBlockContent(block.id, { topic_1_id: tema ? String(tema.id) : '', topic_1: tema?.nombre || '', topic_1_logo: tema?.logo_url || '' })} />
+            <WeeklyTemaPicker label="Segundo tema (opcional)" value={block.content.topic_2_id ?? ''} temas={allTemas} optional onSelect={tema => onUpdateBlockContent(block.id, { topic_2_id: tema ? String(tema.id) : '', topic_2: tema?.nombre || '', topic_2_logo: tema?.logo_url || '' })} />
+          </div>
+          <div style={{ display: 'grid', alignContent: 'center', gap: '9px' }}>
+            {block.content.image_url ? <img src={getCloudinaryImageUrl(block.content.image_url, 'cardWideSmall')} alt="Placa semanal" style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '14px', border: '1px solid #bfdbfe' }} /> : <div style={{ display: 'grid', placeItems: 'center', minHeight: '180px', border: '2px dashed #93c5fd', borderRadius: '14px', color: '#53789d', background: '#fff' }}>Selecciona la placa semanal</div>}
+            <button type="button" style={es.selectionBtn} onClick={() => onOpenImageModal(block.id, 'image_url')}>{block.content.image_url ? 'Cambiar imagen' : 'Subir o elegir imagen'}</button>
+            <AutoTextarea editorId={`${block.id}:caption`} showToolbar={false} value={block.content.image_caption ?? ''} onChange={image_caption => onUpdateBlockContent(block.id, { image_caption })} placeholder="Nombre o descripción de la placa" />
+          </div>
+        </div>
+      )}
+
       {block.block_type === 'list' && (
         <ListBlockEditor
           editorId={block.id}
@@ -2369,6 +2444,8 @@ const AutoTextarea: React.FC<{
         case 'lineHeight': chain.setMark('textStyle', { lineHeight: detail.value || null }).run(); break;
         case 'letterSpacing': chain.setMark('textStyle', { letterSpacing: detail.value || null }).run(); break;
         case 'textTransform': chain.setMark('textStyle', { textTransform: detail.value || null }).run(); break;
+        case 'textStrokeColor': chain.setMark('textStyle', { textStrokeColor: detail.value || null }).run(); break;
+        case 'textStrokeWidth': chain.setMark('textStyle', { textStrokeWidth: detail.value || null }).run(); break;
         case 'clearTextStyle': chain.unsetAllMarks().run(); break;
         case 'link': setLink(); break;
       }
@@ -3964,7 +4041,7 @@ interface ImagePickerModalProps {
   uploadingImage: boolean;
   fileInputRef: React.RefObject<HTMLInputElement>;
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onPickPlaca: (url: string) => void;
+  onPickPlaca: (placa: PickerPlaca) => void;
   onClose: () => void;
   entityType: 'subtemas_page' | 'placas_page' | 'home_page';
   allTemas: AllTema[];
@@ -4102,7 +4179,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
                     <div
                       key={p.id}
                       style={es.placaThumb}
-                      onClick={() => onPickPlaca(p.photo_url)}
+                      onClick={() => onPickPlaca(p)}
                       onMouseEnter={e => {
                         const el = e.currentTarget as HTMLElement;
                         el.style.borderColor = '#38bdf8';
@@ -4178,7 +4255,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
                     <div
                       key={p.id}
                       style={es.placaThumb}
-                      onClick={() => onPickPlaca(p.photo_url)}
+                      onClick={() => onPickPlaca(p)}
                       onMouseEnter={e => {
                         const el = e.currentTarget as HTMLElement;
                         el.style.borderColor = '#38bdf8';

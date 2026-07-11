@@ -6,6 +6,7 @@ import { renderBoldText } from './BoldField';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { normalizeBlockContent } from './blocks/blockRegistry';
+import { supabase } from '../services/supabase';
 
 const RichTextValue: React.FC<{ value: string; className?: string; style?: React.CSSProperties }> = ({ value, className, style }) => {
   if (!value) return null;
@@ -206,12 +207,49 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
   selectedBlockId = null,
   onBlockSelect,
 }) => {
-  const [selectedImage, setSelectedImage] = useState<{ view: string; zoom: string } | null>(null);
+  const [selectedImage, setSelectedImage] = useState<{
+    view: string; zoom: string; placaId?: string; temaNombre?: string; subtemaNombre?: string;
+    aumento?: string | null; senalados?: string[] | null;
+    senaladosMeta?: Array<{ label: string; x: number | null; y: number | null; startX?: number | null; startY?: number | null }> | null;
+    comentario?: string | null; tincion?: string | null;
+  } | null>(null);
 
-  const handleZoom = (url: string) => {
+  const handleZoom = async (url: string, placaId?: string) => {
+    let resolvedPlacaId = placaId;
+    if (!resolvedPlacaId) {
+      const { data } = await supabase.from('placas').select('id').eq('photo_url', url).limit(1).maybeSingle();
+      resolvedPlacaId = data?.id ? String(data.id) : undefined;
+    }
+
+    let details: Record<string, unknown> = {};
+    if (resolvedPlacaId) {
+      const { data: placa } = await supabase
+        .from('placas')
+        .select('id, tema_id, subtema_id, aumento, senalados, senalados_meta, comentario, tincion')
+        .eq('id', Number(resolvedPlacaId))
+        .maybeSingle();
+      if (placa) {
+        const [{ data: tema }, { data: subtema }] = await Promise.all([
+          supabase.from('temas').select('nombre').eq('id', placa.tema_id).maybeSingle(),
+          supabase.from('subtemas').select('nombre').eq('id', placa.subtema_id).maybeSingle(),
+        ]);
+        details = {
+          temaNombre: tema?.nombre,
+          subtemaNombre: subtema?.nombre,
+          aumento: placa.aumento,
+          senalados: placa.senalados,
+          senaladosMeta: placa.senalados_meta,
+          comentario: placa.comentario,
+          tincion: placa.tincion,
+        };
+      }
+    }
+
     setSelectedImage({
       view: getCloudinaryImageUrl(url, 'view'),
       zoom: getCloudinaryImageUrl(url, 'zoom'),
+      placaId: resolvedPlacaId,
+      ...details,
     });
   };
 
@@ -269,13 +307,13 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
         })}
       </div>
       {selectedImage && (
-        <ImageViewerModal src={selectedImage.view} srcZoom={selectedImage.zoom} onClose={() => setSelectedImage(null)} />
+        <ImageViewerModal src={selectedImage.view} srcZoom={selectedImage.zoom} placaId={selectedImage.placaId} temaNombre={selectedImage.temaNombre} subtemaNombre={selectedImage.subtemaNombre} aumento={selectedImage.aumento} senalados={selectedImage.senalados} senaladosMeta={selectedImage.senaladosMeta} comentario={selectedImage.comentario} tincion={selectedImage.tincion} onClose={() => setSelectedImage(null)} />
       )}
     </>
   );
 };
 
-const BlockWithCtas: React.FC<{ block: ContentBlock; onZoom: (url: string) => void }> = ({ block, onZoom }) => {
+const BlockWithCtas: React.FC<{ block: ContentBlock; onZoom: (url: string, placaId?: string) => void }> = ({ block, onZoom }) => {
   const c = normalizeBlockContent(block.block_type, block.content);
   const ctaPosition = (c.cta_position as 'before' | 'after') ?? 'after';
   const renderInlineCtas = block.block_type === 'callout' || block.block_type === 'section';
@@ -380,7 +418,7 @@ const BlockCtas: React.FC<{ content: Record<string, string> }> = ({ content }) =
 
 const BlockItem: React.FC<{
   block: ContentBlock;
-  onZoom: (url: string) => void;
+  onZoom: (url: string, placaId?: string) => void;
   inlineCtas?: React.ReactNode;
   inlineCtaPosition?: 'before' | 'after';
 }> = ({ block, onZoom, inlineCtas, inlineCtaPosition = 'after' }) => {
@@ -734,6 +772,67 @@ const BlockItem: React.FC<{
             </figure>
           ))}
         </div>
+      );
+    }
+
+    case 'weekly_publication': {
+      const accent = c.weekly_accent || '#1677b8';
+      const bg = c.weekly_bg || '#eef8ff';
+      const imageRight = (c.weekly_image_position || 'right') === 'right';
+      const widthMap: Record<string, string> = { full: '100%', wide: '1050px', medium: '850px' };
+      const style = c.weekly_style || 'premium';
+      const weeklyTextStyle: React.CSSProperties = {
+        textAlign: (c.weekly_text_align || 'left') as React.CSSProperties['textAlign'],
+        fontFamily: c.weekly_font_family || '"Montserrat", "Segoe UI", sans-serif',
+        lineHeight: Number(c.weekly_line_height || 1.2),
+        letterSpacing: c.weekly_letter_spacing || 'normal',
+        textTransform: (c.weekly_text_transform || 'none') as React.CSSProperties['textTransform'],
+        fontStyle: (c.weekly_font_style || 'normal') as React.CSSProperties['fontStyle'],
+        textDecoration: c.weekly_text_decoration || 'none',
+      };
+      const topics = [
+        { id: c.topic_1_id, name: c.topic_1, logo: c.topic_1_logo },
+        { id: c.topic_2_id, name: c.topic_2, logo: c.topic_2_logo },
+      ].filter(topic => topic.name);
+      return (
+        <article className="cb-weekly-publication" style={{
+          width: `min(100%, ${widthMap[c.weekly_width || 'full'] || '100%'})`,
+          marginInline: 'auto', overflow: 'hidden', position: 'relative', boxSizing: 'border-box',
+          borderRadius: 'clamp(18px, 2.4vw, 26px)',
+          border: style === 'outline' ? `1px solid ${accent}` : '1px solid rgba(103,158,198,.28)',
+          background: style === 'clean' ? '#ffffff' : style === 'outline' ? 'transparent' : `linear-gradient(138deg, ${bg} 0%, #fbfdff 58%, #edf8ff 100%)`,
+          boxShadow: style === 'outline' ? 'none' : '0 16px 42px rgba(24,73,110,.11)',
+        }}>
+          <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+            <span style={{ position: 'absolute', width: '210px', height: '210px', left: '-95px', top: '-105px', borderRadius: '50%', border: `34px solid ${accent}0b`, boxShadow: `0 0 0 1px ${accent}0e` }} />
+            <span style={{ position: 'absolute', width: '145px', height: '145px', left: '42%', bottom: '-105px', borderRadius: '50%', background: `radial-gradient(circle, ${accent}12, transparent 68%)` }} />
+            <span style={{ position: 'absolute', left: '22px', bottom: '20px', width: '76px', height: '48px', opacity: .26, backgroundImage: `radial-gradient(${accent} 1.4px, transparent 1.4px)`, backgroundSize: '11px 11px' }} />
+          </div>
+          <div aria-hidden style={{ position: 'absolute', zIndex: 2, inset: '0 0 auto', height: '3px', background: `linear-gradient(90deg, ${accent}, #74c9e9 58%, transparent)` }} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.04fr) minmax(280px, .96fr)', gap: 'clamp(8px, 1vw, 14px)', padding: 'clamp(8px, 1vw, 13px)', direction: imageRight ? 'ltr' : 'rtl', minHeight: 'clamp(300px, 32vw, 405px)' }}>
+            <div style={{ direction: 'ltr', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 'clamp(24px, 4vw, 50px)', ...weeklyTextStyle }}>
+              <div style={{ alignSelf: 'stretch', display: 'grid', gridTemplateColumns: '34px auto minmax(30px,1fr)', alignItems: 'center', gap: '10px', color: accent, fontSize: '.7em', fontWeight: 780, letterSpacing: '.025em' }}>
+                <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: '32px', height: '32px', borderRadius: '9px', color: '#fff', background: `linear-gradient(145deg, ${accent}, #329aca)`, boxShadow: `0 6px 15px ${accent}28`, fontSize: '1.05em' }}>📅</span>
+                <RichTextValue value={c.eyebrow || 'Esta semana en el laboratorio'} style={{ minWidth: 0 }} />
+                <span aria-hidden style={{ height: '1px', background: `linear-gradient(90deg, ${accent}4d, transparent)` }} />
+              </div>
+              <div style={{ position: 'relative', width: '100%' }}><span aria-hidden style={{ position: 'absolute', left: '-17px', top: '19px', width: '6px', height: '30px', borderRadius: '999px', background: `linear-gradient(${accent}, #68c9ec)`, boxShadow: `0 5px 15px ${accent}38` }} /><RichTextValue value={c.title || 'Explora lo que estudiaremos esta semana'} style={{ width: '100%', margin: '17px 0 9px', color: c.weekly_title_color || c.style_text || '#071b31', fontSize: c.weekly_title_size || 'clamp(1.55rem, 2.7vw, 2.35rem)', fontWeight: Number(c.weekly_title_weight || 760), fontFamily: 'inherit', lineHeight: '1.08', letterSpacing: '-.025em', textTransform: 'inherit', fontStyle: 'inherit', textDecoration: 'inherit' }} /></div>
+              <div style={{ alignSelf: c.weekly_text_align === 'center' ? 'center' : c.weekly_text_align === 'right' ? 'flex-end' : 'flex-start', width: '48px', height: '3px', borderRadius: '999px', background: `linear-gradient(90deg, ${accent}, #7dd3fc)`, marginBottom: '20px' }} />
+              <div style={{ display: 'grid', gap: '9px' }}>
+                {topics.map((topic, index) => <a className="cb-weekly-topic" key={topic.id || index} href={topic.id ? `/subtemas/${topic.id}` : undefined} style={{ ['--weekly-accent' as string]: accent, position: 'relative', display: 'grid', gridTemplateColumns: '46px minmax(0,1fr) 32px', alignItems: 'center', gap: '12px', padding: '10px 11px 10px 14px', overflow: 'hidden', borderRadius: '14px', background: 'linear-gradient(100deg,rgba(255,255,255,.9),rgba(255,255,255,.62))', border: '1px solid rgba(137,181,215,.34)', boxShadow: '0 6px 18px rgba(29,78,120,.055)', color: c.weekly_topic_color || '#0b1f33', fontSize: c.weekly_topic_size || '.95rem', textDecoration: 'none', transition: 'transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease' }}><span aria-hidden style={{ position: 'absolute', inset: '8px auto 8px 0', width: '3px', borderRadius: '0 99px 99px 0', background: `linear-gradient(${accent}, #77d1ec)` }} />{topic.logo ? <img src={getCloudinaryImageUrl(topic.logo, 'thumbSmall')} alt="" style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '13px', border: '2px solid rgba(255,255,255,.88)', boxShadow: `0 4px 12px ${accent}25` }} /> : <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: '44px', height: '44px', borderRadius: '13px', color: accent, background: `${accent}0d`, fontSize: '1.2em' }}>⌬</span>}<span style={{ display: 'grid', gap: '2px', minWidth: 0 }}><small style={{ color: accent, fontSize: '.63em', fontWeight: 850, letterSpacing: '.09em', textTransform: 'uppercase' }}>Tema {String(index + 1).padStart(2, '0')}</small><strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: Number(c.weekly_topic_weight || 680), lineHeight: 1.2 }}>{topic.name}</strong></span><span className="cb-weekly-topic-arrow" aria-hidden style={{ display: 'grid', placeItems: 'center', width: '29px', height: '29px', borderRadius: '50%', color: accent, background: `${accent}0d`, border: `1px solid ${accent}1f`, fontSize: '1.15em', fontWeight: 650 }}>›</span></a>)}
+              </div>
+            </div>
+            <figure className={c.image_url ? 'cb-zoom-trigger' : undefined} role={c.image_url ? 'button' : undefined} tabIndex={c.image_url ? 0 : undefined} onClick={c.image_url ? () => onZoom(c.image_url, c.weekly_placa_id || undefined) : undefined} onKeyDown={c.image_url ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onZoom(c.image_url, c.weekly_placa_id || undefined); } } : undefined} title={c.image_url ? 'Ver placa en grande' : undefined} style={{ direction: 'ltr', position: 'relative', margin: 0, minHeight: '280px', overflow: 'hidden', borderRadius: 'clamp(13px, 1.7vw, 19px)', cursor: c.image_url ? 'zoom-in' : 'default', background: `linear-gradient(145deg, ${accent}18, #dbeafe)`, boxShadow: '0 8px 24px rgba(20,67,103,.10)' }}>
+              {c.image_url ? <img src={getCloudinaryImageUrl(c.image_url, 'view')} alt={c.image_caption || 'Placa semanal del laboratorio'} style={{ width: '100%', height: '100%', minHeight: '280px', objectFit: 'cover', display: 'block' }} /> : <div style={{ display: 'grid', placeItems: 'center', height: '100%', minHeight: '280px', color: accent, fontWeight: 850 }}>Placa semanal</div>}
+              <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(145deg, rgba(255,255,255,.11), transparent 38%, rgba(4,31,55,.10))', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.18)' }} />
+              {c.image_caption && <figcaption style={{ position: 'absolute', inset: 'auto clamp(9px, 1.5vw, 15px) clamp(9px, 1.5vw, 15px)', display: 'grid', gridTemplateColumns: '18px minmax(0,1fr) 30px', alignItems: 'center', gap: '8px', padding: '7px 9px', borderRadius: '11px', color: '#fff', background: 'linear-gradient(115deg, rgba(20,83,126,.55), rgba(20,57,88,.46))', border: '1px solid rgba(205,235,250,.38)', boxShadow: '0 5px 15px rgba(8,48,82,.12)', backdropFilter: 'blur(10px) saturate(1.15)' }}>
+                <span aria-hidden style={{ justifySelf: 'center', width: '7px', height: '7px', borderRadius: '50%', background: '#79d2f7', boxShadow: '0 0 0 4px rgba(121,210,247,.14)' }} />
+                <RichTextValue value={c.image_caption} style={{ minWidth: 0, fontSize: 'clamp(.76rem, 1.1vw, .92rem)', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700 }} />
+                <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: '28px', height: '28px', borderRadius: '9px', background: 'rgba(255,255,255,.9)', color: '#126da6', border: '1px solid rgba(255,255,255,.72)', fontSize: '.9em', fontWeight: 850 }}>↗</span>
+              </figcaption>}
+            </figure>
+          </div>
+        </article>
       );
     }
 

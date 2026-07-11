@@ -2869,6 +2869,20 @@ body {
 }
 .cb-shell a { color: var(--atlas-link-color, #2563eb); text-decoration: var(--atlas-link-decoration, underline); }
 .cb-shell a:hover { text-decoration: var(--atlas-link-hover-decoration, underline); }
+.cb-weekly-topic:hover { transform: translateX(4px); border-color: color-mix(in srgb, var(--weekly-accent) 48%, white) !important; background: rgba(255,255,255,.94) !important; box-shadow: 0 10px 24px rgba(29,78,120,.12) !important; text-decoration: none !important; }
+.cb-weekly-topic:focus-visible { outline: 3px solid color-mix(in srgb, var(--weekly-accent) 28%, transparent); outline-offset: 2px; }
+.cb-weekly-topic-arrow { transition: transform .2s ease; }
+.cb-weekly-topic:hover .cb-weekly-topic-arrow { transform: translateX(3px); }
+
+@media (max-width: 720px) {
+  .cb-weekly-publication > div {
+    grid-template-columns: 1fr !important;
+    direction: ltr !important;
+  }
+  .cb-weekly-publication figure {
+    min-height: 240px !important;
+  }
+}
 
 .route-loading-spinner {
   width: 38px;

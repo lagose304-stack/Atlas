@@ -163,15 +163,18 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'content' | 'appearance' | 'text' | 'layout' | 'buttons'>(embedded ? 'appearance' : 'content');
   const [textState, setTextState] = useState<Record<string, string | boolean>>({});
+  const [activeTextEditorId, setActiveTextEditorId] = useState(block.id);
   const content = block.content;
   const meta = getBlockMeta(block.block_type);
   const sendTextCommand = (command: string, value?: string) => {
-    window.dispatchEvent(new CustomEvent('atlas-rich-text-command', { detail: { editorId: block.id, command, value } }));
+    window.dispatchEvent(new CustomEvent('atlas-rich-text-command', { detail: { editorId: activeTextEditorId, command, value } }));
   };
   React.useEffect(() => {
     const handleState = (event: Event) => {
       const detail = (event as CustomEvent<Record<string, unknown>>).detail;
-      if (!detail || detail.editorId !== block.id) return;
+      const editorId = String(detail?.editorId || '');
+      if (!detail || (editorId !== block.id && !editorId.startsWith(`${block.id}:`))) return;
+      setActiveTextEditorId(editorId);
       const attrs = (detail.attrs || {}) as Record<string, string>;
       setTextState({ ...attrs, ...detail } as Record<string, string | boolean>);
     };
@@ -193,6 +196,16 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
     }
     if (block.block_type === 'list') {
       return <TextAreaField label="Elementos de la lista" value={content.items ?? ''} placeholder="Un elemento por línea" onChange={items => onChange({ items })} />;
+    }
+    if (block.block_type === 'weekly_publication') {
+      return <>
+        <TextAreaField label="Etiqueta superior" value={content.eyebrow ?? ''} onChange={eyebrow => onChange({ eyebrow })} />
+        <TextAreaField label="Título principal" value={content.title ?? ''} onChange={title => onChange({ title })} />
+        <TextAreaField label="Primer tema de la semana" value={content.topic_1 ?? ''} onChange={topic_1 => onChange({ topic_1 })} />
+        <TextAreaField label="Segundo tema (opcional)" value={content.topic_2 ?? ''} onChange={topic_2 => onChange({ topic_2 })} />
+        <ImageField url={content.image_url ?? ''} onPick={() => onPickImage('image_url')} onClear={() => onChange({ image_url: '', weekly_image_source: '', weekly_placa_id: '' })} />
+        <TextAreaField label="Nombre de la placa semanal" value={content.image_caption ?? ''} onChange={image_caption => onChange({ image_caption })} />
+      </>;
     }
     if (block.block_type === 'image') {
       return (
@@ -273,7 +286,7 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
     return <p className="visual-properties-hint">Este bloque no contiene texto ni imágenes editables.</p>;
   };
 
-  const hasLayoutOptions = ['section', 'columns_2', 'image', 'text_image', 'callout', 'list', 'divider', 'carousel', 'text_carousel', 'double_carousel'].includes(block.block_type);
+  const hasLayoutOptions = ['section', 'columns_2', 'image', 'text_image', 'callout', 'weekly_publication', 'list', 'divider', 'carousel', 'text_carousel', 'double_carousel'].includes(block.block_type);
   const renderLayoutFields = () => {
     if (block.block_type === 'section') {
       return <SelectField label="Tono de la sección" value={content.tone || 'neutral'} options={[{ value: 'neutral', label: 'Neutro' }, { value: 'info', label: 'Informativo' }, { value: 'accent', label: 'Con color de acento' }]} onChange={tone => onChange({ tone })} />;
@@ -305,6 +318,12 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
     if (block.block_type === 'callout') {
       return <SelectField label="Tipo de caja" value={content.variant || 'info'} options={[{ value: 'info', label: 'Información' }, { value: 'tip', label: 'Consejo' }, { value: 'warning', label: 'Importante' }, { value: 'clinical', label: 'Dato clínico' }]} onChange={variant => onChange({ variant })} />;
     }
+    if (block.block_type === 'weekly_publication') {
+      return <>
+        <SelectField label="Posición de la placa" value={content.weekly_image_position || 'right'} options={[{ value: 'right', label: 'Imagen a la derecha' }, { value: 'left', label: 'Imagen a la izquierda' }]} onChange={weekly_image_position => onChange({ weekly_image_position })} />
+        <SelectField label="Ancho del componente" value={content.weekly_width || 'full'} options={[{ value: 'full', label: 'Todo el ancho' }, { value: 'wide', label: 'Amplio (1050 px)' }, { value: 'medium', label: 'Medio (850 px)' }]} onChange={weekly_width => onChange({ weekly_width })} />
+      </>;
+    }
     if (block.block_type === 'list') {
       return <SelectField label="Estilo de la lista" value={content.style || 'bullet'} options={[{ value: 'bullet', label: 'Con viñetas' }, { value: 'numbered', label: 'Numerada' }]} onChange={style => onChange({ style })} />;
     }
@@ -330,6 +349,7 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
     if (block.block_type === 'paragraph') return <div className="visual-properties-specific-style"><h4>Presentación del texto</h4><SelectField label="Estilo del cuadro" value={content.text_box_style || 'plain'} options={[{ value: 'plain', label: 'Texto limpio' }, { value: 'card', label: 'Tarjeta elevada' }, { value: 'soft', label: 'Fondo suave' }, { value: 'quote', label: 'Cita destacada' }]} onChange={text_box_style => onChange({ text_box_style })} /><SelectField label="Columnas de lectura" value={content.text_columns || '1'} options={[{ value: '1', label: 'Una columna' }, { value: '2', label: 'Dos columnas' }, { value: '3', label: 'Tres columnas' }]} onChange={text_columns => onChange({ text_columns })} />{content.text_box_style === 'quote' && <ColorField label="Color de la cita" value={content.text_box_accent || ''} fallback="#38bdf8" onChange={text_box_accent => onChange({ text_box_accent })} />}</div>;
     if (block.block_type === 'list') return <div className="visual-properties-specific-style"><h4>Presentación de la lista</h4><SelectField label="Columnas" value={content.list_columns || '1'} options={[{ value: '1', label: 'Una columna' }, { value: '2', label: 'Dos columnas' }, { value: '3', label: 'Tres columnas' }]} onChange={list_columns => onChange({ list_columns })} /><SelectField label="Marcadores" value={content.list_marker || (content.style === 'numbered' ? 'number' : 'bullet')} options={[{ value: 'bullet', label: 'Viñetas' }, { value: 'number', label: 'Números' }, { value: 'check', label: 'Marcas de verificación' }, { value: 'arrow', label: 'Flechas' }]} onChange={list_marker => onChange({ list_marker })} /><SelectField label="Estilo de cada elemento" value={content.list_item_style || 'plain'} options={[{ value: 'plain', label: 'Limpio' }, { value: 'soft', label: 'Fondos suaves' }, { value: 'cards', label: 'Tarjetas separadas' }]} onChange={list_item_style => onChange({ list_item_style })} /><ColorField label="Color de los marcadores" value={content.list_accent || ''} fallback="#2563eb" onChange={list_accent => onChange({ list_accent })} /></div>;
     if (block.block_type === 'callout') return <div className="visual-properties-specific-style"><h4>Acabado de la caja destacada</h4><SelectField label="Diseño" value={content.callout_style || 'modern'} options={[{ value: 'modern', label: 'Moderna con degradado suave' }, { value: 'accent', label: 'Limpia con franja lateral' }, { value: 'tinted', label: 'Fondo de color suave' }, { value: 'outline', label: 'Solo contorno' }]} onChange={callout_style => onChange({ callout_style })} /><SelectField label="Ancho de la caja" value={content.callout_width || 'full'} options={[{ value: 'full', label: 'Todo el ancho disponible' }, { value: 'wide', label: 'Amplia (900 px)' }, { value: 'medium', label: 'Media (700 px)' }, { value: 'compact', label: 'Compacta (520 px)' }]} onChange={callout_width => onChange({ callout_width })} /><SelectField label="Icono" value={content.callout_show_icon || 'true'} options={[{ value: 'true', label: 'Mostrar icono' }, { value: 'false', label: 'Ocultar icono' }]} onChange={callout_show_icon => onChange({ callout_show_icon })} /><ColorField label="Color principal" value={content.callout_bg || ''} fallback="#dbeafe" onChange={callout_bg => onChange({ callout_bg })} /><ColorField label="Color del borde y acento" value={content.callout_border || ''} fallback="#60a5fa" onChange={callout_border => onChange({ callout_border })} /></div>;
+    if (block.block_type === 'weekly_publication') return <div className="visual-properties-specific-style"><h4>Diseño de la publicación semanal</h4><SelectField label="Estilo visual" value={content.weekly_style || 'premium'} options={[{ value: 'premium', label: 'Editorial premium' }, { value: 'clean', label: 'Blanco y limpio' }, { value: 'outline', label: 'Contorno elegante' }]} onChange={weekly_style => onChange({ weekly_style })} /><ColorField label="Color de acento" value={content.weekly_accent || ''} fallback="#1677b8" onChange={weekly_accent => onChange({ weekly_accent })} /><ColorField label="Color de fondo" value={content.weekly_bg || ''} fallback="#eef8ff" onChange={weekly_bg => onChange({ weekly_bg })} /></div>;
     return null;
   };
 
@@ -366,6 +386,7 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       </section>}
 
       {activeTab === 'text' && <section>
+        <>
         <h4>Formato del texto seleccionado</h4>
         <p className="visual-properties-hint">Primero selecciona una palabra o frase. El formato se aplica a esa selección; la posición vertical organiza el contenido completo dentro de su cuadro.</p>
         <div className="visual-properties-selection-format is-selection-only">
@@ -395,6 +416,21 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
           <SelectField label="Mayúsculas y minúsculas" value={String(textState.textTransform || '')} options={[{ value: '', label: 'Como fue escrito' }, { value: 'none', label: 'Como fue escrito' }, { value: 'uppercase', label: 'TODO EN MAYÚSCULAS' }, { value: 'capitalize', label: 'Iniciales En Mayúscula' }]} onChange={value => sendTextCommand('textTransform', value)} />
           <ColorField label="Color solo de la selección" value={String(textState.color || '')} fallback="#000000" onChange={color => sendTextCommand('textColor', color)} />
           <ColorField label="Resaltado solo de la selección" value={String(textState.highlight || '')} fallback="#fde047" onChange={color => sendTextCommand('highlight', color)} />
+          <div className={`visual-text-outline-card ${textState.textStrokeWidth && textState.textStrokeWidth !== '0px' ? 'is-enabled' : ''}`}>
+            <div className="visual-text-outline-heading">
+              <div><strong>Contorno</strong><small>Haz que las letras destaquen sobre cualquier fondo</small></div>
+              <button type="button" className="visual-text-outline-switch" aria-label="Activar o desactivar contorno" aria-pressed={Boolean(textState.textStrokeWidth && textState.textStrokeWidth !== '0px')} onClick={() => sendTextCommand('textStrokeWidth', textState.textStrokeWidth && textState.textStrokeWidth !== '0px' ? '' : '1px')}><span /></button>
+            </div>
+            <div className="visual-text-outline-preview" aria-hidden="true" style={{ WebkitTextStrokeColor: String(textState.textStrokeColor || '#000000'), WebkitTextStrokeWidth: textState.textStrokeWidth && textState.textStrokeWidth !== '0px' ? String(textState.textStrokeWidth) : '0px' }}>Aa <small>{textState.textStrokeWidth && textState.textStrokeWidth !== '0px' ? 'Vista del contorno' : 'Contorno desactivado'}</small></div>
+            <div className="visual-text-outline-controls">
+              <ColorField label="Color del contorno" value={String(textState.textStrokeColor || '')} fallback="#000000" onChange={color => sendTextCommand('textStrokeColor', color)} />
+              <label className="visual-text-outline-width">
+                <span><b>Grosor</b><output>{parseFloat(String(textState.textStrokeWidth || '1')) || 1}px</output></span>
+                <input type="range" min="0.5" max="4" step="0.5" value={parseFloat(String(textState.textStrokeWidth || '1')) || 1} onChange={event => sendTextCommand('textStrokeWidth', `${event.target.value}px`)} />
+                <small><i>Fino</i><i>Grueso</i></small>
+              </label>
+            </div>
+          </div>
           <div className="visual-properties-clear-tools">
             <button type="button" onClick={() => sendTextCommand('textColor')} title="Quitar color"><Palette size={15} /> Quitar color</button>
             <button type="button" onClick={() => sendTextCommand('fontSize')} title="Quitar tamaño personalizado"><Type size={15} /> Quitar tamaño</button>
@@ -402,6 +438,7 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
           </div>
           <button type="button" className="visual-properties-reset-text" onClick={() => sendTextCommand('clearTextStyle')}><RotateCcw size={15} /> Quitar todo el formato de la selección</button>
         </div>
+        </>
       </section>}
 
       {activeTab === 'layout' && <section>
