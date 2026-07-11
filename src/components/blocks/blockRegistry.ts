@@ -1,4 +1,4 @@
-import type { BlockType } from '../PageContentEditor';
+import type { BlockType } from '../../types/contentBlocks';
 
 export interface BlockMeta {
   label: string;
@@ -41,17 +41,17 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
   heading: {
     meta: { label: 'Titulo principal', icon: 'TIT', description: 'Encabezado grande para abrir una seccion.', color: '#6366f1' },
     schemaVersion: 1,
-    defaultContent: { text: '', text_vertical_align: 'start' },
+    defaultContent: { text: '', text_vertical_align: 'start', style_text: '#000000' },
   },
   subheading: {
     meta: { label: 'Subtitulo', icon: 'SUB', description: 'Encabezado secundario para organizar contenido.', color: '#8b5cf6' },
     schemaVersion: 1,
-    defaultContent: { text: '', text_vertical_align: 'start' },
+    defaultContent: { text: '', text_vertical_align: 'start', style_text: '#000000' },
   },
   paragraph: {
     meta: { label: 'Texto', icon: 'TXT', description: 'Bloque de texto normal para cuerpo de contenido.', color: '#0ea5e9' },
     schemaVersion: 1,
-    defaultContent: { text: '', text_vertical_align: 'start' },
+    defaultContent: { text: '', text_vertical_align: 'start', style_text: '#000000' },
   },
   image: {
     meta: { label: 'Imagen', icon: 'IMG', description: 'Una sola imagen con pie opcional.', color: '#10b981' },
@@ -105,12 +105,12 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
   callout: {
     meta: { label: 'Caja destacada', icon: 'INFO', description: 'Resalta una idea importante o aviso.', color: '#f97316' },
     schemaVersion: 1,
-    defaultContent: { text: '', variant: 'info' },
+    defaultContent: { text: '', variant: 'info', style_text: '#000000', callout_style: 'modern', callout_width: 'full', callout_show_icon: 'true' },
   },
   list: {
     meta: { label: 'Lista', icon: 'LISTA', description: 'Elementos en formato de lista.', color: '#06b6d4' },
     schemaVersion: 1,
-    defaultContent: { items: '', style: 'bullet' },
+    defaultContent: { items: '', style: 'bullet', style_text: '#000000' },
   },
   divider: {
     meta: { label: 'Separador', icon: 'SEP', description: 'Linea divisoria entre secciones.', color: '#94a3b8' },

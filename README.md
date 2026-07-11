@@ -1,5 +1,23 @@
 # Atlas
 
+## Pruebas automatizadas
+
+Ejecuta la suite completa con:
+
+```bash
+npm test
+```
+
+Durante el desarrollo puedes mantener Vitest observando cambios con `npm run test:watch`.
+El workflow de Cloudflare ejecuta las pruebas y `npm run typecheck` antes de compilar y desplegar;
+si una comprobacion falla, esa version no se publica.
+
+## Contador publico de visualizaciones
+
+Ejecuta `database/public_site_views_counter.sql` en Supabase antes de desplegar el frontend que usa
+el contador publico. La funcion devuelve unicamente el total de visitas y no concede lectura publica
+sobre los registros individuales de analitica.
+
 ## Despliegue de seguridad (obligatorio)
 
 La aplicacion usa sesiones propias validadas por PostgreSQL y politicas RLS por rol. Para actualizar

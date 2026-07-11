@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
-import type { ContentBlock, BlockType } from './PageContentEditor';
+import type { ContentBlock, BlockType } from '../types/contentBlocks';
 import ImageViewerModal from './ImageViewerModal';
 import { renderBoldText } from './BoldField';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
@@ -15,15 +15,20 @@ const RichTextValue: React.FC<{ value: string; className?: string; style?: React
   return <div className={className} style={style}>{renderBoldText(value)}</div>;
 };
 
-const getBlockShellStyle = (content: Record<string, string>): React.CSSProperties => {
+const TEXT_BLOCK_TYPES: BlockType[] = ['heading', 'subheading', 'paragraph', 'list', 'callout'];
+
+const getBlockShellStyle = (content: Record<string, string>, blockType?: BlockType): React.CSSProperties => {
   const padding = Number(content.style_padding ?? 0);
   const radius = Number(content.style_radius ?? 0);
   const hasBg = Boolean(content.style_bg);
   const hasBorder = Boolean(content.style_border);
 
   // Padding más responsive
+  const isAutoHeightTextBlock = blockType ? TEXT_BLOCK_TYPES.includes(blockType) : false;
   const effectivePadding = Number.isFinite(padding) && padding > 0
-    ? `${padding}px`
+    ? isAutoHeightTextBlock
+      ? `${Math.min(padding, 10)}px ${padding}px`
+      : `${padding}px`
     : hasBg || hasBorder
     ? 'clamp(12px, 2.5vw, 20px)'
     : undefined;
@@ -54,6 +59,16 @@ const getBlockShellStyle = (content: Record<string, string>): React.CSSPropertie
     md: '0.96em',
     lg: '1.06em',
   };
+  const fontFamilyMap: Record<string, string> = {
+    site: 'inherit',
+    modern: 'Montserrat, Segoe UI, sans-serif',
+    classic: 'Georgia, Times New Roman, serif',
+    clean: 'Arial, Helvetica, sans-serif',
+    friendly: 'Verdana, Geneva, sans-serif',
+  };
+  const lineHeightMap: Record<string, number> = { compact: 1.25, normal: 1.55, relaxed: 1.85 };
+  const letterSpacingMap: Record<string, string> = { tight: '-0.02em', normal: 'normal', wide: '0.06em' };
+  const linkStyle = content.style_link_decoration || 'always';
 
   const align = content.style_align || 'left';
   const requestedMaxWidth = maxWidthMap[content.style_max_width || 'full'] || '100%';
@@ -81,22 +96,21 @@ const getBlockShellStyle = (content: Record<string, string>): React.CSSPropertie
     fontWeight: content.style_font_weight && content.style_font_weight !== 'default'
       ? Number(content.style_font_weight)
       : undefined,
+    fontFamily: fontFamilyMap[content.style_font_family || 'site'] || 'inherit',
+    lineHeight: lineHeightMap[content.style_line_height || 'normal'] || 1.55,
+    letterSpacing: letterSpacingMap[content.style_letter_spacing || 'normal'] || 'normal',
+    textTransform: (content.style_text_transform || 'none') as React.CSSProperties['textTransform'],
+    textIndent: `${Number(content.style_text_indent || 0)}px`,
+    marginTop: `${Number(content.style_text_space_top || 0)}px`,
+    marginBottom: `${Number(content.style_text_space_bottom || 0)}px`,
+    ['--atlas-link-color' as string]: content.style_link_color || '#2563eb',
+    ['--atlas-link-decoration' as string]: linkStyle === 'always' ? 'underline' : 'none',
+    ['--atlas-link-hover-decoration' as string]: linkStyle === 'none' ? 'none' : 'underline',
     marginLeft: 0,
     marginRight: 0,
     overflow: hasBg || hasBorder ? 'hidden' : undefined,
     boxSizing: 'border-box',
     transition: 'all 0.28s ease',
-  };
-};
-
-const getTextVerticalAlignStyle = (value?: string): React.CSSProperties => {
-  const verticalAlign = (value as 'start' | 'center' | 'end') ?? 'start';
-  return {
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent:
-      verticalAlign === 'center' ? 'center' : verticalAlign === 'end' ? 'flex-end' : 'flex-start',
-    minHeight: verticalAlign === 'center' || verticalAlign === 'end' ? '120px' : undefined,
   };
 };
 
@@ -138,6 +152,9 @@ const BlockImg: React.FC<{
 
 interface ContentBlockRendererProps {
   blocks: ContentBlock[];
+  editorMode?: boolean;
+  selectedBlockId?: string | null;
+  onBlockSelect?: (blockId: string) => void;
 }
 
 type RenderGroup =
@@ -183,7 +200,12 @@ const toButtonHref = (rawUrl: string): string => {
  * Se usa en las páginas públicas (Subtemas, PlacasSubtema) para mostrar
  * el contenido editorial creado desde el panel de edición.
  */
-const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({ blocks }) => {
+const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
+  blocks,
+  editorMode = false,
+  selectedBlockId = null,
+  onBlockSelect,
+}) => {
   const [selectedImage, setSelectedImage] = useState<{ view: string; zoom: string } | null>(null);
 
   const handleZoom = (url: string) => {
@@ -203,7 +225,13 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({ blocks }) =
           if (group.kind === 'single') {
             const normalizedContent = normalizeBlockContent(group.block.block_type, group.block.content);
             return (
-              <div key={group.block.id} style={getBlockShellStyle(normalizedContent)} className="cb-shell">
+              <div
+                key={group.block.id}
+                style={getBlockShellStyle(normalizedContent, group.block.block_type)}
+                className={`cb-shell cb-shell-${group.block.block_type} ${editorMode ? 'cb-editor-selectable' : ''} ${selectedBlockId === group.block.id ? 'is-editor-selected' : ''}`}
+                data-editor-block-id={editorMode ? group.block.id : undefined}
+                onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(group.block.id); } : undefined}
+              >
                 <BlockWithCtas block={group.block} onZoom={handleZoom} />
               </div>
             );
@@ -212,7 +240,11 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({ blocks }) =
           const sectionContent = normalizeBlockContent(group.section.block_type, group.section.content);
           return (
             <div key={group.section.id} style={rs.sectionGroup} className="cb-section-group">
-              <div style={getBlockShellStyle(sectionContent)} className="cb-shell cb-section-shell">
+              <div
+                style={getBlockShellStyle(sectionContent, group.section.block_type)}
+                className={`cb-shell cb-section-shell ${editorMode ? 'cb-editor-selectable' : ''} ${selectedBlockId === group.section.id ? 'is-editor-selected' : ''}`}
+                onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(group.section.id); } : undefined}
+              >
                 <BlockWithCtas block={group.section} onZoom={handleZoom} />
               </div>
               {group.children.length > 0 && (
@@ -220,7 +252,12 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({ blocks }) =
                   {group.children.map(child => {
                     const childContent = normalizeBlockContent(child.block_type, child.content);
                     return (
-                      <div key={child.id} style={getBlockShellStyle(childContent)} className="cb-shell">
+                      <div
+                        key={child.id}
+                        style={getBlockShellStyle(childContent, child.block_type)}
+                        className={`cb-shell cb-shell-${child.block_type} ${editorMode ? 'cb-editor-selectable' : ''} ${selectedBlockId === child.id ? 'is-editor-selected' : ''}`}
+                        onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(child.id); } : undefined}
+                      >
                         <BlockWithCtas block={child} onZoom={handleZoom} />
                       </div>
                     );
@@ -359,6 +396,13 @@ const BlockItem: React.FC<{
   const userTextColor = shellStyle.color || undefined;
   const userFontSize = shellStyle.fontSize || undefined;
   const userFontWeight = shellStyle.fontWeight || undefined;
+  const userTypographyStyle: React.CSSProperties = {
+    fontFamily: shellStyle.fontFamily,
+    lineHeight: shellStyle.lineHeight,
+    letterSpacing: shellStyle.letterSpacing,
+    textTransform: shellStyle.textTransform,
+    textIndent: shellStyle.textIndent,
+  };
   const onZoomKeyDown = (e: React.KeyboardEvent<HTMLElement>, url: string) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -370,12 +414,21 @@ const BlockItem: React.FC<{
     case 'heading': {
       if (!c.text) return null;
       const align = (c.text_align as React.CSSProperties['textAlign']) ?? 'left';
+      const decoration = c.title_decoration || 'none';
+      const accent = c.title_accent || '#38bdf8';
+      const decorationStyle: React.CSSProperties = decoration === 'soft-box'
+        ? { padding: '0.35em 0.55em', borderRadius: '12px', background: `${accent}18` }
+        : decoration === 'outline'
+          ? { padding: '0.32em 0.5em', borderRadius: '12px', border: `2px solid ${accent}` }
+          : decoration === 'side-line'
+            ? { paddingLeft: '0.5em', borderLeft: `5px solid ${accent}` }
+            : {};
       return (
         <div>
-          <div style={{ ...rs.heading, ...getTextVerticalAlignStyle(c.text_vertical_align), textAlign: align, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }}>
+          <div style={{ ...rs.heading, ...userTypographyStyle, ...decorationStyle, paddingBlock: '0.18em', textAlign: align, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }}>
             <RichTextValue value={c.text} />
           </div>
-          <div style={{ ...rs.headingAccent, margin: align === 'center' ? '0 auto' : align === 'right' ? '0 0 0 auto' : undefined }} />
+          {decoration === 'underline' && <div style={{ ...rs.headingAccent, background: accent, margin: align === 'center' ? '0 auto' : align === 'right' ? '0 0 0 auto' : undefined }} />}
         </div>
       );
     }
@@ -385,15 +438,21 @@ const BlockItem: React.FC<{
       const align = (c.text_align as React.CSSProperties['textAlign']) ?? 'left';
       const isCenter = align === 'center';
       const isRight = align === 'right';
+      const decoration = c.subtitle_decoration || 'side-line';
+      const accent = c.subtitle_accent || '#38bdf8';
       return (
         <div style={{
-          ...rs.subheading,
-          ...getTextVerticalAlignStyle(c.text_vertical_align),
+           ...rs.subheading,
+           ...userTypographyStyle,
           textAlign: align,
-          paddingLeft: isCenter || isRight ? 0 : '14px',
-          paddingRight: isRight ? '14px' : 0,
-          borderLeft: isCenter || isRight ? 'none' : '4px solid #38bdf8',
-          borderRight: isRight ? '4px solid #38bdf8' : 'none',
+          padding: decoration === 'soft-box' ? '0.45em 0.65em' : undefined,
+          borderRadius: decoration === 'soft-box' ? '10px' : undefined,
+          background: decoration === 'soft-box' ? `${accent}18` : undefined,
+          paddingLeft: decoration === 'side-line' && !isCenter && !isRight ? '14px' : 0,
+          paddingRight: decoration === 'side-line' && isRight ? '14px' : 0,
+          borderLeft: decoration === 'side-line' && !isCenter && !isRight ? `4px solid ${accent}` : 'none',
+          borderRight: decoration === 'side-line' && isRight ? `4px solid ${accent}` : 'none',
+          borderBottom: decoration === 'underline' ? `2px solid ${accent}` : undefined,
           ...(userTextColor ? { color: userTextColor } : {}),
           ...(userFontSize ? { fontSize: userFontSize } : {}),
           ...(userFontWeight ? { fontWeight: userFontWeight } : {}),
@@ -406,7 +465,15 @@ const BlockItem: React.FC<{
     case 'paragraph': {
       if (!c.text) return null;
       const align = (c.text_align as React.CSSProperties['textAlign']) ?? 'left';
-      return <RichTextValue className="cb-paragraph" style={{ ...rs.paragraph, ...getTextVerticalAlignStyle(c.text_vertical_align), textAlign: align, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }} value={c.text} />;
+      const boxStyle = c.text_box_style || 'plain';
+      const columns = Math.max(1, Math.min(3, Number(c.text_columns || 1)));
+      const boxStyles: Record<string, React.CSSProperties> = {
+        plain: {},
+        card: { padding: 'clamp(16px, 2vw, 24px)', border: '1px solid #dbe5ef', borderRadius: '16px', background: '#ffffff', boxShadow: '0 10px 28px rgba(15,23,42,.08)' },
+        soft: { padding: 'clamp(16px, 2vw, 24px)', borderRadius: '16px', background: '#f1f5f9' },
+        quote: { padding: '0.7em 1.1em', borderLeft: `5px solid ${c.text_box_accent || '#38bdf8'}`, background: '#f8fafc', fontStyle: 'italic' },
+      };
+      return <RichTextValue className="cb-paragraph" style={{ ...rs.paragraph, ...userTypographyStyle, ...boxStyles[boxStyle], paddingBlock: boxStyle === 'plain' ? '0.3em' : undefined, columnCount: columns, columnGap: '2em', textAlign: align, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }} value={c.text} />;
     }
 
     case 'section': {
@@ -680,80 +747,62 @@ const BlockItem: React.FC<{
         clinical: { icon: '🔬', label: 'Dato clínico', bgStart: '#f3e8ff', bgEnd: '#fff8ff', border: '#c084fc', color: '#7e22ce', accent: '#9333ea' },
       };
       const v = variants[(c.variant as string) ?? 'info'] ?? variants.info;
+      const calloutStyle = c.callout_style || 'modern';
+      const customBg = c.callout_bg || v.bgStart;
+      const customBorder = c.callout_border || v.border;
+      const showIcon = c.callout_show_icon !== 'false';
+      const widthMap: Record<string, string> = { full: '100%', wide: '900px', medium: '700px', compact: '520px' };
+      const requestedWidth = widthMap[c.callout_width || 'full'] || '100%';
+      const surfaceMap: Record<string, React.CSSProperties> = {
+        modern: { background: `linear-gradient(135deg, ${customBg} 0%, #ffffff 88%)`, border: `1px solid ${customBorder}`, boxShadow: '0 12px 30px rgba(25,74,120,.10)' },
+        accent: { background: '#ffffff', border: `1px solid ${customBorder}`, boxShadow: `inset 7px 0 0 ${customBorder}, 0 10px 24px rgba(25,74,120,.09)` },
+        tinted: { background: customBg, border: `1px solid ${customBorder}`, boxShadow: '0 8px 22px rgba(25,74,120,.08)' },
+        outline: { background: 'transparent', border: `2px solid ${customBorder}`, boxShadow: 'none' },
+      };
       return (
         <div style={{
           position: 'relative',
-          background: `linear-gradient(135deg, ${v.bgStart}, ${v.bgEnd})`,
-          border: `1.5px solid ${v.border}`,
-          borderRadius: 'clamp(16px, 2vw, 22px)',
-          padding: 'clamp(28px, 3.2vw, 34px) clamp(13px, 1.8vw, 18px) clamp(11px, 1.5vw, 14px)',
+          ...(surfaceMap[calloutStyle] || surfaceMap.modern),
+          borderRadius: 'clamp(14px, 1.8vw, 20px)',
+          padding: 'clamp(16px, 2.2vw, 24px)',
           display: 'flex',
-          flexDirection: 'column',
-          gap: 'clamp(6px, 1vw, 10px)',
+          gap: 'clamp(12px, 1.8vw, 18px)',
+          alignItems: 'flex-start',
           textAlign: align,
-          boxShadow: '0 18px 40px rgba(15,23,42,0.12)',
           overflow: 'hidden',
           minHeight: '0',
-          width: 'min(100%, 660px)',
-          marginInline: 'auto',
+          width: `min(100%, ${requestedWidth})`,
+          boxSizing: 'border-box',
+          marginInline: align === 'right' ? 'auto 0' : align === 'center' ? 'auto' : '0 auto 0 0',
         }}>
-          <div aria-hidden style={{ position: 'absolute', inset: '0 auto auto 0', height: '6px', width: '100%', background: `linear-gradient(90deg, ${v.border}, ${v.color})` }} />
-          <div aria-hidden style={{ position: 'absolute', top: '-18px', right: '-20px', width: '100px', height: '100px', borderRadius: '50%', background: 'rgba(255,255,255,0.34)', filter: 'blur(2px)' }} />
-          <div aria-hidden style={{ position: 'absolute', bottom: '-28px', left: '-18px', width: '120px', height: '120px', borderRadius: '50%', background: `radial-gradient(circle, ${v.border}66 0%, transparent 70%)` }} />
-          <div aria-hidden style={{ position: 'absolute', inset: '0 auto 0 0', width: '8px', background: `linear-gradient(180deg, ${v.accent}, ${v.border})`, opacity: 0.95 }} />
           {inlineCtas && inlineCtaPosition === 'before' && inlineCtas}
-          <div style={{ position: 'absolute', top: '10px', left: '12px', display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 11px', borderRadius: '999px', background: 'rgba(255,255,255,0.92)', border: `1px solid ${v.border}`, color: v.color, fontSize: '0.7em', fontWeight: 900, letterSpacing: '0.05em', textTransform: 'uppercase', boxShadow: '0 8px 18px rgba(15,23,42,0.12)', zIndex: 1 }}>
-              <span aria-hidden>{v.icon}</span>
-              {v.label}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto', gap: 'clamp(8px, 1.2vw, 12px)', alignItems: 'center', width: '100%', minHeight: '2.1em' }}>
-            <span aria-hidden style={{
-              fontSize: 'clamp(0.96em, 1.3vw, 1.12em)',
-              flexShrink: 0,
+          <div style={{ display: 'grid', gridTemplateColumns: showIcon ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)', gap: 'clamp(12px, 1.8vw, 18px)', alignItems: 'center', width: '100%' }}>
+            {showIcon && <span aria-hidden style={{
+              fontSize: 'clamp(1.15rem, 2vw, 1.45rem)',
               lineHeight: 1,
-              width: '1.45em',
-              height: '1.45em',
-              borderRadius: '999px',
+              width: '2.35em', height: '2.35em', borderRadius: '14px',
               display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: `linear-gradient(180deg, rgba(255,255,255,0.98), ${v.bgEnd})`,
+              alignItems: 'center', justifyContent: 'center',
+              background: '#ffffffcc',
               border: `1px solid ${v.border}`,
-              boxShadow: `0 7px 16px ${v.border}26`,
-            }}>{v.icon}</span>
-            <RichTextValue
-              style={{
+              boxShadow: `0 7px 18px ${v.border}22`,
+            }}>{v.icon}</span>}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ marginBottom: '5px', color: v.color, fontSize: '.7em', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase' }}>{v.label}</div>
+              <RichTextValue style={{
                 margin: 0,
-                minWidth: 0,
                 width: '100%',
-                maxWidth: '42rem',
-                color: userTextColor || '#0f2942',
-                fontSize: userFontSize || '1.18em',
-                lineHeight: 1.28,
-                fontWeight: userFontWeight || 800,
+                color: userTextColor || '#000000',
+                fontSize: userFontSize || '1em',
+                lineHeight: 1.6,
+                fontWeight: userFontWeight || 500,
                 whiteSpace: 'pre-wrap' as const,
                 wordBreak: 'break-word' as const,
                 fontFamily: '"Montserrat", "Segoe UI", sans-serif',
                 textAlign: align,
-                textShadow: '0 1px 0 rgba(255,255,255,0.5)',
-                justifySelf: align === 'center' ? 'center' : align === 'right' ? 'end' : 'start',
-              }}
-              value={c.text}
-            />
-            <span aria-hidden style={{
-              fontSize: 'clamp(0.96em, 1.3vw, 1.12em)',
-              flexShrink: 0,
-              lineHeight: 1,
-              width: '1.45em',
-              height: '1.45em',
-              borderRadius: '999px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: `linear-gradient(180deg, rgba(255,255,255,0.98), ${v.bgEnd})`,
-              border: `1px solid ${v.border}`,
-              boxShadow: `0 7px 16px ${v.border}26`,
-            }}>{v.icon}</span>
+                ...userTypographyStyle,
+              }} value={c.text} />
+            </div>
           </div>
           {inlineCtas && inlineCtaPosition === 'after' && inlineCtas}
         </div>
@@ -762,27 +811,43 @@ const BlockItem: React.FC<{
 
     case 'list': {
       if (!c.items) return null;
-      const itemArr = (c.items as string).split('\n').map((s: string) => s.trim()).filter(Boolean);
+      const listSource = (c.items as string)
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>\s*<p[^>]*>/gi, '\n')
+        .replace(/<\/li>\s*<li[^>]*>/gi, '\n')
+        .replace(/<[^>]+>/g, '');
+      const itemArr = listSource
+        .split('\n')
+        .map((s: string) => s.trim().replace(/^(?:[-*•✓→]|\d+[.)])\s+/, '').trim())
+        .filter(Boolean);
       if (itemArr.length === 0) return null;
       const isNumbered = c.style === 'numbered';
-      const Tag = isNumbered ? 'ol' : 'ul';
+      const columns = Math.max(1, Math.min(3, Number(c.list_columns || 1)));
+      const marker = c.list_marker || (isNumbered ? 'number' : 'bullet');
+      const itemStyle = c.list_item_style || 'plain';
       return (
-        <Tag style={{ paddingLeft: 'clamp(20px, 4vw, 28px)', margin: 0, display: 'flex', flexDirection: 'column' as const, gap: 'clamp(6px, 1.5vw, 10px)' }}>
+        <div className="cb-list-grid" style={{ margin: 0, paddingBlock: '0.3em', display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 'clamp(7px, 1.5vw, 12px)' }}>
           {itemArr.map((item: string, i: number) => (
-            <li
+            <div
               key={i}
               style={{
+                display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr)', gap: '9px', alignItems: 'start',
+                padding: itemStyle === 'cards' ? '10px 12px' : itemStyle === 'soft' ? '8px 10px' : 0,
+                border: itemStyle === 'cards' ? '1px solid #dbe5ef' : undefined,
+                borderRadius: itemStyle !== 'plain' ? '10px' : undefined,
+                background: itemStyle === 'cards' ? '#fff' : itemStyle === 'soft' ? '#f1f5f9' : undefined,
                 fontSize: userFontSize || '0.9em',
                 lineHeight: 1.8,
-                color: userTextColor || '#536b88',
+                color: userTextColor || '#000000',
                 fontWeight: userFontWeight || 400,
                 fontFamily: '"Montserrat", "Segoe UI", sans-serif',
               }}
             >
+              <strong aria-hidden style={{ color: c.list_accent || '#2563eb' }}>{marker === 'check' ? '✓' : marker === 'arrow' ? '→' : marker === 'number' ? `${i + 1}.` : '•'}</strong>
               <RichTextValue value={item} />
-            </li>
+            </div>
           ))}
-        </Tag>
+        </div>
       );
     }
 
@@ -1031,10 +1096,10 @@ const rs: Record<string, React.CSSProperties> = {
   heading: {
     fontSize: 'clamp(1.02rem, 1.2vw + 0.56rem, 1.28rem)',
     fontWeight: 800,
-    color: '#1d3656',
+    color: '#000000',
     letterSpacing: '0.015em',
     lineHeight: 1.3,
-    margin: '0 0 12px',
+    margin: 0,
     fontFamily: '"Montserrat", "Segoe UI", sans-serif',
   },
   headingAccent: {
@@ -1048,7 +1113,7 @@ const rs: Record<string, React.CSSProperties> = {
   subheading: {
     fontSize: 'clamp(0.88rem, 0.72vw + 0.54rem, 1rem)',
     fontWeight: 700,
-    color: '#173654',
+    color: '#000000',
     letterSpacing: '0.01em',
     lineHeight: 1.4,
     margin: 0,
@@ -1061,7 +1126,7 @@ const rs: Record<string, React.CSSProperties> = {
   paragraph: {
     fontSize: 'clamp(0.82rem, 0.52vw + 0.52rem, 0.92rem)',
     lineHeight: 1.8,
-    color: '#536b88',
+    color: '#000000',
     margin: 0,
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',

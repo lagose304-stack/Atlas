@@ -2,7 +2,7 @@
 import Footer from '../components/Footer';
 import Header from '../components/Header';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
-import type { ContentBlock } from '../components/PageContentEditor';
+import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks } from '../services/contentPublication';
 import bombillaIcon from '../assets/icons/bombilla.ico';
 
@@ -126,15 +126,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: 0,
-    padding: 0,
+    padding: '0 0 18px',
     flex: 1,
     boxSizing: 'border-box',
   },
   contentCard: {
     width: '100%',
     maxWidth: '1280px',
+    transform: 'translateY(-22px)',
     background: 'transparent',
     borderRadius: 0,
     boxShadow: 'none',

@@ -7,7 +7,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ImageViewerModal from '../components/ImageViewerModal';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
-import type { ContentBlock } from '../components/PageContentEditor';
+import type { ContentBlock } from '../types/contentBlocks';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { logPlacaView, logSubtemaView } from '../services/analytics';

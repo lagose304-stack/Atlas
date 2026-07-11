@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Extension } from '@tiptap/core';
+import { Extension, type Editor } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -17,6 +17,8 @@ import { getPublicationInfo, publishBlocksSnapshot, setPublicationDraft } from '
 import { createContentVersion, listContentVersions, restoreContentVersion, type ContentBlockVersionRow } from '../services/contentVersioning';
 import LoadingToast from './LoadingToast';
 import ContentBlockRenderer from './ContentBlockRenderer';
+import VisualBlockProperties from './page-editor/VisualBlockProperties';
+import type { BlockType, ContentBlock } from '../types/contentBlocks';
 
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -33,6 +35,31 @@ const FontSize = Extension.create({
               return { style: `font-size: ${attributes.fontSize}` };
             },
           },
+          fontFamily: {
+            default: null,
+            parseHTML: element => element.style.fontFamily || null,
+            renderHTML: attributes => attributes.fontFamily ? { style: `font-family: ${attributes.fontFamily}` } : {},
+          },
+          fontWeight: {
+            default: null,
+            parseHTML: element => element.style.fontWeight || null,
+            renderHTML: attributes => attributes.fontWeight ? { style: `font-weight: ${attributes.fontWeight}` } : {},
+          },
+          lineHeight: {
+            default: null,
+            parseHTML: element => element.style.lineHeight || null,
+            renderHTML: attributes => attributes.lineHeight ? { style: `line-height: ${attributes.lineHeight}` } : {},
+          },
+          letterSpacing: {
+            default: null,
+            parseHTML: element => element.style.letterSpacing || null,
+            renderHTML: attributes => attributes.letterSpacing ? { style: `letter-spacing: ${attributes.letterSpacing}` } : {},
+          },
+          textTransform: {
+            default: null,
+            parseHTML: element => element.style.textTransform || null,
+            renderHTML: attributes => attributes.textTransform ? { style: `text-transform: ${attributes.textTransform}` } : {},
+          },
         },
       },
     ];
@@ -41,19 +68,15 @@ const FontSize = Extension.create({
 
 // ── Tipos exportados (también los usa ContentBlockRenderer) ───────────────────
 
-export type BlockType = 'heading' | 'subheading' | 'paragraph' | 'image' | 'text_image' | 'two_images' | 'three_images' | 'callout' | 'list' | 'divider' | 'carousel' | 'text_carousel' | 'double_carousel' | 'section' | 'columns_2';
-
-export interface ContentBlock {
-  id: string;
-  entity_type: string;
-  entity_id: number;
-  block_type: BlockType;
-  sort_order: number;
-  content: Record<string, string>;
-}
+export type { BlockType, ContentBlock } from '../types/contentBlocks';
 
 // ── Tipo interno del editor (añade flag de bloque nuevo) ─────────────────────
 type EditorBlock = ContentBlock & { _isNew: boolean };
+
+const cloneEditorBlocks = (list: EditorBlock[]): EditorBlock[] => list.map(block => ({
+  ...block,
+  content: { ...block.content },
+}));
 
 const getSortedContentRecord = (content: Record<string, string>): Record<string, string> => {
   return Object.keys(content)
@@ -93,6 +116,7 @@ interface AllSubtema {
 }
 
 const ATLAS_CONTENT_PREFIX = 'atlas-content/';
+const AUTO_SAVE_DELAY_MS = 30_000;
 
 const STYLE_CONTENT_KEYS = [
   'style_bg',
@@ -105,6 +129,15 @@ const STYLE_CONTENT_KEYS = [
   'style_shadow',
   'style_font_size',
   'style_font_weight',
+  'style_font_family',
+  'style_line_height',
+  'style_letter_spacing',
+  'style_text_transform',
+  'style_text_indent',
+  'style_text_space_top',
+  'style_text_space_bottom',
+  'style_link_color',
+  'style_link_decoration',
 ] as const;
 
 const STYLE_PRESETS_STORAGE_KEY = 'atlas-style-presets-v1';
@@ -161,6 +194,19 @@ const getAtlasContentPublicIdsFromBlock = (block: Pick<ContentBlock, 'content'>)
 interface PageContentEditorProps {
   entityType: 'subtemas_page' | 'placas_page' | 'home_page';
   entityId: number;
+  onBlocksChange?: (blocks: ContentBlock[]) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  experienceMode?: 'simple' | 'advanced';
+  autoSave?: boolean;
+}
+
+export interface PageContentEditorHandle {
+  updateBlock: (blockId: string, updates: Record<string, string>) => void;
+  duplicateBlock: (blockId: string) => void;
+  requestDeleteBlock: (blockId: string) => void;
+  openImagePicker: (blockId: string, fieldKey: string) => void;
+  undo: () => void;
+  redo: () => void;
 }
 
 const BLOCK_TOOLBAR_GROUPS: Array<{ title: string; types: BlockType[] }> = [
@@ -203,7 +249,14 @@ const BLOCK_TYPE_VISUAL_ICON: Record<BlockType, string> = {
 };
 
 // ── Componente principal ─────────────────────────────────────────────────────
-const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entityId }) => {
+const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentEditorProps>(({
+  entityType,
+  entityId,
+  onBlocksChange,
+  onDirtyChange,
+  experienceMode = 'advanced',
+  autoSave = true,
+}, ref) => {
   const [blocks, setBlocks] = useState<EditorBlock[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -227,6 +280,8 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   const [isRestoringVersion, setIsRestoringVersion] = useState(false);
   const [collapsedToolbarGroups, setCollapsedToolbarGroups] = useState<Set<string>>(new Set());
   const [compactToolbar, setCompactToolbar] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [, setHistoryRevision] = useState(0);
 
   // Modal selector de imagen
   const [imageModal, setImageModal] = useState<{
@@ -255,6 +310,12 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   const blocksRef = useRef<EditorBlock[]>([]);
   const pendingAssetDeleteIdsRef = useRef<Set<string>>(new Set());
   const persistedBlocksFingerprintRef = useRef<string>('[]');
+  const historyPastRef = useRef<EditorBlock[][]>([]);
+  const historyFutureRef = useRef<EditorBlock[][]>([]);
+  const historyCurrentRef = useRef<EditorBlock[]>([]);
+  const historyFingerprintRef = useRef('[]');
+  const historyTimerRef = useRef<number | null>(null);
+  const applyingHistoryRef = useRef(false);
 
   // Guard contra respuestas de peticiones obsoletas
   const reqIdRef = useRef(0);
@@ -262,6 +323,14 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   const hasPendingChangesFor = useCallback((list: EditorBlock[]) => {
     return getBlocksFingerprint(list) !== persistedBlocksFingerprintRef.current;
   }, []);
+
+  useEffect(() => {
+    onBlocksChange?.(blocks.map(({ _isNew: _ignored, ...block }) => block));
+  }, [blocks, onBlocksChange]);
+
+  useEffect(() => {
+    onDirtyChange?.(hasPendingChangesFor(blocks) || hasChanges);
+  }, [blocks, hasChanges, hasPendingChangesFor, onDirtyChange]);
 
   const toggleToolbarGroup = (groupTitle: string) => {
     setCollapsedToolbarGroups(prev => {
@@ -653,6 +722,11 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       }));
       persistedBlocksFingerprintRef.current = getBlocksFingerprint(loaded);
       blocksRef.current = loaded;
+      historyPastRef.current = [];
+      historyFutureRef.current = [];
+      historyCurrentRef.current = cloneEditorBlocks(loaded);
+      historyFingerprintRef.current = getBlocksFingerprint(loaded);
+      setHistoryRevision(value => value + 1);
       setBlocks(loaded);
       setSavedIds(new Set(loaded.map(b => b.id)));
       setSelectedBlockIds(new Set());
@@ -672,6 +746,83 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
     const currentFingerprint = getBlocksFingerprint(blocks);
     setHasChanges(currentFingerprint !== persistedBlocksFingerprintRef.current);
   }, [blocks]);
+
+  useEffect(() => {
+    if (loading) return;
+    const fingerprint = getBlocksFingerprint(blocks);
+    if (fingerprint === historyFingerprintRef.current) return;
+
+    if (applyingHistoryRef.current) {
+      applyingHistoryRef.current = false;
+      historyCurrentRef.current = cloneEditorBlocks(blocks);
+      historyFingerprintRef.current = fingerprint;
+      return;
+    }
+
+    if (historyTimerRef.current !== null) window.clearTimeout(historyTimerRef.current);
+    const previous = cloneEditorBlocks(historyCurrentRef.current);
+    const next = cloneEditorBlocks(blocks);
+    historyTimerRef.current = window.setTimeout(() => {
+      historyPastRef.current = [...historyPastRef.current.slice(-59), previous];
+      historyFutureRef.current = [];
+      historyCurrentRef.current = next;
+      historyFingerprintRef.current = getBlocksFingerprint(next);
+      historyTimerRef.current = null;
+      setHistoryRevision(value => value + 1);
+    }, 450);
+
+    return () => {
+      if (historyTimerRef.current !== null) window.clearTimeout(historyTimerRef.current);
+    };
+  }, [blocks, loading]);
+
+  const undoBlocks = useCallback(() => {
+    if (historyTimerRef.current !== null) {
+      window.clearTimeout(historyTimerRef.current);
+      historyTimerRef.current = null;
+    }
+    const previous = historyPastRef.current[historyPastRef.current.length - 1];
+    if (!previous) return;
+    historyPastRef.current = historyPastRef.current.slice(0, -1);
+    historyFutureRef.current = [cloneEditorBlocks(historyCurrentRef.current), ...historyFutureRef.current].slice(0, 60);
+    applyingHistoryRef.current = true;
+    setBlocks(cloneEditorBlocks(previous));
+    setHasChanges(true);
+    setHistoryRevision(value => value + 1);
+  }, []);
+
+  const redoBlocks = useCallback(() => {
+    if (historyTimerRef.current !== null) {
+      window.clearTimeout(historyTimerRef.current);
+      historyTimerRef.current = null;
+    }
+    const next = historyFutureRef.current[0];
+    if (!next) return;
+    historyFutureRef.current = historyFutureRef.current.slice(1);
+    historyPastRef.current = [...historyPastRef.current.slice(-59), cloneEditorBlocks(historyCurrentRef.current)];
+    applyingHistoryRef.current = true;
+    setBlocks(cloneEditorBlocks(next));
+    setHasChanges(true);
+    setHistoryRevision(value => value + 1);
+  }, []);
+
+  useEffect(() => {
+    const handleHistoryShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.matches('input, textarea, [contenteditable="true"], [contenteditable=""]')) return;
+      const key = event.key.toLowerCase();
+      if (key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        undoBlocks();
+      } else if (key === 'y' || (key === 'z' && event.shiftKey)) {
+        event.preventDefault();
+        redoBlocks();
+      }
+    };
+    window.addEventListener('keydown', handleHistoryShortcut);
+    return () => window.removeEventListener('keydown', handleHistoryShortcut);
+  }, [redoBlocks, undoBlocks]);
 
   // ── Operaciones sobre bloques ────────────────────────────────────────────
   const addBlock = useCallback(
@@ -724,7 +875,6 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   );
 
   const deleteBlock = useCallback((blockId: string) => {
-    if (!window.confirm('¿Eliminar este bloque de contenido?')) return;
     setBlocks(prev => {
       const toDelete = prev.find(b => b.id === blockId);
       if (toDelete) {
@@ -746,14 +896,33 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
     setHasChanges(true);
   }, []);
 
+  const requestDeleteBlock = useCallback((blockId: string) => {
+    setDeleteTargetId(blockId);
+  }, []);
+
+  const confirmDeleteBlock = useCallback(() => {
+    if (!deleteTargetId) return;
+    deleteBlock(deleteTargetId);
+    setDeleteTargetId(null);
+  }, [deleteBlock, deleteTargetId]);
+
   const toggleBlockCollapsed = useCallback((blockId: string) => {
     setCollapsedBlockIds(prev => {
-      const next = new Set(prev);
-      if (next.has(blockId)) next.delete(blockId);
-      else next.add(blockId);
-      return next;
+      if (prev.has(blockId)) {
+        return new Set(blocks.filter(block => block.id !== blockId).map(block => block.id));
+      }
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          document.getElementById(`page-editor-block-${blockId}`)?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest',
+          });
+        });
+      });
+      return new Set(blocks.map(block => block.id));
     });
-  }, []);
+  }, [blocks]);
 
   const collapseAllBlocks = useCallback(() => {
     setCollapsedBlockIds(new Set(blocks.map(b => b.id)));
@@ -919,6 +1088,15 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       .then(({ data }) => setAllSubtemas(data ?? []));
   }, [entityId, entityType]);
 
+  React.useImperativeHandle(ref, () => ({
+    updateBlock: updateBlockContent,
+    duplicateBlock,
+    requestDeleteBlock,
+    openImagePicker: openImageModal,
+    undo: undoBlocks,
+    redo: redoBlocks,
+  }), [duplicateBlock, openImageModal, redoBlocks, requestDeleteBlock, undoBlocks, updateBlockContent]);
+
   // Cargar placas cuando cambia el filtro de la pestaña "Todas"
   const handleAllFilterTema = (temaId: string) => {
     setAllFilterTema(temaId);
@@ -987,6 +1165,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
 
   // ── Guardar ──────────────────────────────────────────────────────────────
   const handleSave = async () => {
+    if (isSaving) return;
     const blocksToSave = blocksRef.current;
     if (!hasPendingChangesFor(blocksToSave)) {
       setHasChanges(false);
@@ -1059,11 +1238,10 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       setBlocks(persistedBlocks);
       pendingAssetDeleteIdsRef.current.clear();
       setHasChanges(false);
-      if (publicationStatus === 'published') {
-        await setPublicationDraft(entityType, entityId);
-        setPublicationStatus('draft');
-        setPublishedAt(null);
-      }
+      // Asegura que incluso una pagina nueva tenga una fila de publicacion vacia.
+      // Asi el borrador recien guardado nunca se usa como contenido publico.
+      await setPublicationDraft(entityType, entityId);
+      setPublicationStatus('draft');
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err) {
@@ -1073,6 +1251,14 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
       setIsSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (!autoSave || loading || isSaving || !hasPendingChangesFor(blocks) && !hasChanges) return;
+    const timer = window.setTimeout(() => {
+      void handleSave();
+    }, AUTO_SAVE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [autoSave, blocks, hasChanges, isSaving, loading]);
 
   const handlePublish = async () => {
     if (hasPendingChangesFor(blocksRef.current)) {
@@ -1228,14 +1414,37 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
   };
 
   const selectedTemplate = sectionTemplates.find(t => t.id === selectedSectionTemplateId) ?? null;
+  const activeEditingBlock = blocks.find(block => !collapsedBlockIds.has(block.id)) ?? null;
 
   return (
     <div style={es.sectionCard} className="block-editor-root">
+      <div className="visual-editor-commandbar">
+        <div className="visual-editor-commandbar-help">
+          <strong>Todas las herramientas están disponibles</strong>
+          <span>Añade componentes, personaliza su diseño, reutiliza plantillas y consulta versiones anteriores. El borrador se guarda automáticamente.</span>
+        </div>
+        <div className="visual-editor-history-actions">
+          <button type="button" onClick={undoBlocks} disabled={historyPastRef.current.length === 0} title="Deshacer (Ctrl+Z)">↶ Deshacer</button>
+          <button type="button" onClick={redoBlocks} disabled={historyFutureRef.current.length === 0} title="Rehacer (Ctrl+Y)">↷ Rehacer</button>
+        </div>
+      </div>
       <div style={es.builderLayout} className="block-editor-builder-layout">
-        <aside style={es.toolbar} className="block-editor-sidebar">
+        <aside style={es.toolbar} className={`block-editor-sidebar ${activeEditingBlock ? 'has-active-properties' : ''}`}>
+        {activeEditingBlock ? (
+          <VisualBlockProperties
+            key={activeEditingBlock.id}
+            block={activeEditingBlock}
+            embedded
+            onChange={updates => updateBlockContent(activeEditingBlock.id, updates)}
+            onDuplicate={() => duplicateBlock(activeEditingBlock.id)}
+            onDelete={() => requestDeleteBlock(activeEditingBlock.id)}
+            onPickImage={fieldKey => openImageModal(activeEditingBlock.id, fieldKey)}
+            onClose={() => toggleBlockCollapsed(activeEditingBlock.id)}
+          />
+        ) : <>
         <div style={es.toolbarTopRow}>
           <span style={es.toolbarLabel}>Componentes</span>
-          <button
+          {experienceMode === 'advanced' && <button
             type="button"
             style={{ ...es.toolbarModeToggle, ...(compactToolbar ? es.toolbarModeToggleActive : {}) }}
             onClick={() => setCompactToolbar(v => !v)}
@@ -1243,7 +1452,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
             aria-pressed={compactToolbar}
           >
             {compactToolbar ? 'Vista compacta: activada' : 'Vista compacta: desactivada'}
-          </button>
+          </button>}
         </div>
         <div style={es.toolbarGroupsWrap}>
           {BLOCK_TOOLBAR_GROUPS.map(group => (
@@ -1328,7 +1537,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
 
         <p style={es.toolbarHint}>Arrastra un componente al área de edición o haz clic para añadirlo al final.</p>
 
-        <div style={es.templateManagerRow} className="block-editor-template-manager">
+        {experienceMode === 'advanced' && <div style={es.templateManagerRow} className="block-editor-template-manager">
           <select
             style={es.styleSelect}
             value={selectedSectionTemplateId}
@@ -1385,9 +1594,9 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
           >
             Importar JSON
           </button>
-        </div>
+        </div>}
 
-        {selectedTemplate && (
+        {experienceMode === 'advanced' && selectedTemplate && (
           <div style={es.templatePreviewPanel}>
             <div style={es.templatePreviewTitleRow}>
               <strong style={es.templatePreviewTitle}>Vista previa</strong>
@@ -1405,10 +1614,11 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
             </div>
           </div>
         )}
+        </>}
         </aside>
 
         <div style={es.builderMain} className="block-editor-main">
-          {blocks.length > 0 && (
+          {experienceMode === 'advanced' && blocks.length > 0 && (
             <div style={es.selectionBar}>
               <span style={es.selectionBarText}>Seleccionados: {selectedBlockIds.size}</span>
               <div style={es.selectionBarActions} className="block-editor-selection-actions">
@@ -1443,6 +1653,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
             )}
 
             {blocks.map((block, idx) => {
+              if (activeEditingBlock && block.id !== activeEditingBlock.id) return null;
               const meta = getBlockMeta(block.block_type);
               const isDragging = dragIdx === idx;
               const isDropBefore = dropIdx === idx;
@@ -1460,6 +1671,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
                 <React.Fragment key={block.id}>
                   {isDropBefore && <div style={es.dropIndicator} />}
                   <div
+                    id={`page-editor-block-${block.id}`}
                     style={{
                       ...es.blockCard,
                       borderLeft: `4px solid ${meta.color}`,
@@ -1532,7 +1744,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
                         </button>
                         <button
                           style={es.deleteBtn}
-                          onClick={() => deleteBlock(block.id)}
+                          onClick={() => requestDeleteBlock(block.id)}
                           title="Eliminar bloque"
                           onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#fee2e2')}
                           onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
@@ -1561,6 +1773,8 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
                         onApplySectionTemplate={applySectionTemplate}
                         onInsertSectionTemplateBelow={insertSectionTemplateBelow}
                         onOpenImageModal={openImageModal}
+                        experienceMode={experienceMode}
+                        showStyleEditor={false}
                       />
                     )}
 
@@ -1578,7 +1792,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
         </div>
       </div>
 
-      <div style={es.versionPanel}>
+      {experienceMode === 'advanced' && <div style={es.versionPanel}>
         <div style={es.versionPanelHeader}>
           <strong style={es.versionPanelTitle}>Versiones de contenido</strong>
           <span style={es.versionPanelMeta}>{versions.length} registradas</span>
@@ -1622,7 +1836,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
             {isRestoringVersion ? 'Restaurando...' : 'Restaurar version'}
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* Barra de guardado */}
       <div style={es.saveBar}>
@@ -1645,7 +1859,7 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
             onClick={handleSave}
             disabled={!hasPendingChanges || isSaving}
           >
-            {isSaving ? 'Guardando...' : hasPendingChanges ? 'Guardar contenido' : 'Sin cambios'}
+            {isSaving ? 'Guardando borrador...' : hasPendingChanges ? 'Guardar ahora' : autoSave ? 'Borrador guardado' : 'Sin cambios'}
           </button>
           <button
             style={!hasPendingChanges && !isPublishing && !isSaving ? es.publishBtn : es.saveBtnDisabled}
@@ -1703,10 +1917,25 @@ const PageContentEditor: React.FC<PageContentEditorProps> = ({ entityType, entit
           onAllFilterSubtema={handleAllFilterSubtema}
         />
       )}
+      {deleteTargetId && (
+        <div className="visual-editor-dialog-backdrop" role="presentation" onMouseDown={() => setDeleteTargetId(null)}>
+          <div className="visual-editor-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-block-title" onMouseDown={event => event.stopPropagation()}>
+            <span className="visual-editor-dialog-icon" aria-hidden="true">!</span>
+            <h3 id="delete-block-title">¿Eliminar este bloque?</h3>
+            <p>El bloque desaparecerá del borrador. Puedes recuperarlo inmediatamente con “Deshacer”.</p>
+            <div className="visual-editor-dialog-actions">
+              <button type="button" className="secondary" onClick={() => setDeleteTargetId(null)}>Cancelar</button>
+              <button type="button" className="danger" onClick={confirmDeleteBlock}>Eliminar bloque</button>
+            </div>
+          </div>
+        </div>
+      )}
       <LoadingToast visible={isSaving} type="saving" message="Guardando contenido" />
     </div>
   );
-};
+});
+
+PageContentEditor.displayName = 'PageContentEditor';
 
 // ── Sub-componentes ───────────────────────────────────────────────────────────
 
@@ -1727,6 +1956,8 @@ interface MemoBlockContentEditorProps {
   onApplySectionTemplate: (sectionId: string, templateId: string) => void;
   onInsertSectionTemplateBelow: (sectionId: string, templateId: string) => void;
   onOpenImageModal: (blockId: string, fieldKey: string) => void;
+  experienceMode: 'simple' | 'advanced';
+  showStyleEditor?: boolean;
 }
 
 const MemoBlockContentEditor = React.memo(({
@@ -1746,16 +1977,18 @@ const MemoBlockContentEditor = React.memo(({
   onApplySectionTemplate,
   onInsertSectionTemplateBelow,
   onOpenImageModal,
+  experienceMode,
+  showStyleEditor = true,
 }: MemoBlockContentEditorProps) => {
   const editorSurfaceVars = {
     ['--atlas-editor-bg' as string]: block.content.style_bg || '#ffffff',
-    ['--atlas-editor-text' as string]: block.content.style_text || 'inherit',
+    ['--atlas-editor-text' as string]: block.content.style_text || '#000000',
     ['--atlas-editor-border' as string]: block.content.style_border || '#dbeafe',
   } as React.CSSProperties;
 
   return (
-    <div style={{ ...es.blockContent, ...editorSurfaceVars }}>
-      <BlockStyleEditor
+    <div style={{ ...es.blockContent, ...editorSurfaceVars }} className={!showStyleEditor ? 'block-editor-content-only' : undefined}>
+      {showStyleEditor && <BlockStyleEditor
         bgColor={block.content.style_bg ?? ''}
         textColor={block.content.style_text ?? ''}
         borderColor={block.content.style_border ?? ''}
@@ -1787,54 +2020,15 @@ const MemoBlockContentEditor = React.memo(({
           onUpdateBlockContent(block.id, preset.style);
         }}
         onDeletePreset={onDeleteStylePreset}
-      />
+      />}
 
       {(block.block_type === 'heading' ||
         block.block_type === 'subheading' ||
         block.block_type === 'paragraph') && (
         <>
-          <div style={es.alignRow}>
-            {(['left', 'center', 'right'] as const).map(align => {
-              const current = block.content.text_align ?? 'left';
-              const icons = { left: '⇤ Izq', center: '≡ Centro', right: 'Der ⇥' };
-              return (
-                <button
-                  key={align}
-                  style={{
-                    ...es.alignBtn,
-                    ...(current === align ? es.alignBtnActive : {}),
-                  }}
-                  onClick={() => onUpdateBlockContent(block.id, { text_align: align })}
-                  title={icons[align]}
-                >
-                  {icons[align]}
-                </button>
-              );
-            })}
-          </div>
-          <div style={es.alignRow}>
-            {([
-              { key: 'start', label: 'Arriba del bloque' },
-              { key: 'center', label: 'Centro del bloque' },
-              { key: 'end', label: 'Abajo del bloque' },
-            ] as const).map(v => {
-              const current = (block.content.text_vertical_align as 'start' | 'center' | 'end') ?? 'start';
-              return (
-                <button
-                  key={v.key}
-                  style={{ ...es.posBtn, ...(current === v.key ? es.posBtnActive : {}) }}
-                  onClick={() => onUpdateBlockContent(block.id, { text_vertical_align: v.key })}
-                  title={`Alineación vertical: ${v.label}`}
-                >
-                  {v.label}
-                </button>
-              );
-            })}
-          </div>
-          <div style={{ marginBottom: '8px', fontSize: '0.76em', color: '#64748b', fontWeight: 700 }}>
-            Alineación vertical del texto dentro del bloque
-          </div>
           <AutoTextarea
+            editorId={block.id}
+            showToolbar={showStyleEditor}
             value={block.content.text ?? ''}
             onChange={text => onUpdateBlockContent(block.id, { text })}
             placeholder={
@@ -1858,7 +2052,7 @@ const MemoBlockContentEditor = React.memo(({
 
       {block.block_type === 'section' && (
         <>
-          <div style={es.sectionTemplateRow}>
+          {experienceMode === 'advanced' && <div style={es.sectionTemplateRow}>
             <button
               type="button"
               style={es.selectionBtn}
@@ -1900,7 +2094,7 @@ const MemoBlockContentEditor = React.memo(({
                 </option>
               ))}
             </select>
-          </div>
+          </div>}
 
           <SectionBlockEditor
             title={block.content.title ?? ''}
@@ -1986,6 +2180,7 @@ const MemoBlockContentEditor = React.memo(({
 
       {block.block_type === 'callout' && (
         <CalloutBlockEditor
+          editorId={block.id}
           text={block.content.text ?? ''}
           variant={(block.content.variant as CalloutVariant) ?? 'info'}
           onTextChange={text => onUpdateBlockContent(block.id, { text })}
@@ -1995,6 +2190,7 @@ const MemoBlockContentEditor = React.memo(({
 
       {block.block_type === 'list' && (
         <ListBlockEditor
+          editorId={block.id}
           items={block.content.items ?? ''}
           style={(block.content.style as 'bullet' | 'numbered') ?? 'bullet'}
           onItemsChange={items => onUpdateBlockContent(block.id, { items })}
@@ -2033,12 +2229,12 @@ const MemoBlockContentEditor = React.memo(({
         />
       )}
 
-      <BlockCtaLinksEditor
+      {showStyleEditor && <BlockCtaLinksEditor
         content={block.content}
         allTemas={allTemas}
         allSubtemas={allSubtemas}
         onContentChange={changes => onUpdateBlockContent(block.id, changes)}
-      />
+      />}
 
     </div>
   );
@@ -2050,7 +2246,21 @@ const AutoTextarea: React.FC<{
   onChange: (v: string) => void;
   placeholder?: string;
   extraStyle?: React.CSSProperties;
-}> = ({ value, onChange, placeholder, extraStyle }) => {
+  editorId?: string;
+  showToolbar?: boolean;
+}> = ({ value, onChange, placeholder, extraStyle, editorId, showToolbar = true }) => {
+  const emitTextState = (currentEditor: Editor) => {
+    if (!editorId) return;
+    window.dispatchEvent(new CustomEvent('atlas-rich-text-state', { detail: {
+      editorId,
+      attrs: currentEditor.getAttributes('textStyle'),
+      align: currentEditor.getAttributes('paragraph').textAlign || 'left',
+      bold: currentEditor.isActive('bold'), italic: currentEditor.isActive('italic'),
+      underline: currentEditor.isActive('underline'), strike: currentEditor.isActive('strike'),
+      bulletList: currentEditor.isActive('bulletList'), orderedList: currentEditor.isActive('orderedList'),
+      link: currentEditor.isActive('link'), highlight: currentEditor.getAttributes('highlight').color || '',
+    } }));
+  };
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -2085,6 +2295,10 @@ const AutoTextarea: React.FC<{
     },
     onUpdate: ({ editor: currentEditor }) => {
       onChange(currentEditor.getHTML());
+      emitTextState(currentEditor);
+    },
+    onSelectionUpdate: ({ editor: currentEditor }) => {
+      emitTextState(currentEditor);
     },
   });
 
@@ -2133,9 +2347,39 @@ const AutoTextarea: React.FC<{
     editor.chain().focus().setLink({ href: url.trim() }).run();
   };
 
+  useEffect(() => {
+    if (!editorId || !editor) return;
+    const handleCommand = (event: Event) => {
+      const detail = (event as CustomEvent<{ editorId: string; command: string; value?: string }>).detail;
+      if (!detail || detail.editorId !== editorId) return;
+      const chain = editor.chain().focus();
+      switch (detail.command) {
+        case 'bold': chain.toggleBold().run(); break;
+        case 'underline': chain.toggleUnderline().run(); break;
+        case 'italic': chain.toggleItalic().run(); break;
+        case 'strike': chain.toggleStrike().run(); break;
+        case 'bulletList': chain.toggleBulletList().run(); break;
+        case 'orderedList': chain.toggleOrderedList().run(); break;
+        case 'align': chain.setTextAlign(detail.value || 'left').run(); break;
+        case 'textColor': detail.value ? chain.setColor(detail.value).run() : chain.unsetColor().run(); break;
+        case 'highlight': detail.value ? chain.setHighlight({ color: detail.value }).run() : chain.unsetHighlight().run(); break;
+        case 'fontSize': detail.value ? applySelectionFontSize(detail.value) : clearSelectionFontSize(); break;
+        case 'fontFamily': chain.setMark('textStyle', { fontFamily: detail.value || null }).run(); break;
+        case 'fontWeight': chain.setMark('textStyle', { fontWeight: detail.value || null }).run(); break;
+        case 'lineHeight': chain.setMark('textStyle', { lineHeight: detail.value || null }).run(); break;
+        case 'letterSpacing': chain.setMark('textStyle', { letterSpacing: detail.value || null }).run(); break;
+        case 'textTransform': chain.setMark('textStyle', { textTransform: detail.value || null }).run(); break;
+        case 'clearTextStyle': chain.unsetAllMarks().run(); break;
+        case 'link': setLink(); break;
+      }
+    };
+    window.addEventListener('atlas-rich-text-command', handleCommand);
+    return () => window.removeEventListener('atlas-rich-text-command', handleCommand);
+  }, [editor, editorId]);
+
   return (
     <div style={es.richTextWrap}>
-      <div style={es.richQuickToolbar}>
+      {showToolbar && <div className="richQuickToolbar" style={es.richQuickToolbar}>
         <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleBold().run()}>
           Negrita
         </button>
@@ -2161,8 +2405,8 @@ const AutoTextarea: React.FC<{
             title="Aplicar color al texto seleccionado"
           />
         </label>
-        <details style={{ width: '100%' }}>
-          <summary style={{ cursor: 'pointer', fontWeight: 700, color: '#0f172a' }}>Más opciones</summary>
+        <div style={{ width: '100%' }}>
+          <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>Formato adicional del texto</div>
           <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '8px', marginTop: '10px' }}>
             <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleItalic().run()}>
               Cursiva
@@ -2220,8 +2464,8 @@ const AutoTextarea: React.FC<{
               Limpiar fondo
             </button>
           </div>
-        </details>
-      </div>
+        </div>
+      </div>}
       <EditorContent
         editor={editor}
         style={{
@@ -2371,14 +2615,14 @@ const BlockStyleEditor: React.FC<BlockStyleEditorProps> = ({
           <option value="right">Derecha</option>
         </select>
       </label>
-      <details style={{ gridColumn: '1 / -1' }}>
-        <summary style={{ cursor: 'pointer', color: '#1d4ed8', fontWeight: 700 }}>Opciones avanzadas</summary>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <div style={{ color: '#1d4ed8', fontWeight: 800, marginBottom: '4px' }}>Texto, sombra y estilos reutilizables</div>
         <div style={{ display: 'grid', gap: '12px', marginTop: '12px' }}>
           <label style={es.styleFieldLabel}>
             Texto
             <input
               type="color"
-              value={textColor || '#0f172a'}
+              value={textColor || '#000000'}
               onChange={e => onChange({ style_text: e.target.value })}
               style={es.colorInput}
             />
@@ -2414,7 +2658,7 @@ const BlockStyleEditor: React.FC<BlockStyleEditorProps> = ({
               style={{
                 ...es.stylePreviewCard,
                 background: bgColor || '#ffffff',
-                color: textColor || '#0f172a',
+                color: textColor || '#000000',
                 border: `1px solid ${borderColor || '#e2e8f0'}`,
                 borderRadius: `${Number.isFinite(previewRadius) ? previewRadius : 0}px`,
                 padding: `${Number.isFinite(previewPadding) ? previewPadding : 0}px`,
@@ -2505,7 +2749,7 @@ const BlockStyleEditor: React.FC<BlockStyleEditorProps> = ({
             Restablecer
           </button>
         </div>
-      </details>
+      </div>
     </div>
   </div>
   );
@@ -2650,8 +2894,8 @@ const BlockCtaLinksEditor: React.FC<BlockCtaLinksEditorProps> = ({ content, allT
         </div>
       </div>
 
-      <details style={{ marginTop: '6px' }}>
-        <summary style={{ cursor: 'pointer', color: '#1d4ed8', fontWeight: 700 }}>Opciones avanzadas</summary>
+      <div style={{ marginTop: '10px' }}>
+        <div style={{ color: '#1d4ed8', fontWeight: 800, marginBottom: '8px' }}>Diseño de los botones</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginTop: '10px' }}>
           <label style={es.fieldLabel}>
             Espaciado
@@ -2708,7 +2952,7 @@ const BlockCtaLinksEditor: React.FC<BlockCtaLinksEditorProps> = ({ content, allT
             />
           </label>
         </div>
-      </details>
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '10px' }}>
         {CTA_SLOTS.slice(0, visibleSlots).map(slot => {
@@ -2896,8 +3140,8 @@ const ImageBlockEditor: React.FC<ImageBlockEditorProps> = ({
         </button>
       )}
     </div>
-    <details style={{ marginTop: '10px' }}>
-      <summary style={{ cursor: 'pointer', color: '#1d4ed8', fontWeight: 700 }}>Ajustes avanzados</summary>
+    <div className="block-customization-control" style={{ marginTop: '14px' }}>
+      <div style={{ color: '#1d4ed8', fontWeight: 800, marginBottom: '8px' }}>Tamaño, posición y recorte</div>
       <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' as const, marginTop: '10px' }}>
         <div>
           <span style={es.fieldLabel}>Tamaño:</span>
@@ -2959,7 +3203,7 @@ const ImageBlockEditor: React.FC<ImageBlockEditorProps> = ({
           </select>
         </label>
       </div>
-    </details>
+    </div>
     <div style={es.captionRow}>
       <label style={es.fieldLabel}>Pie de foto (opcional)</label>
       <AutoTextarea
@@ -3014,8 +3258,8 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
       {/* Columna de texto */}
       <div style={es.tiCol}>
         <label style={es.fieldLabel}>Texto</label>
-        <details style={{ marginBottom: '8px' }}>
-          <summary style={{ cursor: 'pointer', color: '#1d4ed8', fontWeight: 700 }}>Ajustes avanzados</summary>
+        <div className="block-customization-control" style={{ marginBottom: '8px' }}>
+          <div style={{ color: '#1d4ed8', fontWeight: 800, marginBottom: '8px' }}>Posición vertical del texto</div>
           <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '8px', alignItems: 'center', marginTop: '8px' }}>
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' as const }}>
               {([
@@ -3034,7 +3278,7 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
               ))}
             </div>
           </div>
-        </details>
+        </div>
         <AutoTextarea
           value={text}
           onChange={onTextChange}
@@ -3082,8 +3326,8 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
           placeholder="Pie de foto..."
           extraStyle={{ ...es.captionInput, marginTop: '6px' }}
         />
-        <details style={{ marginTop: '8px' }}>
-          <summary style={{ cursor: 'pointer', color: '#1d4ed8', fontWeight: 700 }}>Ajustes avanzados</summary>
+        <div className="block-customization-control" style={{ marginTop: '12px' }}>
+          <div style={{ color: '#1d4ed8', fontWeight: 800, marginBottom: '8px' }}>Tamaño y recorte de la imagen</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '8px', marginTop: '8px' }}>
             <label style={es.fieldLabel}>
               Ancho imagen (%)
@@ -3122,12 +3366,12 @@ const TextImageBlockEditor: React.FC<TextImageBlockEditorProps> = ({
               </select>
             </label>
           </div>
-        </details>
+        </div>
       </div>
     </div>
 
     {/* Toggle posición de imagen */}
-    <div style={es.positionRow}>
+    <div className="block-customization-control" style={es.positionRow}>
       <span style={es.fieldLabel}>Posición de la imagen:</span>
       <div style={es.positionBtns}>
         <button
@@ -3288,7 +3532,7 @@ const SectionBlockEditor: React.FC<SectionBlockEditorProps> = ({
   onToneChange,
 }) => (
   <div style={es.tiEditorWrap}>
-    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' as const }}>
+    <div className="block-customization-control" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' as const }}>
       <span style={es.fieldLabel}>Tono visual:</span>
       {(['neutral', 'info', 'accent'] as const).map(v => (
         <button key={v} style={{ ...es.posBtn, ...(tone === v ? es.posBtnActive : {}) }} onClick={() => onToneChange(v)}>
@@ -3331,7 +3575,7 @@ const ColumnsBlockEditor: React.FC<ColumnsBlockEditorProps> = ({ content, onCont
 
   return (
     <div style={es.tiEditorWrap}>
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' as const, justifyContent: 'space-between' }}>
+      <div className="block-customization-control" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' as const, justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' as const }}>
           <span style={es.fieldLabel}>Columnas:</span>
           {[2, 3, 4].map(v => (
@@ -3381,14 +3625,15 @@ const CALLOUT_META: Record<CalloutVariant, { icon: string; label: string; bg: st
   clinical: { icon: '🔬',  label: 'Dato clínico', bg: '#fdf4ff', border: '#d8b4fe', color: '#7e22ce' },
 };
 interface CalloutBlockEditorProps {
+  editorId: string;
   text: string;
   variant: CalloutVariant;
   onTextChange: (v: string) => void;
   onVariantChange: (v: CalloutVariant) => void;
 }
-const CalloutBlockEditor: React.FC<CalloutBlockEditorProps> = ({ text, variant, onTextChange, onVariantChange }) => (
+const CalloutBlockEditor: React.FC<CalloutBlockEditorProps> = ({ editorId, text, variant, onTextChange, onVariantChange }) => (
   <div style={es.tiEditorWrap}>
-    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' as const, marginBottom: '10px' }}>
+    <div className="block-customization-control" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' as const, marginBottom: '10px' }}>
       <span style={es.fieldLabel}>Tipo:</span>
       {(Object.keys(CALLOUT_META) as CalloutVariant[]).map(v => {
         const m = CALLOUT_META[v];
@@ -3400,20 +3645,21 @@ const CalloutBlockEditor: React.FC<CalloutBlockEditorProps> = ({ text, variant, 
         );
       })}
     </div>
-    <AutoTextarea value={text} onChange={onTextChange} placeholder="Escribe el contenido destacado..." extraStyle={es.textareaParagraph} />
+    <AutoTextarea editorId={editorId} value={text} onChange={onTextChange} placeholder="Escribe el contenido destacado..." extraStyle={es.textareaParagraph} />
   </div>
 );
 
 // Editor de bloque lista
 interface ListBlockEditorProps {
+  editorId: string;
   items: string;
   style: 'bullet' | 'numbered';
   onItemsChange: (v: string) => void;
   onStyleChange: (v: string) => void;
 }
-const ListBlockEditor: React.FC<ListBlockEditorProps> = ({ items, style, onItemsChange, onStyleChange }) => (
+const ListBlockEditor: React.FC<ListBlockEditorProps> = ({ editorId, items, style, onItemsChange, onStyleChange }) => (
   <div style={es.tiEditorWrap}>
-    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+    <div className="block-customization-control" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
       <span style={es.fieldLabel}>Estilo:</span>
       {(['bullet', 'numbered'] as const).map(s => (
         <button key={s} style={{ ...es.posBtn, ...(style === s ? es.posBtnActive : {}) }} onClick={() => onStyleChange(s)}>
@@ -3422,6 +3668,7 @@ const ListBlockEditor: React.FC<ListBlockEditorProps> = ({ items, style, onItems
       ))}
     </div>
     <AutoTextarea
+      editorId={editorId}
       value={items}
       onChange={onItemsChange}
       placeholder="Escribe cada ítem en una línea separada..."
@@ -3441,7 +3688,7 @@ interface DividerBlockEditorProps {
 }
 const DividerBlockEditor: React.FC<DividerBlockEditorProps> = ({ style, onStyleChange }) => (
   <div style={es.tiEditorWrap}>
-    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+    <div className="block-customization-control" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
       <span style={es.fieldLabel}>Estilo del separador:</span>
       {(['gradient', 'simple', 'labeled'] as const).map(s => (
         <button key={s} style={{ ...es.posBtn, ...(style === s ? es.posBtnActive : {}) }} onClick={() => onStyleChange(s)}>
@@ -3567,7 +3814,7 @@ interface IntervalRowProps {
   onAutoChange: (v: boolean) => void;
 }
 const IntervalRow: React.FC<IntervalRowProps> = ({ interval, auto, onIntervalChange, onAutoChange }) => (
-  <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' as const, marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
+  <div className="block-customization-control" style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' as const, marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
     <div>
       <span style={es.fieldLabel}>Auto-avance:</span>
       <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
@@ -3632,7 +3879,7 @@ const TextCarouselBlockEditor: React.FC<TextCarouselBlockEditorProps> = ({ conte
   return (
     <div style={es.tiEditorWrap}>
       {/* Posición de la galería */}
-      <div style={es.positionRow}>
+      <div className="block-customization-control" style={es.positionRow}>
         <span style={es.fieldLabel}>Galería:</span>
         <div style={es.positionBtns}>
           <button style={{ ...es.posBtn, ...(pos === 'left' ? es.posBtnActive : {}) }} onClick={() => onContentChange({ image_position: 'left' })}>⇤ Izquierda</button>
@@ -3640,7 +3887,7 @@ const TextCarouselBlockEditor: React.FC<TextCarouselBlockEditorProps> = ({ conte
         </div>
       </div>
       {/* Alineación del texto */}
-      <div style={es.alignRow}>
+      <div className="block-customization-control" style={es.alignRow}>
         {(['left', 'center', 'right'] as const).map(a => {
           const icons = { left: '⇤ Izq', center: '≡ Centro', right: 'Der ⇥' };
           return <button key={a} style={{ ...es.alignBtn, ...(tiAlign === a ? es.alignBtnActive : {}) }} onClick={() => onContentChange({ ti_text_align: a })}>{icons[a]}</button>;
@@ -4391,11 +4638,11 @@ const es: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
   },
   richEditorContent: {
-    minHeight: '110px',
-    padding: '10px 12px',
+    minHeight: '52px',
+    padding: '12px 14px',
     fontSize: '0.95em',
     lineHeight: 1.65,
-    color: '#1e293b',
+    color: '#000000',
   },
 
   // Textareas
@@ -4406,7 +4653,7 @@ const es: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     border: '1.5px solid #e2e8f0',
     background: '#f8fafc',
-    color: '#1e293b',
+    color: '#000000',
     resize: 'vertical',
     outline: 'none',
     boxSizing: 'border-box',
@@ -4453,14 +4700,14 @@ const es: Record<string, React.CSSProperties> = {
     fontSize: '1.5em',
     fontWeight: 800,
     lineHeight: 1.25,
-    color: '#0f172a',
+    color: '#000000',
     letterSpacing: '-0.02em',
   },
   textareaSubheading: {
     fontSize: '1.15em',
     fontWeight: 700,
     lineHeight: 1.3,
-    color: '#1e293b',
+    color: '#000000',
   },
   textareaParagraph: {
     fontSize: '0.95em',

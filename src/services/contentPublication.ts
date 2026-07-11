@@ -1,8 +1,8 @@
 import { supabase } from './supabase';
 import { BLOCK_TYPES, normalizeBlockContent } from '../components/blocks/blockRegistry';
-import type { BlockType } from '../components/PageContentEditor';
+import type { BlockType, PageEntityType } from '../types/contentBlocks';
 
-export type PageEntityType = 'subtemas_page' | 'placas_page' | 'home_page';
+export type { PageEntityType } from '../types/contentBlocks';
 
 export interface PublicationBlock {
   id: string;
@@ -63,7 +63,9 @@ export const getPublicationInfo = async (entityType: PageEntityType, entityId: n
 export const getRenderableBlocks = async (entityType: PageEntityType, entityId: number): Promise<PublicationBlock[]> => {
   try {
     const publication = await getPublicationInfo(entityType, entityId);
-    if (publication?.status === 'published') {
+    // El estado draft significa que existe una edicion en curso. La web publica
+    // debe seguir mostrando el ultimo snapshot publicado hasta la proxima publicacion.
+    if (publication) {
       return normalizeBlocks(publication.published_blocks as unknown[]);
     }
   } catch (error) {

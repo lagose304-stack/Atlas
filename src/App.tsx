@@ -1,35 +1,43 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
-import Home from './pages/Home';
-import Edicion from './pages/Edicion';
-import TemarioPublico from './pages/TemarioPublico';
-import Temario from './pages/Temario';
-import Placas from './pages/Placas';
-import Subtemas from './pages/Subtemas';
-import PlacasSubtema from './pages/PlacasSubtema';
-import EditarTemario from './pages/EditarTemario';
-import EditarSubtemas from './pages/EditarSubtemas';
-import EditarPlacas from './pages/EditarPlacas';
-import EditorPaginas from './pages/EditorPaginas';
-import EliminarPlacas from './pages/EliminarPlacas';
-import MoverPlaca from './pages/MoverPlaca';
-import ListaEspera from './pages/ListaEspera';
-import GestionTinciones from './pages/GestionTinciones';
-import MapasInteractivos from './pages/MapasInteractivos';
-import GestionUsuarios from './pages/GestionUsuarios';
-import Pruebas from './pages/Pruebas';
-import GestionPruebas from './pages/GestionPruebas';
-import EditorDePruebas from './pages/EditorDePruebas';
-import EjecutarPrueba from './pages/EjecutarPrueba';
-import Evaluaciones from './pages/Evaluaciones';
-import AccesoDenegado from './pages/AccesoDenegado';
-import Estadisticas from './pages/Estadisticas';
 import { logSiteVisitOncePerSession } from './services/analytics';
+
+const Home = lazy(() => import('./pages/Home'));
+const Edicion = lazy(() => import('./pages/Edicion'));
+const TemarioPublico = lazy(() => import('./pages/TemarioPublico'));
+const Temario = lazy(() => import('./pages/Temario'));
+const Placas = lazy(() => import('./pages/Placas'));
+const Subtemas = lazy(() => import('./pages/Subtemas'));
+const PlacasSubtema = lazy(() => import('./pages/PlacasSubtema'));
+const EditarTemario = lazy(() => import('./pages/EditarTemario'));
+const EditarSubtemas = lazy(() => import('./pages/EditarSubtemas'));
+const EditarPlacas = lazy(() => import('./pages/EditarPlacas'));
+const EditorPaginas = lazy(() => import('./pages/EditorPaginas'));
+const EliminarPlacas = lazy(() => import('./pages/EliminarPlacas'));
+const MoverPlaca = lazy(() => import('./pages/MoverPlaca'));
+const ListaEspera = lazy(() => import('./pages/ListaEspera'));
+const GestionTinciones = lazy(() => import('./pages/GestionTinciones'));
+const MapasInteractivos = lazy(() => import('./pages/MapasInteractivos'));
+const GestionUsuarios = lazy(() => import('./pages/GestionUsuarios'));
+const Pruebas = lazy(() => import('./pages/Pruebas'));
+const GestionPruebas = lazy(() => import('./pages/GestionPruebas'));
+const EditorDePruebas = lazy(() => import('./pages/EditorDePruebas'));
+const EjecutarPrueba = lazy(() => import('./pages/EjecutarPrueba'));
+const Evaluaciones = lazy(() => import('./pages/Evaluaciones'));
+const AccesoDenegado = lazy(() => import('./pages/AccesoDenegado'));
+const Estadisticas = lazy(() => import('./pages/Estadisticas'));
 
 const ROLE_ADMIN = 'Administrador' as const;
 const ROLE_MICRO = 'Microscopía' as const;
+
+const RouteLoadingFallback = () => (
+  <div role="status" aria-live="polite" className="route-loading-fallback">
+    <span className="route-loading-spinner" aria-hidden="true" />
+    <span>Cargando sección...</span>
+  </div>
+);
 
 const ScrollToTop: React.FC = () => {
   const { pathname } = useLocation();
@@ -95,6 +103,7 @@ const App: React.FC = () => {
         <ScrollToTop />
         <SiteVisitTracker />
         <SpellcheckEnabler />
+        <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
           {/* Ruta pública */}
           <Route path="/" element={<Home />} />
@@ -265,6 +274,7 @@ const App: React.FC = () => {
           {/* Ruta de fallback */}
           <Route path="*" element={<Home />} />
         </Routes>
+        </Suspense>
       </Router>
     </AuthProvider>
   );

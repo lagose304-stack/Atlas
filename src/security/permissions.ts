@@ -14,7 +14,7 @@ const ROLE_PERMISSIONS: Record<UserRole, PermissionKey[]> = {
 };
 
 export const hasPermission = (role: UserRole | undefined, permission: PermissionKey): boolean => {
-  if (!role) {
+  if (!role || !Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, role)) {
     return false;
   }
   return ROLE_PERMISSIONS[role].includes(permission);

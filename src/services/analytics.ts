@@ -224,6 +224,13 @@ export const fetchAnalyticsEvents = async (range: AnalyticsRangePreset): Promise
 };
 
 export const fetchTotalSiteViews = async (): Promise<number> => {
+  const rpcResult = await supabase.rpc('atlas_get_total_site_views');
+  if (!rpcResult.error && rpcResult.data != null) {
+    const total = Number(rpcResult.data);
+    return Number.isFinite(total) && total >= 0 ? total : 0;
+  }
+
+  // Compatibilidad temporal para administradores mientras se aplica la migración.
   const { count, error } = await supabase
     .from('site_analytics_events')
     .select('id', { count: 'exact', head: true })

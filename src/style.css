@@ -150,12 +150,18 @@ body {
 .tiptap-editor-content {
   min-height: 100px;
   outline: none;
+  color: var(--atlas-editor-text, #000000) !important;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .tiptap-editor-content p {
   margin: 0 0 0.55em;
+}
+
+.tiptap-editor-content p:not([style*="color"]),
+.tiptap-editor-content li:not([style*="color"]) {
+  color: inherit !important;
 }
 
 .tiptap-editor-content p:last-child {
@@ -2193,6 +2199,8 @@ body {
 }
 
 @media (max-width: 760px) {
+  .cb-paragraph { column-count: 1 !important; }
+  .cb-list-grid { grid-template-columns: 1fr !important; }
   .placas-gallery-grid--subtema .placa-thumb-wrap {
     transform: none !important;
   }
@@ -2685,7 +2693,7 @@ body {
 
 /* Contenedor principal */
 .cb-container {
-  gap: clamp(14px, 3vw, 22px) !important;
+  gap: clamp(8px, 1.2vw, 14px) !important;
   width: 100% !important;
   margin-bottom: 0 !important;
   font-family: inherit !important;
@@ -2695,6 +2703,12 @@ body {
   width: 100%;
   margin: 0;
   background-clip: padding-box;
+}
+
+/* El primer componente empieza junto al encabezado de su pagina. Evita que un
+   "espacio antes" guardado en el bloque cree una franja vacia al inicio. */
+.cb-container > .cb-shell:first-child {
+  margin-top: 0 !important;
 }
 
 /* Párrafo */
@@ -2724,7 +2738,7 @@ body {
 
 @media (max-width: 640px) {
   .cb-container {
-    gap: 14px !important;
+    gap: 8px !important;
   }
   .cb-ti-row {
     flex-direction: column !important;
@@ -2819,4 +2833,52 @@ body {
   .block-editor-root .block-editor-save-actions > button {
     width: 100%;
   }
+}
+/* Pantalla breve mientras se descarga una ruta con React.lazy. */
+.route-loading-fallback {
+  min-height: 55vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  color: #1e3a5f;
+  font-weight: 700;
+}
+
+/* Los bloques tipograficos consecutivos se leen como una sola composicion. */
+.cb-shell-heading + .cb-shell-subheading {
+  margin-top: -4px;
+}
+
+.cb-shell-heading p,
+.cb-shell-subheading p {
+  margin-block: 0;
+}
+
+/* El HTML enriquecido no debe recuperar los grises globales del sitio. Los
+   nodos sin un color elegido heredan el color real del bloque (negro por
+   defecto); los span con color aplicado por el usuario conservan su estilo. */
+.cb-shell-heading p:not([style*="color"]),
+.cb-shell-subheading p:not([style*="color"]),
+.cb-shell-paragraph p:not([style*="color"]),
+.cb-shell-list p:not([style*="color"]),
+.cb-shell-list li:not([style*="color"]),
+.cb-shell-callout p:not([style*="color"]) {
+  color: inherit !important;
+}
+.cb-shell a { color: var(--atlas-link-color, #2563eb); text-decoration: var(--atlas-link-decoration, underline); }
+.cb-shell a:hover { text-decoration: var(--atlas-link-hover-decoration, underline); }
+
+.route-loading-spinner {
+  width: 38px;
+  height: 38px;
+  border: 4px solid #dbeafe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: route-loading-spin 0.8s linear infinite;
+}
+
+@keyframes route-loading-spin {
+  to { transform: rotate(360deg); }
 }
