@@ -95,9 +95,9 @@ const Home: React.FC = () => {
         </aside>
       )}
 
-      <main style={styles.main}>
+      <main className={`public-editor-main${contentBlocks.length > 0 ? ' has-editor-content' : ''}`} style={styles.main}>
         {contentBlocks.length > 0 && (
-          <section style={styles.contentCard}>
+          <section className="public-editor-content" style={styles.contentCard}>
             <ContentBlockRenderer blocks={contentBlocks} />
           </section>
         )}
@@ -135,7 +135,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   contentCard: {
     width: '100%',
     maxWidth: '1280px',
-    transform: 'translateY(-22px)',
     background: 'transparent',
     borderRadius: 0,
     boxShadow: 'none',

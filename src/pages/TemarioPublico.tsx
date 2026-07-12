@@ -311,7 +311,7 @@ const TemarioPublico: React.FC = () => {
 
       <main style={styles.main}>
         {contentBlocks.length > 0 && (
-          <section style={styles.auxContentCard}>
+          <section className="public-editor-content public-editor-content-before-system" style={styles.auxContentCard}>
             <ContentBlockRenderer blocks={contentBlocks} />
           </section>
         )}

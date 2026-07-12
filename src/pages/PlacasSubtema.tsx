@@ -331,7 +331,7 @@ const PlacasSubtema: React.FC = () => {
 
           {/* Bloques de contenido editorial */}
           {!loading && contentBlocks.length > 0 && (
-            <div style={{ marginBottom: '24px' }}>
+            <div className="public-editor-content public-editor-content-before-system">
               <ContentBlockRenderer blocks={contentBlocks} />
             </div>
           )}

@@ -210,6 +210,13 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
   const [searchSuggestionsFrame, setSearchSuggestionsFrame] = React.useState<{ top: number; left: number; width: number } | null>(null);
   const isImageViewerOpen = openImageViewerCount > 0;
   const isHeaderLocked = disableInteractions;
+  const isMenuItemActive = React.useCallback((key: typeof MENU_ITEMS[number]['key']) => {
+    if (key === 'inicio') return pathname === '/';
+    if (key === 'temario') {
+      return pathname === '/temario' || pathname.startsWith('/subtemas/') || pathname.startsWith('/ver-placas/');
+    }
+    return pathname === '/evaluaciones' || pathname.startsWith('/evaluaciones/');
+  }, [pathname]);
 
   const isInAdminEditingFlow = React.useMemo(() => {
     const adminPaths = [
@@ -395,7 +402,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
           className="atlas-header-hero"
           style={{
             ...styles.hero,
-            backgroundImage: `linear-gradient(100deg, rgba(6, 33, 86, 0.82) 0%, rgba(36, 77, 145, 0.46) 22%, rgba(213, 237, 255, 0.62) 45%, rgba(170, 214, 249, 0.52) 67%, rgba(20, 58, 128, 0.32) 100%), url(${fondoHeader})`,
+            backgroundImage: `linear-gradient(105deg, rgba(6,33,86,.88), rgba(31,91,151,.48) 25%, rgba(224,242,254,.68) 50%, rgba(125,190,232,.48) 72%, rgba(10,52,112,.7)), url(${fondoHeader})`,
           }}
         >
           <div className="atlas-header-glass" style={styles.heroGlass} />
@@ -542,9 +549,10 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
                 <li className="atlas-header-nav-item" key={item.key} style={styles.navItem}>
                   <button
                     type="button"
-                    className="atlas-header-nav-button"
+                    className={`atlas-header-nav-button${isMenuItemActive(item.key) ? ' is-active' : ''}`}
                     style={{ ...styles.navButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
                     disabled={isHeaderLocked}
+                    aria-current={isMenuItemActive(item.key) ? 'page' : undefined}
                     onClick={() => {
                       if ('path' in item && item.path) navigateFromHeader(item.path);
                     }}
@@ -592,9 +600,10 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
               <li className="atlas-compact-nav-item" key={`compact-${item.key}`} style={styles.compactNavItem}>
                 <button
                   type="button"
-                  className="atlas-compact-nav-button"
+                  className={`atlas-compact-nav-button${isMenuItemActive(item.key) ? ' is-active' : ''}`}
                   style={{ ...styles.compactNavButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
                   disabled={isHeaderLocked}
+                  aria-current={isMenuItemActive(item.key) ? 'page' : undefined}
                   onClick={() => {
                     if ('path' in item && item.path) navigateFromHeader(item.path);
                   }}
@@ -616,10 +625,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '100%',
     maxWidth: '1600px',
     margin: '0 auto',
-    boxShadow: '0 12px 38px rgba(8, 33, 75, 0.26)',
-    borderRadius: '18px 18px 0 0',
+    boxShadow: '0 16px 42px rgba(8, 33, 75, 0.22)',
+    borderRadius: '22px 22px 0 0',
     overflow: 'hidden',
-    border: '1px solid rgba(206, 234, 255, 0.9)',
+    border: '1px solid rgba(186, 225, 249, 0.92)',
     backgroundColor: '#f4f7fb',
   },
   hero: {
@@ -630,14 +639,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     width: '100%',
-    borderBottom: '2px solid rgba(174, 216, 255, 0.8)',
+    borderBottom: '1px solid rgba(174, 216, 255, 0.82)',
   },
   heroGlass: {
     position: 'absolute',
-    inset: '10px',
-    borderRadius: '16px',
+    inset: '11px',
+    borderRadius: '17px',
     border: '1px solid rgba(210, 239, 255, 0.85)',
-    boxShadow: 'inset 0 0 45px rgba(255,255,255,0.22)',
+    boxShadow: 'inset 0 0 55px rgba(255,255,255,.25), 0 0 0 1px rgba(13,73,126,.08)',
     pointerEvents: 'none',
   },
   heroReadableOverlay: {
@@ -930,10 +939,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     lineHeight: 1.35,
   },
   bottomNav: {
-    background: 'linear-gradient(180deg, rgba(247, 252, 255, 0.96) 0%, rgba(240, 247, 255, 0.98) 100%)',
+    background: 'linear-gradient(180deg, rgba(252,254,255,.98), rgba(235,246,253,.98))',
     borderTop: '1px solid rgba(211, 232, 250, 0.85)',
-    borderBottom: '3px solid #8ec8ff',
-    padding: '12px 20px',
+    borderBottom: '3px solid #7dd3fc',
+    padding: '9px clamp(12px,2vw,24px)',
   },
   navList: {
     listStyle: 'none',

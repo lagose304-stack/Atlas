@@ -256,7 +256,9 @@ const Subtemas: React.FC = () => {
 
             {/* Bloques de contenido editorial */}
             {contentBlocks.length > 0 && (
-              <ContentBlockRenderer blocks={contentBlocks} />
+              <div className="public-editor-content public-editor-content-before-system">
+                <ContentBlockRenderer blocks={contentBlocks} />
+              </div>
             )}
 
             {/* Grilla de subtemas */}

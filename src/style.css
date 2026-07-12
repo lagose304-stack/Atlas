@@ -159,6 +159,21 @@ body {
   margin: 0 0 0.55em;
 }
 
+/* Ritmo vertical compartido por el contenido creado en el editor de páginas. */
+.public-editor-content {
+  width: 100%;
+}
+
+.public-editor-content-before-system {
+  margin-bottom: clamp(28px, 4vw, 44px);
+}
+
+/* En la portada el contenido define la altura: así el aire sobre y bajo el
+   bloque es el mismo y el footer no queda separado por un área flexible. */
+.public-editor-main.has-editor-content {
+  flex: 0 0 auto !important;
+}
+
 .tiptap-editor-content p:not([style*="color"]),
 .tiptap-editor-content li:not([style*="color"]) {
   color: inherit !important;
@@ -2336,6 +2351,22 @@ body {
   flex-shrink: 0;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .atlas-header-logo-action-button *,
+  .atlas-header-search-button,
+  .atlas-header-nav-button,
+  .atlas-compact-nav-button,
+  .atlas-compact-bar {
+    transition: none !important;
+  }
+
+  .atlas-header-nav-button:hover,
+  .atlas-compact-nav-button:hover,
+  .atlas-header-search-button:hover {
+    transform: none !important;
+  }
+}
+
 .subtema-public-card:focus-visible {
   outline: 3px solid rgba(35, 134, 187, 0.32);
   outline-offset: 3px;
@@ -2804,7 +2835,7 @@ body {
     font-size: 0.62em !important;
     padding: 3px 7px !important;
   }
-  .footer-copyright {
+.footer-copyright {
     font-size: 0.62em !important;
     padding: 6px 8px !important;
   }
@@ -3061,6 +3092,229 @@ body {
   background-clip: padding-box;
 }
 
+/* Header: profundidad, estado de navegación y detalles coherentes con footer. */
+.atlas-header-hero::before,
+.atlas-header-hero::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: 50%;
+}
+
+.atlas-header-hero::before {
+  width: 150px;
+  height: 150px;
+  left: 32%;
+  top: -112px;
+  border: 1px solid rgba(224,242,254,.28);
+  box-shadow: 0 0 0 18px rgba(186,230,253,.06), 0 0 0 38px rgba(125,211,252,.035);
+}
+
+.atlas-header-hero::after {
+  width: 120px;
+  height: 120px;
+  right: 12%;
+  bottom: -94px;
+  border: 1px solid rgba(224,242,254,.24);
+  box-shadow: 0 0 0 16px rgba(186,230,253,.055), 0 0 0 34px rgba(125,211,252,.03);
+}
+
+.atlas-header-title::after {
+  content: '';
+  display: block;
+  width: clamp(90px, 14vw, 180px);
+  height: 2px;
+  margin: 8px auto 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, #2386bb, transparent);
+  box-shadow: 0 0 12px rgba(56,189,248,.4);
+}
+
+.atlas-header-logo-action-button:focus-visible,
+.atlas-header-search-button:focus-visible,
+.atlas-header-nav-button:focus-visible {
+  outline: 3px solid rgba(56,189,248,.42) !important;
+  outline-offset: 3px;
+}
+
+.atlas-header-search-button {
+  transition: transform .2s ease, background .2s ease, box-shadow .2s ease;
+}
+
+.atlas-header-search-button:hover {
+  transform: translateY(-2px);
+  background: rgba(224,242,254,.3) !important;
+  box-shadow: 0 8px 18px rgba(8,45,78,.24);
+}
+
+.atlas-header-nav-button,
+.atlas-compact-nav-button {
+  position: relative;
+  border-radius: 12px !important;
+  transition: color .2s ease, background .2s ease, transform .2s ease, box-shadow .2s ease !important;
+}
+
+.atlas-header-nav-button {
+  min-height: 38px;
+}
+
+.atlas-header-nav-button:hover,
+.atlas-compact-nav-button:hover {
+  color: #176a9d !important;
+  background: rgba(255,255,255,.76) !important;
+}
+
+.atlas-header-nav-button.is-active,
+.atlas-compact-nav-button.is-active {
+  color: #075985 !important;
+  font-weight: 800 !important;
+  background: linear-gradient(145deg, #fff, #e0f2fe) !important;
+  box-shadow: 0 5px 14px rgba(23,106,157,.13), inset 0 0 0 1px rgba(125,211,252,.5);
+}
+
+.atlas-header-nav-button.is-active::after {
+  content: '';
+  position: absolute;
+  left: 24%;
+  right: 24%;
+  bottom: -9px;
+  height: 3px;
+  border-radius: 999px 999px 0 0;
+  background: #2386bb;
+  box-shadow: 0 -2px 8px rgba(35,134,187,.28);
+}
+
+/* Revisión moderna del header: superficies limpias y navegación integrada. */
+.atlas-header-wrapper {
+  box-shadow: 0 14px 34px rgba(15,61,98,.16) !important;
+}
+
+.atlas-header-hero {
+  isolation: isolate;
+}
+
+.atlas-header-readable-overlay {
+  background: linear-gradient(90deg, rgba(5,32,68,.28), rgba(239,248,255,.18) 25%, rgba(239,248,255,.34) 50%, rgba(239,248,255,.12) 75%, rgba(5,32,68,.3)) !important;
+  backdrop-filter: none !important;
+}
+
+.atlas-header-glass {
+  inset: 12px !important;
+  border-color: rgba(224,242,254,.56) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.46) !important;
+}
+
+.atlas-header-center-area {
+  width: min(100%, 850px) !important;
+  padding: 20px clamp(18px,3vw,42px) 18px !important;
+  border: 1px solid rgba(224,242,254,.55);
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(244,250,255,.5), rgba(210,235,250,.2));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 16px 38px rgba(8,45,78,.1);
+  backdrop-filter: blur(5px) saturate(1.08);
+}
+
+.atlas-header-title {
+  letter-spacing: -.025em !important;
+  text-shadow: 0 2px 18px rgba(255,255,255,.8) !important;
+}
+
+.atlas-header-title::after {
+  width: 56px;
+  margin-top: 10px;
+  background: #2386bb;
+  box-shadow: none;
+}
+
+.atlas-header-subtitle,
+.atlas-header-subtitle2 {
+  text-shadow: 0 1px 10px rgba(255,255,255,.72) !important;
+}
+
+.atlas-header-right-side-panel {
+  background: linear-gradient(180deg, rgba(224,242,254,.2), rgba(125,211,252,.1)) !important;
+  border-left-color: rgba(224,242,254,.34) !important;
+  box-shadow: none !important;
+}
+
+.atlas-header-left-logo-aura,
+.atlas-header-right-logo-aura {
+  background: rgba(225,242,253,.2) !important;
+  border-color: rgba(224,242,254,.58) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 12px 30px rgba(5,35,65,.18) !important;
+  backdrop-filter: blur(4px);
+}
+
+.atlas-header-bottom-nav {
+  position: relative;
+  padding-block: 7px !important;
+  background: rgba(247,252,255,.96) !important;
+  border-top: 0 !important;
+  box-shadow: inset 0 1px 0 rgba(186,218,239,.7);
+}
+
+.atlas-header-nav-list {
+  max-width: 980px;
+  margin-inline: auto !important;
+}
+
+.atlas-header-nav-button,
+.atlas-compact-nav-button {
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.atlas-header-nav-button {
+  min-height: 40px;
+  color: #315b82 !important;
+  font-size: .88rem !important;
+  font-weight: 650 !important;
+  letter-spacing: .055em !important;
+}
+
+.atlas-header-nav-button:hover,
+.atlas-compact-nav-button:hover {
+  color: #0b6e9f !important;
+  background: transparent !important;
+  transform: translateY(-1px);
+}
+
+.atlas-header-nav-button.is-active,
+.atlas-compact-nav-button.is-active {
+  color: #075985 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.atlas-header-nav-button.is-active::after {
+  left: 34%;
+  right: 34%;
+  bottom: -7px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8, #176a9d);
+  box-shadow: 0 0 8px rgba(35,134,187,.24);
+}
+
+.atlas-header-hero::before,
+.atlas-header-hero::after {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .atlas-header-center-area {
+    padding: 10px 12px !important;
+    border-radius: 16px;
+    backdrop-filter: blur(3px);
+  }
+
+  .atlas-header-nav-button {
+    letter-spacing: .025em !important;
+  }
+}
+
 /* El primer componente empieza junto al encabezado de su pagina. Evita que un
    "espacio antes" guardado en el bloque cree una franja vacia al inicio. */
 .cb-container > .cb-shell:first-child {
@@ -3229,4 +3483,85 @@ body {
 
 @keyframes route-loading-spin {
   to { transform: rotate(360deg); }
+}
+
+/* Footer: composición limpia y legible, alineada con las tarjetas del sitio. */
+.footer-col:hover {
+  transform: translateY(-3px);
+  border-color: rgba(224, 242, 254, 1) !important;
+  box-shadow: 0 16px 34px rgba(8, 45, 78, 0.2) !important;
+}
+
+.footer-col-title {
+  letter-spacing: .075em !important;
+}
+
+.footer-col::after {
+  content: '';
+  position: absolute;
+  right: -34px;
+  bottom: -42px;
+  width: 105px;
+  height: 105px;
+  border: 1px solid rgba(56, 189, 248, .16);
+  border-radius: 50%;
+  box-shadow: 0 0 0 14px rgba(125, 211, 252, .055), 0 0 0 29px rgba(186, 230, 253, .035);
+  pointer-events: none;
+}
+
+.footer-title-row::after {
+  content: '';
+  width: 34px;
+  height: 1px;
+  margin-left: 3px;
+  background: linear-gradient(90deg, rgba(29,78,147,.55), transparent);
+}
+
+.footer-icon-wrap,
+.footer-social-row a {
+  border-radius: 11px !important;
+}
+
+@media (max-width: 640px) {
+  .footer-inner {
+    grid-template-columns: 1fr !important;
+    grid-template-areas: 'about' 'contact' 'social' !important;
+    gap: 10px !important;
+    padding: 12px !important;
+  }
+
+  .footer-col {
+    min-height: auto !important;
+    padding: 15px !important;
+    border-radius: 16px !important;
+  }
+
+  .footer-col-title {
+    font-size: .76rem !important;
+  }
+
+  .footer-col-text {
+    font-size: .76rem !important;
+    line-height: 1.45 !important;
+  }
+
+  .footer-icon-wrap {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .footer-edicion-btn {
+    min-height: 30px !important;
+    padding: 5px 10px !important;
+    font-size: .7rem !important;
+  }
+
+  .footer-visits-wrap {
+    transform: none !important;
+  }
+
+  .footer-copyright {
+    padding: 10px 12px !important;
+    font-size: .67rem !important;
+  }
 }
