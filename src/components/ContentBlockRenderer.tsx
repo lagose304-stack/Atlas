@@ -73,9 +73,11 @@ const getBlockShellStyle = (content: Record<string, string>, blockType?: BlockTy
 
   const align = content.style_align || 'left';
   const requestedMaxWidth = maxWidthMap[content.style_max_width || 'full'] || '100%';
-  const maxWidth = (align !== 'left' && (hasBg || hasBorder) && requestedMaxWidth === '100%')
-    ? 'clamp(320px, 90vw, 760px)'
-    : requestedMaxWidth;
+  const maxWidth = (TEXT_BLOCK_TYPES.includes(blockType as BlockType) || blockType === 'weekly_publication') && requestedMaxWidth === '100%'
+    ? '100%'
+    : (align !== 'left' && (hasBg || hasBorder) && requestedMaxWidth === '100%')
+      ? 'clamp(320px, 90vw, 760px)'
+      : requestedMaxWidth;
   const alignSelf: React.CSSProperties['alignSelf'] = align === 'right'
     ? 'flex-end'
     : align === 'center'
@@ -120,11 +122,12 @@ const BlockImg: React.FC<{
   src: string;
   alt?: string;
   style?: React.CSSProperties;
-}> = ({ src, alt = '', style }) => {
+  loading?: 'eager' | 'lazy';
+}> = ({ src, alt = '', style, loading = 'lazy' }) => {
   const [error, setError] = useState(false);
   if (error) {
     return (
-      <div style={{
+      <div role="img" aria-label={alt || 'Imagen no disponible'} style={{
         ...style,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'center', background: '#f1f5f9', color: '#57708f',
@@ -142,7 +145,7 @@ const BlockImg: React.FC<{
       src={src}
       alt={alt}
       style={style}
-      loading="lazy"
+      loading={loading}
       decoding="async"
       sizes="(max-width: 560px) 100vw, (max-width: 900px) 85vw, 70vw"
       draggable={false}
@@ -168,6 +171,10 @@ const buildRenderGroups = (blocks: ContentBlock[]): RenderGroup[] => {
 
   while (idx < blocks.length) {
     const current = blocks[idx];
+    if (current.block_type === 'section_end') {
+      idx += 1;
+      continue;
+    }
     if (current.block_type !== 'section') {
       groups.push({ kind: 'single', block: current });
       idx += 1;
@@ -176,7 +183,7 @@ const buildRenderGroups = (blocks: ContentBlock[]): RenderGroup[] => {
 
     const children: ContentBlock[] = [];
     let cursor = idx + 1;
-    while (cursor < blocks.length && blocks[cursor].block_type !== 'section') {
+    while (cursor < blocks.length && blocks[cursor].block_type !== 'section' && blocks[cursor].block_type !== 'section_end') {
       children.push(blocks[cursor]);
       cursor += 1;
     }
@@ -253,8 +260,20 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
     });
   };
 
-  if (!blocks || blocks.length === 0) return null;
-  const renderGroups = useMemo(() => buildRenderGroups(blocks), [blocks]);
+  const safeBlocks = blocks || [];
+  const columnContainerIds = useMemo(() => new Set(safeBlocks.filter(block => block.block_type === 'columns_2').map(block => block.id)), [safeBlocks]);
+  const columnChildrenByParent = useMemo(() => {
+    const map = new Map<string, ContentBlock[]>();
+    safeBlocks.forEach(block => {
+      const parentId = block.content.layout_parent_id;
+      if (!parentId || !columnContainerIds.has(parentId)) return;
+      map.set(parentId, [...(map.get(parentId) || []), block]);
+    });
+    return map;
+  }, [safeBlocks, columnContainerIds]);
+  const topLevelBlocks = useMemo(() => safeBlocks.filter(block => !block.content.layout_parent_id || !columnContainerIds.has(block.content.layout_parent_id)), [safeBlocks, columnContainerIds]);
+  const renderGroups = useMemo(() => buildRenderGroups(topLevelBlocks), [topLevelBlocks]);
+  if (safeBlocks.length === 0) return null;
 
   return (
     <>
@@ -270,14 +289,28 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
                 data-editor-block-id={editorMode ? group.block.id : undefined}
                 onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(group.block.id); } : undefined}
               >
-                <BlockWithCtas block={group.block} onZoom={handleZoom} />
+                <BlockWithCtas block={group.block} onZoom={handleZoom} columnChildren={columnChildrenByParent.get(group.block.id)} />
               </div>
             );
           }
 
           const sectionContent = normalizeBlockContent(group.section.block_type, group.section.content);
+          const sectionLayout = sectionContent.section_layout || 'guided';
+          const sectionAccent = sectionContent.section_accent || '#38bdf8';
+          const sectionGroupStyle: React.CSSProperties = sectionLayout === 'card'
+            ? { ...rs.sectionGroup, padding: 'clamp(14px, 2.5vw, 24px)', borderRadius: '20px', border: `1px solid ${sectionAccent}40`, background: sectionContent.section_bg || '#f8fbff', boxShadow: '0 12px 34px rgba(15,23,42,.07)' }
+            : sectionLayout === 'band'
+              ? { ...rs.sectionGroup, padding: 'clamp(16px, 3vw, 28px)', borderTop: `4px solid ${sectionAccent}`, borderBottom: `1px solid ${sectionAccent}45`, background: sectionContent.section_bg || `${sectionAccent}0d` }
+              : rs.sectionGroup;
+          const sectionChildrenStyle: React.CSSProperties = {
+            ...rs.sectionChildren,
+            gap: `${Math.max(4, Math.min(48, Number(sectionContent.section_gap || 16)))}px`,
+            ...(sectionLayout === 'minimal' || sectionContent.section_guide === 'false'
+              ? { paddingLeft: 0, borderLeft: 'none', marginLeft: 0 }
+              : { borderLeft: `2px dashed ${sectionAccent}` }),
+          };
           return (
-            <div key={group.section.id} style={rs.sectionGroup} className="cb-section-group">
+            <section key={group.section.id} style={sectionGroupStyle} className={`cb-section-group cb-section-layout-${sectionLayout}`} aria-label={sectionContent.title || 'Sección de contenido'}>
               <div
                 style={getBlockShellStyle(sectionContent, group.section.block_type)}
                 className={`cb-shell cb-section-shell ${editorMode ? 'cb-editor-selectable' : ''} ${selectedBlockId === group.section.id ? 'is-editor-selected' : ''}`}
@@ -286,7 +319,7 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
                 <BlockWithCtas block={group.section} onZoom={handleZoom} />
               </div>
               {group.children.length > 0 && (
-                <div style={rs.sectionChildren} className="cb-section-children">
+                <div style={sectionChildrenStyle} className="cb-section-children">
                   {group.children.map(child => {
                     const childContent = normalizeBlockContent(child.block_type, child.content);
                     return (
@@ -296,13 +329,13 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
                         className={`cb-shell cb-shell-${child.block_type} ${editorMode ? 'cb-editor-selectable' : ''} ${selectedBlockId === child.id ? 'is-editor-selected' : ''}`}
                         onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(child.id); } : undefined}
                       >
-                        <BlockWithCtas block={child} onZoom={handleZoom} />
+                        <BlockWithCtas block={child} onZoom={handleZoom} columnChildren={columnChildrenByParent.get(child.id)} />
                       </div>
                     );
                   })}
                 </div>
               )}
-            </div>
+            </section>
           );
         })}
       </div>
@@ -313,7 +346,7 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
   );
 };
 
-const BlockWithCtas: React.FC<{ block: ContentBlock; onZoom: (url: string, placaId?: string) => void }> = ({ block, onZoom }) => {
+const BlockWithCtas: React.FC<{ block: ContentBlock; onZoom: (url: string, placaId?: string) => void; columnChildren?: ContentBlock[] }> = ({ block, onZoom, columnChildren }) => {
   const c = normalizeBlockContent(block.block_type, block.content);
   const ctaPosition = (c.cta_position as 'before' | 'after') ?? 'after';
   const renderInlineCtas = block.block_type === 'callout' || block.block_type === 'section';
@@ -324,6 +357,7 @@ const BlockWithCtas: React.FC<{ block: ContentBlock; onZoom: (url: string, placa
       onZoom={onZoom}
       inlineCtas={renderInlineCtas ? ctas : null}
       inlineCtaPosition={ctaPosition}
+      columnChildren={columnChildren}
     />
   );
 
@@ -421,7 +455,8 @@ const BlockItem: React.FC<{
   onZoom: (url: string, placaId?: string) => void;
   inlineCtas?: React.ReactNode;
   inlineCtaPosition?: 'before' | 'after';
-}> = ({ block, onZoom, inlineCtas, inlineCtaPosition = 'after' }) => {
+  columnChildren?: ContentBlock[];
+}> = ({ block, onZoom, inlineCtas, inlineCtaPosition = 'after', columnChildren = [] }) => {
   const [imgHovered, setImgHovered] = useState(false);
   const [imgHoveredLeft, setImgHoveredLeft] = useState(false);
   const [imgHoveredRight, setImgHoveredRight] = useState(false);
@@ -435,11 +470,11 @@ const BlockItem: React.FC<{
   const userFontSize = shellStyle.fontSize || undefined;
   const userFontWeight = shellStyle.fontWeight || undefined;
   const userTypographyStyle: React.CSSProperties = {
-    fontFamily: shellStyle.fontFamily,
-    lineHeight: shellStyle.lineHeight,
-    letterSpacing: shellStyle.letterSpacing,
-    textTransform: shellStyle.textTransform,
-    textIndent: shellStyle.textIndent,
+    ...(c.style_font_family ? { fontFamily: shellStyle.fontFamily } : {}),
+    ...(c.style_line_height ? { lineHeight: shellStyle.lineHeight } : {}),
+    ...(c.style_letter_spacing ? { letterSpacing: shellStyle.letterSpacing } : {}),
+    ...(c.style_text_transform ? { textTransform: shellStyle.textTransform } : {}),
+    ...(c.style_text_indent ? { textIndent: shellStyle.textIndent } : {}),
   };
   const onZoomKeyDown = (e: React.KeyboardEvent<HTMLElement>, url: string) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -478,19 +513,25 @@ const BlockItem: React.FC<{
       const isRight = align === 'right';
       const decoration = c.subtitle_decoration || 'side-line';
       const accent = c.subtitle_accent || '#38bdf8';
+      const decorationStyle: React.CSSProperties = decoration === 'soft-box'
+        ? { padding: '0.45em 0.65em', borderRadius: '10px', background: `${accent}18` }
+        : decoration === 'outline'
+          ? { padding: '0.38em 0.6em', borderRadius: '12px', border: `2px solid ${accent}` }
+          : decoration === 'underline'
+            ? { paddingBottom: '0.3em', borderBottom: `2px solid ${accent}` }
+            : decoration === 'side-line'
+              ? isCenter
+                ? { padding: '0.15em 14px', borderLeft: `4px solid ${accent}`, borderRight: `4px solid ${accent}` }
+                : isRight
+                  ? { paddingRight: '14px', borderRight: `4px solid ${accent}` }
+                  : { paddingLeft: '14px', borderLeft: `4px solid ${accent}` }
+          : {};
       return (
         <div style={{
            ...rs.subheading,
            ...userTypographyStyle,
+          ...decorationStyle,
           textAlign: align,
-          padding: decoration === 'soft-box' ? '0.45em 0.65em' : undefined,
-          borderRadius: decoration === 'soft-box' ? '10px' : undefined,
-          background: decoration === 'soft-box' ? `${accent}18` : undefined,
-          paddingLeft: decoration === 'side-line' && !isCenter && !isRight ? '14px' : 0,
-          paddingRight: decoration === 'side-line' && isRight ? '14px' : 0,
-          borderLeft: decoration === 'side-line' && !isCenter && !isRight ? `4px solid ${accent}` : 'none',
-          borderRight: decoration === 'side-line' && isRight ? `4px solid ${accent}` : 'none',
-          borderBottom: decoration === 'underline' ? `2px solid ${accent}` : undefined,
           ...(userTextColor ? { color: userTextColor } : {}),
           ...(userFontSize ? { fontSize: userFontSize } : {}),
           ...(userFontWeight ? { fontWeight: userFontWeight } : {}),
@@ -524,15 +565,26 @@ const BlockItem: React.FC<{
       if (!c.title && !c.subtitle) {
         return <div style={rs.sectionPlaceholder}>Seccion</div>;
       }
+      const accent = c.section_accent || '#38bdf8';
+      const headerStyle = c.section_header_style || 'surface';
+      const headerSurface: React.CSSProperties = headerStyle === 'minimal'
+        ? { background: 'transparent', border: 'none', padding: '0 0 4px', borderRadius: 0 }
+        : headerStyle === 'accent'
+          ? { background: `${accent}12`, border: `1px solid ${accent}45`, borderLeft: `6px solid ${accent}` }
+          : toneStyleMap[tone];
       return (
-        <div style={{ ...rs.sectionWrap, ...toneStyleMap[tone] }}>
+        <div style={{ ...rs.sectionWrap, ...headerSurface }}>
           {inlineCtas && inlineCtaPosition === 'before' && inlineCtas}
-          {c.title && <RichTextValue style={{ ...rs.sectionTitle, ...(userTextColor ? { color: userTextColor } : {}) }} value={c.title} />}
+          {c.eyebrow && <RichTextValue style={{ color: accent, fontSize: '.7em', fontWeight: 850, letterSpacing: '.08em', textTransform: 'uppercase' }} value={c.eyebrow} />}
+          {c.title && <RichTextValue style={{ ...rs.sectionTitle, ...userTypographyStyle, textAlign: (c.text_align || 'left') as React.CSSProperties['textAlign'], ...(userTextColor ? { color: userTextColor } : {}) }} value={c.title} />}
           {c.subtitle && <RichTextValue style={{ ...rs.sectionSubtitle, ...(userTextColor ? { color: userTextColor } : {}) }} value={c.subtitle} />}
           {inlineCtas && inlineCtaPosition === 'after' && inlineCtas}
         </div>
       );
     }
+
+    case 'section_end':
+      return null;
 
     case 'columns_2': {
       const columnsRaw = Number(c.columns ?? 2);
@@ -553,11 +605,33 @@ const BlockItem: React.FC<{
       const gridTemplateColumns = columns === 2
         ? templateMap[ratio]
         : `repeat(${columns}, minmax(0, 1fr))`;
+      const columnStyle = c.column_style || 'cards';
+      const columnGap = Math.max(4, Math.min(48, Number(c.column_gap || 20)));
+      const verticalAlign = (c.column_vertical_align || 'start') as React.CSSProperties['alignItems'];
+      const accent = c.column_accent || '#38bdf8';
+      const cellStyle: React.CSSProperties = columnStyle === 'plain'
+        ? { ...rs.columnsCell, border: 'none', background: 'transparent', padding: 0 }
+        : columnStyle === 'soft'
+          ? { ...rs.columnsCell, border: 'none', background: c.column_bg || '#f1f5f9' }
+          : { ...rs.columnsCell, borderColor: c.column_border || '#e2e8f0', background: c.column_bg || '#ffffff', boxShadow: '0 8px 24px rgba(15,23,42,.06)' };
+      if (columnChildren.length > 0) {
+        const childrenByColumn = Array.from({ length: columns }, (_, columnIndex) => columnChildren.filter(child => Math.max(1, Math.min(columns, Number(child.content.layout_column || 1))) === columnIndex + 1));
+        return <div className="cb-columns-row cb-columns-container" style={{ ...rs.columnsRow, gridTemplateColumns, gap: `${columnGap}px`, alignItems: verticalAlign }}>
+          {childrenByColumn.map((children, columnIndex) => <div key={columnIndex} className="cb-column-slot" style={{ ...cellStyle, display: 'flex', flexDirection: 'column', gap: `${Math.max(6, Number(c.column_inner_gap || 14))}px` }}>
+            {c[`col_title_${columnIndex + 1}`] && <RichTextValue style={{ color: accent, fontWeight: 800, fontSize: '1em' }} value={c[`col_title_${columnIndex + 1}`]} />}
+            {children.map(child => {
+              const childContent = normalizeBlockContent(child.block_type, child.content);
+              return <div key={child.id} className={`cb-shell cb-shell-${child.block_type}`} style={getBlockShellStyle(childContent, child.block_type)}><BlockWithCtas block={child} onZoom={onZoom} /></div>;
+            })}
+          </div>)}
+        </div>;
+      }
       return (
-        <div className="cb-columns-row" style={{ ...rs.columnsRow, gridTemplateColumns }}>
+        <div className="cb-columns-row" style={{ ...rs.columnsRow, gridTemplateColumns, gap: `${columnGap}px`, alignItems: verticalAlign }}>
           {values.map((value, idx) => (
-            <div key={idx} style={rs.columnsCell}>
-              <RichTextValue className="cb-paragraph" style={{ ...rs.paragraph, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }} value={value} />
+            <div key={idx} style={cellStyle}>
+              {c[`col_title_${idx + 1}`] && <RichTextValue style={{ marginBottom: '8px', color: accent, fontWeight: 800, fontSize: '1em', lineHeight: 1.3 }} value={c[`col_title_${idx + 1}`]} />}
+              <RichTextValue className="cb-paragraph" style={{ ...rs.paragraph, ...userTypographyStyle, textAlign: (c.text_align || 'left') as React.CSSProperties['textAlign'], ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }} value={value} />
             </div>
           ))}
         </div>
@@ -578,10 +652,35 @@ const BlockItem: React.FC<{
       const heightRaw = Number(c.image_height ?? 0);
       const fixedHeight = Number.isFinite(heightRaw) && heightRaw > 0 ? `${Math.min(1200, heightRaw)}px` : undefined;
       const imageFit = (c.image_fit as 'contain' | 'cover') === 'cover' ? 'cover' : 'contain';
-      const alignSelfMap: Record<'left' | 'center' | 'right', React.CSSProperties['alignSelf']> = {
-        left: 'flex-start',
-        center: 'center',
-        right: 'flex-end',
+      const visualStyle = c.image_style || 'editorial';
+      const accent = c.image_accent || '#38bdf8';
+      const radiusRaw = Number(c.image_radius ?? 18);
+      const radius = Number.isFinite(radiusRaw) ? Math.max(0, Math.min(40, radiusRaw)) : 18;
+      const zoomEnabled = c.image_zoom !== 'false';
+      const alignMarginMap: Record<string, string> = { left: '0 auto 0 0', center: '0 auto', right: '0 0 0 auto' };
+      const shadowMap: Record<string, string> = { none: 'none', soft: '0 8px 24px rgba(15,23,42,.10)', medium: '0 16px 38px rgba(15,23,42,.16)', dramatic: '0 24px 56px rgba(15,23,42,.24)' };
+      const visualMap: Record<string, React.CSSProperties> = {
+        clean: { background: 'transparent', border: 'none', padding: 0 },
+        editorial: { background: '#ffffff', border: `1px solid ${accent}35`, padding: 'clamp(5px, .8vw, 9px)' },
+        framed: { background: c.image_frame_bg || '#f8fafc', border: `clamp(3px, .5vw, 7px) solid ${c.image_border || '#ffffff'}`, padding: 'clamp(4px, .7vw, 8px)' },
+        floating: { background: 'transparent', border: 'none', padding: 0 },
+      };
+      const aspectRatioMap: Record<string, string | undefined> = { auto: undefined, square: '1 / 1', portrait: '4 / 5', landscape: '4 / 3', wide: '16 / 9' };
+      const captionStyle = c.image_caption_style || 'below';
+      const imageFilterMap: Record<string, string> = {
+        none: 'none',
+        grayscale: 'grayscale(1)',
+        warm: 'saturate(1.08) sepia(.12) contrast(1.02)',
+        cool: 'saturate(.94) hue-rotate(8deg) contrast(1.03)',
+        vivid: 'saturate(1.22) contrast(1.06)',
+        soft: 'saturate(.88) contrast(.94) brightness(1.04)',
+      };
+      const captionTextStyle: React.CSSProperties = {
+        fontFamily: c.style_font_family ? shellStyle.fontFamily : undefined,
+        fontWeight: c.style_font_weight && c.style_font_weight !== 'default' ? Number(c.style_font_weight) : undefined,
+        lineHeight: c.style_line_height ? ({ compact: 1.25, normal: 1.55, relaxed: 1.85 }[c.style_line_height] || 1.55) : undefined,
+        letterSpacing: c.style_letter_spacing ? ({ tight: '-0.02em', normal: 'normal', wide: '0.06em' }[c.style_letter_spacing] || 'normal') : undefined,
+        textTransform: (c.style_text_transform || 'none') as React.CSSProperties['textTransform'],
       };
       const figureStyle: React.CSSProperties = {
         ...rs.figure,
@@ -592,32 +691,38 @@ const BlockItem: React.FC<{
       return (
         <figure style={figureStyle}>
           <div
-            className="cb-zoom-trigger"
-            role="button"
-            tabIndex={0}
-            style={{ ...rs.imgClickWrap, ...(imgHovered ? rs.imgClickWrapHover : {}) }}
-            onClick={() => onZoom(c.url)}
-            onKeyDown={e => onZoomKeyDown(e, c.url)}
+            className={zoomEnabled ? 'cb-zoom-trigger' : undefined}
+            role={zoomEnabled ? 'button' : undefined}
+            tabIndex={zoomEnabled ? 0 : undefined}
+            style={{ ...rs.imgClickWrap, ...visualMap[visualStyle], width: `${widthPct}%`, margin: alignMarginMap[align] || alignMarginMap.center, borderRadius: `${radius}px`, boxShadow: shadowMap[c.image_shadow || (visualStyle === 'clean' ? 'none' : 'medium')], cursor: zoomEnabled ? 'zoom-in' : 'default', ...(imgHovered && c.image_hover !== 'none' ? rs.imgClickWrapHover : {}) }}
+            onClick={zoomEnabled ? () => onZoom(c.url) : undefined}
+            onKeyDown={zoomEnabled ? e => onZoomKeyDown(e, c.url) : undefined}
             onMouseEnter={() => setImgHovered(true)}
             onMouseLeave={() => setImgHovered(false)}
-            title="Ver en grande"
+            title={zoomEnabled ? 'Ver en grande' : undefined}
           >
             <BlockImg
               src={getCloudinaryImageUrl(c.url, 'view')}
-              alt={c.caption || 'Imagen ilustrativa'}
+              alt={c.image_alt || c.caption || 'Imagen ilustrativa'}
               style={{
                 ...rs.image,
-                width: `${widthPct}%`,
+                width: '100%',
                 maxWidth: '100%',
                 height: fixedHeight ?? rs.image.height,
                 objectFit: imageFit,
-                alignSelf: alignSelfMap[(align as 'left' | 'center' | 'right') ?? 'center'],
-                background: imageFit === 'contain' ? '#f8fafc' : undefined,
+                objectPosition: c.image_position || 'center center',
+                aspectRatio: aspectRatioMap[c.image_aspect || 'auto'],
+                background: imageFit === 'contain' ? (c.image_contain_bg || '#f8fafc') : undefined,
+                borderRadius: `${Math.max(0, radius - (visualStyle === 'clean' || visualStyle === 'floating' ? 0 : 7))}px`,
+                boxShadow: 'none',
+                filter: imageFilterMap[c.image_filter || 'none'],
               }}
+              loading={c.image_loading === 'eager' ? 'eager' : 'lazy'}
             />
-            <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>
+            {zoomEnabled && <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>}
+            {captionStyle === 'overlay' && c.caption && <figcaption style={{ ...captionTextStyle, position: 'absolute', inset: c.image_caption_position === 'top' ? '10px 10px auto' : 'auto 10px 10px', padding: '9px 12px', borderRadius: '10px', color: c.image_caption_color || userTextColor || '#ffffff', background: c.image_caption_bg || 'rgba(15,23,42,.68)', backdropFilter: 'blur(8px)', textAlign: (c.image_caption_align || 'center') as React.CSSProperties['textAlign'], fontSize: c.image_caption_size || userFontSize || '.86rem', lineHeight: captionTextStyle.lineHeight || 1.4, fontStyle: c.image_caption_italic === 'false' ? 'normal' : 'italic' }}><RichTextValue value={c.caption} /></figcaption>}
           </div>
-          {c.caption && <figcaption style={rs.caption}><RichTextValue value={c.caption} /></figcaption>}
+          {captionStyle !== 'overlay' && c.caption && <figcaption style={{ ...rs.caption, ...captionTextStyle, width: `${widthPct}%`, boxSizing: 'border-box', margin: alignMarginMap[align] || alignMarginMap.center, color: c.image_caption_color || userTextColor || '#57708f', background: captionStyle === 'card' ? (c.image_caption_bg || '#f8fafc') : undefined, padding: captionStyle === 'card' ? '9px 12px' : undefined, borderRadius: captionStyle === 'card' ? '10px' : undefined, textAlign: (c.image_caption_align || 'center') as React.CSSProperties['textAlign'], fontStyle: c.image_caption_italic === 'false' ? 'normal' : 'italic', fontSize: c.image_caption_size || userFontSize || '.86rem' }}><RichTextValue value={c.caption} /></figcaption>}
         </figure>
       );
     }
@@ -637,40 +742,60 @@ const BlockItem: React.FC<{
       const heightRaw = Number(c.ti_image_height ?? 0);
       const fixedHeight = Number.isFinite(heightRaw) && heightRaw > 0 ? `${Math.min(1000, heightRaw)}px` : undefined;
       const tiImageFit = (c.ti_image_fit as 'contain' | 'cover') === 'contain' ? 'contain' : 'cover';
+      const tiStyle = c.ti_style || 'editorial';
+      const tiAccent = c.ti_accent || '#38bdf8';
+      const tiRadiusRaw = Number(c.ti_radius ?? 20);
+      const tiRadius = Number.isFinite(tiRadiusRaw) ? Math.max(0, Math.min(36, tiRadiusRaw)) : 20;
+      const tiZoom = c.ti_zoom !== 'false';
+      const tiGapRaw = Number(c.ti_gap ?? 28);
+      const tiGap = Number.isFinite(tiGapRaw) ? Math.max(8, Math.min(64, tiGapRaw)) : 28;
+      const tiSurfaceMap: Record<string, React.CSSProperties> = {
+        clean: { background: 'transparent', border: 'none', padding: 0, boxShadow: 'none' },
+        editorial: { background: '#ffffff', border: `1px solid ${tiAccent}30`, padding: 'clamp(14px, 2.5vw, 26px)', boxShadow: '0 14px 38px rgba(15,23,42,.09)' },
+        soft: { background: c.ti_bg || '#f1f7fb', border: 'none', padding: 'clamp(14px, 2.5vw, 26px)', boxShadow: 'none' },
+        accent: { background: '#ffffff', border: `1px solid ${tiAccent}45`, borderLeft: `6px solid ${tiAccent}`, padding: 'clamp(14px, 2.5vw, 26px)', boxShadow: '0 10px 28px rgba(15,23,42,.07)' },
+      };
+      const tiAspectMap: Record<string, string | undefined> = { auto: undefined, square: '1 / 1', portrait: '4 / 5', landscape: '4 / 3', wide: '16 / 9' };
+      const tiFilterMap: Record<string, string> = { none: 'none', grayscale: 'grayscale(1)', warm: 'saturate(1.08) sepia(.12) contrast(1.02)', cool: 'saturate(.94) hue-rotate(8deg) contrast(1.03)', vivid: 'saturate(1.22) contrast(1.06)', soft: 'saturate(.88) contrast(.94) brightness(1.04)' };
 
       return (
-        <div style={{ ...rs.tiRow, flexDirection: direction, alignItems: tiAlignItems }} className="cb-ti-row">
+        <div style={{ ...rs.tiRow, ...tiSurfaceMap[tiStyle], flexDirection: direction, alignItems: tiAlignItems, gap: `${tiGap}px`, borderRadius: `${tiRadius}px` }} className="cb-ti-row">
           {hasImage && (
             <figure style={{ ...rs.tiFigure, flex: `0 0 ${imageWidth}%` }} className="cb-ti-figure">
               <div
-                className="cb-zoom-trigger"
-                role="button"
-                tabIndex={0}
-                style={{ ...rs.imgClickWrap, ...(imgHovered ? rs.imgClickWrapHover : {}) }}
-                onClick={() => onZoom(c.image_url)}
-                onKeyDown={e => onZoomKeyDown(e, c.image_url)}
+                className={tiZoom ? 'cb-zoom-trigger' : undefined}
+                role={tiZoom ? 'button' : undefined}
+                tabIndex={tiZoom ? 0 : undefined}
+                style={{ ...rs.imgClickWrap, borderRadius: `${Math.max(0, tiRadius - 6)}px`, cursor: tiZoom ? 'zoom-in' : 'default', boxShadow: c.ti_image_shadow === 'none' ? 'none' : '0 12px 30px rgba(15,23,42,.15)', ...(imgHovered && c.ti_hover !== 'none' ? rs.imgClickWrapHover : {}) }}
+                onClick={tiZoom ? () => onZoom(c.image_url) : undefined}
+                onKeyDown={tiZoom ? e => onZoomKeyDown(e, c.image_url) : undefined}
                 onMouseEnter={() => setImgHovered(true)}
                 onMouseLeave={() => setImgHovered(false)}
-                title="Ver en grande"
+                title={tiZoom ? 'Ver en grande' : undefined}
               >
                 <BlockImg
                   src={getCloudinaryImageUrl(c.image_url, 'view')}
-                  alt={c.image_caption || 'Imagen ilustrativa'}
+                  alt={c.ti_image_alt || c.image_caption || 'Imagen ilustrativa'}
                   style={{
                     ...rs.tiImage,
                     height: fixedHeight ?? rs.tiImage.height,
                     objectFit: tiImageFit,
-                    background: tiImageFit === 'contain' ? '#f8fafc' : undefined,
+                    objectPosition: c.ti_object_position || 'center center',
+                    aspectRatio: tiAspectMap[c.ti_image_aspect || 'auto'],
+                    background: tiImageFit === 'contain' ? (c.ti_image_bg || '#f8fafc') : undefined,
+                    borderRadius: `${Math.max(0, tiRadius - 6)}px`,
+                    filter: tiFilterMap[c.ti_filter || 'none'],
                   }}
+                  loading={c.ti_loading === 'eager' ? 'eager' : 'lazy'}
                 />
-                <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>
+                {tiZoom && <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>}
               </div>
               {c.image_caption && (
-                <figcaption style={rs.caption}><RichTextValue value={c.image_caption} /></figcaption>
+                <figcaption style={{ ...rs.caption, ...userTypographyStyle, color: c.ti_caption_color || userTextColor || '#57708f', textAlign: (c.ti_caption_align || 'center') as React.CSSProperties['textAlign'], fontStyle: c.ti_caption_italic === 'false' ? 'normal' : 'italic', fontSize: c.ti_caption_size || '.82rem', fontWeight: c.ti_caption_weight && c.ti_caption_weight !== 'default' ? Number(c.ti_caption_weight) : undefined }}><RichTextValue value={c.image_caption} /></figcaption>
               )}
             </figure>
           )}
-          {hasText && <RichTextValue className="cb-ti-text" style={{ ...rs.tiText, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }} value={c.text} />}
+          {hasText && <RichTextValue className="cb-ti-text" style={{ ...rs.tiText, ...userTypographyStyle, textAlign: (c.ti_text_align || 'left') as React.CSSProperties['textAlign'], ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }} value={c.text} />}
         </div>
       );
     }
@@ -679,59 +804,49 @@ const BlockItem: React.FC<{
       const hasLeft = Boolean(c.image_url_left);
       const hasRight = Boolean(c.image_url_right);
       if (!hasLeft && !hasRight) return null;
-
+      const twoZoom = c.two_zoom !== 'false';
+      const twoAccent = c.two_accent || '#38bdf8';
+      const twoRadiusRaw = Number(c.two_radius ?? 18);
+      const twoRadius = Number.isFinite(twoRadiusRaw) ? Math.max(0, Math.min(40, twoRadiusRaw)) : 18;
+      const twoGapRaw = Number(c.two_gap ?? 20);
+      const twoGap = Number.isFinite(twoGapRaw) ? Math.max(0, Math.min(56, twoGapRaw)) : 20;
+      const twoAspectMap: Record<string, string | undefined> = { auto: undefined, square: '1 / 1', portrait: '4 / 5', landscape: '4 / 3', wide: '16 / 9' };
+      const twoColumnsMap: Record<string, string> = { equal: 'minmax(0, 1fr) minmax(0, 1fr)', left: 'minmax(0, 1.35fr) minmax(0, .65fr)', right: 'minmax(0, .65fr) minmax(0, 1.35fr)' };
+      const twoShadowMap: Record<string, string> = { none: 'none', soft: '0 8px 22px rgba(15,23,42,.08)', medium: '0 14px 34px rgba(15,23,42,.14)' };
+      const twoStyle = c.two_style || 'editorial';
+      const twoFilterMap: Record<string, string> = { none: 'none', grayscale: 'grayscale(1)', warm: 'saturate(1.08) sepia(.12) contrast(1.02)', cool: 'saturate(.94) hue-rotate(8deg) contrast(1.03)', vivid: 'saturate(1.22) contrast(1.06)', soft: 'saturate(.88) contrast(.94) brightness(1.04)' };
+      const items = [
+        { side: 'left', url: c.image_url_left, caption: c.image_caption_left, alt: c.image_alt_left, position: c.two_position_left, hovered: imgHoveredLeft, setHovered: setImgHoveredLeft },
+        { side: 'right', url: c.image_url_right, caption: c.image_caption_right, alt: c.image_alt_right, position: c.two_position_right, hovered: imgHoveredRight, setHovered: setImgHoveredRight },
+      ].filter(item => item.url);
       return (
-        <div style={rs.twoImgRow} className="cb-two-img-row">
-          {hasLeft && (
-            <figure style={rs.twoImgFigure}>
+        <div style={{ ...rs.twoImgRow, gridTemplateColumns: items.length === 1 ? 'minmax(0, 1fr)' : twoColumnsMap[c.two_ratio || 'equal'], gap: `${twoGap}px` }} className="cb-two-img-row">
+          {items.map(item => (
+            <figure key={item.side} style={{ ...rs.twoImgFigure, padding: twoStyle === 'cards' ? 'clamp(10px, 1.8vw, 16px)' : 0, background: twoStyle === 'cards' ? (c.two_bg || '#f8fafc') : 'transparent', border: twoStyle === 'accent' ? `2px solid ${twoAccent}` : twoStyle === 'editorial' ? `1px solid ${twoAccent}30` : 'none', borderRadius: `${twoRadius}px`, boxShadow: twoStyle === 'clean' ? 'none' : twoShadowMap[c.two_shadow || 'medium'] }}>
               <div
-                className="cb-zoom-trigger"
-                role="button"
-                tabIndex={0}
-                style={{ ...rs.twoImgWrap, ...(imgHoveredLeft ? rs.twoImgWrapHover : {}) }}
-                onClick={() => onZoom(c.image_url_left)}
-                onKeyDown={e => onZoomKeyDown(e, c.image_url_left)}
-                onMouseEnter={() => setImgHoveredLeft(true)}
-                onMouseLeave={() => setImgHoveredLeft(false)}
-                title="Ver en grande"
+                className={twoZoom ? 'cb-zoom-trigger' : undefined}
+                role={twoZoom ? 'button' : undefined}
+                tabIndex={twoZoom ? 0 : undefined}
+                style={{ ...rs.twoImgWrap, aspectRatio: twoAspectMap[c.two_aspect || 'landscape'], borderRadius: `${Math.max(0, twoRadius - (twoStyle === 'cards' ? 7 : 0))}px`, cursor: twoZoom ? 'zoom-in' : 'default', boxShadow: 'none', ...(item.hovered && c.two_hover !== 'none' ? rs.twoImgWrapHover : {}) }}
+                onClick={twoZoom ? () => onZoom(item.url) : undefined}
+                onKeyDown={twoZoom ? e => onZoomKeyDown(e, item.url) : undefined}
+                onMouseEnter={() => item.setHovered(true)}
+                onMouseLeave={() => item.setHovered(false)}
+                title={twoZoom ? 'Ver en grande' : undefined}
               >
                 <BlockImg
-                  src={getCloudinaryImageUrl(c.image_url_left, 'view')}
-                  alt={c.image_caption_left || 'Imagen izquierda'}
-                  style={rs.twoImgImage}
+                  src={getCloudinaryImageUrl(item.url, 'view')}
+                  alt={item.alt || item.caption || `Imagen ${item.side === 'left' ? 'izquierda' : 'derecha'}`}
+                  style={{ ...rs.twoImgImage, objectFit: c.two_fit === 'contain' ? 'contain' : 'cover', objectPosition: item.position || 'center center', background: c.two_fit === 'contain' ? (c.two_image_bg || '#f8fafc') : undefined, filter: twoFilterMap[c.two_filter || 'none'] }}
+                  loading={c.two_loading === 'eager' ? 'eager' : 'lazy'}
                 />
-                <div style={{ ...rs.zoomOverlay, opacity: imgHoveredLeft ? 1 : 0 }}>🔍</div>
+                {twoZoom && <div style={{ ...rs.zoomOverlay, opacity: item.hovered ? 1 : 0 }}>🔍</div>}
               </div>
-              {c.image_caption_left && (
-                <figcaption style={rs.caption}><RichTextValue value={c.image_caption_left} /></figcaption>
+              {item.caption && (
+                <figcaption style={{ ...rs.caption, ...userTypographyStyle, color: c.two_caption_color || userTextColor || '#57708f', textAlign: (c.two_caption_align || 'center') as React.CSSProperties['textAlign'], fontStyle: c.two_caption_italic === 'false' ? 'normal' : 'italic', fontSize: c.two_caption_size || '.82rem', fontWeight: c.two_caption_weight && c.two_caption_weight !== 'default' ? Number(c.two_caption_weight) : undefined }}><RichTextValue value={item.caption} /></figcaption>
               )}
             </figure>
-          )}
-          {hasRight && (
-            <figure style={rs.twoImgFigure}>
-              <div
-                className="cb-zoom-trigger"
-                role="button"
-                tabIndex={0}
-                style={{ ...rs.twoImgWrap, ...(imgHoveredRight ? rs.twoImgWrapHover : {}) }}
-                onClick={() => onZoom(c.image_url_right)}
-                onKeyDown={e => onZoomKeyDown(e, c.image_url_right)}
-                onMouseEnter={() => setImgHoveredRight(true)}
-                onMouseLeave={() => setImgHoveredRight(false)}
-                title="Ver en grande"
-              >
-                <BlockImg
-                  src={getCloudinaryImageUrl(c.image_url_right, 'view')}
-                  alt={c.image_caption_right || 'Imagen derecha'}
-                  style={rs.twoImgImage}
-                />
-                <div style={{ ...rs.zoomOverlay, opacity: imgHoveredRight ? 1 : 0 }}>🔍</div>
-              </div>
-              {c.image_caption_right && (
-                <figcaption style={rs.caption}><RichTextValue value={c.image_caption_right} /></figcaption>
-              )}
-            </figure>
-          )}
+          ))}
         </div>
       );
     }
@@ -741,34 +856,47 @@ const BlockItem: React.FC<{
       const has2 = Boolean(c.image_url_2);
       const has3 = Boolean(c.image_url_3);
       if (!has1 && !has2 && !has3) return null;
+      const threeZoom = c.three_zoom !== 'false';
+      const threeAccent = c.three_accent || '#38bdf8';
+      const threeRadiusRaw = Number(c.three_radius ?? 16);
+      const threeRadius = Number.isFinite(threeRadiusRaw) ? Math.max(0, Math.min(40, threeRadiusRaw)) : 16;
+      const threeGapRaw = Number(c.three_gap ?? 18);
+      const threeGap = Number.isFinite(threeGapRaw) ? Math.max(0, Math.min(48, threeGapRaw)) : 18;
+      const threeAspectMap: Record<string, string | undefined> = { auto: undefined, square: '1 / 1', portrait: '4 / 5', landscape: '4 / 3', wide: '16 / 9' };
+      const threeShadowMap: Record<string, string> = { none: 'none', soft: '0 8px 22px rgba(15,23,42,.08)', medium: '0 14px 32px rgba(15,23,42,.13)' };
+      const threeStyle = c.three_style || 'editorial';
+      const threeFilterMap: Record<string, string> = { none: 'none', grayscale: 'grayscale(1)', warm: 'saturate(1.08) sepia(.12) contrast(1.02)', cool: 'saturate(.94) hue-rotate(8deg) contrast(1.03)', vivid: 'saturate(1.22) contrast(1.06)', soft: 'saturate(.88) contrast(.94) brightness(1.04)' };
       const items = [
-        { url: c.image_url_1, cap: c.image_caption_1 },
-        { url: c.image_url_2, cap: c.image_caption_2 },
-        { url: c.image_url_3, cap: c.image_caption_3 },
+        { url: c.image_url_1, cap: c.image_caption_1, alt: c.image_alt_1, position: c.three_position_1 },
+        { url: c.image_url_2, cap: c.image_caption_2, alt: c.image_alt_2, position: c.three_position_2 },
+        { url: c.image_url_3, cap: c.image_caption_3, alt: c.image_alt_3, position: c.three_position_3 },
       ].filter(x => x.url);
+      const threeLayout = c.three_layout || 'grid';
+      const threeColumns = items.length < 3 ? `repeat(${items.length}, minmax(0, 1fr))` : threeLayout === 'featured' ? 'minmax(0, 1.5fr) repeat(2, minmax(0, .75fr))' : threeLayout === 'story' ? 'minmax(0, .8fr) minmax(0, 1.4fr) minmax(0, .8fr)' : 'repeat(3, minmax(0, 1fr))';
       return (
-        <div style={rs.threeImgRow} className="cb-three-img-row">
+        <div style={{ ...rs.threeImgRow, gridTemplateColumns: threeColumns, gap: `${threeGap}px` }} className="cb-three-img-row">
           {items.map((item, idx) => (
-            <figure key={idx} style={rs.twoImgFigure}>
+            <figure key={idx} style={{ ...rs.twoImgFigure, padding: threeStyle === 'cards' ? 'clamp(9px, 1.5vw, 14px)' : 0, background: threeStyle === 'cards' ? (c.three_bg || '#f8fafc') : 'transparent', border: threeStyle === 'accent' ? `2px solid ${threeAccent}` : threeStyle === 'editorial' ? `1px solid ${threeAccent}30` : 'none', borderRadius: `${threeRadius}px`, boxShadow: threeStyle === 'clean' ? 'none' : threeShadowMap[c.three_shadow || 'medium'] }}>
               <div
-                className="cb-zoom-trigger"
-                role="button"
-                tabIndex={0}
-                style={{ ...rs.twoImgWrap, ...(imgHoveredIdx === idx ? rs.twoImgWrapHover : {}) }}
-                onClick={() => onZoom(item.url)}
-                onKeyDown={e => onZoomKeyDown(e, item.url)}
+                className={threeZoom ? 'cb-zoom-trigger' : undefined}
+                role={threeZoom ? 'button' : undefined}
+                tabIndex={threeZoom ? 0 : undefined}
+                style={{ ...rs.twoImgWrap, aspectRatio: threeAspectMap[c.three_aspect || 'landscape'], borderRadius: `${Math.max(0, threeRadius - (threeStyle === 'cards' ? 6 : 0))}px`, cursor: threeZoom ? 'zoom-in' : 'default', boxShadow: 'none', ...(imgHoveredIdx === idx && c.three_hover !== 'none' ? rs.twoImgWrapHover : {}) }}
+                onClick={threeZoom ? () => onZoom(item.url) : undefined}
+                onKeyDown={threeZoom ? e => onZoomKeyDown(e, item.url) : undefined}
                 onMouseEnter={() => setImgHoveredIdx(idx)}
                 onMouseLeave={() => setImgHoveredIdx(-1)}
-                title="Ver en grande"
+                title={threeZoom ? 'Ver en grande' : undefined}
               >
                 <BlockImg
                   src={getCloudinaryImageUrl(item.url, 'view')}
-                  alt={item.cap || `Imagen ${idx + 1}`}
-                  style={rs.twoImgImage}
+                  alt={item.alt || item.cap || `Imagen ${idx + 1}`}
+                  style={{ ...rs.twoImgImage, objectFit: c.three_fit === 'contain' ? 'contain' : 'cover', objectPosition: item.position || 'center center', background: c.three_fit === 'contain' ? (c.three_image_bg || '#f8fafc') : undefined, filter: threeFilterMap[c.three_filter || 'none'] }}
+                  loading={c.three_loading === 'eager' ? 'eager' : 'lazy'}
                 />
-                <div style={{ ...rs.zoomOverlay, opacity: imgHoveredIdx === idx ? 1 : 0 }}>🔍</div>
+                {threeZoom && <div style={{ ...rs.zoomOverlay, opacity: imgHoveredIdx === idx ? 1 : 0 }}>🔍</div>}
               </div>
-              {item.cap && <figcaption style={rs.caption}>{renderBoldText(item.cap)}</figcaption>}
+              {item.cap && <figcaption style={{ ...rs.caption, ...userTypographyStyle, color: c.three_caption_color || userTextColor || '#57708f', textAlign: (c.three_caption_align || 'center') as React.CSSProperties['textAlign'], fontStyle: c.three_caption_italic === 'false' ? 'normal' : 'italic', fontSize: c.three_caption_size || '.8rem', fontWeight: c.three_caption_weight && c.three_caption_weight !== 'default' ? Number(c.three_caption_weight) : undefined }}><RichTextValue value={item.cap} /></figcaption>}
             </figure>
           ))}
         </div>
@@ -816,14 +944,14 @@ const BlockItem: React.FC<{
                 <RichTextValue value={c.eyebrow || 'Esta semana en el laboratorio'} style={{ minWidth: 0 }} />
                 <span aria-hidden style={{ height: '1px', background: `linear-gradient(90deg, ${accent}4d, transparent)` }} />
               </div>
-              <div style={{ position: 'relative', width: '100%' }}><span aria-hidden style={{ position: 'absolute', left: '-17px', top: '19px', width: '6px', height: '30px', borderRadius: '999px', background: `linear-gradient(${accent}, #68c9ec)`, boxShadow: `0 5px 15px ${accent}38` }} /><RichTextValue value={c.title || 'Explora lo que estudiaremos esta semana'} style={{ width: '100%', margin: '17px 0 9px', color: c.weekly_title_color || c.style_text || '#071b31', fontSize: c.weekly_title_size || 'clamp(1.55rem, 2.7vw, 2.35rem)', fontWeight: Number(c.weekly_title_weight || 760), fontFamily: 'inherit', lineHeight: '1.08', letterSpacing: '-.025em', textTransform: 'inherit', fontStyle: 'inherit', textDecoration: 'inherit' }} /></div>
+              <div style={{ position: 'relative', width: '100%' }}><span aria-hidden style={{ position: 'absolute', left: c.weekly_text_align === 'right' ? 'auto' : '-17px', right: c.weekly_text_align === 'right' ? '-17px' : 'auto', top: '19px', width: '6px', height: '30px', borderRadius: '999px', background: `linear-gradient(${accent}, #68c9ec)`, boxShadow: `0 5px 15px ${accent}38` }} /><RichTextValue value={c.title || 'Explora lo que estudiaremos esta semana'} style={{ width: '100%', margin: '17px 0 9px', color: c.weekly_title_color || c.style_text || '#071b31', fontSize: c.weekly_title_size || 'clamp(1.55rem, 2.7vw, 2.35rem)', fontWeight: Number(c.weekly_title_weight || 760), fontFamily: 'inherit', lineHeight: '1.08', letterSpacing: '-.025em', textTransform: 'inherit', fontStyle: 'inherit', textDecoration: 'inherit' }} /></div>
               <div style={{ alignSelf: c.weekly_text_align === 'center' ? 'center' : c.weekly_text_align === 'right' ? 'flex-end' : 'flex-start', width: '48px', height: '3px', borderRadius: '999px', background: `linear-gradient(90deg, ${accent}, #7dd3fc)`, marginBottom: '20px' }} />
               <div style={{ display: 'grid', gap: '9px' }}>
                 {topics.map((topic, index) => <a className="cb-weekly-topic" key={topic.id || index} href={topic.id ? `/subtemas/${topic.id}` : undefined} style={{ ['--weekly-accent' as string]: accent, position: 'relative', display: 'grid', gridTemplateColumns: '46px minmax(0,1fr) 32px', alignItems: 'center', gap: '12px', padding: '10px 11px 10px 14px', overflow: 'hidden', borderRadius: '14px', background: 'linear-gradient(100deg,rgba(255,255,255,.9),rgba(255,255,255,.62))', border: '1px solid rgba(137,181,215,.34)', boxShadow: '0 6px 18px rgba(29,78,120,.055)', color: c.weekly_topic_color || '#0b1f33', fontSize: c.weekly_topic_size || '.95rem', textDecoration: 'none', transition: 'transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease' }}><span aria-hidden style={{ position: 'absolute', inset: '8px auto 8px 0', width: '3px', borderRadius: '0 99px 99px 0', background: `linear-gradient(${accent}, #77d1ec)` }} />{topic.logo ? <img src={getCloudinaryImageUrl(topic.logo, 'thumbSmall')} alt="" style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '13px', border: '2px solid rgba(255,255,255,.88)', boxShadow: `0 4px 12px ${accent}25` }} /> : <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: '44px', height: '44px', borderRadius: '13px', color: accent, background: `${accent}0d`, fontSize: '1.2em' }}>⌬</span>}<span style={{ display: 'grid', gap: '2px', minWidth: 0 }}><small style={{ color: accent, fontSize: '.63em', fontWeight: 850, letterSpacing: '.09em', textTransform: 'uppercase' }}>Tema {String(index + 1).padStart(2, '0')}</small><strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: Number(c.weekly_topic_weight || 680), lineHeight: 1.2 }}>{topic.name}</strong></span><span className="cb-weekly-topic-arrow" aria-hidden style={{ display: 'grid', placeItems: 'center', width: '29px', height: '29px', borderRadius: '50%', color: accent, background: `${accent}0d`, border: `1px solid ${accent}1f`, fontSize: '1.15em', fontWeight: 650 }}>›</span></a>)}
               </div>
             </div>
             <figure className={c.image_url ? 'cb-zoom-trigger' : undefined} role={c.image_url ? 'button' : undefined} tabIndex={c.image_url ? 0 : undefined} onClick={c.image_url ? () => onZoom(c.image_url, c.weekly_placa_id || undefined) : undefined} onKeyDown={c.image_url ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onZoom(c.image_url, c.weekly_placa_id || undefined); } } : undefined} title={c.image_url ? 'Ver placa en grande' : undefined} style={{ direction: 'ltr', position: 'relative', margin: 0, minHeight: '280px', overflow: 'hidden', borderRadius: 'clamp(13px, 1.7vw, 19px)', cursor: c.image_url ? 'zoom-in' : 'default', background: `linear-gradient(145deg, ${accent}18, #dbeafe)`, boxShadow: '0 8px 24px rgba(20,67,103,.10)' }}>
-              {c.image_url ? <img src={getCloudinaryImageUrl(c.image_url, 'view')} alt={c.image_caption || 'Placa semanal del laboratorio'} style={{ width: '100%', height: '100%', minHeight: '280px', objectFit: 'cover', display: 'block' }} /> : <div style={{ display: 'grid', placeItems: 'center', height: '100%', minHeight: '280px', color: accent, fontWeight: 850 }}>Placa semanal</div>}
+              {c.image_url ? <img src={getCloudinaryImageUrl(c.image_url, 'view')} alt={c.image_caption || 'Placa semanal del laboratorio'} style={{ width: '100%', height: '100%', minHeight: '280px', objectFit: (c.weekly_image_fit || 'cover') as React.CSSProperties['objectFit'], background: c.weekly_image_fit === 'contain' ? bg : undefined, display: 'block' }} /> : <div style={{ display: 'grid', placeItems: 'center', height: '100%', minHeight: '280px', color: accent, fontWeight: 850 }}>Placa semanal</div>}
               <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(145deg, rgba(255,255,255,.11), transparent 38%, rgba(4,31,55,.10))', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.18)' }} />
               {c.image_caption && <figcaption style={{ position: 'absolute', inset: 'auto clamp(9px, 1.5vw, 15px) clamp(9px, 1.5vw, 15px)', display: 'grid', gridTemplateColumns: '18px minmax(0,1fr) 30px', alignItems: 'center', gap: '8px', padding: '7px 9px', borderRadius: '11px', color: '#fff', background: 'linear-gradient(115deg, rgba(20,83,126,.55), rgba(20,57,88,.46))', border: '1px solid rgba(205,235,250,.38)', boxShadow: '0 5px 15px rgba(8,48,82,.12)', backdropFilter: 'blur(10px) saturate(1.15)' }}>
                 <span aria-hidden style={{ justifySelf: 'center', width: '7px', height: '7px', borderRadius: '50%', background: '#79d2f7', boxShadow: '0 0 0 4px rgba(121,210,247,.14)' }} />
@@ -850,6 +978,9 @@ const BlockItem: React.FC<{
       const customBg = c.callout_bg || v.bgStart;
       const customBorder = c.callout_border || v.border;
       const showIcon = c.callout_show_icon !== 'false';
+      const showLabel = c.callout_show_label !== 'false';
+      const label = c.callout_label || v.label;
+      const labelColor = c.callout_label_color || v.color;
       const widthMap: Record<string, string> = { full: '100%', wide: '900px', medium: '700px', compact: '520px' };
       const requestedWidth = widthMap[c.callout_width || 'full'] || '100%';
       const surfaceMap: Record<string, React.CSSProperties> = {
@@ -859,12 +990,12 @@ const BlockItem: React.FC<{
         outline: { background: 'transparent', border: `2px solid ${customBorder}`, boxShadow: 'none' },
       };
       return (
-        <div style={{
+        <div role="note" style={{
           position: 'relative',
           ...(surfaceMap[calloutStyle] || surfaceMap.modern),
           borderRadius: 'clamp(14px, 1.8vw, 20px)',
           padding: 'clamp(16px, 2.2vw, 24px)',
-          display: 'flex',
+          display: 'grid',
           gap: 'clamp(12px, 1.8vw, 18px)',
           alignItems: 'flex-start',
           textAlign: align,
@@ -887,7 +1018,7 @@ const BlockItem: React.FC<{
               boxShadow: `0 7px 18px ${v.border}22`,
             }}>{v.icon}</span>}
             <div style={{ minWidth: 0 }}>
-              <div style={{ marginBottom: '5px', color: v.color, fontSize: '.7em', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase' }}>{v.label}</div>
+              {showLabel && <div style={{ marginBottom: '5px', color: labelColor, fontSize: '.7em', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase' }}>{label}</div>}
               <RichTextValue style={{
                 margin: 0,
                 width: '100%',
@@ -924,22 +1055,25 @@ const BlockItem: React.FC<{
       const columns = Math.max(1, Math.min(3, Number(c.list_columns || 1)));
       const marker = c.list_marker || (isNumbered ? 'number' : 'bullet');
       const itemStyle = c.list_item_style || 'plain';
+      const itemGap = Math.max(0, Math.min(32, Number(c.list_gap || 10)));
       return (
-        <div className="cb-list-grid" style={{ margin: 0, paddingBlock: '0.3em', display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 'clamp(7px, 1.5vw, 12px)' }}>
+        <div role="list" className="cb-list-grid" style={{ margin: 0, paddingBlock: '0.3em', display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: `${itemGap}px` }}>
           {itemArr.map((item: string, i: number) => (
             <div
               key={i}
+              role="listitem"
               style={{
                 display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr)', gap: '9px', alignItems: 'start',
                 padding: itemStyle === 'cards' ? '10px 12px' : itemStyle === 'soft' ? '8px 10px' : 0,
-                border: itemStyle === 'cards' ? '1px solid #dbe5ef' : undefined,
+                border: itemStyle === 'cards' ? `1px solid ${c.list_item_border || '#dbe5ef'}` : undefined,
                 borderRadius: itemStyle !== 'plain' ? '10px' : undefined,
-                background: itemStyle === 'cards' ? '#fff' : itemStyle === 'soft' ? '#f1f5f9' : undefined,
+                background: itemStyle === 'cards' ? (c.list_item_bg || '#ffffff') : itemStyle === 'soft' ? (c.list_item_bg || '#f1f5f9') : undefined,
                 fontSize: userFontSize || '0.9em',
-                lineHeight: 1.8,
+                ...userTypographyStyle,
+                lineHeight: userTypographyStyle.lineHeight ?? 1.8,
                 color: userTextColor || '#000000',
                 fontWeight: userFontWeight || 400,
-                fontFamily: '"Montserrat", "Segoe UI", sans-serif',
+                textAlign: (c.text_align || 'left') as React.CSSProperties['textAlign'],
               }}
             >
               <strong aria-hidden style={{ color: c.list_accent || '#2563eb' }}>{marker === 'check' ? '✓' : marker === 'arrow' ? '→' : marker === 'number' ? `${i + 1}.` : '•'}</strong>
@@ -951,36 +1085,42 @@ const BlockItem: React.FC<{
     }
 
     case 'divider': {
+      const color = c.divider_color || '#38bdf8';
+      const thickness = Math.max(1, Math.min(12, Number(c.divider_thickness || (c.style === 'gradient' ? 3 : 1))));
+      const width = Math.max(20, Math.min(100, Number(c.divider_width || 100)));
+      const spacing = Math.max(0, Math.min(80, Number(c.divider_spacing || 20)));
       const divStlMap: Record<string, React.CSSProperties> = {
-        gradient: { height: '3px', background: 'linear-gradient(90deg, #38bdf8, #818cf8)', borderRadius: '4px', border: 'none' },
-        simple:   { height: '1px', background: '#cbd5e1', border: 'none' },
-        labeled:  { height: 0, border: 'none' },
+        gradient: { height: `${thickness}px`, background: `linear-gradient(90deg, transparent, ${color}, #818cf8, transparent)`, borderRadius: '999px', border: 'none' },
+        simple: { height: `${thickness}px`, background: color, borderRadius: '999px', border: 'none' },
+        solid: { height: `${thickness}px`, background: color, borderRadius: '999px', border: 'none' },
+        dashed: { height: 0, border: 'none', borderTop: `${thickness}px dashed ${color}` },
+        dots: { height: `${Math.max(4, thickness)}px`, border: 'none', backgroundImage: `radial-gradient(circle, ${color} 2px, transparent 2.5px)`, backgroundSize: '12px 100%' },
+        labeled: { height: 0, border: 'none' },
       };
       const stl = (c.style as string) ?? 'gradient';
       if (stl === 'labeled') {
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(8px, 2vw, 14px)', margin: 'clamp(12px, 2vw, 20px) 0' }}>
-            <div style={{ flex: 1, height: '1px', background: '#cbd5e1' }} />
-            <div style={{ display: 'flex', gap: '4px' }}>
-              {[0, 1, 2].map(i => <div key={i} style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#94a3b8' }} />)}
-            </div>
-            <div style={{ flex: 1, height: '1px', background: '#cbd5e1' }} />
+          <div role="separator" style={{ display: 'flex', alignItems: 'center', gap: 'clamp(8px, 2vw, 14px)', margin: `${spacing}px auto`, width: `${width}%` }}>
+            <div style={{ flex: 1, height: `${thickness}px`, background: color }} />
+            <span style={{ color: c.divider_text_color || color, fontWeight: 750, fontSize: '.82em', whiteSpace: 'nowrap' }}>{c.divider_label || '• • •'}</span>
+            <div style={{ flex: 1, height: `${thickness}px`, background: color }} />
           </div>
         );
       }
-      return <div style={{ ...(divStlMap[stl] ?? divStlMap.gradient), margin: 'clamp(12px, 2vw, 20px) 0' }} />;
+      return <div role="separator" style={{ ...(divStlMap[stl] ?? divStlMap.gradient), margin: `${spacing}px auto`, width: `${width}%` }} />;
     }
 
     case 'carousel': {
       const slides = readCarouselSlides(c, 'image_', 8);
       if (slides.length === 0) return null;
       return (
-        <figure style={{ margin: '0 auto', maxWidth: 'clamp(280px, 80vw, 700px)', width: '100%' }}>
+        <figure className="cb-carousel-figure" style={{ margin: '0 auto', maxWidth: c.carousel_width === 'full' ? '100%' : c.carousel_width === 'medium' ? '700px' : '950px', width: '100%' }}>
           <CarouselPlayer
             slides={slides}
             interval={Number(c.interval ?? 4)}
             auto={(c.auto as string) !== 'false'}
             onZoom={onZoom}
+            options={{ style: c.carousel_style, accent: c.carousel_accent, aspect: c.carousel_aspect, fit: c.carousel_fit, position: c.carousel_position, imageBg: c.carousel_image_bg, radius: c.carousel_radius, zoom: c.carousel_zoom, arrows: c.carousel_arrows, dots: c.carousel_dots, shadow: c.carousel_shadow, captionAlign: c.carousel_caption_align, captionItalic: c.carousel_caption_italic, captionColor: c.carousel_caption_color, captionSize: c.carousel_caption_size, captionWeight: c.carousel_caption_weight, captionFontFamily: shellStyle.fontFamily, captionLineHeight: c.style_line_height ? shellStyle.lineHeight : undefined, captionLetterSpacing: c.style_letter_spacing ? shellStyle.letterSpacing : undefined, captionTransform: c.style_text_transform, filter: c.carousel_filter, loading: c.carousel_loading }}
           />
         </figure>
       );
@@ -993,23 +1133,35 @@ const BlockItem: React.FC<{
       const isLeft = c.image_position !== 'right';
       const direction: React.CSSProperties['flexDirection'] = isLeft ? 'row' : 'row-reverse';
       const tiTextAlign = (c.ti_text_align as React.CSSProperties['textAlign']) ?? 'left';
+      const tcStyle = c.tc_style || 'editorial';
+      const tcAccent = c.tc_accent || '#38bdf8';
+      const tcRadiusRaw = Number(c.tc_radius ?? 20);
+      const tcRadius = Number.isFinite(tcRadiusRaw) ? Math.max(0, Math.min(40, tcRadiusRaw)) : 20;
+      const tcGapRaw = Number(c.tc_gap ?? 28);
+      const tcGap = Number.isFinite(tcGapRaw) ? Math.max(8, Math.min(64, tcGapRaw)) : 28;
+      const tcWidthRaw = Number(c.tc_gallery_width ?? 44);
+      const tcWidth = Number.isFinite(tcWidthRaw) ? Math.max(30, Math.min(65, tcWidthRaw)) : 44;
+      const tcAlign = c.tc_vertical_align === 'start' ? 'flex-start' : c.tc_vertical_align === 'end' ? 'flex-end' : 'center';
+      const tcSurface: Record<string, React.CSSProperties> = {
+        clean: { background: 'transparent', border: 'none', padding: 0, boxShadow: 'none' },
+        editorial: { background: '#ffffff', border: `1px solid ${tcAccent}30`, padding: 'clamp(14px, 2.5vw, 26px)', boxShadow: '0 14px 38px rgba(15,23,42,.09)' },
+        soft: { background: c.tc_bg || '#f1f7fb', border: 'none', padding: 'clamp(14px, 2.5vw, 26px)', boxShadow: 'none' },
+        accent: { background: '#ffffff', border: `1px solid ${tcAccent}40`, borderLeft: `6px solid ${tcAccent}`, padding: 'clamp(14px, 2.5vw, 26px)', boxShadow: '0 10px 28px rgba(15,23,42,.07)' },
+      };
       return (
-        <div style={{ ...rs.tiRow, flexDirection: direction }} className="cb-ti-row">
+        <div style={{ ...rs.tiRow, ...tcSurface[tcStyle], flexDirection: direction, alignItems: tcAlign, gap: `${tcGap}px`, borderRadius: `${tcRadius}px` }} className="cb-ti-row cb-text-carousel">
           {slides.length > 0 && (
-            <div style={{ flexShrink: 0, width: 'clamp(200px, 42%, 360px)', minWidth: 0 }} className="cb-ti-figure">
+            <div style={{ flex: `0 0 ${tcWidth}%`, minWidth: 0 }} className="cb-ti-figure">
               <CarouselPlayer
                 slides={slides}
                 interval={Number(c.interval ?? 4)}
                 auto={(c.auto as string) !== 'false'}
                 onZoom={onZoom}
+                options={{ style: 'clean', accent: tcAccent, aspect: c.tc_aspect, fit: c.tc_fit, position: c.tc_position, imageBg: c.tc_image_bg, radius: String(Math.max(0, tcRadius - 5)), zoom: c.tc_zoom, arrows: c.tc_arrows, dots: c.tc_dots, shadow: c.tc_shadow, captionAlign: c.tc_caption_align, captionColor: c.tc_caption_color, captionSize: c.tc_caption_size, captionWeight: c.tc_caption_weight, captionFontFamily: shellStyle.fontFamily, captionLineHeight: c.style_line_height ? shellStyle.lineHeight : undefined, captionLetterSpacing: c.style_letter_spacing ? shellStyle.letterSpacing : undefined, captionTransform: c.style_text_transform, filter: c.tc_filter, loading: c.tc_loading }}
               />
             </div>
           )}
-          {hasText && (
-            <p className="cb-ti-text" style={{ ...rs.tiText, textAlign: tiTextAlign, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }}>
-              {renderBoldText(c.text as string)}
-            </p>
-          )}
+          {hasText && <RichTextValue className="cb-ti-text" style={{ ...rs.tiText, ...userTypographyStyle, textAlign: tiTextAlign, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }} value={c.text} />}
         </div>
       );
     }
@@ -1020,16 +1172,24 @@ const BlockItem: React.FC<{
       if (leftSlides.length === 0 && rightSlides.length === 0) return null;
       const interval = Number(c.interval ?? 4);
       const autoPlay = (c.auto as string) !== 'false';
+      const dcRatioMap: Record<string, string> = { equal: 'minmax(0, 1fr) minmax(0, 1fr)', left: 'minmax(0, 1.35fr) minmax(0, .65fr)', right: 'minmax(0, .65fr) minmax(0, 1.35fr)' };
+      const dcGapRaw = Number(c.dc_gap ?? 22);
+      const dcGap = Number.isFinite(dcGapRaw) ? Math.max(0, Math.min(56, dcGapRaw)) : 22;
+      const dcRadiusRaw = Number(c.dc_radius ?? 18);
+      const dcRadius = Number.isFinite(dcRadiusRaw) ? Math.max(0, Math.min(40, dcRadiusRaw)) : 18;
+      const dcStyle = c.dc_style || 'editorial';
+      const dcAccent = c.dc_accent || '#38bdf8';
+      const dcPlayerOptions = (side: 'left' | 'right') => ({ style: dcStyle === 'cinema' ? 'cinema' : dcStyle === 'clean' ? 'clean' : 'framed', accent: dcAccent, aspect: c.dc_aspect, fit: c.dc_fit, position: side === 'left' ? c.dc_position_left : c.dc_position_right, imageBg: c.dc_image_bg, radius: String(dcRadius), zoom: c.dc_zoom, arrows: c.dc_arrows, dots: c.dc_dots, shadow: c.dc_shadow, captionAlign: c.dc_caption_align, captionColor: c.dc_caption_color, captionSize: c.dc_caption_size, captionWeight: c.dc_caption_weight, captionFontFamily: shellStyle.fontFamily, captionLineHeight: c.style_line_height ? shellStyle.lineHeight : undefined, captionLetterSpacing: c.style_letter_spacing ? shellStyle.letterSpacing : undefined, captionTransform: c.style_text_transform, filter: c.dc_filter, loading: c.dc_loading });
       return (
-        <div style={rs.twoImgRow} className="cb-two-img-row">
+        <div style={{ ...rs.twoImgRow, gridTemplateColumns: leftSlides.length && rightSlides.length ? dcRatioMap[c.dc_ratio || 'equal'] : 'minmax(0, 1fr)', gap: `${dcGap}px`, padding: dcStyle === 'cards' ? 'clamp(12px, 2vw, 20px)' : 0, background: dcStyle === 'cards' ? (c.dc_bg || '#f8fafc') : 'transparent', borderRadius: `${dcRadius + 6}px`, border: dcStyle === 'editorial' ? `1px solid ${dcAccent}30` : 'none' }} className="cb-two-img-row cb-double-carousel">
           {leftSlides.length > 0 && (
             <div style={{ flex: '1 1 0', minWidth: 0 }}>
-              <CarouselPlayer slides={leftSlides} interval={interval} auto={autoPlay} onZoom={onZoom} />
+              <CarouselPlayer slides={leftSlides} interval={interval} auto={autoPlay} onZoom={onZoom} options={dcPlayerOptions('left')} />
             </div>
           )}
           {rightSlides.length > 0 && (
             <div style={{ flex: '1 1 0', minWidth: 0 }}>
-              <CarouselPlayer slides={rightSlides} interval={interval} auto={autoPlay} onZoom={onZoom} />
+              <CarouselPlayer slides={rightSlides} interval={interval} auto={autoPlay} onZoom={onZoom} options={dcPlayerOptions('right')} />
             </div>
           )}
         </div>
@@ -1043,11 +1203,12 @@ const BlockItem: React.FC<{
 
 // ── Reproductor de carrusel ───────────────────────────────────────────────────
 const CarouselPlayer: React.FC<{
-  slides: { url: string; caption?: string }[];
+  slides: { url: string; caption?: string; alt?: string }[];
   interval: number;
   auto: boolean;
   onZoom?: (url: string) => void;
-}> = ({ slides, interval, auto, onZoom }) => {
+  options?: Record<string, unknown>;
+}> = ({ slides, interval, auto, onZoom, options = {} }) => {
   const [emblaRef, emblaApi] = useEmblaCarousel({
     loop: slides.length > 1,
     align: 'start',
@@ -1058,6 +1219,15 @@ const CarouselPlayer: React.FC<{
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [failedSlides, setFailedSlides] = useState<Set<number>>(new Set());
   const count = slides.length;
+  const zoomEnabled = options.zoom !== 'false';
+  const accent = String(options.accent || '#38bdf8');
+  const radiusRaw = Number(options.radius ?? 20);
+  const radius = Number.isFinite(radiusRaw) ? Math.max(0, Math.min(40, radiusRaw)) : 20;
+  const safeInterval = Number.isFinite(interval) ? Math.max(1, Math.min(60, interval)) : 4;
+  const aspectMap: Record<string, string | undefined> = { auto: undefined, square: '1 / 1', portrait: '4 / 5', landscape: '4 / 3', wide: '16 / 9' };
+  const shadowMap: Record<string, string> = { none: 'none', soft: '0 8px 24px rgba(15,23,42,.09)', medium: '0 16px 38px rgba(15,23,42,.15)', deep: '0 24px 54px rgba(15,23,42,.24)' };
+  const carouselStyle = String(options.style || 'editorial');
+  const carouselFilterMap: Record<string, string> = { none: 'none', grayscale: 'grayscale(1)', warm: 'saturate(1.08) sepia(.12) contrast(1.02)', cool: 'saturate(.94) hue-rotate(8deg) contrast(1.03)', vivid: 'saturate(1.22) contrast(1.06)', soft: 'saturate(.88) contrast(.94) brightness(1.04)' };
   const onZoomKeyDown = (e: React.KeyboardEvent<HTMLElement>, url: string) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -1079,9 +1249,9 @@ const CarouselPlayer: React.FC<{
 
   useEffect(() => {
     if (!emblaApi || !auto || count <= 1 || interval <= 0 || paused) return;
-    const t = window.setInterval(() => emblaApi.scrollNext(), interval * 1000);
+    const t = window.setInterval(() => emblaApi.scrollNext(), safeInterval * 1000);
     return () => window.clearInterval(t);
-  }, [emblaApi, auto, count, interval, paused]);
+  }, [emblaApi, auto, count, safeInterval, paused]);
 
   if (count === 0) {
     return (
@@ -1102,53 +1272,53 @@ const CarouselPlayer: React.FC<{
   };
 
   return (
-    <div style={rs.carouselWrap} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-      <div style={rs.carouselViewport} ref={emblaRef}>
+    <div style={{ ...rs.carouselWrap, borderRadius: `${radius}px`, padding: carouselStyle === 'framed' ? 'clamp(8px, 1.5vw, 14px)' : 0, background: carouselStyle === 'cinema' ? '#0f172a' : carouselStyle === 'framed' ? '#ffffff' : 'transparent', border: carouselStyle === 'clean' ? 'none' : `1px solid ${accent}35`, boxShadow: carouselStyle === 'clean' ? 'none' : shadowMap[String(options.shadow || 'medium')] }} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+      <div style={{ ...rs.carouselViewport, borderRadius: `${Math.max(0, radius - (carouselStyle === 'framed' ? 7 : 0))}px` }} ref={emblaRef}>
         <div style={rs.carouselTrack}>
           {slides.map((item, idx) => (
             <div key={item.url + idx} style={rs.carouselCell}>
               <div
-                className="cb-zoom-trigger"
-                role="button"
-                tabIndex={0}
-                style={{ ...rs.carouselSlide, ...(hoveredIdx === idx ? rs.imgClickWrapHover : {}) }}
-                onClick={() => onZoom?.(item.url)}
-                onKeyDown={e => onZoomKeyDown(e, item.url)}
+                className={zoomEnabled ? 'cb-zoom-trigger' : undefined}
+                role={zoomEnabled ? 'button' : undefined}
+                tabIndex={zoomEnabled ? 0 : undefined}
+                style={{ ...rs.carouselSlide, aspectRatio: aspectMap[String(options.aspect || 'landscape')], cursor: zoomEnabled ? 'zoom-in' : 'default', ...(hoveredIdx === idx && zoomEnabled ? rs.imgClickWrapHover : {}) }}
+                onClick={zoomEnabled ? () => onZoom?.(item.url) : undefined}
+                onKeyDown={zoomEnabled ? e => onZoomKeyDown(e, item.url) : undefined}
                 onMouseEnter={() => setHoveredIdx(idx)}
                 onMouseLeave={() => setHoveredIdx(null)}
-                title="Ver en grande"
+                title={zoomEnabled ? 'Ver en grande' : undefined}
               >
                 {failedSlides.has(idx) ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', color: '#94a3b8', fontSize: '0.82em', fontWeight: 600, width: '100%', minHeight: '200px', gap: '6px' }}>
+                  <div role="img" aria-label={item.alt || item.caption || `Imagen ${idx + 1} no disponible`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', color: '#94a3b8', fontSize: '0.82em', fontWeight: 600, width: '100%', minHeight: '200px', gap: '6px' }}>
                     <span style={{ fontSize: '1.8em', lineHeight: 1 }}>🖼️</span>
                     <span>Imagen no disponible</span>
                   </div>
                 ) : (
                   <img
                     src={getCloudinaryImageUrl(item.url, 'view')}
-                    alt={item.caption ?? ''}
-                    style={rs.carouselImage}
-                    loading="lazy"
+                    alt={item.alt || item.caption || `Imagen ${idx + 1}`}
+                    style={{ ...rs.carouselImage, height: options.aspect === 'auto' ? 'auto' : '100%', objectFit: options.fit === 'contain' ? 'contain' : 'cover', objectPosition: String(options.position || 'center center'), background: options.fit === 'contain' ? String(options.imageBg || '#f8fafc') : undefined, filter: carouselFilterMap[String(options.filter || 'none')] }}
+                    loading={options.loading === 'eager' ? 'eager' : 'lazy'}
                     decoding="async"
                     sizes="(max-width: 560px) 100vw, (max-width: 900px) 90vw, 70vw"
                     draggable={false}
                     onError={() => setFailedSlides(prev => new Set([...prev, idx]))}
                   />
                 )}
-                <div style={{ ...rs.zoomOverlay, opacity: hoveredIdx === idx ? 1 : 0 }}>🔍</div>
+                {zoomEnabled && <div style={{ ...rs.zoomOverlay, opacity: hoveredIdx === idx ? 1 : 0 }}>🔍</div>}
               </div>
             </div>
           ))}
         </div>
       </div>
-      {count > 1 && (
+      {count > 1 && options.arrows !== 'false' && (
         <>
           <button type="button" style={{ ...rs.carouselArrow, left: '8px' }} onClick={prev} title="Anterior">❮</button>
           <button type="button" style={{ ...rs.carouselArrow, right: '8px' }} onClick={next} title="Siguiente">❯</button>
         </>
       )}
-      {slide.caption && <figcaption style={rs.caption}><RichTextValue value={slide.caption} /></figcaption>}
-      {count > 1 && (
+      {slide.caption && <figcaption style={{ ...rs.caption, color: String(options.captionColor || (carouselStyle === 'cinema' ? '#e2e8f0' : '#57708f')), textAlign: (options.captionAlign || 'center') as React.CSSProperties['textAlign'], fontStyle: options.captionItalic === 'false' ? 'normal' : 'italic', fontSize: String(options.captionSize || '.84rem'), fontWeight: options.captionWeight && options.captionWeight !== 'default' ? Number(options.captionWeight) : undefined, fontFamily: options.captionFontFamily ? String(options.captionFontFamily) : undefined, lineHeight: options.captionLineHeight as React.CSSProperties['lineHeight'], letterSpacing: options.captionLetterSpacing ? String(options.captionLetterSpacing) : undefined, textTransform: (options.captionTransform || 'none') as React.CSSProperties['textTransform'] }}><RichTextValue value={slide.caption} /></figcaption>}
+      {count > 1 && options.dots !== 'false' && (
         <div style={rs.dotsRow}>
           {slides.map((_, i) => (
             <button
@@ -1170,12 +1340,12 @@ function readCarouselSlides(
   c: Record<string, unknown>,
   prefix: string,
   max: number,
-): { url: string; caption?: string }[] {
-  const slides: { url: string; caption?: string }[] = [];
+): { url: string; caption?: string; alt?: string }[] {
+  const slides: { url: string; caption?: string; alt?: string }[] = [];
   for (let i = 1; i <= max; i++) {
     const url = (c[`${prefix}url_${i}`] as string) ?? '';
-    if (!url) break;
-    slides.push({ url, caption: (c[`${prefix}cap_${i}`] as string) || undefined });
+    if (!url) continue;
+    slides.push({ url, caption: (c[`${prefix}cap_${i}`] as string) || undefined, alt: (c[`${prefix}alt_${i}`] as string) || undefined });
   }
   return slides;
 }

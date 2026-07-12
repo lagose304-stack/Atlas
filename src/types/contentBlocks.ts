@@ -14,6 +14,7 @@ export type BlockType =
   | 'text_carousel'
   | 'double_carousel'
   | 'section'
+  | 'section_end'
   | 'columns_2';
 
 export type PageEntityType = 'subtemas_page' | 'placas_page' | 'home_page';

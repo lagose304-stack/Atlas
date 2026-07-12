@@ -263,6 +263,7 @@ const BLOCK_TYPE_VISUAL_ICON: Record<BlockType, string> = {
   text_carousel: 'T+GAL',
   double_carousel: '2GAL',
   section: 'SEC',
+  section_end: 'FIN',
   columns_2: 'COL',
 };
 
@@ -440,7 +441,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     if (start === -1) return null;
     let endExclusive = list.length;
     for (let i = start + 1; i < list.length; i++) {
-      if (list[i].block_type === 'section') {
+      if (list[i].block_type === 'section' || list[i].block_type === 'section_end') {
         endExclusive = i;
         break;
       }
@@ -697,7 +698,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
 
       let targetEnd = next.length;
       for (let i = targetStart + 1; i < next.length; i++) {
-        if (next[i].block_type === 'section') {
+        if (next[i].block_type === 'section' || next[i].block_type === 'section_end') {
           targetEnd = i;
           break;
         }
@@ -865,12 +866,85 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     [blocks.length, entityType, entityId]
   );
 
+  const addBlockToColumn = useCallback((parentId: string, column: number, type: BlockType) => {
+    if (type === 'columns_2' || type === 'section' || type === 'section_end') return;
+    const newBlock: EditorBlock = {
+      id: crypto.randomUUID(), entity_type: entityType, entity_id: entityId, block_type: type,
+      sort_order: blocks.length,
+      content: { ...createDefaultBlockContent(type), layout_parent_id: parentId, layout_column: String(column) },
+      _isNew: true,
+    };
+    setBlocks(prev => [...prev, newBlock].map((block, index) => ({ ...block, sort_order: index })));
+    setCollapsedBlockIds(prev => { const next = new Set(prev); next.delete(newBlock.id); return next; });
+    setHasChanges(true);
+  }, [blocks.length, entityId, entityType]);
+
+  const insertSectionEnd = useCallback((insertAfterId: string) => {
+    setBlocks(prev => {
+      const index = prev.findIndex(block => block.id === insertAfterId);
+      if (index < 0 || prev[index + 1]?.block_type === 'section_end') return prev;
+      const marker: EditorBlock = { id: crypto.randomUUID(), entity_type: entityType, entity_id: entityId, block_type: 'section_end', sort_order: index + 1, content: {}, _isNew: true };
+      const next = [...prev];
+      next.splice(index + 1, 0, marker);
+      return next.map((block, sortOrder) => ({ ...block, sort_order: sortOrder }));
+    });
+    setHasChanges(true);
+  }, [entityId, entityType]);
+
+  const closeSectionAtCurrentEnd = useCallback((sectionId: string) => {
+    setBlocks(prev => {
+      const start = prev.findIndex(block => block.id === sectionId && block.block_type === 'section');
+      if (start < 0) return prev;
+      let boundary = start + 1;
+      while (boundary < prev.length && prev[boundary].block_type !== 'section' && prev[boundary].block_type !== 'section_end') boundary += 1;
+      if (prev[boundary]?.block_type === 'section_end') return prev;
+      const marker: EditorBlock = { id: crypto.randomUUID(), entity_type: entityType, entity_id: entityId, block_type: 'section_end', sort_order: boundary, content: {}, _isNew: true };
+      const next = [...prev]; next.splice(boundary, 0, marker);
+      return next.map((block, index) => ({ ...block, sort_order: index }));
+    });
+    setHasChanges(true);
+  }, [entityId, entityType]);
+
+  const addBlockToSection = useCallback((sectionId: string, type: BlockType) => {
+    if (type === 'section' || type === 'section_end') return;
+    setBlocks(prev => {
+      const start = prev.findIndex(block => block.id === sectionId && block.block_type === 'section');
+      if (start < 0) return prev;
+      let boundary = start + 1;
+      while (boundary < prev.length && prev[boundary].block_type !== 'section' && prev[boundary].block_type !== 'section_end') boundary += 1;
+      const newBlock: EditorBlock = { id: crypto.randomUUID(), entity_type: entityType, entity_id: entityId, block_type: type, sort_order: boundary, content: createDefaultBlockContent(type), _isNew: true };
+      const next = [...prev]; next.splice(boundary, 0, newBlock);
+      return next.map((block, index) => ({ ...block, sort_order: index }));
+    });
+    setHasChanges(true);
+  }, [entityId, entityType]);
+
+  const moveBlockIntoSection = useCallback((blockId: string, sectionId: string) => {
+    setBlocks(prev => {
+      const from = prev.findIndex(block => block.id === blockId);
+      if (from < 0 || prev[from].block_type === 'section' || prev[from].block_type === 'section_end') return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      const start = next.findIndex(block => block.id === sectionId && block.block_type === 'section');
+      if (start < 0) return prev;
+      let boundary = start + 1;
+      while (boundary < next.length && next[boundary].block_type !== 'section' && next[boundary].block_type !== 'section_end') boundary += 1;
+      next.splice(boundary, 0, { ...moved, content: { ...moved.content, layout_parent_id: '', layout_column: '' } });
+      return next.map((block, index) => ({ ...block, sort_order: index }));
+    });
+    setHasChanges(true);
+  }, []);
+
   const updateBlockContent = useCallback(
     (blockId: string, updates: Record<string, string>) => {
       const replacedAtlasContentIds: string[] = [];
 
       setBlocks(prev =>
         prev.map(b => {
+          if (b.content.layout_parent_id === blockId && updates.columns) {
+            const maxColumn = Math.max(2, Math.min(4, Number(updates.columns)));
+            return { ...b, content: { ...b.content, layout_column: String(Math.min(maxColumn, Number(b.content.layout_column || 1))) } };
+          }
           if (b.id !== blockId) return b;
 
           Object.entries(updates).forEach(([key, nextValue]) => {
@@ -896,11 +970,20 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
   const deleteBlock = useCallback((blockId: string) => {
     setBlocks(prev => {
       const toDelete = prev.find(b => b.id === blockId);
-      if (toDelete) {
-        const publicIds = getAtlasContentPublicIdsFromBlock(toDelete);
-        publicIds.forEach(pid => pendingAssetDeleteIdsRef.current.add(pid));
+      const deletingContainer = toDelete?.block_type === 'columns_2';
+      let pairedSectionEndId = '';
+      if (toDelete?.block_type === 'section') {
+        const start = prev.findIndex(block => block.id === blockId);
+        let boundary = start + 1;
+        while (boundary < prev.length && prev[boundary].block_type !== 'section' && prev[boundary].block_type !== 'section_end') boundary += 1;
+        if (prev[boundary]?.block_type === 'section_end') pairedSectionEndId = prev[boundary].id;
       }
-      return prev.filter(b => b.id !== blockId);
+      const blocksToDelete = prev.filter(block => block.id === blockId || (deletingContainer && block.content.layout_parent_id === blockId));
+      blocksToDelete.forEach(block => {
+        const publicIds = getAtlasContentPublicIdsFromBlock(block);
+        publicIds.forEach(pid => pendingAssetDeleteIdsRef.current.add(pid));
+      });
+      return prev.filter(b => b.id !== blockId && b.id !== pairedSectionEndId && (!deletingContainer || b.content.layout_parent_id !== blockId)).map((block, index) => ({ ...block, sort_order: index }));
     });
     setSelectedBlockIds(prev => {
       const next = new Set(prev);
@@ -997,15 +1080,38 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       const idx = prev.findIndex(b => b.id === blockId);
       if (idx === -1) return prev;
       const original = prev[idx];
+      if (original.block_type === 'section') {
+        let endExclusive = idx + 1;
+        while (endExclusive < prev.length && prev[endExclusive].block_type !== 'section' && prev[endExclusive].block_type !== 'section_end') endExclusive += 1;
+        if (prev[endExclusive]?.block_type === 'section_end') endExclusive += 1;
+        const directRange = prev.slice(idx, endExclusive);
+        const nestedParentIds = new Set(directRange.filter(block => block.block_type === 'columns_2').map(block => block.id));
+        const nestedChildren = prev.filter(block => block.content.layout_parent_id && nestedParentIds.has(block.content.layout_parent_id) && !directRange.some(item => item.id === block.id));
+        const source = [...directRange, ...nestedChildren];
+        const idMap = new Map(source.map(block => [block.id, crypto.randomUUID()]));
+        const clones = source.map(block => ({
+          ...block,
+          id: idMap.get(block.id)!,
+          content: { ...block.content, ...(block.content.layout_parent_id && idMap.has(block.content.layout_parent_id) ? { layout_parent_id: idMap.get(block.content.layout_parent_id)! } : {}) },
+          _isNew: true,
+        }));
+        const next = [...prev];
+        next.splice(endExclusive, 0, ...clones);
+        return next.map((block, index) => ({ ...block, sort_order: index }));
+      }
+      const cloneId = crypto.randomUUID();
       const clone: EditorBlock = {
         ...original,
-        id: crypto.randomUUID(),
+        id: cloneId,
         content: { ...original.content },
         _isNew: true,
       };
+      const childClones = original.block_type === 'columns_2'
+        ? prev.filter(block => block.content.layout_parent_id === original.id).map(child => ({ ...child, id: crypto.randomUUID(), content: { ...child.content, layout_parent_id: cloneId }, _isNew: true }))
+        : [];
       const next = [...prev];
-      next.splice(idx + 1, 0, clone);
-      return next;
+      next.splice(idx + 1, 0, clone, ...childClones);
+      return next.map((block, index) => ({ ...block, sort_order: index }));
     });
     setHasChanges(true);
   }, []);
@@ -1438,6 +1544,13 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     }
     return sectionPos;
   };
+  const getOwningSectionForIndex = (idx: number): EditorBlock | null => {
+    for (let cursor = idx - 1; cursor >= 0; cursor -= 1) {
+      if (blocks[cursor].block_type === 'section_end') return null;
+      if (blocks[cursor].block_type === 'section') return blocks[cursor];
+    }
+    return null;
+  };
 
   const selectedTemplate = sectionTemplates.find(t => t.id === selectedSectionTemplateId) ?? null;
   const activeEditingBlock = blocks.find(block => !collapsedBlockIds.has(block.id)) ?? null;
@@ -1685,11 +1798,15 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
               const isDropBefore = dropIdx === idx;
               const isDropAfterLast = idx === blocks.length - 1 && dropIdx === blocks.length;
               const isCollapsed = collapsedBlockIds.has(block.id);
+              const columnParent = block.content.layout_parent_id ? blocks.find(candidate => candidate.id === block.content.layout_parent_id && candidate.block_type === 'columns_2') : undefined;
+              const parentColumnCount = columnParent ? Math.max(2, Math.min(4, Number(columnParent.content.columns || 2))) : 0;
               const currentSectionPos = getSectionPosForIndex(idx);
+              const owningSection = block.block_type !== 'section' && block.block_type !== 'section_end' ? getOwningSectionForIndex(idx) : null;
+              const directSectionChildren = block.block_type === 'section' ? blocks.slice(idx + 1, (() => { const relativeBoundary = blocks.slice(idx + 1).findIndex(candidate => candidate.block_type === 'section' || candidate.block_type === 'section_end'); return relativeBoundary < 0 ? blocks.length : idx + 1 + relativeBoundary; })()).filter(child => !child.content.layout_parent_id) : [];
               const canMoveToPrevSection =
-                block.block_type !== 'section' && sectionIndexes.length > 0 && currentSectionPos > 0;
+                block.block_type !== 'section' && block.block_type !== 'section_end' && sectionIndexes.length > 0 && currentSectionPos > 0;
               const canMoveToNextSection =
-                block.block_type !== 'section' &&
+                block.block_type !== 'section' && block.block_type !== 'section_end' &&
                 sectionIndexes.length > 0 &&
                 (currentSectionPos === -1 || currentSectionPos < sectionIndexes.length - 1);
 
@@ -1703,6 +1820,8 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
                       borderLeft: `4px solid ${meta.color}`,
                       opacity: isDragging ? 0.3 : 1,
                       transform: isDragging ? 'scale(0.98)' : 'scale(1)',
+                      marginLeft: columnParent ? 'clamp(18px, 4vw, 52px)' : owningSection ? 'clamp(10px, 2vw, 24px)' : undefined,
+                      background: columnParent ? '#f8fbff' : owningSection ? '#fbfdff' : block.block_type === 'section_end' ? '#f8fafc' : undefined,
                     }}
                     onDragOver={e => handleBlockDragOver(e, idx)}
                   >
@@ -1730,17 +1849,21 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
                           {meta.icon}
                         </span>
                         <span style={es.typeLabel}>{meta.label}</span>
+                        {columnParent && <span style={es.previewStateBadge}>Dentro de {getBlockMeta(columnParent.block_type).label} · Columna {block.content.layout_column || '1'}</span>}
+                        {owningSection && !columnParent && <span style={es.previewStateBadge}>Dentro de: {owningSection.content.title || 'Sección sin título'}</span>}
                       </div>
                       <div className="block-editor-header-actions" style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                         {isCollapsed && <span style={es.previewStateBadge}>Vista previa</span>}
-                        <button
+                        {block.block_type !== 'section_end' && <button
                           type="button"
                           style={es.collapseBtn}
                           onClick={() => toggleBlockCollapsed(block.id)}
                           title={isCollapsed ? 'Expandir bloque' : 'Contraer bloque'}
                         >
                           {isCollapsed ? 'Editar' : 'Listo'}
-                        </button>
+                        </button>}
+                        {block.block_type === 'section' && <button type="button" style={es.sectionMoveBtn} onClick={() => closeSectionAtCurrentEnd(block.id)} title="Insertar un cierre al final de los componentes actuales">Cerrar sección</button>}
+                        {owningSection && !columnParent && <button type="button" style={es.sectionMoveBtn} onClick={() => insertSectionEnd(block.id)} title="La sección terminará después de este componente">Terminar aquí</button>}
                         <button
                           type="button"
                           style={canMoveToPrevSection ? es.sectionMoveBtn : es.sectionMoveBtnDisabled}
@@ -1780,8 +1903,63 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
                       </div>
                     </div>
 
+                    {block.block_type === 'section' && !isCollapsed && (
+                      <div style={{ padding: '14px', background: '#f0fdfa', borderBottom: '1px solid #99f6e4' }} onDragOver={event => { event.preventDefault(); event.stopPropagation(); }} onDrop={event => {
+                        event.preventDefault(); event.stopPropagation();
+                        const paletteType = event.dataTransfer.getData('application/x-atlas-block-type') as BlockType;
+                        if ((BLOCK_TYPES as ReadonlyArray<string>).includes(paletteType) && paletteType !== 'section' && paletteType !== 'section_end') addBlockToSection(block.id, paletteType);
+                        else if (dragIdx !== null && blocks[dragIdx]) moveBlockIntoSection(blocks[dragIdx].id, block.id);
+                        setDragIdx(null); setDropIdx(null);
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                          <div><strong style={{ color: '#0f766e' }}>Contenido de esta sección</strong><small style={{ display: 'block', color: '#52706d' }}>{directSectionChildren.length} componente{directSectionChildren.length === 1 ? '' : 's'} · arrastra aquí o agrega desde la lista</small></div>
+                          <button type="button" style={es.sectionMoveBtn} onClick={() => closeSectionAtCurrentEnd(block.id)}>Cerrar sección</button>
+                        </div>
+                        <div style={{ display: 'grid', gap: '6px', marginBottom: '10px' }}>{directSectionChildren.length ? directSectionChildren.map(child => <div key={child.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '7px 9px', borderRadius: '8px', background: '#fff', border: '1px solid #ccfbf1', color: '#334155', fontSize: '.82em' }}><span>{getBlockMeta(child.block_type).label}</span><span style={{ color: '#0f766e' }}>Incluido</span></div>) : <div style={{ padding: '12px', border: '2px dashed #5eead4', borderRadius: '10px', textAlign: 'center', color: '#52706d' }}>La sección está vacía</div>}</div>
+                        <select defaultValue="" aria-label="Agregar componente a la sección" onChange={event => { const type = event.target.value as BlockType; if (type) addBlockToSection(block.id, type); event.currentTarget.value = ''; }} style={es.styleSelect}>
+                          <option value="">+ Agregar componente a la sección</option>
+                          {BLOCK_TYPES.filter(type => type !== 'section' && type !== 'section_end').map(type => <option key={type} value={type}>{getBlockMeta(type).label}</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    {block.block_type === 'columns_2' && !isCollapsed && (
+                      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(2, Math.min(4, Number(block.content.columns || 2)))}, minmax(0,1fr))`, gap: '10px', padding: '12px', background: '#f8fbff', borderBottom: '1px solid #dbeafe' }} className="column-container-editor-zones">
+                        {Array.from({ length: Math.max(2, Math.min(4, Number(block.content.columns || 2))) }, (_, columnIndex) => {
+                          const children = blocks.filter(child => child.content.layout_parent_id === block.id && Number(child.content.layout_column || 1) === columnIndex + 1);
+                          return <div key={columnIndex} style={{ minWidth: 0, padding: '10px', border: '2px dashed #93c5fd', borderRadius: '12px', background: '#fff' }} onDragOver={event => { event.preventDefault(); event.stopPropagation(); }} onDrop={event => {
+                            event.preventDefault(); event.stopPropagation();
+                            const paletteType = event.dataTransfer.getData('application/x-atlas-block-type') as BlockType;
+                            if ((BLOCK_TYPES as ReadonlyArray<string>).includes(paletteType) && paletteType !== 'columns_2' && paletteType !== 'section') addBlockToColumn(block.id, columnIndex + 1, paletteType);
+                            else if (dragIdx !== null) {
+                              const moved = blocks[dragIdx];
+                              if (moved && moved.id !== block.id && moved.block_type !== 'section' && moved.block_type !== 'columns_2') updateBlockContent(moved.id, { layout_parent_id: block.id, layout_column: String(columnIndex + 1) });
+                            }
+                            setDragIdx(null); setDropIdx(null);
+                          }}>
+                            <strong style={{ display: 'block', color: '#1d4ed8', marginBottom: '8px' }}>Columna {columnIndex + 1}</strong>
+                            <div style={{ display: 'grid', gap: '5px', marginBottom: '8px' }}>{children.length ? children.map(child => <span key={child.id} style={{ padding: '5px 7px', borderRadius: '7px', background: '#eff6ff', color: '#334155', fontSize: '.78em' }}>{getBlockMeta(child.block_type).label}</span>) : <small style={{ color: '#64748b' }}>Vacía</small>}</div>
+                            <select defaultValue="" aria-label={`Agregar componente a columna ${columnIndex + 1}`} onChange={event => { const type = event.target.value as BlockType; if (type) addBlockToColumn(block.id, columnIndex + 1, type); event.currentTarget.value = ''; }} style={es.styleSelect}>
+                              <option value="">+ Agregar componente</option>
+                              {BLOCK_TYPES.filter(type => type !== 'columns_2' && type !== 'section' && type !== 'section_end').map(type => <option key={type} value={type}>{getBlockMeta(type).label}</option>)}
+                            </select>
+                          </div>;
+                        })}
+                      </div>
+                    )}
+
+                    {columnParent && !isCollapsed && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: '#eff6ff', borderBottom: '1px solid #bfdbfe' }}>
+                        <label style={{ fontSize: '.82em', fontWeight: 700, color: '#1e3a8a' }}>Ubicación:</label>
+                        <select value={block.content.layout_column || '1'} onChange={event => updateBlockContent(block.id, { layout_column: event.target.value })} style={es.styleSelect}>
+                          {Array.from({ length: parentColumnCount }, (_, columnIndex) => <option key={columnIndex} value={String(columnIndex + 1)}>Columna {columnIndex + 1}</option>)}
+                        </select>
+                        <button type="button" style={es.selectionBtn} onClick={() => updateBlockContent(block.id, { layout_parent_id: '', layout_column: '' })}>Sacar de columnas</button>
+                      </div>
+                    )}
+
                     {/* Área de edición según tipo */}
-                    {!isCollapsed && (
+                    {!isCollapsed && block.block_type !== 'section_end' && (
                       <MemoBlockContentEditor
                         block={block}
                         styleClipboard={styleClipboard}
@@ -1804,11 +1982,14 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
                       />
                     )}
 
-                    {isCollapsed && (
+                    {!isCollapsed && block.block_type === 'section_end' && <div style={{ padding: '14px', textAlign: 'center', color: '#475569', fontWeight: 700, borderTop: '2px dashed #94a3b8' }}>Los componentes que siguen ya no pertenecen a la sección anterior.</div>}
+
+                    {isCollapsed && block.block_type !== 'section_end' && (
                       <div style={es.collapsedPreviewWrap}>
                         <ContentBlockRenderer blocks={[block]} />
                       </div>
                     )}
+                    {isCollapsed && block.block_type === 'section_end' && <div style={{ padding: '10px 14px', textAlign: 'center', color: '#64748b', borderTop: '2px dashed #94a3b8', fontSize: '.82em', fontWeight: 700 }}>Fin de la sección anterior</div>}
                   </div>
                   {isDropAfterLast && <div style={es.dropIndicator} />}
                 </React.Fragment>
@@ -1948,7 +2129,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
           <div className="visual-editor-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-block-title" onMouseDown={event => event.stopPropagation()}>
             <span className="visual-editor-dialog-icon" aria-hidden="true">!</span>
             <h3 id="delete-block-title">¿Eliminar este bloque?</h3>
-            <p>El bloque desaparecerá del borrador. Puedes recuperarlo inmediatamente con “Deshacer”.</p>
+            <p>{blocks.find(block => block.id === deleteTargetId)?.block_type === 'columns_2' ? `También se eliminarán los ${blocks.filter(block => block.content.layout_parent_id === deleteTargetId).length} componentes que contiene. Puedes recuperarlos inmediatamente con “Deshacer”.` : 'El bloque desaparecerá del borrador. Puedes recuperarlo inmediatamente con “Deshacer”.'}</p>
             <div className="visual-editor-dialog-actions">
               <button type="button" className="secondary" onClick={() => setDeleteTargetId(null)}>Cancelar</button>
               <button type="button" className="danger" onClick={confirmDeleteBlock}>Eliminar bloque</button>
@@ -2111,7 +2292,7 @@ const MemoBlockContentEditor = React.memo(({
 
       {block.block_type === 'section' && (
         <>
-          {experienceMode === 'advanced' && <div style={es.sectionTemplateRow}>
+          {false && experienceMode === 'advanced' && <div style={es.sectionTemplateRow}>
             <button
               type="button"
               style={es.selectionBtn}

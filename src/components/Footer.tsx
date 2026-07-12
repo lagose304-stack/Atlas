@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Facebook, Instagram, Mail, PenSquare } from 'lucide-react';
+import { AlertTriangle, Facebook, Instagram, Mail, PenSquare, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import LoginForm from './LoginForm';
 import FloatingVisitorsIndicator from './FloatingVisitorsIndicator';
@@ -78,7 +78,7 @@ const Footer: React.FC<FooterProps> = () => {
           </div>
           <div className="footer-about-body">
             <p style={s.text} className="footer-col-text footer-about-text">
-              Este recurso digital didáctico está diseñado para facilitar el aprendizaje de la histología, desarrollado por el Laboratorio de Histología de la UNAH.
+              Este sitio web está diseñado para facilitar el aprendizaje del laboratorio.
             </p>
             <div style={s.edicionRow} className="footer-about-actions">
               <button
@@ -217,9 +217,15 @@ const Footer: React.FC<FooterProps> = () => {
       <div style={s.divider} />
 
       {/* Copyright */}
-      <p style={s.copyright} className="footer-copyright">
-        © {currentYear} Atlas de Histología — UNAH. Todos los derechos reservados.
-      </p>
+      <div style={s.copyright} className="footer-copyright">
+        <span>© {currentYear} Atlas de Histología — UNAH. Todos los derechos reservados.</span>
+        <span style={s.creditDivider} aria-hidden="true">·</span>
+        <span style={s.creditBadge} className="footer-credit-badge">
+          <Sparkles size={13} strokeWidth={2.2} aria-hidden="true" />
+          <span>Diseñado y desarrollado por</span>
+          <strong style={s.creditName}>Elam Lagos</strong>
+        </span>
+      </div>
 
       {showLogin && <LoginForm onClose={() => setShowLogin(false)} />}
     </footer>
@@ -456,6 +462,36 @@ const s: { [key: string]: React.CSSProperties } = {
     textShadow: '0 1px 2px rgba(3, 10, 24, 0.45)',
     position: 'relative',
     zIndex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: '4px 7px',
+  },
+  creditDivider: {
+    color: '#8ecbff',
+    fontWeight: 800,
+  },
+  creditName: {
+    color: '#ffffff',
+    fontWeight: 800,
+    letterSpacing: '0.45px',
+    textShadow: '0 1px 8px rgba(120, 199, 255, 0.5)',
+  },
+  creditBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: '4px 6px',
+    padding: '4px 10px',
+    borderRadius: '999px',
+    color: '#dceeff',
+    background: 'linear-gradient(135deg, rgba(69, 143, 218, 0.42), rgba(25, 76, 142, 0.58))',
+    border: '1px solid rgba(178, 222, 255, 0.48)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,.18), 0 3px 12px rgba(2, 17, 41, .24)',
+    backdropFilter: 'blur(7px)',
+    transition: 'transform .2s ease, border-color .2s ease, box-shadow .2s ease',
   },
 };
 
