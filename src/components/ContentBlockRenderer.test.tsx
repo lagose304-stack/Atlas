@@ -11,6 +11,12 @@ vi.mock('embla-carousel-react', () => ({
   default: () => [vi.fn(), undefined],
 }));
 
+vi.mock('../services/supabase', () => ({
+  supabase: {
+    from: vi.fn(),
+  },
+}));
+
 const headingBlock: ContentBlock = {
   id: 'block-heading-1',
   entity_type: 'home_page',
