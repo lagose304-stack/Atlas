@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams, useNavigate } from 'react-router-dom';
-import { ZoomIn } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, ListChecks, XCircle, ZoomIn } from 'lucide-react';
 import BackButton from '../components/BackButton';
-import Footer from '../components/Footer';
-import Header from '../components/Header';
 import ImageViewerModal from '../components/ImageViewerModal';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { supabase } from '../services/supabase';
@@ -104,8 +102,12 @@ const EjecutarPrueba: React.FC = () => {
   const [referenceThumbNaturalSize, setReferenceThumbNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [answerError, setAnswerError] = useState('');
   const [showCompletion, setShowCompletion] = useState(false);
+  const [showReviewSummary, setShowReviewSummary] = useState(false);
   const [isGraded, setIsGraded] = useState(false);
+  const [reviewedQuestions, setReviewedQuestions] = useState<Record<string, boolean>>({});
+  const [gradingQuestionId, setGradingQuestionId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -162,6 +164,8 @@ const EjecutarPrueba: React.FC = () => {
 
       setCurrentQuestionIndex(0);
       setIsGraded(false);
+      setShowReviewSummary(false);
+      setReviewedQuestions({});
 
       setIsLoading(false);
     };
@@ -188,6 +192,44 @@ const EjecutarPrueba: React.FC = () => {
   const progressPercent = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
   const currentQuestion = questions[currentQuestionIndex] ?? null;
   const canGoPrev = currentQuestionIndex > 0;
+
+  const answerQuestion = async (questionId: string, optionId: string) => {
+    if (!pruebaId || reviewedQuestions[questionId] || gradingQuestionId) return;
+
+    const nextAnswers = { ...selectedAnswers, [questionId]: optionId };
+    setSelectedAnswers(nextAnswers);
+    setGradingQuestionId(questionId);
+    setAnswerError('');
+
+    const { data, error: gradeError } = await supabase.rpc('atlas_grade_test', {
+      p_prueba_id: pruebaId,
+      p_answers: nextAnswers,
+    });
+    const result = ((data as { results?: GradeResult[] } | null)?.results ?? [])
+      .find(item => item.question_id === questionId);
+
+    if (gradeError || !result) {
+      setSelectedAnswers(previous => {
+        const restored = { ...previous };
+        delete restored[questionId];
+        return restored;
+      });
+      setAnswerError('No se pudo comprobar esta respuesta. Intenta seleccionarla nuevamente.');
+      setGradingQuestionId(null);
+      return;
+    }
+
+    setQuestions(previous => previous.map(question => question.id === questionId ? {
+      ...question,
+      retroalimentacion: result.feedback ?? '',
+      options: question.options.map(option => ({
+        ...option,
+        isCorrect: option.id === result.correct_option_id,
+      })),
+    } : question));
+    setReviewedQuestions(previous => ({ ...previous, [questionId]: true }));
+    setGradingQuestionId(null);
+  };
 
   const gradeTest = async () => {
     if (!pruebaId || isGraded) {
@@ -225,12 +267,13 @@ const EjecutarPrueba: React.FC = () => {
 
   return (
     <div style={s.page}>
-      <Header disableInteractions />
+      <main style={s.main} className="exam-runner-main">
+        <div style={s.examTopbar}>
+          <BackButton onClick={() => { window.location.href = backTarget; }} />
+          <span style={s.examIdentity}><ClipboardCheck size={18} /> Atlas · Evaluación</span>
+        </div>
 
-      <main style={s.main} className="edicion-main">
-        <BackButton onClick={() => { window.location.href = backTarget; }} />
-
-        <section style={s.hero} className="edicion-card">
+        <section style={s.hero}>
           <div style={s.heroText}>
             <p style={s.kicker}>Ejecutor</p>
             <h1 style={s.title}>{prueba?.nombre ?? 'Prueba'}</h1>
@@ -253,7 +296,7 @@ const EjecutarPrueba: React.FC = () => {
           </section>
         ) : (
           <>
-            <section style={s.summaryCard} className="edicion-card">
+            <section className="exam-summary" style={s.summaryCard}>
               <div style={s.summaryItem}>
                 <span style={s.summaryLabel}>Scope</span>
                 <strong style={s.summaryValue}>{prueba?.scope}</strong>
@@ -278,9 +321,62 @@ const EjecutarPrueba: React.FC = () => {
               </div>
             </section>
 
-            <section style={s.questionsWrap}>
+            {showReviewSummary && (
+              <section style={s.reviewSection}>
+                <header style={s.reviewHeader}>
+                  <div>
+                    <p style={s.reviewKicker}><ListChecks size={16} /> Revisión del intento</p>
+                    <h2 style={s.reviewTitle}>Resumen de tus respuestas</h2>
+                    <p style={s.reviewSubtitle}>Compara lo que elegiste con la respuesta correcta y repasa la retroalimentación de cada pregunta.</p>
+                  </div>
+                  <div style={s.reviewScore}>{correctCount}/{totalQuestions}<small style={s.reviewScoreLabel}>respuestas correctas</small></div>
+                </header>
+
+                <div style={s.reviewList}>
+                  {questions.map((question, index) => {
+                    const selectedId = selectedAnswers[question.id];
+                    const selectedOption = question.options.find(option => option.id === selectedId);
+                    const correctOption = question.options.find(option => option.isCorrect);
+                    const wasCorrect = Boolean(selectedOption?.isCorrect);
+                    return (
+                      <article className="exam-review-item" key={question.id} style={s.reviewItem}>
+                        <div style={wasCorrect ? s.reviewStatusCorrect : s.reviewStatusWrong}>
+                          {wasCorrect ? <CheckCircle2 size={20} /> : <XCircle size={20} />}
+                        </div>
+                        <div style={s.reviewContent}>
+                          <span style={s.reviewNumber}>Pregunta {index + 1}</span>
+                          <h3 style={s.reviewQuestion}>{question.title}</h3>
+                          <div style={s.reviewAnswers}>
+                            <p><strong>Tu respuesta:</strong> {selectedOption?.text ?? 'Sin responder'}</p>
+                            {!wasCorrect && <p><strong>Respuesta correcta:</strong> {correctOption?.text ?? 'No definida'}</p>}
+                          </div>
+                          {question.retroalimentacion && <p style={s.reviewFeedback}>{question.retroalimentacion}</p>}
+                        </div>
+                        <button
+                          type="button"
+                          style={s.reviewQuestionButton}
+                          onClick={() => {
+                            setCurrentQuestionIndex(index);
+                            setShowReviewSummary(false);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                        >
+                          Ver pregunta
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+
+                <div style={s.reviewActions}>
+                  <button type="button" style={s.primaryFinishButton} onClick={() => navigate('/evaluaciones')}>Finalizar y volver a Evaluaciones</button>
+                </div>
+              </section>
+            )}
+
+            <section style={{ ...s.questionsWrap, ...(showReviewSummary ? { display: 'none' } : {}) }}>
               {questions.length === 0 ? (
-                <div style={s.card} className="edicion-card">
+                <div style={s.card}>
                   <div style={s.emptyState}>
                     <p style={s.emptyTitle}>La prueba no tiene preguntas todavía.</p>
                   </div>
@@ -290,11 +386,16 @@ const EjecutarPrueba: React.FC = () => {
                   const selectedId = selectedAnswers[currentQuestion.id];
                   const selectedOption = currentQuestion.options.find(option => option.id === selectedId);
                   const correctOption = currentQuestion.options.find(option => option.isCorrect) ?? null;
-                  const isAnswered = Boolean(selectedId);
                   const isCorrect = Boolean(selectedOption?.isCorrect);
+                  const isQuestionGraded = Boolean(reviewedQuestions[currentQuestion.id]);
+                  const isCheckingAnswer = gradingQuestionId === currentQuestion.id;
 
                   return (
-                    <article key={currentQuestion.id} style={s.questionCard} className="edicion-card">
+                    <article
+                      key={currentQuestion.id}
+                      style={s.questionCard}
+                      className={isQuestionGraded ? (isCorrect ? 'exam-result-correct' : 'exam-result-wrong') : undefined}
+                    >
                       <div style={s.questionHeader}>
                         <div style={s.questionHeaderLeft}>
                           <span style={s.questionIndex}>{currentQuestionIndex + 1}</span>
@@ -302,12 +403,12 @@ const EjecutarPrueba: React.FC = () => {
                             <h2 style={s.questionTitle}>{currentQuestion.title || 'Pregunta sin título'}</h2>
                           </div>
                         </div>
-                        <span style={isAnswered && isGraded ? (isCorrect ? s.correctPill : s.wrongPill) : s.pendingPill}>
-                          {isAnswered ? (isGraded ? (isCorrect ? 'Correcta' : 'Incorrecta') : 'Respondida') : 'Sin responder'}
+                        <span style={isQuestionGraded ? (isCorrect ? s.correctPill : s.wrongPill) : s.pendingPill}>
+                          {isCheckingAnswer ? 'Comprobando…' : isQuestionGraded ? (isCorrect ? 'Correcta' : 'Incorrecta') : 'Sin responder'}
                         </span>
                       </div>
 
-                      <div style={s.questionBody}>
+                      <div className="exam-question-body" style={s.questionBody}>
                         <div style={s.referencePanel}>
                           {currentQuestion.referencePhotoUrl ? (
                             <button
@@ -377,20 +478,22 @@ const EjecutarPrueba: React.FC = () => {
 
                         <div style={s.answerPanel}>
                           <p style={s.answerHint}>Selecciona una sola respuesta.</p>
+                          {answerError && <div style={s.answerError}>{answerError}</div>}
                           <div style={s.optionsList}>
                             {currentQuestion.options.map((option) => {
                               const isSelected = option.id === selectedId;
                               const optionIsCorrect = option.isCorrect;
                               const buttonStyle = isSelected
-                                ? (isGraded ? (optionIsCorrect ? s.optionCorrect : s.optionWrong) : s.optionCorrectGhost)
-                                : (isGraded && optionIsCorrect ? s.optionCorrectGhost : s.optionButton);
+                                ? (isQuestionGraded ? (optionIsCorrect ? s.optionCorrect : s.optionWrong) : s.optionSelected)
+                                : (isQuestionGraded && optionIsCorrect ? s.optionCorrectGhost : s.optionButton);
 
                               return (
                                 <button
                                   key={option.id}
                                   type="button"
                                   style={buttonStyle}
-                                  onClick={() => !isGraded && setSelectedAnswers(prev => ({ ...prev, [currentQuestion.id]: option.id }))}
+                                  onClick={() => void answerQuestion(currentQuestion.id, option.id)}
+                                  disabled={isQuestionGraded || Boolean(gradingQuestionId)}
                                 >
                                   <span style={s.optionLetter}>{String.fromCharCode(65 + option.sortOrder)}</span>
                                   <span style={s.optionText}>{option.text}</span>
@@ -399,15 +502,16 @@ const EjecutarPrueba: React.FC = () => {
                             })}
                           </div>
 
-                          {isAnswered && isGraded && (
-                            <div style={isCorrect ? s.feedbackSuccess : s.feedbackError}>
+                          {isQuestionGraded && (
+                            <div className="exam-feedback-result" style={isCorrect ? s.feedbackSuccess : s.feedbackError}>
+                              <span className="exam-feedback-icon"><CheckCircle2 size={19} aria-hidden="true" /></span>
                               {isCorrect
                                 ? 'Seleccionaste la respuesta correcta.'
                                 : `Incorrecta. La correcta es: ${correctOption?.text ?? 'No definida'}`}
                             </div>
                           )}
 
-                          {isAnswered && isGraded && currentQuestion.retroalimentacion.trim().length > 0 && (
+                          {isQuestionGraded && currentQuestion.retroalimentacion.trim().length > 0 && (
                             <div style={s.feedbackNoteBox}>
                               <span style={s.feedbackNoteLabel}>Retroalimentación</span>
                               <p style={s.feedbackNoteText}>{currentQuestion.retroalimentacion}</p>
@@ -415,6 +519,11 @@ const EjecutarPrueba: React.FC = () => {
                           )}
 
                           <div style={s.navigationRow}>
+                            {isGraded && (
+                              <button type="button" style={s.navButton} onClick={() => setShowReviewSummary(true)}>
+                                Volver al resumen
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => setCurrentQuestionIndex(index => Math.max(0, index - 1))}
@@ -436,10 +545,10 @@ const EjecutarPrueba: React.FC = () => {
                                   void gradeTest();
                                 }
                               }}
-                              disabled={questions.length === 0}
-                              style={s.navButtonPrimary}
+                              disabled={questions.length === 0 || !isQuestionGraded}
+                              style={isQuestionGraded ? s.navButtonPrimary : s.navButtonDisabled}
                             >
-                              Siguiente
+                              {currentQuestionIndex < questions.length - 1 ? 'Siguiente pregunta' : 'Finalizar examen'}
                             </button>
                           </div>
                         </div>
@@ -458,7 +567,7 @@ const EjecutarPrueba: React.FC = () => {
                   <p style={s.completionScore}>Tu puntuación: <strong>{correctCount}</strong> de <strong>{totalQuestions}</strong> ({totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0}%)</p>
                   <div style={s.completionActions}>
                     <button type="button" style={s.primaryFinishButton} onClick={() => navigate('/evaluaciones')}>Finalizar y volver a Evaluaciones</button>
-                    <button type="button" style={s.secondaryFinishButton} onClick={() => setShowCompletion(false)}>Revisar respuestas</button>
+                    <button type="button" style={s.secondaryFinishButton} onClick={() => { setShowCompletion(false); setShowReviewSummary(true); }}>Ver revisión detallada</button>
                   </div>
                 </div>
               </section>
@@ -484,7 +593,6 @@ const EjecutarPrueba: React.FC = () => {
         )}
       </main>
 
-      <Footer />
     </div>
   );
 };
@@ -501,28 +609,34 @@ const s: Record<string, React.CSSProperties> = {
   main: {
     flex: 1,
     width: '100%',
-    maxWidth: '1280px',
+    maxWidth: '1160px',
     margin: '0 auto',
     boxSizing: 'border-box',
-    padding: '0 20px 44px',
+    padding: '18px 20px 48px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '24px',
+    gap: '18px',
+  },
+  examTopbar: {
+    minHeight: '48px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px',
+  },
+  examIdentity: {
+    display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#315b82', fontWeight: 850,
+    fontSize: '.82rem', letterSpacing: '.03em',
   },
   hero: {
     display: 'block',
     padding: '0',
   },
   heroText: {
-    borderRadius: '28px',
-    padding: '28px 30px',
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(239,246,255,0.96) 45%, rgba(255,255,255,0.98) 100%)',
-    border: '1px solid rgba(191,219,254,0.9)',
-    boxShadow: '0 20px 50px rgba(15,23,42,0.10)',
+    borderRadius: '22px',
+    padding: '24px 28px',
+    background: 'linear-gradient(135deg, #173f72 0%, #225d8f 100%)',
+    boxShadow: '0 18px 40px rgba(18,59,102,.2)',
   },
   kicker: {
     margin: 0,
-    color: '#7c3aed',
+    color: '#bae6fd',
     fontWeight: 900,
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
@@ -533,11 +647,12 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 'clamp(1.8rem, 4vw, 3rem)',
     lineHeight: 1.05,
     letterSpacing: '-0.04em',
+    color: '#fff',
   },
   subtitle: {
     margin: 0,
     maxWidth: '72ch',
-    color: '#475569',
+    color: 'rgba(255,255,255,.82)',
     lineHeight: 1.65,
     fontSize: '0.98rem',
   },
@@ -601,6 +716,43 @@ const s: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: '18px',
   },
+  reviewSection: {
+    borderRadius: '22px', border: '1px solid #cbddeb', background: 'rgba(255,255,255,.96)',
+    boxShadow: '0 18px 50px rgba(15,23,42,.09)', padding: 'clamp(18px, 3vw, 30px)',
+    display: 'flex', flexDirection: 'column', gap: '22px',
+  },
+  reviewHeader: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap',
+    paddingBottom: '20px', borderBottom: '1px solid #dce7ef',
+  },
+  reviewKicker: {
+    margin: 0, display: 'flex', alignItems: 'center', gap: '7px', color: '#237eae', fontSize: '.76rem',
+    fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase',
+  },
+  reviewTitle: { margin: '7px 0 5px', color: '#123b66', fontSize: 'clamp(1.35rem, 3vw, 2rem)' },
+  reviewSubtitle: { margin: 0, color: '#64748b', lineHeight: 1.55, maxWidth: '68ch', fontSize: '.9rem' },
+  reviewScore: {
+    minWidth: '130px', borderRadius: '18px', padding: '14px 18px', background: '#e8f6ee', color: '#166534',
+    fontSize: '1.75rem', lineHeight: 1, fontWeight: 950, textAlign: 'center',
+  },
+  reviewScoreLabel: { display: 'block', marginTop: '6px', fontSize: '.67rem', lineHeight: 1.2, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.05em' },
+  reviewList: { display: 'flex', flexDirection: 'column', gap: '12px' },
+  reviewItem: {
+    display: 'grid', gridTemplateColumns: '38px minmax(0,1fr) auto', gap: '14px', alignItems: 'start',
+    padding: '16px', borderRadius: '17px', border: '1px solid #dce7ef', background: '#fbfdff',
+  },
+  reviewStatusCorrect: { width: '36px', height: '36px', borderRadius: '50%', display: 'grid', placeItems: 'center', color: '#15803d', background: '#dcfce7' },
+  reviewStatusWrong: { width: '36px', height: '36px', borderRadius: '50%', display: 'grid', placeItems: 'center', color: '#b91c1c', background: '#fee2e2' },
+  reviewContent: { minWidth: 0 },
+  reviewNumber: { color: '#64748b', fontSize: '.72rem', fontWeight: 850, textTransform: 'uppercase', letterSpacing: '.06em' },
+  reviewQuestion: { margin: '4px 0 9px', color: '#0f172a', fontSize: '1rem', lineHeight: 1.4 },
+  reviewAnswers: { color: '#475569', fontSize: '.85rem', lineHeight: 1.5 },
+  reviewFeedback: { margin: '9px 0 0', padding: '10px 12px', borderRadius: '11px', background: '#eef6fb', color: '#315b82', fontSize: '.84rem', lineHeight: 1.5 },
+  reviewQuestionButton: {
+    border: '1px solid #bfd7e8', borderRadius: '11px', background: '#fff', color: '#176a9d', padding: '9px 11px',
+    fontFamily: 'inherit', fontWeight: 850, cursor: 'pointer', whiteSpace: 'nowrap',
+  },
+  reviewActions: { display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' },
   card: {
     borderRadius: '28px',
     border: '1px solid rgba(226,232,240,0.95)',
@@ -843,6 +995,14 @@ const s: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
+  answerError: {
+    borderRadius: '12px', border: '1px solid #fecaca', background: '#fff1f2', color: '#9f1239',
+    padding: '10px 12px', fontSize: '.84rem', fontWeight: 750,
+  },
+  optionSelected: {
+    borderRadius: '16px', border: '1.5px solid #3b82f6', background: '#eff6ff', padding: '14px 16px',
+    display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'left', fontFamily: 'inherit',
+  },
   optionWrong: {
     borderRadius: '16px',
     border: '1.5px solid #fca5a5',
@@ -880,6 +1040,7 @@ const s: Record<string, React.CSSProperties> = {
     padding: '14px 16px',
     fontWeight: 800,
     lineHeight: 1.6,
+    display: 'flex', alignItems: 'center', gap: '9px',
   },
   feedbackError: {
     borderRadius: '16px',
@@ -889,6 +1050,7 @@ const s: Record<string, React.CSSProperties> = {
     padding: '14px 16px',
     fontWeight: 800,
     lineHeight: 1.6,
+    display: 'flex', alignItems: 'center', gap: '9px',
   },
   feedbackNoteBox: {
     borderRadius: '16px',

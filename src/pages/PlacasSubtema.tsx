@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { MousePointerClick } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, Images, MousePointerClick } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
@@ -257,9 +257,10 @@ const PlacasSubtema: React.FC = () => {
     const isHovered = hoveredId === placa.id;
 
     return (
-      <div
+      <button
+        type="button"
         key={`${placa.id}-${keySuffix}`}
-        className="placa-thumb-wrap"
+        className="placa-thumb-wrap placa-gallery-card"
         style={{
           ...styles.thumbWrap,
           boxShadow: isHovered
@@ -271,6 +272,7 @@ const PlacasSubtema: React.FC = () => {
         onMouseEnter={() => setHoveredId(placa.id)}
         onMouseLeave={() => setHoveredId(null)}
         title="Ver en grande"
+        aria-label={`Abrir placa${placa.aumento ? ` con aumento ${placa.aumento}` : ''}`}
       >
         <div style={styles.thumbSquare}>
           <img
@@ -297,10 +299,10 @@ const PlacasSubtema: React.FC = () => {
             ...styles.thumbOverlay,
             opacity: hoveredId === placa.id ? 1 : 0,
           }}>
-            🔍
+            <span style={styles.thumbOverlayContent}><Eye size={21} /><span>Abrir</span></span>
           </div>
         </div>
-      </div>
+      </button>
     );
   };
 
@@ -313,8 +315,9 @@ const PlacasSubtema: React.FC = () => {
 
         <section style={styles.section}>
           <div style={styles.sectionHeader}>
-            <div style={styles.accentBar} />
+            <div style={styles.galleryIcon}><Images size={25} /></div>
             <div style={styles.sectionTitleWrap}>
+              {temaNombre && <span style={styles.breadcrumb}>{temaNombre} · Galería histológica</span>}
               <h1 style={styles.title}>
                 {loading ? 'Cargando...' : subtema?.nombre ?? 'Placas'}
               </h1>
@@ -381,7 +384,7 @@ const PlacasSubtema: React.FC = () => {
                       navAnterior.onClick();
                     }}
                   >
-                    {navAnterior.label}
+                    <ArrowLeft size={16} /> {navAnterior.label.replace('← ', '')}
                   </button>
                 )}
 
@@ -393,7 +396,7 @@ const PlacasSubtema: React.FC = () => {
                       navSiguiente.onClick();
                     }}
                   >
-                    {navSiguiente.label}
+                    {navSiguiente.label.replace(' →', '')} <ArrowRight size={16} />
                   </button>
                 )}
               </div>
@@ -430,7 +433,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex', flexDirection: 'column',
     fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     color: '#0f172a',
-    backgroundColor: 'transparent',
+    background: 'radial-gradient(circle at 8% 10%, rgba(186,230,253,.4), transparent 27%), linear-gradient(180deg, #f8fcff 0%, #eef6fc 55%, #f8fbfe 100%)',
   },
   main: {
     flex: 1,
@@ -439,6 +442,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: '0 auto',
     boxSizing: 'border-box',
     display: 'flex', flexDirection: 'column',
+    padding: 'clamp(18px, 3vw, 34px) 14px 48px',
+    gap: '16px',
   },
   backButton: {
     alignSelf: 'flex-start',
@@ -459,10 +464,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
   },
   section: {
-    background: 'transparent',
-    padding: '0',
-    boxShadow: 'none',
-    border: 'none',
+    background: 'rgba(255,255,255,.74)',
+    padding: 'clamp(18px, 3vw, 30px)',
+    boxShadow: '0 18px 46px rgba(23,65,101,.08)',
+    border: '1px solid rgba(195,216,232,.88)',
+    borderRadius: '26px',
   },
   sectionHeader: {
     display: 'flex',
@@ -470,7 +476,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '16px',
     marginBottom: '28px',
     paddingBottom: '16px',
-    borderBottom: '2px solid #e0f2fe',
+    borderBottom: '1px solid #dce7ef',
+  },
+  galleryIcon: {
+    width: '50px', height: '50px', borderRadius: '16px', display: 'grid', placeItems: 'center', flexShrink: 0,
+    color: '#fff', background: 'linear-gradient(145deg, #2386bb, #225d8f)', boxShadow: '0 10px 22px rgba(34,93,143,.22)',
   },
   accentBar: {
     width: '5px',
@@ -485,11 +495,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '12px',
     flexWrap: 'wrap',
   },
+  breadcrumb: { width: '100%', color: '#64829b', fontSize: '.72rem', fontWeight: 850, letterSpacing: '.07em', textTransform: 'uppercase' },
   title: {
     margin: 0,
     fontSize: 'clamp(1.3em, 3vw, 2em)',
     fontWeight: 800,
-    color: '#0f172a',
+    color: '#123b66',
     letterSpacing: '-0.02em',
   },
   countBadge: {
@@ -538,12 +549,16 @@ const styles: { [key: string]: React.CSSProperties } = {
   gridSectionsWrap: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '14px',
+    gap: '18px',
   },
   gridSection: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '12px',
+    padding: 'clamp(12px, 2vw, 18px)',
+    borderRadius: '19px',
+    border: '1px solid #dce7ef',
+    background: 'rgba(248,252,255,.82)',
   },
   gridSectionHeader: {
     display: 'flex',
@@ -555,7 +570,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   gridSectionTitle: {
     margin: 0,
-    color: '#334155',
+    color: '#315b82',
     fontSize: '0.95em',
     fontWeight: 700,
     letterSpacing: '0.01em',
@@ -580,6 +595,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: '1.5px solid #dbeafe',
     boxShadow: '0 6px 14px rgba(56,189,248,0.16)',
     outline: 'none',
+    padding: 0,
     transition: 'box-shadow 0.28s ease, border-color 0.28s ease',
   },
   thumbSquare: {
@@ -604,9 +620,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '2em',
     transition: 'opacity 0.2s ease',
     backdropFilter: 'blur(2.5px)',
+  },
+  thumbOverlayContent: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 10px', borderRadius: '999px',
+    background: 'rgba(15,59,97,.84)', color: '#fff', fontSize: '.72rem', fontWeight: 850,
   },
   thumbBadgesRow: {
     position: 'absolute',
@@ -682,6 +701,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     textAlign: 'center',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
   },
 };
 

@@ -4,6 +4,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { supabase } from '../services/supabase';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { ArrowRight, BookOpenCheck, CalendarDays, ClipboardCheck, Sparkles } from 'lucide-react';
 
 interface PruebaPublica {
   id: string;
@@ -36,7 +37,6 @@ const TestCard: React.FC<{
   badge: string;
   badges?: string[];
 }> = ({ prueba, badge, badges = [] }) => {
-  const [hovered, setHovered] = React.useState(false);
   const [logoFailed, setLogoFailed] = React.useState(false);
   const logoSrc = prueba.image_url ? getCloudinaryImageUrl(prueba.image_url, 'cardWide') : '';
   const logoSrcSet = prueba.image_url
@@ -44,34 +44,29 @@ const TestCard: React.FC<{
     : undefined;
 
   const baseStyle: React.CSSProperties = {
-    borderRadius: '12px',
+    borderRadius: '18px',
     background: '#ffffff',
-    boxShadow: hovered ? '0 18px 40px rgba(23,50,82,0.14)' : '0 8px 20px rgba(23,50,82,0.08)',
-    cursor: 'pointer',
-    transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
-    border: hovered ? '1px solid rgba(97,143,202,0.36)' : '1px solid rgba(199,215,232,0.92)',
-    transform: hovered ? 'translateY(-6px)' : 'translateY(0)',
-    display: 'flex',
-    flexDirection: 'column',
+    boxShadow: '0 7px 22px rgba(23,61,94,0.07)',
+    border: '1px solid rgba(196,215,230,0.85)',
+    display: 'grid',
+    gridTemplateColumns: '132px minmax(0, 1fr)',
     padding: '0',
-    gap: '8px',
-    minHeight: '160px',
+    minHeight: '190px',
     overflow: 'hidden',
   };
 
   return (
     <article
+      className="evaluacion-test-card"
       style={baseStyle}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       <div
+        className="evaluacion-test-image"
         style={{
-          height: '96px',
+          height: '100%',
           width: '100%',
           overflow: 'hidden',
-          borderBottom: '1px solid rgba(201,217,233,0.92)',
-          background: '#e8f1fa',
+          background: 'linear-gradient(145deg, #e1f2fc, #cfe5f5)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -90,14 +85,14 @@ const TestCard: React.FC<{
             onError={() => setLogoFailed(true)}
           />
         ) : (
-          <span style={{ fontSize: '1em', color: '#1e3a5f', padding: '6px 10px' }}>{prueba.nombre}</span>
+          <span style={s.imageFallback}><BookOpenCheck size={28} aria-hidden="true" /><strong>{prueba.nombre}</strong></span>
         )}
       </div>
 
-      <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="evaluacion-test-body" style={{ padding: '17px 18px', display: 'flex', flexDirection: 'column', gap: 9, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={s.badge}>{badge}</span>
-          <span style={s.meta}>{new Date(prueba.created_at).toLocaleDateString('es-MX')}</span>
+          <span style={s.meta}><CalendarDays size={13} aria-hidden="true" />{new Date(prueba.created_at).toLocaleDateString('es-MX')}</span>
         </div>
 
         <h4 style={s.cardTitle}>{prueba.nombre}</h4>
@@ -107,7 +102,7 @@ const TestCard: React.FC<{
           {badges.map((b) => (
             <span key={b} style={s.scopeTag}>{b}</span>
           ))}
-          <Link to={`/evaluaciones/ejecutar/${prueba.id}`} state={{ from: '/evaluaciones' }} style={s.startButton}>Iniciar prueba</Link>
+          <Link to={`/evaluaciones/ejecutar/${prueba.id}`} state={{ from: '/evaluaciones' }} style={s.startButton}>Iniciar prueba <ArrowRight size={15} aria-hidden="true" /></Link>
         </div>
       </div>
     </article>
@@ -118,6 +113,7 @@ const Evaluaciones: React.FC = () => {
   const [pruebas, setPruebas] = React.useState<PruebaPublica[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState('');
+  const [selectedParcial, setSelectedParcial] = React.useState<ParcialSection['key']>('primer');
 
   React.useEffect(() => {
     const loadPublicTests = async () => {
@@ -161,31 +157,67 @@ const Evaluaciones: React.FC = () => {
     (section) => section.parcialTests.length || section.temaTests.length || section.subtemaTests.length,
   );
 
+  const availableSections = React.useMemo(
+    () => parcialSections.filter((section) => section.parcialTests.length || section.temaTests.length || section.subtemaTests.length),
+    [parcialSections],
+  );
+
+  React.useEffect(() => {
+    if (availableSections.length > 0 && !availableSections.some((section) => section.key === selectedParcial)) {
+      setSelectedParcial(availableSections[0].key);
+    }
+  }, [availableSections, selectedParcial]);
+
   return (
     <div style={s.page}>
       <Header />
       <main style={s.main}>
-        <section style={s.card}>
-          <p style={s.kicker}>Zona de reto académico</p>
-          <h1 style={s.title}>Esta sección es especial para poner a prueba tus conocimientos</h1>
-          <p style={s.text}>
-            Encontrarás las evaluaciones publicadas organizadas por parcial. En cada parcial verás primero
-            las pruebas generales, luego las de tema y al final las de subtema.
-          </p>
+        <section className="evaluaciones-hero" style={s.hero}>
+          <div style={s.heroGlow} aria-hidden="true" />
+          <div style={s.heroIcon}><ClipboardCheck size={30} strokeWidth={2} aria-hidden="true" /></div>
+          <div style={s.heroCopy}>
+            <p style={s.kicker}><Sparkles size={14} aria-hidden="true" /> Zona de reto académico</p>
+            <h1 style={s.title}>Pon a prueba lo que has aprendido</h1>
+          </div>
+          <div className="evaluaciones-hero-stat" style={s.heroStat}>
+            <strong>{pruebas.length}</strong>
+            <span>{pruebas.length === 1 ? 'evaluación disponible' : 'evaluaciones disponibles'}</span>
+          </div>
+        </section>
 
+        <section style={s.card}>
           {isLoading ? (
-            <div style={s.statusBox}>Cargando evaluaciones...</div>
+            <div style={s.statusBox}><span className="route-loading-spinner" /> <div><strong>Preparando evaluaciones</strong><span>Estamos organizando el contenido disponible.</span></div></div>
           ) : error ? (
-            <div style={s.statusBox}>{error}</div>
+            <div style={{ ...s.statusBox, ...s.errorBox }}><strong>No pudimos cargar las evaluaciones</strong><span>{error}</span></div>
           ) : !hasAnyPublishedTest ? (
-            <div style={s.statusBox}>Aún no hay evaluaciones publicadas.</div>
+            <div style={s.statusBox}><BookOpenCheck size={28} aria-hidden="true" /><div><strong>Aún no hay evaluaciones publicadas</strong><span>Cuando haya contenido disponible aparecerá organizado en esta página.</span></div></div>
           ) : (
-            <div style={s.parcialSections}>
-              {parcialSections.map((section) => {
+            <>
+              <div className="evaluaciones-overview-grid" style={s.overviewGrid}>
+                {availableSections.map((section, index) => {
+                  const count = section.parcialTests.length + section.temaTests.length + section.subtemaTests.length;
+                  const isActive = section.key === selectedParcial;
+                  return <button
+                    key={section.key}
+                    type="button"
+                    className={`evaluaciones-filter${isActive ? ' is-active' : ''}`}
+                    aria-pressed={isActive}
+                    onClick={() => setSelectedParcial(section.key)}
+                    style={s.overviewCard}
+                  >
+                    <span style={s.overviewNumber}>{index + 1}</span>
+                    <span><strong style={s.overviewTitle}>{section.title}</strong><small style={s.overviewMeta}>{count} {count === 1 ? 'prueba' : 'pruebas'}</small></span>
+                    <ArrowRight size={17} aria-hidden="true" />
+                  </button>;
+                })}
+              </div>
+              <div style={s.parcialSections}>
+              {availableSections.filter((section) => section.key === selectedParcial).map((section) => {
                 const hasTests = section.parcialTests.length || section.temaTests.length || section.subtemaTests.length;
 
                 return (
-                  <section key={section.key} style={s.parcialBlock}>
+                  <section className="evaluaciones-parcial" key={section.key} id={`evaluaciones-${section.key}`} style={s.parcialBlock}>
                     <header style={s.parcialHeader}>
                       <h2 style={s.parcialTitle}>{section.title}</h2>
                       <span style={s.parcialCount}>
@@ -197,50 +229,39 @@ const Evaluaciones: React.FC = () => {
                       <div style={s.innerEmpty}>Sin pruebas publicadas en este parcial.</div>
                     ) : (
                       <>
-                        <div style={s.scopeBlock}>
+                        {section.parcialTests.length > 0 && <div className="evaluaciones-scope" style={s.scopeBlock}>
                           <h3 style={s.scopeTitle}>Pruebas por parcial</h3>
-                          {section.parcialTests.length === 0 ? (
-                            <div style={s.innerEmpty}>No hay pruebas de parcial publicadas.</div>
-                          ) : (
-                              <div className="evaluaciones-grid" style={s.grid}>
+                          <div className="evaluaciones-grid" style={s.grid}>
                               {section.parcialTests.map((prueba) => (
                                 <TestCard key={prueba.id} prueba={prueba} badge="Parcial" />
                               ))}
                             </div>
-                          )}
-                        </div>
+                        </div>}
 
-                        <div style={s.scopeBlock}>
+                        {section.temaTests.length > 0 && <div className="evaluaciones-scope" style={s.scopeBlock}>
                           <h3 style={s.scopeTitle}>Pruebas por tema</h3>
-                          {section.temaTests.length === 0 ? (
-                            <div style={s.innerEmpty}>No hay pruebas por tema publicadas.</div>
-                          ) : (
-                            <div className="evaluaciones-grid" style={s.grid}>
+                          <div className="evaluaciones-grid" style={s.grid}>
                               {section.temaTests.map((prueba) => (
                                 <TestCard key={prueba.id} prueba={prueba} badge="Tema" badges={[prueba.tema?.nombre ?? 'Tema sin identificar']} />
                               ))}
                             </div>
-                          )}
-                        </div>
+                        </div>}
 
-                        <div style={s.scopeBlock}>
+                        {section.subtemaTests.length > 0 && <div className="evaluaciones-scope" style={s.scopeBlock}>
                           <h3 style={s.scopeTitle}>Pruebas por subtema</h3>
-                          {section.subtemaTests.length === 0 ? (
-                            <div style={s.innerEmpty}>No hay pruebas por subtema publicadas.</div>
-                          ) : (
-                            <div className="evaluaciones-grid" style={s.grid}>
+                          <div className="evaluaciones-grid" style={s.grid}>
                               {section.subtemaTests.map((prueba) => (
                                 <TestCard key={prueba.id} prueba={prueba} badge="Subtema" badges={[prueba.tema?.nombre ?? 'Tema sin identificar', prueba.subtema?.nombre ?? 'Subtema sin identificar']} />
                               ))}
                             </div>
-                          )}
-                        </div>
+                        </div>}
                       </>
                     )}
                   </section>
                 );
               })}
-            </div>
+              </div>
+            </>
           )}
         </section>
       </main>
@@ -254,65 +275,149 @@ const s: { [key: string]: React.CSSProperties } = {
     minHeight: '100vh',
     display: 'flex',
     flexDirection: 'column',
-    background: 'linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%)',
+    background: 'radial-gradient(circle at 8% 8%, rgba(186,230,253,.55), transparent 28%), radial-gradient(circle at 92% 18%, rgba(219,234,254,.72), transparent 25%), linear-gradient(180deg, #f7fbff 0%, #edf5fc 52%, #f8fbff 100%)',
+    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
   },
   main: {
     width: '100%',
-    maxWidth: '1180px',
+    maxWidth: '1240px',
     margin: '0 auto',
-    padding: '32px 16px 56px',
+    padding: 'clamp(20px, 4vw, 42px) 16px 58px',
     boxSizing: 'border-box',
     flex: 1,
   },
-  card: {
+  hero: {
     width: '100%',
-    borderRadius: '28px',
-    border: '1px solid #dbeafe',
-    background: 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)',
-    boxShadow: '0 18px 40px rgba(15,23,42,0.08)',
+    boxSizing: 'border-box',
+    borderRadius: '30px',
+    border: '1px solid rgba(157,210,245,.75)',
+    background: 'linear-gradient(125deg, rgba(255,255,255,.98), rgba(231,246,255,.96) 52%, rgba(218,238,255,.94))',
+    boxShadow: '0 24px 58px rgba(20,72,118,.13)',
+    padding: 'clamp(24px, 4vw, 42px)',
+    display: 'grid',
+    gridTemplateColumns: 'auto minmax(0,1fr) auto',
+    alignItems: 'center',
+    gap: 'clamp(18px, 3vw, 30px)',
+    position: 'relative',
+    overflow: 'hidden',
+    marginBottom: '22px',
+  },
+  heroGlow: {
+    position: 'absolute',
+    width: '230px',
+    height: '230px',
+    borderRadius: '50%',
+    right: '-90px',
+    top: '-125px',
+    background: 'radial-gradient(circle, rgba(56,189,248,.22), transparent 68%)',
+    pointerEvents: 'none',
+  },
+  heroIcon: {
+    width: '66px',
+    height: '66px',
+    borderRadius: '21px',
+    display: 'grid',
+    placeItems: 'center',
+    color: '#fff',
+    background: 'linear-gradient(145deg, #1677b8, #2563a9)',
+    boxShadow: '0 14px 30px rgba(22,119,184,.25)',
+  },
+  heroCopy: { minWidth: 0 },
+  heroStat: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '150px',
+    padding: '15px 18px',
+    borderRadius: '20px',
+    background: 'rgba(255,255,255,.72)',
+    border: '1px solid rgba(147,197,253,.65)',
+    color: '#315b82',
+    fontSize: '.78rem',
+    fontWeight: 700,
     textAlign: 'center',
-    padding: '28px',
-    gap: '18px',
+  },
+  card: {
+    width: '100%',
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '30px',
   },
   kicker: {
     margin: 0,
-    padding: '7px 12px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '7px',
+    padding: '6px 11px',
     borderRadius: '999px',
-    background: '#dbeafe',
-    color: '#1d4ed8',
-    fontSize: '0.82rem',
+    background: 'rgba(219,234,254,.8)',
+    color: '#176aa5',
+    fontSize: '0.74rem',
     fontWeight: 800,
     letterSpacing: '0.08em',
     textTransform: 'uppercase',
   },
   title: {
-    margin: 0,
+    margin: '9px 0 8px',
     color: '#0f172a',
     fontSize: 'clamp(1.8rem, 3.8vw, 2.8rem)',
     lineHeight: 1.15,
     fontWeight: 900,
-    maxWidth: '28ch',
+    maxWidth: '30ch',
   },
   text: {
     margin: 0,
-    maxWidth: '72ch',
+    maxWidth: '68ch',
     color: '#475569',
     fontSize: '1rem',
     lineHeight: 1.7,
   },
   statusBox: {
     width: '100%',
-    maxWidth: '880px',
+    maxWidth: '100%',
     borderRadius: '18px',
-    border: '1px dashed #cbd5e1',
-    background: '#f8fafc',
+    border: '1px solid #cfe3f4',
+    background: 'rgba(255,255,255,.82)',
     color: '#475569',
     padding: '18px 20px',
     fontWeight: 700,
     textAlign: 'left',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    boxShadow: '0 10px 26px rgba(20,67,112,.07)',
+  },
+  errorBox: { borderColor: '#fecaca', background: '#fff7f7', color: '#991b1b' },
+  overviewGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, minmax(0,1fr))',
+    gap: '12px',
+  },
+  overviewCard: {
+    display: 'grid',
+    gridTemplateColumns: '42px minmax(0,1fr) auto',
+    alignItems: 'center',
+    gap: '11px',
+    padding: '13px 14px',
+    borderRadius: '18px',
+    border: '1px solid #cfe3f4',
+    background: 'linear-gradient(145deg, rgba(255,255,255,.95), rgba(238,248,255,.92))',
+    color: '#173f72',
+    textDecoration: 'none',
+    boxShadow: '0 8px 22px rgba(20,67,112,.07)',
+  },
+  overviewNumber: {
+    width: '40px', height: '40px', borderRadius: '13px', display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 900,
+    background: 'linear-gradient(145deg, #2296c9, #2563a9)', boxShadow: '0 6px 14px rgba(37,99,169,.2)',
+  },
+  overviewTitle: { display: 'block', fontSize: '.92rem' },
+  overviewMeta: { display: 'block', marginTop: '2px', color: '#63809d', fontSize: '.75rem', fontWeight: 700 },
+  contentIntro: {
+    display: 'flex', alignItems: 'center', gap: '11px', padding: '13px 15px', borderRadius: '16px',
+    color: '#315b82', background: 'rgba(231,244,253,.76)', border: '1px solid #cfe3f4', fontSize: '.84rem',
   },
   parcialSections: {
     width: '100%',
@@ -322,14 +427,16 @@ const s: { [key: string]: React.CSSProperties } = {
   },
   parcialBlock: {
     width: '100%',
-    borderRadius: '22px',
-    border: '1px solid #dbeafe',
-    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-    padding: '18px',
+    borderRadius: '25px',
+    border: '1px solid rgba(191,219,238,.92)',
+    background: 'rgba(255,255,255,.88)',
+    padding: 'clamp(16px, 2.5vw, 24px)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
+    gap: '20px',
     textAlign: 'left',
+    boxShadow: '0 14px 36px rgba(20,67,112,.08)',
+    scrollMarginTop: '24px',
   },
   parcialHeader: {
     display: 'flex',
@@ -341,15 +448,15 @@ const s: { [key: string]: React.CSSProperties } = {
   },
   parcialTitle: {
     margin: 0,
-    fontSize: '1.2rem',
-    color: '#0f172a',
+    fontSize: '1.3rem',
+    color: '#123b66',
     fontWeight: 900,
   },
   parcialCount: {
     borderRadius: '999px',
     padding: '6px 10px',
-    background: '#eff6ff',
-    color: '#1d4ed8',
+    background: '#e7f4fd',
+    color: '#176aa5',
     fontSize: '0.76rem',
     fontWeight: 800,
     whiteSpace: 'nowrap',
@@ -361,8 +468,8 @@ const s: { [key: string]: React.CSSProperties } = {
   },
   scopeTitle: {
     margin: 0,
-    color: '#1e293b',
-    fontSize: '0.95rem',
+    color: '#315b82',
+    fontSize: '0.82rem',
     textTransform: 'uppercase',
     letterSpacing: '0.08em',
     fontWeight: 900,
@@ -378,7 +485,7 @@ const s: { [key: string]: React.CSSProperties } = {
   grid: {
     width: '100%',
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     gap: '14px',
     justifyContent: 'start',
   },
@@ -427,11 +534,14 @@ const s: { [key: string]: React.CSSProperties } = {
     color: '#64748b',
     fontSize: '0.82rem',
     fontWeight: 700,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
   },
   cardTitle: {
     margin: 0,
     color: '#0f172a',
-    fontSize: '1.02rem',
+    fontSize: '1.08rem',
     lineHeight: 1.35,
   },
   cardText: {
@@ -455,15 +565,19 @@ const s: { [key: string]: React.CSSProperties } = {
     fontWeight: 800,
   },
   startButton: {
-    display: 'inline-block',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
     marginLeft: 'auto',
     padding: '8px 12px',
     borderRadius: '12px',
-    background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+    background: 'linear-gradient(135deg, #1677b8, #2563a9)',
     color: '#fff',
     fontWeight: 800,
     textDecoration: 'none',
+    boxShadow: '0 8px 18px rgba(22,119,184,.2)',
   },
+  imageFallback: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: '#315b82', padding: '12px', textAlign: 'center' },
 };
 
 export default Evaluaciones;

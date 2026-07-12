@@ -10,6 +10,7 @@ import { getRenderableBlocks } from '../services/contentPublication';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { logTemaView } from '../services/analytics';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import { ArrowLeft, ArrowRight, Layers3, Microscope } from 'lucide-react';
 
 interface Tema {
   id: number;
@@ -267,12 +268,15 @@ const Subtemas: React.FC = () => {
             ) : (
               <div className="subtemas-grid-page">
                 {subtemas.map(subtema => (
-                  <div
+                  <button
+                    type="button"
+                    className="subtema-public-card"
                     key={subtema.id}
                     style={{
                       ...styles.subtemaCard,
                       ...(hoveredSubtema === subtema.id ? styles.subtemaCardHover : {}),
                       cursor: 'pointer',
+                      fontFamily: 'inherit',
                     }}
                     onMouseEnter={() => setHoveredSubtema(subtema.id)}
                     onMouseLeave={() => setHoveredSubtema(null)}
@@ -304,14 +308,18 @@ const Subtemas: React.FC = () => {
                       </div>
                     ) : (
                       <div className="subtema-card-img-wrap" style={styles.subtemaIconFallback}>
-                        <span style={styles.subtemaIconText}>📄</span>
+                        <Microscope size={30} aria-hidden="true" />
                       </div>
                     )}
-                    <h3 className="subtema-card-label atlas-typo-card" style={styles.subtemaTitle}>{subtema.nombre}</h3>
-                    {subtema.descripcion && (
-                      <p className="atlas-typo-body" style={styles.subtemaDesc}>{subtema.descripcion}</p>
-                    )}
-                  </div>
+                    <div className="subtema-public-copy" style={styles.subtemaCopy}>
+                      <span style={styles.subtemaEyebrow}><Layers3 size={13} /> Subtema</span>
+                      <h3 className="subtema-card-label atlas-typo-card" style={styles.subtemaTitle}>{subtema.nombre}</h3>
+                      {subtema.descripcion && (
+                        <p className="atlas-typo-body" style={styles.subtemaDesc}>{subtema.descripcion}</p>
+                      )}
+                      <span style={styles.subtemaAction}>Ver placas <ArrowRight size={15} /></span>
+                    </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -327,7 +335,7 @@ const Subtemas: React.FC = () => {
                         navigate(`/subtemas/${navAnterior.targetId}`);
                       }}
                     >
-                      {navAnterior.label}
+                      <ArrowLeft size={16} /> {navAnterior.label.replace('← ', '')}
                     </button>
                   )}
 
@@ -339,7 +347,7 @@ const Subtemas: React.FC = () => {
                         navigate(`/subtemas/${navSiguiente.targetId}`);
                       }}
                     >
-                      {navSiguiente.label}
+                      {navSiguiente.label.replace(' →', '')} <ArrowRight size={16} />
                     </button>
                   )}
                 </div>
@@ -361,7 +369,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     color: '#0f172a',
-    backgroundColor: 'transparent',
+    background: 'radial-gradient(circle at 8% 10%, rgba(186,230,253,.4), transparent 27%), linear-gradient(180deg, #f8fcff 0%, #eef6fc 55%, #f8fbfe 100%)',
   },
   main: {
     flex: 1,
@@ -370,6 +378,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: '0 auto',
     boxSizing: 'border-box',
     display: 'flex', flexDirection: 'column',
+    padding: 'clamp(18px, 3vw, 34px) 14px 48px',
+    gap: '16px',
   },
   backButton: {
     alignSelf: 'flex-start',
@@ -391,11 +401,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   card: {
     width: '100%',
-    background: 'transparent',
-    borderRadius: '18px',
-    padding: '0',
-    boxShadow: 'none',
-    border: 'none',
+    background: 'rgba(255,255,255,.74)',
+    borderRadius: '26px',
+    padding: 'clamp(18px, 3vw, 30px)',
+    boxShadow: '0 18px 46px rgba(23,65,101,.08)',
+    border: '1px solid rgba(195,216,232,.88)',
     boxSizing: 'border-box',
   },
   temaHeader: {
@@ -403,15 +413,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: 'clamp(12px, 3vw, 28px)',
     flexWrap: 'wrap',
+    padding: 'clamp(8px, 2vw, 16px)',
   },
   temaLogoWrap: {
     flexShrink: 0,
     width: 'clamp(70px, 12vw, 120px)',
     height: 'clamp(70px, 12vw, 120px)',
-    borderRadius: '16px',
+    borderRadius: '20px',
     overflow: 'hidden',
-    boxShadow: '0 6px 20px rgba(15,23,42,0.12)',
-    border: '2px solid #e0f2fe',
+    boxShadow: '0 12px 28px rgba(15,61,98,.16)',
+    border: '3px solid rgba(255,255,255,.9)',
     background: '#f8fafc',
     display: 'flex',
     alignItems: 'center',
@@ -442,6 +453,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   temaTitle: {
     margin: 0,
+    color: '#123b66',
+    fontSize: 'clamp(1.7rem, 4vw, 2.8rem)',
   },
   divider: {
     width: '100%',
@@ -452,6 +465,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   subtemasHeading: {
     marginBottom: 'clamp(12px, 3vw, 24px)',
     marginTop: 0,
+    color: '#123b66',
   },
   subtemasGrid: {
     display: 'grid',
@@ -461,25 +475,25 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxSizing: 'border-box',
   },
   subtemaCard: {
-    borderRadius: 'clamp(10px, 1.6vw, 16px)',
-    padding: 'clamp(10px, 2vw, 18px)',
-    background: 'linear-gradient(150deg, rgba(255,255,255,0.95) 0%, rgba(241,245,249,0.9) 100%)',
-    boxShadow: '0 8px 18px rgba(15,23,42,0.08)',
+    borderRadius: '16px',
+    padding: 0,
+    background: '#fff',
+    boxShadow: '0 8px 22px rgba(23,65,101,.08)',
     cursor: 'pointer',
-    textAlign: 'center',
+    textAlign: 'left',
     transition: 'transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease',
     border: '1px solid rgba(186,230,253,0.8)',
     position: 'relative',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    gap: '8px',
+    alignItems: 'stretch',
+    gap: 0,
   },
   subtemaCardHover: {
-    transform: 'translateY(-8px)',
-    boxShadow: '0 18px 34px rgba(14,165,233,0.22)',
-    border: '1px solid #38bdf8',
+    transform: 'translateY(-4px)',
+    boxShadow: '0 18px 36px rgba(23,65,101,.16)',
+    border: '1px solid rgba(35,134,187,.55)',
   },
   subtemaAccent: {
     position: 'absolute',
@@ -491,14 +505,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '14px 14px 0 0',
   },
   subtemaLogoWrap: {
-    borderRadius: '10px',
+    borderRadius: 0,
     overflow: 'hidden',
     border: '1px solid #e2e8f0',
     background: '#f8fafc',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: '8px',
+    marginTop: 0,
   },
   subtemaLogo: {
     width: '100%',
@@ -507,28 +521,35 @@ const styles: { [key: string]: React.CSSProperties } = {
     objectPosition: 'center center',
   },
   subtemaIconFallback: {
-    borderRadius: '10px',
+    borderRadius: 0,
     background: 'linear-gradient(135deg, #e0f2fe, #bae6fd)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: '8px',
+    marginTop: 0,
     border: '1px solid #7dd3fc',
   },
-  subtemaIconText: {
-    fontSize: 'clamp(1.5em, 3vw, 2.2em)',
-  },
+  subtemaCopy: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: '5px', padding: '12px 14px', flex: 1 },
+  subtemaEyebrow: { display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#2386bb', fontSize: '.68rem', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase' },
   subtemaTitle: {
     lineHeight: 1.3,
     margin: 0,
     wordBreak: 'break-word',
     overflowWrap: 'break-word',
     width: '100%',
+    color: '#123b66',
   },
   subtemaDesc: {
     lineHeight: 1.5,
     margin: 0,
+    color: '#64748b',
+    fontSize: '.82rem',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
   },
+  subtemaAction: { display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', color: '#176a9d', fontSize: '.76rem', fontWeight: 900 },
   emptyState: {
     width: '100%',
     padding: 'clamp(20px, 5vw, 48px)',
@@ -620,6 +641,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     textAlign: 'center',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
   },
 };
 
