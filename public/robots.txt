@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+Disallow: /edicion
+Disallow: /temario-admin
+Disallow: /placas
+Disallow: /editar-
+Disallow: /editor-paginas
+Disallow: /eliminar-placas
+Disallow: /mover-placa
+Disallow: /lista-espera
+Disallow: /gestion-
+Disallow: /estadisticas
+Disallow: /pruebas
+Disallow: /acceso-denegado
+
+Sitemap: https://atlas-histolab.pages.dev/sitemap.xml
