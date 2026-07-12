@@ -676,6 +676,9 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       <SelectField label="Grosor de los temas" value={content.weekly_topic_weight || '680'} options={[{ value: '500', label: 'Normal' }, { value: '680', label: 'Seminegrita' }, { value: '800', label: 'Negrita' }]} onChange={weekly_topic_weight => onChange({ weekly_topic_weight })} />
       <ColorField label="Color del título" value={content.weekly_title_color || ''} fallback="#071b31" onChange={weekly_title_color => onChange({ weekly_title_color })} />
       <ColorField label="Color de los temas" value={content.weekly_topic_color || ''} fallback="#0b1f33" onChange={weekly_topic_color => onChange({ weekly_topic_color })} />
+      <ColorField label="Color del texto de la placa" value={content.weekly_caption_color || ''} fallback="#ffffff" onChange={weekly_caption_color => onChange({ weekly_caption_color })} />
+      <ColorField label="Fondo del texto de la placa" value={content.weekly_caption_bg || ''} fallback="#14537e" onChange={weekly_caption_bg => onChange({ weekly_caption_bg })} />
+      <label className="wide"><span>Transparencia del fondo: {Number(content.weekly_caption_transparency ?? 45)}%</span><input type="range" min="0" max="100" value={Number(content.weekly_caption_transparency ?? 45)} onChange={event => onChange({ weekly_caption_transparency: event.target.value })} /></label>
       <ColorField label="Color de acento" value={content.weekly_accent || ''} fallback="#1677b8" onChange={weekly_accent => onChange({ weekly_accent })} />
       <ColorField label="Color de fondo" value={content.weekly_bg || ''} fallback="#eef8ff" onChange={weekly_bg => onChange({ weekly_bg })} />
       <label className="wide"><span>Separación superior: {content.style_text_space_top || 0}px</span><input type="range" min="0" max="64" value={Number(content.style_text_space_top || 0)} onChange={event => onChange({ style_text_space_top: event.target.value })} /></label>
