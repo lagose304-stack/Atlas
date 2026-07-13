@@ -157,17 +157,6 @@ const Evaluaciones: React.FC = () => {
     (section) => section.parcialTests.length || section.temaTests.length || section.subtemaTests.length,
   );
 
-  const availableSections = React.useMemo(
-    () => parcialSections.filter((section) => section.parcialTests.length || section.temaTests.length || section.subtemaTests.length),
-    [parcialSections],
-  );
-
-  React.useEffect(() => {
-    if (availableSections.length > 0 && !availableSections.some((section) => section.key === selectedParcial)) {
-      setSelectedParcial(availableSections[0].key);
-    }
-  }, [availableSections, selectedParcial]);
-
   return (
     <div style={s.page}>
       <Header />
@@ -195,7 +184,7 @@ const Evaluaciones: React.FC = () => {
           ) : (
             <>
               <div className="evaluaciones-overview-grid" style={s.overviewGrid}>
-                {availableSections.map((section, index) => {
+                {parcialSections.map((section, index) => {
                   const count = section.parcialTests.length + section.temaTests.length + section.subtemaTests.length;
                   const isActive = section.key === selectedParcial;
                   return <button
@@ -213,7 +202,7 @@ const Evaluaciones: React.FC = () => {
                 })}
               </div>
               <div style={s.parcialSections}>
-              {availableSections.filter((section) => section.key === selectedParcial).map((section) => {
+              {parcialSections.filter((section) => section.key === selectedParcial).map((section) => {
                 const hasTests = section.parcialTests.length || section.temaTests.length || section.subtemaTests.length;
 
                 return (
