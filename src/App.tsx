@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-route
 import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 import { logSiteVisitOncePerSession } from './services/analytics';
+import SeoManager from './components/SeoManager';
 
 const Home = lazy(() => import('./pages/Home'));
 const Edicion = lazy(() => import('./pages/Edicion'));
@@ -100,6 +101,7 @@ const App: React.FC = () => {
   return (
     <AuthProvider>
       <Router>
+        <SeoManager />
         <ScrollToTop />
         <SiteVisitTracker />
         <SpellcheckEnabler />

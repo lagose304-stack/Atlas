@@ -2,12 +2,13 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/x-icon" href="/src/assets/icons/laboratorio.ico" />
+    <link rel="icon" type="image/x-icon" sizes="48x48" href="/src/assets/icons/laboratorio.ico" />
+    <link rel="shortcut icon" href="/src/assets/icons/laboratorio.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Atlas Histolab | Histología y microscopía</title>
+    <title>Atlas de Histología | Histolab UNAH</title>
     <meta
       name="description"
-      content="Atlas Histolab es una plataforma educativa para estudiar histología y microscopía mediante temarios, subtemas y placas histológicas."
+      content="Atlas de Histología del Laboratorio de Histología de la UNAH: temario, microscopía y colección de placas histológicas para estudiantes."
     />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta name="google-site-verification" content="Kmids16XS1TmMFVrSKt0EKMIt2o5rbKk3HATTFQP_98" />
@@ -16,34 +17,58 @@
 
     <meta property="og:locale" content="es_HN" />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Atlas Histolab" />
-    <meta property="og:title" content="Atlas Histolab | Histología y microscopía" />
+    <meta property="og:site_name" content="Atlas de Histología | Histolab UNAH" />
+    <meta property="og:title" content="Atlas de Histología | Histolab UNAH" />
     <meta
       property="og:description"
-      content="Plataforma educativa para estudiar histología y microscopía mediante temarios y placas histológicas."
+      content="Atlas del Laboratorio de Histología de la UNAH con temario, microscopía y placas histológicas para estudiantes."
     />
     <meta property="og:url" content="https://atlas-histolab.pages.dev/" />
 
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="Atlas Histolab | Histología y microscopía" />
+    <meta name="twitter:title" content="Atlas de Histología | Histolab UNAH" />
     <meta
       name="twitter:description"
-      content="Plataforma educativa para estudiar histología y microscopía mediante temarios y placas histológicas."
+      content="Atlas del Laboratorio de Histología de la UNAH con temario, microscopía y placas histológicas para estudiantes."
     />
 
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "WebSite",
-        "name": "Atlas Histolab",
+        "name": "Atlas de Histología",
+        "alternateName": ["Atlas Histolab", "Histolab UNAH", "Atlas de Histología UNAH"],
         "url": "https://atlas-histolab.pages.dev/",
         "inLanguage": "es",
-        "description": "Plataforma educativa para estudiar histología y microscopía mediante temarios y placas histológicas."
+        "description": "Atlas educativo del Laboratorio de Histología de la Facultad de Ciencias Médicas de la UNAH, con temarios y placas histológicas.",
+        "publisher": {
+          "@type": "EducationalOrganization",
+          "name": "Laboratorio de Histología, Facultad de Ciencias Médicas, UNAH",
+          "parentOrganization": {
+            "@type": "CollegeOrUniversity",
+            "name": "Universidad Nacional Autónoma de Honduras",
+            "alternateName": "UNAH",
+            "url": "https://www.unah.edu.hn/"
+          }
+        },
+        "about": ["Histología", "Microscopía", "Placas histológicas", "Educación médica"]
       }
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <header>
+        <h1>Atlas de Histología | Histolab UNAH</h1>
+        <p>Laboratorio de Histología de la Facultad de Ciencias Médicas de la Universidad Nacional Autónoma de Honduras (UNAH).</p>
+      </header>
+      <main>
+        <p>Atlas educativo para el estudio de la histología y la microscopía mediante temarios, subtemas y placas histológicas.</p>
+        <nav aria-label="Contenido principal">
+          <a href="/temario">Consultar el temario de histología</a>
+          <a href="/evaluaciones">Evaluaciones de histología</a>
+        </nav>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
