@@ -8,6 +8,9 @@ interface MarkerLocation {
   y: number;
   startX?: number | null;
   startY?: number | null;
+  regionPoints?: number[] | null;
+  regionColor?: string | null;
+  regionOpacity?: number | null;
 }
 
 interface PlateEditorPanelProps {
@@ -33,6 +36,7 @@ interface PlateEditorPanelProps {
   onOpenSenaladoLocation: (index: number) => void;
   onAddSenalado: () => void;
   onAddMultipleSenalado?: () => void;
+  onAddBorderSenalado?: () => void;
   showComentario: boolean;
   onShowComentario: () => void;
   comentario: string;
@@ -50,6 +54,7 @@ interface PlateEditorPanelProps {
     removeComentario?: string;
     addSenalado?: string;
     addMultipleSenalado?: string;
+    addBorderSenalado?: string;
     editLocation?: string;
     placeLocation?: string;
   };
@@ -203,6 +208,7 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
   onOpenSenaladoLocation,
   onAddSenalado,
   onAddMultipleSenalado,
+  onAddBorderSenalado,
   showComentario,
   onShowComentario,
   comentario,
@@ -225,11 +231,12 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
       const label = rawLabel.trim();
       if (!label) return;
 
-      const existing = groups.get(label);
       const position = senaladosPos[index] ?? null;
+      const groupKey = position?.regionPoints?.length ? `${label}::border::${index}` : label;
+      const existing = groups.get(groupKey);
 
       if (!existing) {
-        groups.set(label, {
+        groups.set(groupKey, {
           label,
           count: 1,
           firstIndex: index,
@@ -279,6 +286,7 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
     removeComentario: labels?.removeComentario ?? '🗑️ Quitar comentario',
     addSenalado: labels?.addSenalado ?? '+ Añadir señalado',
     addMultipleSenalado: labels?.addMultipleSenalado ?? '+ Añadir señalado múltiples',
+    addBorderSenalado: labels?.addBorderSenalado ?? '+ Añadir señalado con borde',
     editLocation: labels?.editLocation ?? '📍 Editar ubicación',
     placeLocation: labels?.placeLocation ?? '📍 Ubicar',
   };
@@ -561,6 +569,11 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
               {onAddMultipleSenalado && (
                 <button type="button" style={{ ...mergedStyles.addBtn, marginTop: '0px' }} onClick={onAddMultipleSenalado}>
                   {texts.addMultipleSenalado}
+                </button>
+              )}
+              {onAddBorderSenalado && (
+                <button type="button" style={{ ...mergedStyles.addBtn, marginTop: '0px', borderColor: '#bbf7d0', background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', color: '#166534' }} onClick={onAddBorderSenalado}>
+                  {texts.addBorderSenalado}
                 </button>
               )}
             </div>

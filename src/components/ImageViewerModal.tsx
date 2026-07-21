@@ -1,11 +1,10 @@
 ﻿import React, { useId, useState, useEffect, useMemo, useRef } from 'react';
-import { MousePointerClick } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { renderBoldText } from './BoldField';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
 import { supabase } from '../services/supabase';
-import InteractiveMapViewerModal, { type InteractiveMapViewerSection } from './InteractiveMapViewerModal';
+import type { InteractiveMapViewerSection } from './InteractiveMapViewerModal';
 
 interface SenaladoMetaItem {
   label: string;
@@ -13,6 +12,9 @@ interface SenaladoMetaItem {
   y: number | null;
   startX?: number | null;
   startY?: number | null;
+  regionPoints?: number[] | null;
+  regionColor?: string | null;
+  regionOpacity?: number | null;
 }
 
 interface ImageViewerModalProps {
@@ -46,6 +48,12 @@ interface InteractiveMapRow {
   sections: InteractiveMapRawSection[] | null;
 }
 
+type ViewerMode = 'arrow' | 'pointer' | 'map';
+type InteractiveMapData = { mapNumber: number; sections: InteractiveMapViewerSection[] };
+
+const interactiveMapViewerCache = new Map<number, InteractiveMapData>();
+const VIEWER_MODE_SESSION_KEY = 'atlas_public_viewer_mode';
+
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 4;
 const MIN_DYNAMIC_MAX_ZOOM = 1.2;
@@ -53,7 +61,46 @@ const ZOOM_OVERSHOOT_FACTOR = 1.1;
 const SIDEBAR_BREAKPOINT = 900;
 const MOBILE_BREAKPOINT = 640;
 const MOBILE_ARROW_SCALE = 0.6;
+const getReadableTextColor = (hex: string) => {
+  const normalized = hex.replace('#', '');
+  const expanded = normalized.length === 3 ? normalized.split('').map(char => `${char}${char}`).join('') : normalized;
+  if (!/^[0-9a-fA-F]{6}$/.test(expanded)) return '#ffffff';
+  const value = Number.parseInt(expanded, 16);
+  const luminance = (((value >> 16) & 255) * 0.299 + ((value >> 8) & 255) * 0.587 + (value & 255) * 0.114) / 255;
+  return luminance > 0.62 ? '#0f172a' : '#ffffff';
+};
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+const mapSectionCoordinates = (section: InteractiveMapViewerSection, width: number, height: number) => {
+  const normalized = section.coordinateSpace === 'image_uv_v1' || section.points.every(value => value >= -0.001 && value <= 1.001);
+  return section.points.map((value, index) => normalized ? value * (index % 2 === 0 ? width : height) : value);
+};
+const polygonArea = (points: number[]) => {
+  let area = 0;
+  for (let index = 0; index < points.length; index += 2) {
+    const next = (index + 2) % points.length;
+    area += points[index] * points[next + 1] - points[next] * points[index + 1];
+  }
+  return Math.abs(area) / 2;
+};
+const pointInPolygon = (x: number, y: number, points: number[]) => {
+  let inside = false;
+  for (let index = 0, previous = points.length - 2; index < points.length; previous = index, index += 2) {
+    const xi = points[index];
+    const yi = points[index + 1];
+    const xj = points[previous];
+    const yj = points[previous + 1];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi) inside = !inside;
+  }
+  return inside;
+};
+const polygonPath = (points: number[]) => points.length >= 6
+  ? `M ${points[0]} ${points[1]} ${points.slice(2).reduce((path, value, index) => path + (index % 2 === 0 ? ` L ${value}` : ` ${value}`), '')} Z`
+  : '';
+const polygonBounds = (points: number[]) => {
+  const xs = points.filter((_, index) => index % 2 === 0);
+  const ys = points.filter((_, index) => index % 2 === 1);
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+};
 type PointerEdge = 'left' | 'right' | 'top' | 'bottom';
 type MarkerVisualMode = 'pointer' | 'arrow';
 type MarkerColorKey = 'black' | 'white' | 'red' | 'lime';
@@ -170,8 +217,6 @@ const POINTER_MIN_ANGLE_DEG = 7;
 const POINTER_OUTLINE_TIP_BACKOFF_PX = 1.1;
 const POINTER_BASE_OUTSET_PX = 3;
 const ARROW_TAIL_DISTANCE_PX = 21;
-const MARKER_FADE_OUT_MS = 180;
-const MARKER_FADE_IN_MS = 200;
 const COMMENT_HINT_DURATION_MS = 5200;
 const COMMENT_HINT_EXIT_MS = 420;
 
@@ -268,6 +313,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         y: item.y,
         startX: item.startX ?? null,
         startY: item.startY ?? null,
+        regionPoints: Array.isArray(item.regionPoints) ? item.regionPoints : null,
+        regionColor: item.regionColor ?? null,
+        regionOpacity: item.regionOpacity ?? null,
       }));
     }
 
@@ -287,9 +335,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       const label = item.label.trim();
       if (!label) return;
 
-      const existing = groups.get(label);
+      const groupKey = item.regionPoints?.length ? `${label}::border::${index}` : label;
+      const existing = groups.get(groupKey);
       if (!existing) {
-        groups.set(label, {
+        groups.set(groupKey, {
           label,
           count: 1,
           firstIndex: index,
@@ -309,7 +358,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     return Array.from(groups.values()).sort((a, b) => a.firstIndex - b.firstIndex);
   }, [senaladosItems]);
 
-  const hasInfo = !!(
+  const hasPlateDetails = !!(
     senaladosItems.length > 0 ||
     comentario ||
     tincion
@@ -325,8 +374,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [position, setPosition]     = useState({ x: 0, y: 0 });
   const [activeMarkerIndex, setActiveMarkerIndex] = useState<number | null>(resolvedInitialMarkerIndex);
   const [markerRecenterRequest, setMarkerRecenterRequest] = useState(0);
-  const [displayedMarkerIndex, setDisplayedMarkerIndex] = useState<number | null>(null);
-  const [markerVisible, setMarkerVisible] = useState(false);
   const [showCommentHint, setShowCommentHint] = useState(false);
   const [isCommentHintExiting, setIsCommentHintExiting] = useState(false);
   const [hoveredMarkerIndex, setHoveredMarkerIndex] = useState<number | null>(null);
@@ -337,17 +384,27 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [isPinching, setIsPinching] = useState(false);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(null);
-  const [interactiveMapData, setInteractiveMapData] = useState<{ mapNumber: number; sections: InteractiveMapViewerSection[] } | null>(null);
+  const [interactiveMapData, setInteractiveMapData] = useState<InteractiveMapData | null>(null);
   const [loadingInteractiveMap, setLoadingInteractiveMap] = useState<boolean>(() => hasInteractiveMapHint === true);
-  const [showInteractiveMapViewer, setShowInteractiveMapViewer] = useState(false);
-  const [isInteractiveMapCtaHovered, setIsInteractiveMapCtaHovered] = useState(false);
+  const [isInteractiveMapVisible, setIsInteractiveMapVisible] = useState(true);
+  const [activeMapSectionIndex, setActiveMapSectionIndex] = useState<number | null>(null);
+  const [hoveredMapSectionIndex, setHoveredMapSectionIndex] = useState<number | null>(null);
+  const [focusedMapSectionIndex, setFocusedMapSectionIndex] = useState<number | null>(null);
+  const [mapFocusRequest, setMapFocusRequest] = useState(0);
+  const [interactiveMapError, setInteractiveMapError] = useState<string | null>(null);
+  const [interactiveMapReloadTick, setInteractiveMapReloadTick] = useState(0);
+  const [viewerMode, setViewerMode] = useState<ViewerMode>(() => initialMarkerVisualMode);
+  const [announcement, setAnnouncement] = useState('');
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const pointerClipId = useId();
+  const hasInfo = hasPlateDetails || hasInteractiveMapHint === true || loadingInteractiveMap || interactiveMapData !== null;
 
   const activeMarkerIndices = useMemo(() => {
     if (activeMarkerIndex === null) return [];
 
     const activeMarker = senaladosItems[activeMarkerIndex];
     if (!activeMarker || !activeMarker.label.trim()) return [activeMarkerIndex];
+    if (activeMarker.regionPoints?.length) return [activeMarkerIndex];
 
     const activeLabel = activeMarker.label.trim();
     return senaladosItems
@@ -363,15 +420,45 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     return MARKER_COLOR_OPTIONS.find(option => option.key === markerColorKey) ?? MARKER_COLOR_OPTIONS[0];
   }, [markerColorKey]);
 
+  const mapGeometry = useMemo(() => {
+    if (!interactiveMapData || !imageSize) return null;
+    const coordinates = interactiveMapData.sections.map(section => mapSectionCoordinates(section, imageSize.width, imageSize.height));
+    const areas = coordinates.map(polygonArea);
+    const children = coordinates.map(() => [] as number[]);
+
+    coordinates.forEach((inner, innerIndex) => {
+      let closestParent: number | null = null;
+      let closestParentArea = Number.POSITIVE_INFINITY;
+      coordinates.forEach((outer, outerIndex) => {
+        if (innerIndex === outerIndex || areas[outerIndex] <= areas[innerIndex]) return;
+        const contained = inner.every((_, pointIndex) => pointIndex % 2 !== 0 || pointInPolygon(inner[pointIndex], inner[pointIndex + 1], outer));
+        if (contained && areas[outerIndex] < closestParentArea) {
+          closestParent = outerIndex;
+          closestParentArea = areas[outerIndex];
+        }
+      });
+      if (closestParent !== null) children[closestParent].push(innerIndex);
+    });
+
+    const paths = coordinates.map((points, index) => [polygonPath(points), ...children[index].map(childIndex => polygonPath(coordinates[childIndex]))].join(' '));
+    const renderOrder = coordinates.map((_, index) => index).sort((a, b) => areas[b] - areas[a]);
+    return { coordinates, areas, children, paths, renderOrder };
+  }, [interactiveMapData, imageSize]);
+
   const containerRef   = useRef<HTMLDivElement>(null);
   const imageRef       = useRef<HTMLImageElement>(null);
   const stateRef       = useRef({ zoom: 1, pos: { x: 0, y: 0 } });
   const dragStartRef   = useRef({ x: 0, y: 0 });
   const isDraggingRef  = useRef(false);
   const pinchRef       = useRef<{ dist: number } | null>(null);
-  const markerSwapTimeoutRef = useRef<number | null>(null);
+  const touchGestureRef = useRef<{ x: number; y: number; startedAt: number } | null>(null);
+  const lastTapAtRef = useRef(0);
   const commentHintTimeoutRef = useRef<number | null>(null);
   const commentHintExitTimeoutRef = useRef<number | null>(null);
+
+  const vibrateSelection = () => {
+    if ('vibrate' in navigator) navigator.vibrate(12);
+  };
 
   useEffect(() => { stateRef.current.zoom = zoomLevel; }, [zoomLevel]);
   useEffect(() => { stateRef.current.pos  = position;  }, [position]);
@@ -412,8 +499,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   useEffect(() => {
     setActiveMarkerIndex(null);
-    setDisplayedMarkerIndex(null);
-    setMarkerVisible(false);
     setHoveredMarkerIndex(null);
     setFocusedMarkerIndex(null);
     setMarkerColorKey('black');
@@ -485,54 +570,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     }, COMMENT_HINT_EXIT_MS);
   }, [zoomLevel, showCommentHint, isCommentHintExiting]);
 
-  useEffect(() => {
-    if (markerSwapTimeoutRef.current !== null) {
-      window.clearTimeout(markerSwapTimeoutRef.current);
-      markerSwapTimeoutRef.current = null;
-    }
-
-    if (activeMarkerIndex === null) {
-      setMarkerVisible(false);
-      markerSwapTimeoutRef.current = window.setTimeout(() => {
-        setDisplayedMarkerIndex(null);
-      }, MARKER_FADE_OUT_MS);
-      return;
-    }
-
-    if (displayedMarkerIndex === null) {
-      setDisplayedMarkerIndex(activeMarkerIndex);
-      requestAnimationFrame(() => setMarkerVisible(true));
-      return;
-    }
-
-    if (displayedMarkerIndex === activeMarkerIndex) {
-      setMarkerVisible(true);
-      return;
-    }
-
-    setMarkerVisible(false);
-    markerSwapTimeoutRef.current = window.setTimeout(() => {
-      setDisplayedMarkerIndex(activeMarkerIndex);
-      requestAnimationFrame(() => setMarkerVisible(true));
-    }, MARKER_FADE_OUT_MS);
-
-    return () => {
-      if (markerSwapTimeoutRef.current !== null) {
-        window.clearTimeout(markerSwapTimeoutRef.current);
-        markerSwapTimeoutRef.current = null;
-      }
-    };
-  }, [activeMarkerIndex, displayedMarkerIndex]);
-
-  useEffect(() => {
-    return () => {
-      if (markerSwapTimeoutRef.current !== null) {
-        window.clearTimeout(markerSwapTimeoutRef.current);
-        markerSwapTimeoutRef.current = null;
-      }
-    };
-  }, []);
-
   const updateImageSize = () => {
     const imageEl = imageRef.current;
     if (!imageEl) return;
@@ -593,12 +630,29 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, []);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
+    updatePreference();
+    mediaQuery.addEventListener('change', updatePreference);
+    return () => mediaQuery.removeEventListener('change', updatePreference);
+  }, []);
+
+  useEffect(() => {
+    if (!srcZoom) return;
+    const preload = new Image();
+    preload.src = srcZoom;
+  }, [srcZoom]);
+
+  useEffect(() => {
     let cancelled = false;
 
     if (hasInteractiveMapHint === false) {
       setInteractiveMapData(null);
       setLoadingInteractiveMap(false);
-      setShowInteractiveMapViewer(false);
+      setActiveMapSectionIndex(null);
+      setViewerMode(resolvedInitialMarkerVisualMode);
+      setMarkerVisualMode(resolvedInitialMarkerVisualMode);
+      setIsInteractiveMapVisible(false);
       return;
     }
 
@@ -607,12 +661,45 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     if (!Number.isFinite(plateIdNumber)) {
       setInteractiveMapData(null);
       setLoadingInteractiveMap(false);
-      setShowInteractiveMapViewer(false);
+      setActiveMapSectionIndex(null);
+      setViewerMode(resolvedInitialMarkerVisualMode);
+      setMarkerVisualMode(resolvedInitialMarkerVisualMode);
+      setIsInteractiveMapVisible(false);
       return;
     }
 
     const fetchInteractiveMapByPlaca = async () => {
       setLoadingInteractiveMap(true);
+      setInteractiveMapError(null);
+      setInteractiveMapData(null);
+      setActiveMapSectionIndex(null);
+      setHoveredMapSectionIndex(null);
+      setFocusedMapSectionIndex(null);
+
+      const resolveAvailableMode = (): ViewerMode => {
+        const savedMode = sessionStorage.getItem(VIEWER_MODE_SESSION_KEY);
+        if (groupedSenaladosItems.length === 0) return 'map';
+        return savedMode === 'arrow' || savedMode === 'pointer' || savedMode === 'map' ? savedMode : 'map';
+      };
+
+      if (interactiveMapViewerCache.has(plateIdNumber)) {
+        const cached = interactiveMapViewerCache.get(plateIdNumber) ?? null;
+        if (!cancelled) {
+          setInteractiveMapData(cached);
+          setLoadingInteractiveMap(false);
+          if (cached) {
+            const nextMode = resolveAvailableMode();
+            setViewerMode(nextMode);
+            setMarkerVisualMode(nextMode === 'pointer' ? 'pointer' : 'arrow');
+            setIsInteractiveMapVisible(nextMode === 'map');
+          } else {
+            setViewerMode(resolvedInitialMarkerVisualMode);
+            setMarkerVisualMode(resolvedInitialMarkerVisualMode);
+            setIsInteractiveMapVisible(false);
+          }
+        }
+        return;
+      }
 
       const { data, error } = await supabase
         .from('interactive_maps')
@@ -625,7 +712,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       if (error) {
         console.error('Error al consultar mapa interactivo por placa en viewer:', error);
         setInteractiveMapData(null);
+        setInteractiveMapError('No se pudo cargar el mapa interactivo.');
         setLoadingInteractiveMap(false);
+        setViewerMode(resolvedInitialMarkerVisualMode);
+        setMarkerVisualMode(resolvedInitialMarkerVisualMode);
+        setIsInteractiveMapVisible(false);
         return;
       }
 
@@ -633,6 +724,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       if (!mapRow) {
         setInteractiveMapData(null);
         setLoadingInteractiveMap(false);
+        setViewerMode(resolvedInitialMarkerVisualMode);
+        setMarkerVisualMode(resolvedInitialMarkerVisualMode);
+        setIsInteractiveMapVisible(false);
         return;
       }
 
@@ -640,13 +734,23 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       if (sections.length === 0) {
         setInteractiveMapData(null);
         setLoadingInteractiveMap(false);
+        setViewerMode(resolvedInitialMarkerVisualMode);
+        setMarkerVisualMode(resolvedInitialMarkerVisualMode);
+        setIsInteractiveMapVisible(false);
         return;
       }
 
-      setInteractiveMapData({
+      const nextMapData = {
         mapNumber: mapRow.map_number,
         sections,
-      });
+      };
+      interactiveMapViewerCache.set(plateIdNumber, nextMapData);
+      setInteractiveMapData(nextMapData);
+      const nextMode = resolveAvailableMode();
+      setViewerMode(nextMode);
+      setMarkerVisualMode(nextMode === 'pointer' ? 'pointer' : 'arrow');
+      setIsInteractiveMapVisible(nextMode === 'map');
+      setActiveMapSectionIndex(null);
       setLoadingInteractiveMap(false);
     };
 
@@ -655,17 +759,43 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [placaId, hasInteractiveMapHint]);
+  }, [placaId, hasInteractiveMapHint, interactiveMapReloadTick, groupedSenaladosItems.length, resolvedInitialMarkerVisualMode]);
 
-  const shouldReserveInteractiveMapCtaSpace = hasInteractiveMapHint === true && loadingInteractiveMap && !interactiveMapData;
-
-  const handleReturnToPlacaInfoFromInteractiveMap = () => {
-    setShowInteractiveMapViewer(false);
+  const selectViewerMode = (mode: ViewerMode) => {
+    if (mode === 'map' && !interactiveMapData) return;
+    setViewerMode(mode);
+    sessionStorage.setItem(VIEWER_MODE_SESSION_KEY, mode);
+    setIsInteractiveMapVisible(mode === 'map');
+    if (mode !== 'map') {
+      setMarkerVisualMode(mode);
+      setActiveMapSectionIndex(null);
+    } else {
+      setActiveMarkerIndex(null);
+    }
+    setAnnouncement(mode === 'map' ? 'Modo mapa interactivo' : mode === 'arrow' ? 'Modo flechas' : 'Modo señaladores');
+    vibrateSelection();
   };
 
-  const handleCloseInteractiveMapToPlacasGrid = () => {
-    setShowInteractiveMapViewer(false);
-    onClose();
+  const navigateActiveItem = (direction: -1 | 1) => {
+    if (viewerMode === 'map' && interactiveMapData) {
+      const count = interactiveMapData.sections.length;
+      if (count === 0) return;
+      const next = activeMapSectionIndex === null ? (direction > 0 ? 0 : count - 1) : (activeMapSectionIndex + direction + count) % count;
+      setActiveMapSectionIndex(next);
+      setMapFocusRequest(request => request + 1);
+      setAnnouncement(`Zona ${next + 1} de ${count}: ${interactiveMapData.sections[next].title}`);
+      vibrateSelection();
+      return;
+    }
+
+    const count = groupedSenaladosItems.length;
+    if (count === 0) return;
+    const currentGroupIndex = groupedSenaladosItems.findIndex(group => group.representativeIndex === activeMarkerIndex);
+    const next = currentGroupIndex < 0 ? (direction > 0 ? 0 : count - 1) : (currentGroupIndex + direction + count) % count;
+    setActiveMarkerIndex(groupedSenaladosItems[next].representativeIndex);
+    setMarkerRecenterRequest(request => request + 1);
+    setAnnouncement(`Señalado ${next + 1} de ${count}: ${groupedSenaladosItems[next].label}`);
+    vibrateSelection();
   };
 
   const applyZoom = (newZoom: number, newPos?: { x: number; y: number }) => {
@@ -700,6 +830,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         setIsPinching(true);
       } else if (e.touches.length === 1) {
         pinchRef.current = null;
+        touchGestureRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, startedAt: Date.now() };
         if (stateRef.current.zoom > 1) {
           isDraggingRef.current = true;
           setIsDragging(true);
@@ -737,7 +868,31 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     const onTouchEnd = (e: TouchEvent) => {
       e.preventDefault();
       if (e.touches.length < 2) { pinchRef.current = null; setIsPinching(false); }
-      if (e.touches.length === 0) { isDraggingRef.current = false; setIsDragging(false); }
+      if (e.touches.length === 0) {
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        const gesture = touchGestureRef.current;
+        const changedTouch = e.changedTouches[0];
+        touchGestureRef.current = null;
+        if (!gesture || !changedTouch) return;
+        const deltaX = changedTouch.clientX - gesture.x;
+        const deltaY = changedTouch.clientY - gesture.y;
+        const elapsed = Date.now() - gesture.startedAt;
+        if (stateRef.current.zoom <= 1.02 && elapsed < 650 && Math.abs(deltaX) > 58 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35) {
+          navigateActiveItem(deltaX < 0 ? 1 : -1);
+          return;
+        }
+        if (elapsed < 280 && Math.hypot(deltaX, deltaY) < 18) {
+          const now = Date.now();
+          if (now - lastTapAtRef.current < 330) {
+            if (stateRef.current.zoom > 1.05) handleResetViewport();
+            else applyZoom(Math.min(2, effectiveMaxZoom));
+            lastTapAtRef.current = 0;
+          } else {
+            lastTapAtRef.current = now;
+          }
+        }
+      }
     };
 
     el.addEventListener('touchstart', onTouchStart, { passive: false });
@@ -748,10 +903,16 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       el.removeEventListener('touchmove',  onTouchMove);
       el.removeEventListener('touchend',   onTouchEnd);
     };
-  }, [effectiveMaxZoom]);
+  }, [effectiveMaxZoom, viewerMode, interactiveMapData, activeMapSectionIndex, activeMarkerIndex, groupedSenaladosItems]);
 
   const handleZoomIn  = () => applyZoom(stateRef.current.zoom + 0.25);
   const handleZoomOut = () => applyZoom(stateRef.current.zoom - 0.25);
+  const handleResetViewport = () => {
+    stateRef.current.zoom = 1;
+    stateRef.current.pos = { x: 0, y: 0 };
+    setZoomLevel(1);
+    setPosition({ x: 0, y: 0 });
+  };
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -802,6 +963,37 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       y: clamp(nextPos.y, -maxOffsetY, maxOffsetY),
     };
   };
+
+  useEffect(() => {
+    if (activeMapSectionIndex === null || !mapGeometry || !imageSize) return;
+    const points = mapGeometry.coordinates[activeMapSectionIndex];
+    const containerEl = containerRef.current;
+    if (!points || points.length < 6 || !containerEl) return;
+
+    const bounds = polygonBounds(points);
+    const sectionWidth = Math.max(1, bounds.maxX - bounds.minX);
+    const sectionHeight = Math.max(1, bounds.maxY - bounds.minY);
+    const containerWidth = containerEl.clientWidth;
+    const containerHeight = containerEl.clientHeight;
+    const fitZoom = Math.min(containerWidth / (sectionWidth * 1.8), containerHeight / (sectionHeight * 1.8));
+    const targetZoom = clamp(Math.max(1.25, Math.min(fitZoom, 2.15)), ZOOM_MIN, effectiveMaxZoom);
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+    const targetPosition = clampPositionToViewport(
+      {
+        x: -(centerX - imageSize.width / 2) * targetZoom,
+        y: -(centerY - imageSize.height / 2) * targetZoom,
+      },
+      targetZoom,
+      imageSize,
+      { width: containerWidth, height: containerHeight }
+    );
+
+    stateRef.current.zoom = targetZoom;
+    stateRef.current.pos = targetPosition;
+    setZoomLevel(targetZoom);
+    setPosition(targetPosition);
+  }, [activeMapSectionIndex, mapFocusRequest, mapGeometry, imageSize, effectiveMaxZoom, sidebarOpen, windowWidth]);
 
   useEffect(() => {
     if (activeMarkerIndex === null || zoomLevel <= 1 || !imageSize) return;
@@ -891,6 +1083,18 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, [hasInfo, imageSize, isDesktop, position.x, position.y, zoomLevel]);
 
   const showSidebar = !hideSidebar && hasInfo && (isDesktop || sidebarOpen);
+  const isImagePointVisible = (x: number, y: number) => {
+    const container = containerRef.current;
+    if (!container || !imageSize) return true;
+    const screenX = container.clientWidth / 2 + position.x + (x - imageSize.width / 2) * zoomLevel;
+    const screenY = container.clientHeight / 2 + position.y + (y - imageSize.height / 2) * zoomLevel;
+    return screenX >= 20 && screenX <= container.clientWidth - 20 && screenY >= 20 && screenY <= container.clientHeight - 20;
+  };
+  const activeNavigationCount = viewerMode === 'map' ? interactiveMapData?.sections.length ?? 0 : groupedSenaladosItems.length;
+  const activeNavigationPosition = viewerMode === 'map'
+    ? activeMapSectionIndex === null ? 0 : activeMapSectionIndex + 1
+    : Math.max(0, groupedSenaladosItems.findIndex(group => group.representativeIndex === activeMarkerIndex) + 1);
+  const availableViewerModeCount = (groupedSenaladosItems.length > 0 ? 2 : 0) + (interactiveMapData || loadingInteractiveMap ? 1 : 0);
 
   return createPortal(
     <div
@@ -901,9 +1105,20 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         fontFamily: "'Inter', 'Segoe UI', sans-serif",
       }}
     >
+      <div aria-live="polite" style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 }}>
+        {announcement}
+      </div>
       <style>
         {`@keyframes senaladoCardIn {
           0% { opacity: 0; transform: translateY(6px) scale(0.985); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes mapGrayIn {
+          0% { opacity: 0; }
+          100% { opacity: 0.88; }
+        }
+        @keyframes mapCalloutIn {
+          0% { opacity: 0; transform: translateY(5px) scale(0.96); }
           100% { opacity: 1; transform: translateY(0) scale(1); }
         }
         @keyframes senaladoBadgePulse {
@@ -1168,7 +1383,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               display: 'inline-block',
               transform: `translate(${position.x}px, ${position.y}px) scale(${zoomLevel})`,
               cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-              transition: (isDragging || isPinching) ? 'none' : 'transform 0.3s ease',
+              transition: (isDragging || isPinching || prefersReducedMotion) ? 'none' : 'transform 0.3s ease',
             }}
           >
             <img
@@ -1207,7 +1422,82 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               />
             )}
 
-            {activeMarkerIndices.length > 0 && imageSize && (() => {
+            {(activeMarkerIndices.length > 0 || (isInteractiveMapVisible && interactiveMapData)) && imageSize && (() => {
+              const activeMapSection = activeMapSectionIndex === null
+                ? null
+                : interactiveMapData?.sections[activeMapSectionIndex] ?? null;
+              const activeMapSectionCoordinates = activeMapSectionIndex === null ? [] : mapGeometry?.coordinates[activeMapSectionIndex] ?? [];
+              const activeMapSectionPath = activeMapSectionIndex === null ? '' : mapGeometry?.paths[activeMapSectionIndex] ?? '';
+              let activeZoneCenter = activeMapSectionCoordinates.length >= 6
+                ? activeMapSectionCoordinates.reduce((center, value, coordinateIndex) => {
+                    if (coordinateIndex % 2 === 0) center.x += value;
+                    else center.y += value;
+                    return center;
+                  }, { x: 0, y: 0 })
+                : null;
+              const activeZonePointCount = activeMapSectionCoordinates.length / 2;
+              if (activeZoneCenter && activeZonePointCount > 0) {
+                activeZoneCenter.x /= activeZonePointCount;
+                activeZoneCenter.y /= activeZonePointCount;
+              }
+              const activeChildPolygons = activeMapSectionIndex === null || !mapGeometry
+                ? []
+                : mapGeometry.children[activeMapSectionIndex].map(childIndex => mapGeometry.coordinates[childIndex]);
+              if (activeZoneCenter && activeChildPolygons.some(points => pointInPolygon(activeZoneCenter!.x, activeZoneCenter!.y, points))) {
+                const bounds = polygonBounds(activeMapSectionCoordinates);
+                let bestCandidate: { x: number; y: number; distance: number } | null = null;
+                for (let gx = 1; gx < 10; gx += 1) {
+                  for (let gy = 1; gy < 10; gy += 1) {
+                    const x = bounds.minX + ((bounds.maxX - bounds.minX) * gx) / 10;
+                    const y = bounds.minY + ((bounds.maxY - bounds.minY) * gy) / 10;
+                    if (!pointInPolygon(x, y, activeMapSectionCoordinates)) continue;
+                    if (activeChildPolygons.some(points => pointInPolygon(x, y, points))) continue;
+                    const distance = Math.hypot(x - activeZoneCenter.x, y - activeZoneCenter.y);
+                    if (!bestCandidate || distance < bestCandidate.distance) bestCandidate = { x, y, distance };
+                  }
+                }
+                if (bestCandidate) activeZoneCenter = { x: bestCandidate.x, y: bestCandidate.y };
+              }
+              const calloutTitle = activeMapSection?.title ?? '';
+              const containerWidth = containerRef.current?.clientWidth ?? imageSize.width;
+              const containerHeight = containerRef.current?.clientHeight ?? imageSize.height;
+              const visibleLeft = clamp(imageSize.width / 2 + (-containerWidth / 2 - position.x) / zoomLevel, 0, imageSize.width);
+              const visibleRight = clamp(imageSize.width / 2 + (containerWidth / 2 - position.x) / zoomLevel, 0, imageSize.width);
+              const visibleTop = clamp(imageSize.height / 2 + (-containerHeight / 2 - position.y) / zoomLevel, 0, imageSize.height);
+              const visibleBottom = clamp(imageSize.height / 2 + (containerHeight / 2 - position.y) / zoomLevel, 0, imageSize.height);
+              const calloutMargin = 10 / zoomLevel;
+              const calloutOffset = 34 / zoomLevel;
+              const availableCalloutWidth = Math.max(60 / zoomLevel, visibleRight - visibleLeft - calloutMargin * 2);
+              const desiredCalloutScreenWidth = clamp(82 + calloutTitle.length * 5.2, 116, 230);
+              const calloutWidth = Math.min(desiredCalloutScreenWidth / zoomLevel, availableCalloutWidth);
+              const calloutHeight = 34 / zoomLevel;
+              const maxTitleCharacters = Math.max(8, Math.floor((calloutWidth * zoomLevel - 38) / 5.2));
+              const calloutDisplayTitle = calloutTitle.length > maxTitleCharacters
+                ? `${calloutTitle.slice(0, Math.max(5, maxTitleCharacters - 3))}...`
+                : calloutTitle;
+              const calloutX = activeZoneCenter
+                ? clamp(
+                    activeZoneCenter.x > (visibleLeft + visibleRight) / 2
+                      ? activeZoneCenter.x - calloutWidth - calloutOffset
+                      : activeZoneCenter.x + calloutOffset,
+                    visibleLeft + calloutMargin,
+                    Math.max(visibleLeft + calloutMargin, visibleRight - calloutWidth - calloutMargin)
+                  )
+                : 0;
+              const calloutY = activeZoneCenter
+                ? clamp(
+                    activeZoneCenter.y - calloutHeight - 22 / zoomLevel,
+                    visibleTop + calloutMargin,
+                    Math.max(visibleTop + calloutMargin, visibleBottom - calloutHeight - calloutMargin)
+                  )
+                : 0;
+              const calloutAnchorX = activeZoneCenter
+                ? (calloutX > activeZoneCenter.x ? calloutX : calloutX + calloutWidth)
+                : 0;
+              const calloutAnchorY = calloutY + calloutHeight / 2;
+              const grayscaleFilterId = `${pointerClipId}-map-grayscale`;
+              const selectedZoneMaskId = `${pointerClipId}-selected-zone-mask`;
+
               return (
                 <svg
                   style={{
@@ -1216,10 +1506,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                     pointerEvents: 'none',
                     zIndex: 4,
                     overflow: 'visible',
-                    opacity: markerVisible ? 1 : 0,
-                    transform: markerVisible ? 'translateY(0px) scale(1)' : 'translateY(2px) scale(0.992)',
-                    filter: markerVisible ? 'blur(0px)' : 'blur(0.4px)',
-                    transition: `opacity ${MARKER_FADE_IN_MS}ms ease, transform ${MARKER_FADE_IN_MS}ms ease, filter ${MARKER_FADE_IN_MS}ms ease`,
                   }}
                   width={imageSize.width}
                   height={imageSize.height}
@@ -1229,8 +1515,118 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                     <clipPath id={pointerClipId}>
                       <rect x="0" y="0" width={imageSize.width} height={imageSize.height} />
                     </clipPath>
+                    <filter id={grayscaleFilterId} colorInterpolationFilters="sRGB">
+                      <feColorMatrix type="saturate" values="0" />
+                    </filter>
+                    {activeMapSectionPath && (
+                      <mask id={selectedZoneMaskId} maskUnits="userSpaceOnUse" x="0" y="0" width={imageSize.width} height={imageSize.height}>
+                        <rect x="0" y="0" width={imageSize.width} height={imageSize.height} fill="white" />
+                        <path d={activeMapSectionPath} fill="black" fillRule="evenodd" />
+                      </mask>
+                    )}
                   </defs>
                   <g clipPath={`url(#${pointerClipId})`}>
+                    {isInteractiveMapVisible && activeMapSectionPath && (
+                      <image
+                        href={useZoomSource && srcZoom ? srcZoom : src}
+                        x="0"
+                        y="0"
+                        width={imageSize.width}
+                        height={imageSize.height}
+                        preserveAspectRatio="none"
+                        filter={`url(#${grayscaleFilterId})`}
+                        mask={`url(#${selectedZoneMaskId})`}
+                        opacity="0.88"
+                        pointerEvents="none"
+                        style={{ animation: prefersReducedMotion ? 'none' : 'mapGrayIn 280ms ease both' }}
+                      />
+                    )}
+                    {isInteractiveMapVisible && mapGeometry?.renderOrder.map(sectionIndex => {
+                      const section = interactiveMapData!.sections[sectionIndex];
+                      const isActiveSection = activeMapSectionIndex === sectionIndex;
+                      if (activeMapSectionIndex !== null && !isActiveSection) return null;
+                      const isHoveredSection = hoveredMapSectionIndex === sectionIndex;
+                      const isFocusedSection = focusedMapSectionIndex === sectionIndex;
+                      const sectionPath = mapGeometry.paths[sectionIndex];
+
+                      return (
+                        <path
+                          key={`interactive-map-section-${sectionIndex}`}
+                          d={sectionPath}
+                          fill={section.color}
+                          fillRule="evenodd"
+                          fillOpacity={isActiveSection ? 0.12 : isHoveredSection || isFocusedSection ? 0.36 : 0.24}
+                          stroke={section.color}
+                          strokeWidth={isActiveSection ? 2.4 : isHoveredSection || isFocusedSection ? 2.2 : 1.5}
+                          strokeDasharray={isActiveSection ? '0' : '6 4'}
+                          strokeLinejoin="round"
+                          vectorEffect="non-scaling-stroke"
+                          pointerEvents="visiblePainted"
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`Seleccionar zona ${section.title}`}
+                          style={{ cursor: 'pointer', transition: 'fill-opacity 0.18s ease, stroke-width 0.18s ease', outline: 'none' }}
+                          onClick={event => {
+                            event.stopPropagation();
+                            setActiveMapSectionIndex(current => current === sectionIndex ? null : sectionIndex);
+                            vibrateSelection();
+                          }}
+                          onKeyDown={event => {
+                            if (event.key !== 'Enter' && event.key !== ' ') return;
+                            event.preventDefault();
+                            setActiveMapSectionIndex(current => current === sectionIndex ? null : sectionIndex);
+                            vibrateSelection();
+                          }}
+                          onMouseEnter={() => setHoveredMapSectionIndex(sectionIndex)}
+                          onMouseLeave={() => setHoveredMapSectionIndex(null)}
+                          onFocus={() => setFocusedMapSectionIndex(sectionIndex)}
+                          onBlur={() => setFocusedMapSectionIndex(null)}
+                          onMouseDown={event => event.stopPropagation()}
+                          onTouchStart={event => event.stopPropagation()}
+                        >
+                          <title>{section.title}</title>
+                        </path>
+                      );
+                    })}
+                    {isInteractiveMapVisible && activeMapSection && activeZoneCenter && (
+                      <g pointerEvents="none" style={{ animation: prefersReducedMotion ? 'none' : 'mapCalloutIn 320ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                        <line
+                          x1={activeZoneCenter.x}
+                          y1={activeZoneCenter.y}
+                          x2={calloutAnchorX}
+                          y2={calloutAnchorY}
+                          stroke="#ffffff"
+                          strokeWidth="3.4"
+                          strokeLinecap="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                        <line
+                          x1={activeZoneCenter.x}
+                          y1={activeZoneCenter.y}
+                          x2={calloutAnchorX}
+                          y2={calloutAnchorY}
+                          stroke={activeMapSection.color}
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                        <circle cx={activeZoneCenter.x} cy={activeZoneCenter.y} r={5.5 / zoomLevel} fill="#ffffff" stroke={activeMapSection.color} strokeWidth="2.2" vectorEffect="non-scaling-stroke" />
+                        <rect x={calloutX + 2 / zoomLevel} y={calloutY + 3 / zoomLevel} width={calloutWidth} height={calloutHeight} rx={9 / zoomLevel} fill="rgba(15,23,42,0.24)" />
+                        <rect x={calloutX} y={calloutY} width={calloutWidth} height={calloutHeight} rx={9 / zoomLevel} fill="rgba(255,255,255,0.97)" stroke="rgba(15,23,42,0.36)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                        <rect x={calloutX + 6 / zoomLevel} y={calloutY + 6 / zoomLevel} width={4 / zoomLevel} height={calloutHeight - 12 / zoomLevel} rx={2 / zoomLevel} fill={activeMapSection.color} />
+                        <text
+                          x={calloutX + 18 / zoomLevel}
+                          y={calloutY + calloutHeight / 2 + 0.5 / zoomLevel}
+                          fill="#111827"
+                          fontSize={12 / zoomLevel}
+                          fontWeight="700"
+                          fontFamily="Montserrat, Segoe UI, sans-serif"
+                          dominantBaseline="middle"
+                        >
+                          {calloutDisplayTitle}
+                        </text>
+                      </g>
+                    )}
                     {activeMarkerIndices.map((markerIndex) => {
                       const marker = senaladosItems[markerIndex];
                       if (!marker || marker.x == null || marker.y == null) return null;
@@ -1309,9 +1705,54 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
                       const selectedFill = activeMarkerColor.fill;
                       const selectedEdge = activeMarkerColor.edge;
+                      const regionPixelPoints = marker.regionPoints && marker.regionPoints.length >= 6
+                        ? Array.from({ length: marker.regionPoints.length / 2 }, (_, index) => ({
+                            x: marker.regionPoints![index * 2] * imageSize.width,
+                            y: marker.regionPoints![index * 2 + 1] * imageSize.height,
+                          }))
+                        : [];
+                      const regionMinX = regionPixelPoints.length ? Math.min(...regionPixelPoints.map(point => point.x)) : 0;
+                      const regionMaxX = regionPixelPoints.length ? Math.max(...regionPixelPoints.map(point => point.x)) : 0;
+                      const regionMinY = regionPixelPoints.length ? Math.min(...regionPixelPoints.map(point => point.y)) : 0;
+                      const regionMaxY = regionPixelPoints.length ? Math.max(...regionPixelPoints.map(point => point.y)) : 0;
+                      const regionLabelHeight = 32 / zoomLevel;
+                      const regionLabelWidth = Math.min(
+                        Math.max(112, 54 + marker.label.length * 6.2) / zoomLevel,
+                        Math.max(80 / zoomLevel, imageSize.width - 16 / zoomLevel)
+                      );
+                      const regionLabelX = clamp(
+                        (regionMinX + regionMaxX) / 2 - regionLabelWidth / 2,
+                        8 / zoomLevel,
+                        Math.max(8 / zoomLevel, imageSize.width - regionLabelWidth - 8 / zoomLevel)
+                      );
+                      const regionHasRoomAbove = regionMinY >= regionLabelHeight + 21 / zoomLevel;
+                      const regionLabelY = regionHasRoomAbove
+                        ? regionMinY - regionLabelHeight - 13 / zoomLevel
+                        : Math.min(imageSize.height - regionLabelHeight - 8 / zoomLevel, regionMaxY + 13 / zoomLevel);
+                      const regionAnchorX = clamp((regionMinX + regionMaxX) / 2, regionLabelX + 12 / zoomLevel, regionLabelX + regionLabelWidth - 12 / zoomLevel);
+                      const regionConnectorY = regionHasRoomAbove ? regionMinY : regionMaxY;
+                      const regionLabelEdgeY = regionHasRoomAbove ? regionLabelY + regionLabelHeight : regionLabelY;
+                      const regionLabelFontSize = clamp(
+                        ((regionLabelWidth * zoomLevel - 18) / Math.max(1, marker.label.length * 0.62)),
+                        8,
+                        12
+                      ) / zoomLevel;
 
                       return (
-                        <g key={markerIndex} opacity={markerVisible ? 1 : 0}>
+                        <g key={markerIndex}>
+                          {marker.regionPoints && marker.regionPoints.length >= 6 && (
+                            <polygon
+                              points={Array.from({ length: marker.regionPoints.length / 2 }, (_, index) => `${marker.regionPoints![index * 2] * imageSize.width},${marker.regionPoints![index * 2 + 1] * imageSize.height}`).join(' ')}
+                              fill={marker.regionColor ?? '#22c55e'}
+                              fillOpacity={marker.regionOpacity ?? 0.28}
+                              stroke={marker.regionColor ?? '#22c55e'}
+                              strokeWidth={2.5}
+                              strokeDasharray="10 7"
+                              strokeLinejoin="round"
+                              vectorEffect="non-scaling-stroke"
+                              style={{ transition: prefersReducedMotion ? 'none' : 'opacity 220ms ease' }}
+                            />
+                          )}
                           {markerVisualMode === 'arrow' ? (
                             <>
                               <polygon
@@ -1344,6 +1785,53 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                               />
                             </>
                           )}
+                          {regionPixelPoints.length >= 3 && (
+                            <g pointerEvents="none" style={{ animation: prefersReducedMotion ? 'none' : 'mapCalloutIn 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                              <line
+                                x1={regionAnchorX}
+                                y1={regionLabelEdgeY}
+                                x2={(regionMinX + regionMaxX) / 2}
+                                y2={regionConnectorY}
+                                stroke="#ffffff"
+                                strokeWidth="4"
+                                strokeLinecap="round"
+                                vectorEffect="non-scaling-stroke"
+                              />
+                              <line
+                                x1={regionAnchorX}
+                                y1={regionLabelEdgeY}
+                                x2={(regionMinX + regionMaxX) / 2}
+                                y2={regionConnectorY}
+                                stroke={marker.regionColor ?? '#22c55e'}
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                vectorEffect="non-scaling-stroke"
+                              />
+                              <rect
+                                x={regionLabelX}
+                                y={regionLabelY}
+                                width={regionLabelWidth}
+                                height={regionLabelHeight}
+                                rx={9 / zoomLevel}
+                                fill="rgba(255,255,255,0.97)"
+                                stroke={marker.regionColor ?? '#22c55e'}
+                                strokeWidth="1.5"
+                                vectorEffect="non-scaling-stroke"
+                              />
+                              <text
+                                x={regionLabelX + regionLabelWidth / 2}
+                                y={regionLabelY + regionLabelHeight / 2 + 0.5 / zoomLevel}
+                                fill="#111827"
+                                fontSize={regionLabelFontSize}
+                                fontWeight="750"
+                                fontFamily="Montserrat, Segoe UI, sans-serif"
+                                textAnchor="middle"
+                                dominantBaseline="middle"
+                              >
+                                {marker.label}
+                              </text>
+                            </g>
+                          )}
                         </g>
                       );
                     })}
@@ -1353,6 +1841,24 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             })()}
           </div>
         </div>
+
+        {zoomLevel > 1.05 && imageSize && (() => {
+          const frame = containerRef.current;
+          const miniWidth = isDesktop ? 132 : 104;
+          const miniHeight = Math.max(58, Math.min(104, miniWidth * imageSize.height / imageSize.width));
+          const frameWidth = frame?.clientWidth ?? imageSize.width;
+          const frameHeight = frame?.clientHeight ?? imageSize.height;
+          const visibleWidth = Math.min(imageSize.width, frameWidth / zoomLevel);
+          const visibleHeight = Math.min(imageSize.height, frameHeight / zoomLevel);
+          const visibleLeft = clamp(imageSize.width / 2 + (-frameWidth / 2 - position.x) / zoomLevel, 0, Math.max(0, imageSize.width - visibleWidth));
+          const visibleTop = clamp(imageSize.height / 2 + (-frameHeight / 2 - position.y) / zoomLevel, 0, Math.max(0, imageSize.height - visibleHeight));
+          return (
+            <div aria-label="Minimapa de navegación" style={{ position: 'absolute', left: '16px', bottom: '18px', width: `${miniWidth}px`, height: `${miniHeight}px`, borderRadius: '10px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.88)', background: '#0f172a', boxShadow: '0 8px 24px rgba(2,6,23,0.35)', zIndex: 6, pointerEvents: 'none' }}>
+              <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'fill', opacity: 0.82 }} />
+              <span style={{ position: 'absolute', left: `${visibleLeft / imageSize.width * miniWidth}px`, top: `${visibleTop / imageSize.height * miniHeight}px`, width: `${visibleWidth / imageSize.width * miniWidth}px`, height: `${visibleHeight / imageSize.height * miniHeight}px`, border: '2px solid #38bdf8', background: 'rgba(56,189,248,0.14)', boxSizing: 'border-box', borderRadius: '3px' }} />
+            </div>
+          );
+        })()}
 
         <div
           style={{
@@ -1369,6 +1875,25 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             <span style={{ color: '#0f172a', fontWeight: 800, minWidth: '55px', textAlign: 'center', fontSize: '0.95em' }}>{Math.round(zoomLevel * 100)}%</span>
             <button onClick={handleZoomIn} style={{ background: 'linear-gradient(135deg,#38bdf8,#0ea5e9)', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', fontSize: '1.2em', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(14,165,233,0.3)' }} title="Acercar">+</button>
           </div>
+          <button
+            type="button"
+            onClick={handleResetViewport}
+            disabled={zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5}
+            style={{
+              border: '1px solid #bae6fd',
+              background: '#ffffff',
+              color: '#0369a1',
+              borderRadius: '9px',
+              padding: '6px 12px',
+              fontWeight: 750,
+              fontSize: '0.72em',
+              fontFamily: 'inherit',
+              cursor: zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 ? 'not-allowed' : 'pointer',
+              opacity: zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 ? 0.5 : 1,
+            }}
+          >
+            Recentrar
+          </button>
           <span style={{ color: '#64748b', fontSize: '0.72em', textAlign: 'center' }}>
             {zoomLevel > 1 ? '✋ Arrastra para mover' : '🖱️ Rueda para zoom'}
           </span>
@@ -1421,104 +1946,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           </div>
           {/* Contenido */}
           <div style={{ padding: '12px 10px 16px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
-            {(interactiveMapData || shouldReserveInteractiveMapCtaSpace) && (
-              <div style={sidebarSectionStyle}>
-                {interactiveMapData ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowInteractiveMapViewer(true)}
-                    onMouseEnter={() => setIsInteractiveMapCtaHovered(true)}
-                    onMouseLeave={() => setIsInteractiveMapCtaHovered(false)}
-                    onFocus={() => setIsInteractiveMapCtaHovered(true)}
-                    onBlur={() => setIsInteractiveMapCtaHovered(false)}
-                    style={{
-                      width: '100%',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      borderRadius: '10px',
-                      border: isInteractiveMapCtaHovered ? '1px solid #93c5fd' : '1px solid #bfdbfe',
-                      background: isInteractiveMapCtaHovered
-                        ? 'linear-gradient(135deg, #dbeafe 0%, #c7ddff 100%)'
-                        : 'linear-gradient(135deg, #e8f0ff 0%, #dbeafe 100%)',
-                      color: '#1e3a8a',
-                      fontWeight: 800,
-                      fontSize: '0.82em',
-                      letterSpacing: '0.01em',
-                      fontFamily: 'inherit',
-                      padding: '10px 12px',
-                      cursor: 'pointer',
-                      boxShadow: isInteractiveMapCtaHovered
-                        ? '0 7px 16px rgba(59,130,246,0.24)'
-                        : '0 4px 12px rgba(59,130,246,0.18)',
-                      transform: isInteractiveMapCtaHovered ? 'translateY(-2px) scale(1.01)' : 'translateY(0) scale(1)',
-                      filter: isInteractiveMapCtaHovered ? 'saturate(1.06)' : 'none',
-                      animation: isInteractiveMapCtaHovered ? 'mapCtaGlow 0.9s ease-in-out infinite' : 'none',
-                      transition: 'all 0.22s ease',
-                    }}
-                  >
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transform: 'translateX(0) scale(1)',
-                        animation: isInteractiveMapCtaHovered ? 'mapCtaIconTap 0.62s cubic-bezier(0.22, 1, 0.36, 1) infinite' : 'none',
-                        transition: 'transform 0.2s ease',
-                      }}
-                    >
-                      <MousePointerClick size={16} strokeWidth={2.2} />
-                    </span>
-                    Ver placa interactiva
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled
-                    aria-disabled="true"
-                    style={{
-                      width: '100%',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      borderRadius: '10px',
-                      border: '1px solid #bfdbfe',
-                      background: 'linear-gradient(135deg, #e8f0ff 0%, #dbeafe 100%)',
-                      color: '#1e3a8a',
-                      fontWeight: 800,
-                      fontSize: '0.82em',
-                      letterSpacing: '0.01em',
-                      fontFamily: 'inherit',
-                      padding: '10px 12px',
-                      cursor: 'default',
-                      boxShadow: '0 4px 12px rgba(59,130,246,0.18)',
-                      opacity: 0.88,
-                    }}
-                  >
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        animation: 'mapCtaIconTap 0.72s cubic-bezier(0.22, 1, 0.36, 1) infinite',
-                      }}
-                    >
-                      <MousePointerClick size={16} strokeWidth={2.2} />
-                    </span>
-                    Preparando placa interactiva...
-                  </button>
-                )}
-              </div>
-            )}
-
             {(temaNombre || subtemaNombre) && (
               <div
                 style={{
                   ...sidebarGridStyle,
+                  order: 1,
                   gridTemplateColumns: temaNombre && subtemaNombre ? 'repeat(2, minmax(0, 1fr))' : '1fr',
                 }}
               >
@@ -1569,6 +2001,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               <div
                 style={{
                   ...sidebarGridStyle,
+                  order: 1,
                   gridTemplateColumns: aumento && tincion ? 'repeat(2, minmax(0, 1fr))' : '1fr',
                 }}
               >
@@ -1618,79 +2051,117 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               </div>
             )}
 
-            {groupedSenaladosItems.length > 0 && (
-              <div style={sidebarSectionStyle}>
-                <span style={labelStyle}>Señalados</span>
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+            {(groupedSenaladosItems.length > 0 || interactiveMapData || loadingInteractiveMap || interactiveMapError) && (
+              <div style={{ ...sidebarSectionStyle, order: 3 }}>
+                <span style={labelStyle}>Visualización</span>
+                {groupedSenaladosItems.length > 0 && viewerMode !== 'map' && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.72em', fontWeight: 800, color: '#64748b', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Color</span>
+                    {MARKER_COLOR_OPTIONS.map(option => {
+                      const isActiveColor = markerColorKey === option.key;
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onClick={() => setMarkerColorKey(option.key)}
+                          title={option.label}
+                          aria-label={`Cambiar color a ${option.label}`}
+                          style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '999px',
+                            border: isActiveColor ? `2px solid ${option.edge}` : '1px solid #cbd5e1',
+                            background: option.fill,
+                            boxShadow: isActiveColor ? '0 0 0 3px rgba(96,165,250,0.18)' : 'none',
+                            cursor: 'pointer',
+                            padding: 0,
+                            outline: 'none',
+                            transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease',
+                            transform: isActiveColor ? 'scale(1.08)' : 'scale(1)',
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, availableViewerModeCount)}, minmax(0, 1fr))`, gap: '7px', marginBottom: '10px' }}>
+                  {groupedSenaladosItems.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => setMarkerVisualMode('arrow')}
+                    aria-pressed={viewerMode === 'arrow'}
+                    onClick={() => selectViewerMode('arrow')}
                     style={{
-                      flex: 1,
-                      border: markerVisualMode === 'arrow' ? '1px solid #93c5fd' : '1px solid #d1d9e6',
-                      background: markerVisualMode === 'arrow' ? '#e9f1ff' : '#ffffff',
-                      color: markerVisualMode === 'arrow' ? '#1e3a8a' : '#334155',
+                      border: viewerMode === 'arrow' ? '1px solid #93c5fd' : '1px solid #d1d9e6',
+                      background: viewerMode === 'arrow' ? '#e9f1ff' : '#ffffff',
+                      color: viewerMode === 'arrow' ? '#1e3a8a' : '#334155',
                       borderRadius: '11px',
-                      padding: '7px 10px',
+                      padding: '8px 6px',
                       fontWeight: 700,
                       cursor: 'pointer',
                       fontFamily: 'inherit',
-                      fontSize: '0.75em',
-                      boxShadow: markerVisualMode === 'arrow' ? '0 4px 12px rgba(37,99,235,0.14)' : 'none',
+                      fontSize: '0.7em',
+                      boxShadow: viewerMode === 'arrow' ? '0 4px 12px rgba(37,99,235,0.14)' : 'none',
                       transition: 'all 0.18s ease',
                     }}
                   >
-                    Flecha
+                    Flechas
                   </button>
+                  )}
+                  {groupedSenaladosItems.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => setMarkerVisualMode('pointer')}
+                    aria-pressed={viewerMode === 'pointer'}
+                    onClick={() => selectViewerMode('pointer')}
                     style={{
-                      flex: 1,
-                      border: markerVisualMode === 'pointer' ? '1px solid #93c5fd' : '1px solid #d1d9e6',
-                      background: markerVisualMode === 'pointer' ? '#e9f1ff' : '#ffffff',
-                      color: markerVisualMode === 'pointer' ? '#1e3a8a' : '#334155',
+                      border: viewerMode === 'pointer' ? '1px solid #93c5fd' : '1px solid #d1d9e6',
+                      background: viewerMode === 'pointer' ? '#e9f1ff' : '#ffffff',
+                      color: viewerMode === 'pointer' ? '#1e3a8a' : '#334155',
                       borderRadius: '11px',
-                      padding: '7px 10px',
+                      padding: '8px 6px',
                       fontWeight: 700,
                       cursor: 'pointer',
                       fontFamily: 'inherit',
-                      fontSize: '0.75em',
-                      boxShadow: markerVisualMode === 'pointer' ? '0 4px 12px rgba(37,99,235,0.14)' : 'none',
+                      fontSize: '0.7em',
+                      boxShadow: viewerMode === 'pointer' ? '0 4px 12px rgba(37,99,235,0.14)' : 'none',
                       transition: 'all 0.18s ease',
                     }}
                   >
                     Señalador
                   </button>
+                  )}
+                  {(interactiveMapData || loadingInteractiveMap) && (
+                  <button
+                    type="button"
+                    aria-pressed={viewerMode === 'map'}
+                    disabled={!interactiveMapData}
+                    onClick={() => selectViewerMode('map')}
+                    style={{
+                      border: viewerMode === 'map' && interactiveMapData ? '1px solid #86efac' : '1px solid #cbd5e1',
+                      background: viewerMode === 'map' && interactiveMapData ? '#ecfdf5' : '#ffffff',
+                      color: viewerMode === 'map' && interactiveMapData ? '#166534' : '#475569',
+                      borderRadius: '11px',
+                      padding: '8px 6px',
+                      fontWeight: 800,
+                      cursor: interactiveMapData ? 'pointer' : 'wait',
+                      fontFamily: 'inherit',
+                      fontSize: '0.7em',
+                      boxShadow: viewerMode === 'map' && interactiveMapData ? '0 4px 12px rgba(22,163,74,0.13)' : 'none',
+                      opacity: interactiveMapData ? 1 : 0.72,
+                      transition: 'all 0.18s ease',
+                    }}
+                  >
+                    {!interactiveMapData ? 'Cargando...' : 'Mapa'}
+                  </button>
+                  )}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '0.72em', fontWeight: 800, color: '#64748b', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Color</span>
-                  {MARKER_COLOR_OPTIONS.map(option => {
-                    const isActiveColor = markerColorKey === option.key;
-                    return (
-                      <button
-                        key={option.key}
-                        type="button"
-                        onClick={() => setMarkerColorKey(option.key)}
-                        title={option.label}
-                        aria-label={`Cambiar color a ${option.label}`}
-                        style={{
-                          width: '28px',
-                          height: '28px',
-                          borderRadius: '999px',
-                          border: isActiveColor ? `2px solid ${option.edge}` : '1px solid #cbd5e1',
-                          background: option.fill,
-                          boxShadow: isActiveColor ? '0 0 0 3px rgba(96,165,250,0.18)' : 'none',
-                          cursor: 'pointer',
-                          padding: 0,
-                          outline: 'none',
-                          transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease',
-                          transform: isActiveColor ? 'scale(1.08)' : 'scale(1)',
-                        }}
-                      />
-                    );
-                  })}
-                </div>
+                {interactiveMapError && (
+                  <div style={{ marginBottom: '10px', padding: '9px', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '0.74em', lineHeight: 1.4 }}>
+                    {interactiveMapError}
+                    <button type="button" onClick={() => setInteractiveMapReloadTick(value => value + 1)} style={{ marginLeft: '8px', border: '1px solid #fca5a5', borderRadius: '7px', background: '#fff', color: '#991b1b', padding: '4px 7px', fontWeight: 750, cursor: 'pointer' }}>Reintentar</button>
+                  </div>
+                )}
+                {groupedSenaladosItems.length > 0 && viewerMode !== 'map' && (
+                  <>
                 <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {groupedSenaladosItems.map((group, groupIndex) => {
                     const item = group.representative;
@@ -1699,6 +2170,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                     const isActive = activeMarkerIndex === indexToUse;
                     const isHovered = hoveredMarkerIndex === indexToUse;
                     const isFocused = focusedMarkerIndex === indexToUse;
+                    const isOffscreen = Boolean(hasMarker && imageSize && !isImagePointVisible((item.x ?? 0) * imageSize.width, (item.y ?? 0) * imageSize.height));
                     return (
                     <li key={`${group.label}-${groupIndex}`} style={{
                       display: 'flex',
@@ -1710,7 +2182,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                       border: isActive ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
                       boxShadow: isActive ? '0 8px 18px rgba(37,99,235,0.12)' : '0 1px 0 rgba(148,163,184,0.12)',
                       transition: 'all 0.2s ease',
-                      animation: 'senaladoCardIn 320ms ease both',
+                      animation: prefersReducedMotion ? 'none' : 'senaladoCardIn 320ms ease both',
                       animationDelay: `${group.firstIndex * 45}ms`,
                     }}>
                       <span style={{
@@ -1748,6 +2220,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                         onFocus={() => setFocusedMarkerIndex(indexToUse)}
                         onBlur={() => setFocusedMarkerIndex(null)}
                         aria-pressed={isActive}
+                        title={isOffscreen ? 'Fuera de la vista; pulsa para centrar' : undefined}
                         style={{
                           width: '100%',
                           border: isActive ? '1px solid #93c5fd' : isHovered ? '1px solid #bfdbfe' : '1px solid #cbd5e1',
@@ -1807,7 +2280,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                           minWidth: '26px',
                           minHeight: '22px',
                         }}>
-                          {hasMarker ? (
+                          {isOffscreen ? '↗' : hasMarker ? (
                             isActive ? (
                               <svg
                                 width="14"
@@ -1868,10 +2341,144 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 >
                   Ocultar señalador
                 </button>
+                  </>
+                )}
+                {interactiveMapData && viewerMode === 'map' && (
+                  <div style={{ marginTop: groupedSenaladosItems.length > 0 ? '12px' : 0 }}>
+                    <span style={labelStyle}>Zonas del mapa {interactiveMapData.mapNumber}</span>
+                    <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {interactiveMapData.sections.map((section, sectionIndex) => {
+                        const isActive = activeMapSectionIndex === sectionIndex;
+                        const isHovered = hoveredMapSectionIndex === sectionIndex;
+                        const isFocused = focusedMapSectionIndex === sectionIndex;
+                        const sectionCoordinates = mapGeometry?.coordinates[sectionIndex] ?? [];
+                        const sectionBounds = sectionCoordinates.length >= 6 ? polygonBounds(sectionCoordinates) : null;
+                        const isOffscreen = Boolean(sectionBounds && !isImagePointVisible((sectionBounds.minX + sectionBounds.maxX) / 2, (sectionBounds.minY + sectionBounds.maxY) / 2));
+                        return (
+                          <li
+                            key={`map-section-control-${sectionIndex}`}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '24px minmax(0, 1fr)',
+                              alignItems: 'start',
+                              gap: '8px 10px',
+                              background: isActive ? '#eff6ff' : isHovered || isFocused ? '#f0f9ff' : '#f8fafc',
+                              borderRadius: '12px',
+                              padding: '8px 10px',
+                              border: isActive || isHovered || isFocused ? `1px solid ${section.color}` : '1px solid #e2e8f0',
+                              boxShadow: isActive ? '0 8px 18px rgba(37,99,235,0.12)' : isHovered || isFocused ? `0 5px 14px ${section.color}20` : '0 1px 0 rgba(148,163,184,0.12)',
+                              transform: isHovered && !isActive ? 'translateY(-1px)' : 'none',
+                              transition: 'all 0.2s ease',
+                              animation: prefersReducedMotion ? 'none' : 'senaladoCardIn 320ms ease both',
+                              animationDelay: `${sectionIndex * 45}ms`,
+                            }}
+                          >
+                            <span
+                              aria-hidden="true"
+                              style={{
+                                width: '24px',
+                                height: '24px',
+                                marginTop: '6px',
+                                borderRadius: '999px',
+                                background: section.color,
+                                color: getReadableTextColor(section.color),
+                                fontWeight: 850,
+                                fontSize: '0.68em',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: isActive ? `0 4px 10px ${section.color}66` : `0 2px 6px ${section.color}38`,
+                              }}
+                            >
+                              {sectionIndex + 1}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={!isInteractiveMapVisible}
+                              onClick={() => {
+                                setActiveMapSectionIndex(current => current === sectionIndex ? null : sectionIndex);
+                                vibrateSelection();
+                              }}
+                              onMouseEnter={() => setHoveredMapSectionIndex(sectionIndex)}
+                              onMouseLeave={() => setHoveredMapSectionIndex(null)}
+                              onFocus={() => setFocusedMapSectionIndex(sectionIndex)}
+                              onBlur={() => setFocusedMapSectionIndex(null)}
+                              style={{
+                                width: '100%',
+                                minHeight: '38px',
+                                border: isActive || isHovered || isFocused ? `1px solid ${section.color}` : '1px solid #cbd5e1',
+                                background: isActive ? '#ffffff' : isHovered || isFocused ? '#f8fbff' : '#ffffff',
+                                color: '#111111',
+                                borderRadius: '10px',
+                                padding: '7px 9px 7px 11px',
+                                fontFamily: 'inherit',
+                                fontSize: '0.72em',
+                                lineHeight: 1.35,
+                                fontWeight: isActive ? 750 : 600,
+                                cursor: isInteractiveMapVisible ? 'pointer' : 'not-allowed',
+                                opacity: isInteractiveMapVisible ? 1 : 0.55,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '10px',
+                                boxShadow: isActive ? `0 4px 12px ${section.color}2b` : isHovered || isFocused ? `0 3px 10px ${section.color}1f` : 'none',
+                                outline: isFocused ? `2px solid ${section.color}55` : 'none',
+                                outlineOffset: '1px',
+                                transition: 'all 0.18s ease',
+                              }}
+                            >
+                              <span style={{ flex: 1, minWidth: 0, textAlign: 'center', letterSpacing: '0.01em' }}>
+                                {section.title}
+                              </span>
+                              <span style={{
+                                minWidth: '31px',
+                                minHeight: '22px',
+                                padding: '3px 7px',
+                                borderRadius: '999px',
+                                border: `1px solid ${section.color}66`,
+                                background: isActive ? `${section.color}24` : `${section.color}12`,
+                                color: '#334155',
+                                fontSize: '0.68em',
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                whiteSpace: 'nowrap',
+                              }}>
+                                {isActive ? 'Activa' : isOffscreen ? 'Centrar' : 'Ver'}
+                              </span>
+                            </button>
+                            {isActive && section.description && (
+                              <p style={{ gridColumn: '2', margin: 0, padding: '8px 10px', borderRadius: '9px', border: `1px solid ${section.color}38`, background: '#ffffff', color: '#475569', fontSize: '0.73em', lineHeight: 1.48 }}>
+                                {section.description}
+                              </p>
+                            )}
+                            {isActive && (
+                              <div style={{ gridColumn: '2', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '0.68em', color: '#64748b', fontWeight: 700 }}>Zona {sectionIndex + 1} · <span style={{ color: section.color }}>●</span> {section.color}</span>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button type="button" onClick={() => setMapFocusRequest(value => value + 1)} style={{ border: '1px solid #bae6fd', background: '#fff', color: '#0369a1', borderRadius: '7px', padding: '4px 7px', fontSize: '0.68em', fontWeight: 750, cursor: 'pointer' }}>Centrar</button>
+                                  <button type="button" onClick={() => setActiveMapSectionIndex(null)} style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#475569', borderRadius: '7px', padding: '4px 7px', fontSize: '0.68em', fontWeight: 750, cursor: 'pointer' }}>Ver todas</button>
+                                </div>
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                )}
+                {activeNavigationCount > 1 && (
+                  <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '7px' }}>
+                    <button type="button" onClick={() => navigateActiveItem(-1)} aria-label="Elemento anterior" style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#334155', borderRadius: '9px', padding: '7px', fontWeight: 800, cursor: 'pointer' }}>← Anterior</button>
+                    <span style={{ color: '#64748b', fontSize: '0.68em', fontWeight: 800, whiteSpace: 'nowrap' }}>{activeNavigationPosition || '—'} / {activeNavigationCount}</span>
+                    <button type="button" onClick={() => navigateActiveItem(1)} aria-label="Elemento siguiente" style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#334155', borderRadius: '9px', padding: '7px', fontWeight: 800, cursor: 'pointer' }}>Siguiente →</button>
+                  </div>
+                )}
               </div>
             )}
             {comentario && (
-              <div style={sidebarSectionStyle}>
+              <div style={{ ...sidebarSectionStyle, order: 4 }}>
                 <span style={labelStyle}>Comentario</span>
                 <p style={{ margin: 0, color: '#334155', fontSize: '0.87em', lineHeight: 1.62, background: '#f8fafc', borderRadius: '10px', padding: '10px 14px', border: '1px solid #dbe3ee' }}>{renderBoldText(comentario)}</p>
               </div>
@@ -1880,18 +2487,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         </div>
       )}
 
-      {showInteractiveMapViewer && interactiveMapData && (
-        <InteractiveMapViewerModal
-          mapLabel={`Mapa ${interactiveMapData.mapNumber}`}
-          imageUrl={src}
-          temaNombre={temaNombre}
-          subtemaNombre={subtemaNombre}
-          sections={interactiveMapData.sections}
-          onClose={handleCloseInteractiveMapToPlacasGrid}
-          onReturnToInfo={handleReturnToPlacaInfoFromInteractiveMap}
-          returnToInfoLabel="Volver a info de la placa"
-        />
-      )}
     </div>,
     document.body
   );

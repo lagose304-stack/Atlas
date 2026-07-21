@@ -34,6 +34,9 @@ interface MarkerLocation {
   y: number;
   startX?: number | null;
   startY?: number | null;
+  regionPoints?: number[] | null;
+  regionColor?: string | null;
+  regionOpacity?: number | null;
 }
 
 interface SenaladoMetaItem {
@@ -42,6 +45,9 @@ interface SenaladoMetaItem {
   y: number | null;
   startX?: number | null;
   startY?: number | null;
+  regionPoints?: number[] | null;
+  regionColor?: string | null;
+  regionOpacity?: number | null;
 }
 
 const buildSenaladosPayload = (
@@ -85,6 +91,9 @@ const buildSenaladosPayload = (
       y: location?.y ?? null,
       startX: location?.startX ?? null,
       startY: location?.startY ?? null,
+      regionPoints: location?.regionPoints ?? null,
+      regionColor: location?.regionColor ?? null,
+      regionOpacity: location?.regionOpacity ?? null,
     });
   }
 
@@ -310,6 +319,7 @@ const Placas: React.FC = () => {
   const [senalados, setSenalados] = useState<string[]>([]);
   const [senaladosPos, setSenaladosPos] = useState<Array<MarkerLocation | null>>([]);
   const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
+  const [borderSenaladoIndex, setBorderSenaladoIndex] = useState<number | null>(null);
   const [namingSenaladoIndex, setNamingSenaladoIndex] = useState<number | null>(null);
   const [comentario, setComentario] = useState('');
   const [showComentario, setShowComentario] = useState(false);
@@ -867,6 +877,13 @@ const Placas: React.FC = () => {
                             setEditingSenaladoIndex(nextIndex);
                           }}
                           onAddMultipleSenalado={handleAddMultipleSenalado}
+                          onAddBorderSenalado={() => {
+                            const nextIndex = senalados.length;
+                            setSenalados(prev => [...prev, '']);
+                            setSenaladosPos(prev => [...prev, null]);
+                            setBorderSenaladoIndex(nextIndex);
+                            setEditingSenaladoIndex(nextIndex);
+                          }}
                           showComentario={showComentario}
                           onShowComentario={() => setShowComentario(true)}
                           comentario={comentario}
@@ -1131,8 +1148,10 @@ const Placas: React.FC = () => {
           imageSrc={selectedFilePreviewUrl}
           senaladoLabel={senalados[editingSenaladoIndex] ?? ''}
           initialLocation={senaladosPos[editingSenaladoIndex] ?? null}
+          borderMode={borderSenaladoIndex === editingSenaladoIndex || Boolean(senaladosPos[editingSenaladoIndex]?.regionPoints?.length)}
           onCancel={() => {
             setEditingSenaladoIndex(null);
+            setBorderSenaladoIndex(null);
             setNamingSenaladoIndex(null);
             setMultipleSenaladoActivo(false);
             setMultipleSenaladoLabel('');
@@ -1142,6 +1161,7 @@ const Placas: React.FC = () => {
             setSenalados(prev => prev.filter((_, i) => i !== targetIndex));
             setSenaladosPos(prev => prev.filter((_, i) => i !== targetIndex));
             setEditingSenaladoIndex(null);
+            setBorderSenaladoIndex(null);
             setNamingSenaladoIndex(null);
             setMultipleSenaladoActivo(false);
             setMultipleSenaladoLabel('');
@@ -1153,6 +1173,7 @@ const Placas: React.FC = () => {
               next[targetIndex] = location;
               return next;
             });
+            setBorderSenaladoIndex(null);
 
             const currentLabel = (senalados[targetIndex] ?? '').trim();
             if (!currentLabel) {

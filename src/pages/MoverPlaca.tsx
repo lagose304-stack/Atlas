@@ -57,6 +57,9 @@ interface MarkerLocation {
   y: number;
   startX?: number | null;
   startY?: number | null;
+  regionPoints?: number[] | null;
+  regionColor?: string | null;
+  regionOpacity?: number | null;
 }
 
 interface SenaladoMetaItem {
@@ -65,6 +68,9 @@ interface SenaladoMetaItem {
   y: number | null;
   startX?: number | null;
   startY?: number | null;
+  regionPoints?: number[] | null;
+  regionColor?: string | null;
+  regionOpacity?: number | null;
 }
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
@@ -101,6 +107,9 @@ const normalizeLocations = (values: Array<MarkerLocation | null>): Array<MarkerL
       y: Math.min(Math.max(y, 0), 1),
       startX,
       startY,
+      regionPoints: Array.isArray(value.regionPoints) ? value.regionPoints : null,
+      regionColor: value.regionColor ?? null,
+      regionOpacity: value.regionOpacity ?? null,
     };
   });
 };
@@ -148,6 +157,9 @@ const buildSenaladosPayload = (
       y: location?.y ?? null,
       startX: location?.startX ?? null,
       startY: location?.startY ?? null,
+      regionPoints: location?.regionPoints ?? null,
+      regionColor: location?.regionColor ?? null,
+      regionOpacity: location?.regionOpacity ?? null,
     });
   }
 
@@ -166,6 +178,9 @@ const deriveLocations = (
       y: item.y,
       startX: item.startX ?? null,
       startY: item.startY ?? null,
+      regionPoints: item.regionPoints ?? null,
+      regionColor: item.regionColor ?? null,
+      regionOpacity: item.regionOpacity ?? null,
     };
   });
 };
@@ -214,6 +229,7 @@ const MoverPlaca: React.FC = () => {
   const [editSenalados,     setEditSenalados]     = useState<string[]>([]);
   const [editSenaladosPos,  setEditSenaladosPos]  = useState<Array<MarkerLocation | null>>([]);
   const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
+  const [borderSenaladoIndex, setBorderSenaladoIndex] = useState<number | null>(null);
   const [editingSenaladoGroup, setEditingSenaladoGroup] = useState<{ label: string; indices: number[] } | null>(null);
   const [editingSenaladoGroupLocations, setEditingSenaladoGroupLocations] = useState<Array<MarkerLocation | null>>([]);
   const [, setForceLocationAssignment] = useState(false);
@@ -1103,6 +1119,13 @@ const MoverPlaca: React.FC = () => {
                     setEditingSenaladoIndex(nextIndex);
                   }}
                   onAddMultipleSenalado={handleAddMultipleSenalado}
+                  onAddBorderSenalado={() => {
+                    const nextIndex = editSenalados.length;
+                    setEditSenalados(prev => [...prev, '']);
+                    setEditSenaladosPos(prev => [...prev, null]);
+                    setBorderSenaladoIndex(nextIndex);
+                    setEditingSenaladoIndex(nextIndex);
+                  }}
                   showComentario={showEditComentario}
                   onShowComentario={() => setShowEditComentario(true)}
                   comentario={editComentario}
@@ -1156,8 +1179,10 @@ const MoverPlaca: React.FC = () => {
           imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
           senaladoLabel={editSenalados[editingSenaladoIndex] ?? ''}
           initialLocation={editSenaladosPos[editingSenaladoIndex] ?? null}
+          borderMode={borderSenaladoIndex === editingSenaladoIndex || Boolean(editSenaladosPos[editingSenaladoIndex]?.regionPoints?.length)}
           onCancel={() => {
             setEditingSenaladoIndex(null);
+            setBorderSenaladoIndex(null);
             setEditingSenaladoGroup(null);
             setEditingSenaladoGroupLocations([]);
           }}
@@ -1166,6 +1191,7 @@ const MoverPlaca: React.FC = () => {
             setEditSenalados(prev => prev.filter((_, i) => i !== targetIndex));
             setEditSenaladosPos(prev => prev.filter((_, i) => i !== targetIndex));
             setEditingSenaladoIndex(null);
+            setBorderSenaladoIndex(null);
             setNamingSenaladoIndex(null);
             setForceLocationAssignment(false);
             setMultipleSenaladoActivo(false);
@@ -1180,6 +1206,7 @@ const MoverPlaca: React.FC = () => {
               next[targetIndex] = location;
               return next;
             });
+            setBorderSenaladoIndex(null);
 
             const currentLabel = (editSenalados[targetIndex] ?? '').trim();
             if (!currentLabel) {

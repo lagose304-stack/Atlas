@@ -5,6 +5,9 @@ interface MarkerLocation {
   y: number;
   startX?: number | null;
   startY?: number | null;
+  regionPoints?: number[] | null;
+  regionColor?: string | null;
+  regionOpacity?: number | null;
 }
 
 interface SenaladoLocationPickerProps {
@@ -15,6 +18,7 @@ interface SenaladoLocationPickerProps {
   required?: boolean;
   batchMode?: boolean;
   batchSaveLabel?: string;
+  borderMode?: boolean;
   onCancel: () => void;
   onSave: (location: MarkerLocation | null) => void;
   onBatchSave?: (locations: MarkerLocation[]) => void;
@@ -133,6 +137,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   required = false,
   batchMode = false,
   batchSaveLabel = 'Guardar todos',
+  borderMode = false,
   onCancel,
   onSave,
   onBatchSave,
@@ -145,9 +150,26 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
   const [draggingPointerStart, setDraggingPointerStart] = useState(false);
   const [draggingBatchPointerStartIndex, setDraggingBatchPointerStartIndex] = useState<number | null>(null);
+  const [regionPoints, setRegionPoints] = useState<number[]>(initialLocation?.regionPoints ?? []);
+  const [regionColor, setRegionColor] = useState(initialLocation?.regionColor ?? '#22c55e');
+  const [regionOpacity, setRegionOpacity] = useState(initialLocation?.regionOpacity ?? 0.28);
+  const [regionComplete, setRegionComplete] = useState((initialLocation?.regionPoints?.length ?? 0) >= 6);
+  const [draggingRegionPointIndex, setDraggingRegionPointIndex] = useState<number | null>(null);
+  const [selectedRegionPointIndex, setSelectedRegionPointIndex] = useState<number | null>(null);
+  const [isCoarsePointer, setIsCoarsePointer] = useState(() => window.matchMedia?.('(pointer: coarse)').matches ?? false);
+  const lastDirectPointerAtRef = useRef(0);
   const imageRef = useRef<HTMLImageElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const pointerClipId = useId();
+
+  useEffect(() => {
+    const media = window.matchMedia?.('(pointer: coarse)');
+    if (!media) return;
+    const update = () => setIsCoarsePointer(media.matches);
+    update();
+    media.addEventListener?.('change', update);
+    return () => media.removeEventListener?.('change', update);
+  }, []);
 
   const zoomIn = () => setZoomLevel(prev => clamp(Number((prev + ZOOM_STEP).toFixed(2)), ZOOM_MIN, ZOOM_MAX));
   const zoomOut = () => setZoomLevel(prev => clamp(Number((prev - ZOOM_STEP).toFixed(2)), ZOOM_MIN, ZOOM_MAX));
@@ -289,10 +311,12 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
 
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
 
     return () => {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [draggingPointerStart, imageSize]);
 
@@ -308,14 +332,110 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
 
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
 
     return () => {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [draggingBatchPointerStartIndex, imageSize]);
 
+  const applyRegionPoints = (next: number[]) => {
+    setRegionPoints(next);
+    if (next.length < 2) {
+      setLocation(null);
+      return;
+    }
+    const pointCount = next.length / 2;
+    let sumX = 0;
+    let sumY = 0;
+    for (let index = 0; index < next.length; index += 2) {
+      sumX += next[index];
+      sumY += next[index + 1];
+    }
+    setLocation(previous => ({
+      x: sumX / pointCount,
+      y: sumY / pointCount,
+      startX: previous?.startX ?? null,
+      startY: previous?.startY ?? null,
+    }));
+  };
+
+  const addRegionPoint = (clientX: number, clientY: number) => {
+    const imageEl = imageRef.current;
+    if (!imageEl) return;
+    const rect = imageEl.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const next = [
+      ...regionPoints,
+      clamp((clientX - rect.left) / rect.width, 0, 1),
+      clamp((clientY - rect.top) / rect.height, 0, 1),
+    ];
+    applyRegionPoints(next);
+  };
+
+  const updateRegionPointFromClient = (pointIndex: number, clientX: number, clientY: number) => {
+    const imageEl = imageRef.current;
+    if (!imageEl) return;
+    const rect = imageEl.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const next = [...regionPoints];
+    next[pointIndex * 2] = clamp((clientX - rect.left) / rect.width, 0, 1);
+    next[pointIndex * 2 + 1] = clamp((clientY - rect.top) / rect.height, 0, 1);
+    applyRegionPoints(next);
+  };
+
+  const insertRegionPointFromClient = (clientX: number, clientY: number) => {
+    const imageEl = imageRef.current;
+    if (!imageEl || regionPoints.length < 6) return;
+    const rect = imageEl.getBoundingClientRect();
+    const x = clamp((clientX - rect.left) / rect.width, 0, 1);
+    const y = clamp((clientY - rect.top) / rect.height, 0, 1);
+    let closestSegment = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    const count = regionPoints.length / 2;
+    for (let index = 0; index < count; index += 1) {
+      const nextIndex = (index + 1) % count;
+      const ax = regionPoints[index * 2];
+      const ay = regionPoints[index * 2 + 1];
+      const bx = regionPoints[nextIndex * 2];
+      const by = regionPoints[nextIndex * 2 + 1];
+      const dx = bx - ax;
+      const dy = by - ay;
+      const lengthSquared = dx * dx + dy * dy || 1;
+      const t = clamp(((x - ax) * dx + (y - ay) * dy) / lengthSquared, 0, 1);
+      const distance = Math.hypot(x - (ax + t * dx), y - (ay + t * dy));
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestSegment = index;
+      }
+    }
+    const next = [...regionPoints];
+    next.splice((closestSegment + 1) * 2, 0, x, y);
+    applyRegionPoints(next);
+    setSelectedRegionPointIndex(closestSegment + 1);
+  };
+
+  useEffect(() => {
+    if (draggingRegionPointIndex == null) return;
+    const move = (event: PointerEvent) => {
+      event.preventDefault();
+      updateRegionPointFromClient(draggingRegionPointIndex, event.clientX, event.clientY);
+    };
+    const stop = () => setDraggingRegionPointIndex(null);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+    };
+  }, [draggingRegionPointIndex, regionPoints]);
+
   const handleImageClick = (event: React.MouseEvent<HTMLImageElement>) => {
+    if (Date.now() - lastDirectPointerAtRef.current < 450) return;
     if (batchMode) {
       const imageEl = imageRef.current;
       if (!imageEl) return;
@@ -329,7 +449,34 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
       return;
     }
 
+    if (borderMode && !regionComplete) {
+      addRegionPoint(event.clientX, event.clientY);
+      return;
+    }
     updatePointerTipFromClient(event.clientX, event.clientY);
+  };
+
+  const handleImagePointerDown = (event: React.PointerEvent<HTMLImageElement>) => {
+    if (event.pointerType === 'mouse') return;
+    event.preventDefault();
+    lastDirectPointerAtRef.current = Date.now();
+    if (batchMode) {
+      const imageEl = imageRef.current;
+      if (!imageEl) return;
+      const rect = imageEl.getBoundingClientRect();
+      setBatchLocations(previous => [...previous, {
+        x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
+        y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
+        startX: null,
+        startY: null,
+      }]);
+      return;
+    }
+    if (borderMode && !regionComplete) {
+      addRegionPoint(event.clientX, event.clientY);
+      return;
+    }
+    if (!borderMode) updatePointerTipFromClient(event.clientX, event.clientY);
   };
 
   const handlePointerStartDown = (event: React.PointerEvent<SVGCircleElement>) => {
@@ -344,6 +491,11 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
     const target = event.target as Element;
     if (target.tagName.toLowerCase() === 'circle') return;
     event.preventDefault();
+
+    if (borderMode) {
+      if (!regionComplete) addRegionPoint(event.clientX, event.clientY);
+      return;
+    }
 
     if (batchMode) {
       const imageEl = imageRef.current;
@@ -442,12 +594,16 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
           }}
         >
           <div>
-            <p style={{ margin: 0, color: '#0f172a', fontWeight: 800, fontSize: '0.98em' }}>Ubicar señalado</p>
+            <p style={{ margin: 0, color: '#0f172a', fontWeight: 800, fontSize: '0.98em' }}>{borderMode ? 'Dibujar señalado con borde' : 'Ubicar señalado'}</p>
             <p style={{ margin: '4px 0 0', color: '#475569', fontSize: '0.86em' }}>
-              Haz clic sobre la imagen para ubicar: <strong>{senaladoLabel || 'Señalado'}</strong>
+              {borderMode ? 'Marca al menos 3 puntos alrededor de la zona' : 'Haz clic sobre la imagen para ubicar'}: <strong>{senaladoLabel || 'Señalado'}</strong>
             </p>
             <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.8em' }}>
-              Arrastra el punto azul del borde para cambiar la dirección del puntero.
+              {borderMode
+                ? (!regionComplete
+                    ? 'Cuando termines el contorno, pulsa “Finalizar borde”.'
+                    : 'Arrastra los puntos blancos para corregir el contorno, pulsa una línea para añadir otro punto y usa el punto azul para cambiar la dirección del puntero.')
+                : 'Arrastra el punto azul del borde para cambiar la dirección del puntero.'}
             </p>
           </div>
           <button
@@ -489,6 +645,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                 src={imageSrc}
                 alt="Seleccionar ubicación"
                 onClick={handleImageClick}
+                onPointerDown={handleImagePointerDown}
                 onLoad={updateImageSize}
                 style={{
                   display: 'block',
@@ -499,6 +656,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                   borderRadius: '10px',
                   cursor: 'crosshair',
                   boxShadow: '0 8px 24px rgba(15, 23, 42, 0.25)',
+                  touchAction: 'none',
                 }}
               />
 
@@ -510,6 +668,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                     pointerEvents: 'auto',
                     overflow: 'visible',
                     cursor: 'crosshair',
+                    touchAction: 'none',
                   }}
                   onPointerDown={handleOverlayPointerDown}
                   width={contentSize.width}
@@ -552,6 +711,18 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                           </clipPath>
                         </defs>
                         <g clipPath={`url(#${pointerClipId})`}>
+                          {borderMode && regionPoints.length >= 4 && (
+                            <polygon
+                              points={Array.from({ length: regionPoints.length / 2 }, (_, index) => `${regionPoints[index * 2] * contentSize.width},${regionPoints[index * 2 + 1] * contentSize.height}`).join(' ')}
+                              fill={regionColor}
+                              fillOpacity={regionOpacity}
+                              stroke={regionColor}
+                              strokeWidth={3}
+                              strokeDasharray="10 7"
+                              strokeLinejoin="round"
+                              pointerEvents="none"
+                            />
+                          )}
                           <polygon
                             points={`${outline[0].x},${outline[0].y} ${outline[1].x},${outline[1].y} ${outline[2].x},${outline[2].y} ${outline[3].x},${outline[3].y} ${outline[4].x},${outline[4].y}`}
                             fill="rgba(255,255,255,0.6)"
@@ -568,13 +739,51 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                         <circle
                           cx={startPx.x}
                           cy={startPx.y}
-                          r={8}
+                          r={isCoarsePointer ? 12 : 8}
                           fill={draggingPointerStart ? '#2563eb' : '#0ea5e9'}
                           stroke="#ffffff"
                           strokeWidth={2}
                           onPointerDown={handlePointerStartDown}
                           style={{ cursor: draggingPointerStart ? 'grabbing' : 'grab' }}
                         />
+                        {borderMode && regionComplete && (
+                          <polygon
+                            points={Array.from({ length: regionPoints.length / 2 }, (_, index) => `${regionPoints[index * 2] * contentSize.width},${regionPoints[index * 2 + 1] * contentSize.height}`).join(' ')}
+                            fill="none"
+                            stroke="rgba(0,0,0,0.001)"
+                            strokeWidth={18}
+                            strokeLinejoin="round"
+                            pointerEvents="stroke"
+                            onPointerDown={event => event.stopPropagation()}
+                            onClick={event => {
+                              event.stopPropagation();
+                              insertRegionPointFromClient(event.clientX, event.clientY);
+                            }}
+                            style={{ cursor: 'copy' }}
+                          />
+                        )}
+                        {borderMode && regionPoints.map((_, flatIndex) => {
+                          if (flatIndex % 2 !== 0) return null;
+                          const pointIndex = flatIndex / 2;
+                          return (
+                            <circle
+                              key={`region-point-${pointIndex}`}
+                              cx={regionPoints[flatIndex] * contentSize.width}
+                              cy={regionPoints[flatIndex + 1] * contentSize.height}
+                              r={selectedRegionPointIndex === pointIndex ? (isCoarsePointer ? 12 : 7) : (isCoarsePointer ? 9 : 5.5)}
+                              fill={selectedRegionPointIndex === pointIndex ? '#f59e0b' : '#ffffff'}
+                              stroke={regionColor}
+                              strokeWidth={2.5}
+                              onPointerDown={event => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setSelectedRegionPointIndex(pointIndex);
+                                setDraggingRegionPointIndex(pointIndex);
+                              }}
+                              style={{ cursor: draggingRegionPointIndex === pointIndex ? 'grabbing' : 'grab' }}
+                            />
+                          );
+                        })}
                       </>
                     );
                   })()}
@@ -589,6 +798,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                     pointerEvents: 'auto',
                     overflow: 'visible',
                     cursor: 'crosshair',
+                    touchAction: 'none',
                   }}
                   onPointerDown={handleOverlayPointerDown}
                   width={contentSize.width}
@@ -623,7 +833,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                         <circle
                           cx={geometry.startPx.x}
                           cy={geometry.startPx.y}
-                          r={POINTER_BATCH_RADIUS_PX}
+                          r={isCoarsePointer ? 12 : POINTER_BATCH_RADIUS_PX}
                           fill={draggingBatchPointerStartIndex === index ? '#2563eb' : '#0ea5e9'}
                           stroke="#ffffff"
                           strokeWidth={2}
@@ -656,7 +866,38 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
             flexShrink: 0,
           }}
         >
-          <div style={{ flex: '1 1 0', display: 'flex', justifyContent: 'flex-start', minWidth: 0 }}>
+          <div style={{ flex: '1 1 0', display: 'flex', justifyContent: 'flex-start', gap: '8px', minWidth: 0, flexWrap: 'wrap' }}>
+            {borderMode && (
+              <>
+                <input type="color" value={regionColor} onChange={event => setRegionColor(event.target.value)} title="Color del borde" aria-label="Color del borde" style={{ width: 42, height: 38, border: '1px solid #cbd5e1', borderRadius: 8, padding: 3 }} />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontSize: '0.8em', fontWeight: 700 }}>
+                  Transparencia
+                  <input type="range" min="0.1" max="0.7" step="0.05" value={regionOpacity} onChange={event => setRegionOpacity(Number(event.target.value))} />
+                </label>
+                {!regionComplete ? (
+                  <>
+                    <button type="button" disabled={regionPoints.length === 0} onClick={() => applyRegionPoints(regionPoints.slice(0, -2))} style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: '8px 12px', fontWeight: 700, background: '#fff', color: '#475569', cursor: regionPoints.length === 0 ? 'not-allowed' : 'pointer' }}>Deshacer punto</button>
+                    <button type="button" disabled={regionPoints.length < 6} onClick={() => setRegionComplete(true)} style={{ border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 800, background: regionPoints.length < 6 ? '#cbd5e1' : '#16a34a', color: '#fff', cursor: regionPoints.length < 6 ? 'not-allowed' : 'pointer' }}>Finalizar borde</button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={selectedRegionPointIndex == null || regionPoints.length <= 6}
+                      onClick={() => {
+                        if (selectedRegionPointIndex == null || regionPoints.length <= 6) return;
+                        const next = [...regionPoints];
+                        next.splice(selectedRegionPointIndex * 2, 2);
+                        applyRegionPoints(next);
+                        setSelectedRegionPointIndex(null);
+                      }}
+                      style={{ border: '1px solid #fed7aa', borderRadius: 8, padding: '8px 12px', fontWeight: 700, background: '#fff7ed', color: '#c2410c', cursor: selectedRegionPointIndex == null || regionPoints.length <= 6 ? 'not-allowed' : 'pointer' }}
+                    >Eliminar punto</button>
+                    <button type="button" onClick={() => { setRegionPoints([]); setLocation(null); setSelectedRegionPointIndex(null); setRegionComplete(false); }} style={{ border: '1px solid #fca5a5', borderRadius: 8, padding: '8px 12px', fontWeight: 700, background: '#fff1f2', color: '#be123c', cursor: 'pointer' }}>Redibujar</button>
+                  </>
+                )}
+              </>
+            )}
             {batchMode ? (
               <button
                 type="button"
@@ -747,7 +988,8 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                   return;
                 }
 
-                onSave(location);
+                if (borderMode && (!regionComplete || regionPoints.length < 6)) return;
+                onSave(location && borderMode ? { ...location, regionPoints, regionColor, regionOpacity } : location);
               }}
               style={{
                 border: 'none',
@@ -760,7 +1002,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                 fontFamily: 'inherit',
               }}
             >
-              {batchMode ? batchSaveLabel : 'Guardar ubicación'}
+              {batchMode ? batchSaveLabel : borderMode ? 'Guardar borde y ubicación' : 'Guardar ubicación'}
             </button>
           </div>
         </div>
