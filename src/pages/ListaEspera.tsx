@@ -338,8 +338,22 @@ const ListaEspera: React.FC = () => {
     setDeleteError('');
     try {
       const deleteTargetId = deleteTarget.id;
-      await deleteFromCloudinary(deleteTarget.public_id);
-      await supabase.from('placas_sin_clasificar').delete().eq('id', deleteTarget.id);
+      const { data: deletedRows, error: deleteRowError } = await supabase
+        .from('placas_sin_clasificar')
+        .delete()
+        .eq('id', deleteTargetId)
+        .select('id');
+
+      if (deleteRowError) throw deleteRowError;
+      if (!deletedRows?.some(row => row.id === deleteTargetId)) {
+        throw new Error('La base de datos no confirmó la eliminación de la placa.');
+      }
+
+      try {
+        await deleteFromCloudinary({ publicId: deleteTarget.public_id, imageUrl: deleteTarget.photo_url });
+      } catch (cloudinaryError) {
+        console.warn('La placa se eliminó, pero no fue posible limpiar su imagen de Cloudinary:', cloudinaryError);
+      }
 
       await logPlateActivity({
         actionType: 'delete_unclassified',
@@ -354,7 +368,7 @@ const ListaEspera: React.FC = () => {
         },
       });
 
-      setPlacas(prev => prev.filter(p => p.id !== deleteTarget.id));
+      setPlacas(prev => prev.filter(p => p.id !== deleteTargetId));
       setDeleteTarget(null);
     } catch (err) {
       console.error('Error al eliminar placa:', err);
@@ -769,9 +783,11 @@ const ListaEspera: React.FC = () => {
                       senalados={senalados}
                       senaladosPos={senaladosPos}
                       onSenaladoChange={(index, value) => {
-                        const updated = [...senalados];
-                        updated[index] = value;
-                        setSenalados(updated);
+                        setSenalados(previous => {
+                          const updated = [...previous];
+                          updated[index] = value;
+                          return updated;
+                        });
                       }}
                       onRemoveSenalado={(index) => {
                         const groupIndices = getSenaladoGroupIndices(index);

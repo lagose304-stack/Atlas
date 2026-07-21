@@ -1070,9 +1070,11 @@ const MoverPlaca: React.FC = () => {
                   senalados={editSenalados}
                   senaladosPos={editSenaladosPos}
                   onSenaladoChange={(index, value) => {
-                    const updated = [...editSenalados];
-                    updated[index] = value;
-                    setEditSenalados(updated);
+                    setEditSenalados(previous => {
+                      const updated = [...previous];
+                      updated[index] = value;
+                      return updated;
+                    });
                   }}
                   onRemoveSenalado={(index) => {
                     setEditSenalados(prev => prev.filter((_, i) => i !== index));

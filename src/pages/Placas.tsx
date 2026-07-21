@@ -817,9 +817,11 @@ const Placas: React.FC = () => {
                           senalados={senalados}
                           senaladosPos={senaladosPos}
                           onSenaladoChange={(index, value) => {
-                            const updated = [...senalados];
-                            updated[index] = value;
-                            setSenalados(updated);
+                            setSenalados(previous => {
+                              const updated = [...previous];
+                              updated[index] = value;
+                              return updated;
+                            });
                           }}
                           onRemoveSenalado={(index) => {
                             const targetLabel = (senalados[index] ?? '').trim();

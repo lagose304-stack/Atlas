@@ -51,6 +51,8 @@ const ZOOM_MAX = 4;
 const MIN_DYNAMIC_MAX_ZOOM = 1.2;
 const ZOOM_OVERSHOOT_FACTOR = 1.1;
 const SIDEBAR_BREAKPOINT = 900;
+const MOBILE_BREAKPOINT = 640;
+const MOBILE_ARROW_SCALE = 0.6;
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 type PointerEdge = 'left' | 'right' | 'top' | 'bottom';
 type MarkerVisualMode = 'pointer' | 'arrow';
@@ -1277,9 +1279,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                       const svgTip = { x: 140, y: 80 };
                       const svgTail = { x: 30, y: 80 };
                       const actualTip = endPx;
+                      const arrowScale = windowWidth <= MOBILE_BREAKPOINT ? MOBILE_ARROW_SCALE : 1;
                       const actualTail = {
-                        x: endPx.x - ux * Math.min(ARROW_TAIL_DISTANCE_PX, directionLen * 0.95),
-                        y: endPx.y - uy * Math.min(ARROW_TAIL_DISTANCE_PX, directionLen * 0.95)
+                        x: endPx.x - ux * Math.min(ARROW_TAIL_DISTANCE_PX * arrowScale, directionLen * 0.95),
+                        y: endPx.y - uy * Math.min(ARROW_TAIL_DISTANCE_PX * arrowScale, directionLen * 0.95)
                       };
                       const vSvg = { x: svgTip.x - svgTail.x, y: svgTip.y - svgTail.y };
                       const vReal = { x: actualTip.x - actualTail.x, y: actualTip.y - actualTail.y };

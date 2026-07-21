@@ -117,6 +117,7 @@ const EliminarPlacas: React.FC = () => {
   const [isDeleting,    setIsDeleting]    = useState(false);
   const [showConfirm,   setShowConfirm]   = useState(false);
   const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
   const [hoveredCard,   setHoveredCard]   = useState<number | null>(null);
 
   const fetchTemas = useCallback(async (): Promise<boolean> => {
@@ -275,6 +276,7 @@ const EliminarPlacas: React.FC = () => {
     setIsDeleting(true);
     setShowConfirm(false);
     setDeleteSuccessMessage(null);
+    setDeleteErrorMessage(null);
     try {
       const toDelete = placas.filter(p => selectedIds.has(p.id));
       const toDeleteUrlSet = new Set(toDelete.map(p => p.photo_url));
@@ -282,8 +284,9 @@ const EliminarPlacas: React.FC = () => {
       let deletedMapsCount = 0;
 
       // 1. Borrar content_blocks que referencian estas fotos en cualquier página del sitio
-      const { data: allBlocks } = await supabase
+      const { data: allBlocks, error: blocksLoadError } = await supabase
         .from('content_blocks').select('id, block_type, content');
+      if (blocksLoadError) throw blocksLoadError;
       const blockIdsToDelete: string[] = [];
       for (const b of (allBlocks ?? [])) {
         const urls = extractAllBlockImageUrls(b as any);
@@ -292,7 +295,11 @@ const EliminarPlacas: React.FC = () => {
         }
       }
       if (blockIdsToDelete.length > 0) {
-        await supabase.from('content_blocks').delete().in('id', blockIdsToDelete);
+        const { error: blocksDeleteError } = await supabase
+          .from('content_blocks')
+          .delete()
+          .in('id', blockIdsToDelete);
+        if (blocksDeleteError) throw blocksDeleteError;
       }
 
       // 2. Borrar mapas interactivos asociados a las placas seleccionadas
@@ -313,18 +320,26 @@ const EliminarPlacas: React.FC = () => {
       // 3. Borrar fotos de Cloudinary y registros de placas
       await Promise.all(
         toDelete.map(async placa => {
-          const publicId = getCloudinaryPublicId(placa.photo_url);
-          if (publicId) {
-            try { await deleteFromCloudinary({ publicId, imageUrl: placa.photo_url }); } catch {/* ignorar si falla Cloudinary */}
-          }
-
-          const { error: deletePlacaError } = await supabase
+          const { data: deletedRows, error: deletePlacaError } = await supabase
             .from('placas')
             .delete()
-            .eq('id', placa.id);
+            .eq('id', placa.id)
+            .select('id');
 
           if (deletePlacaError) {
             throw deletePlacaError;
+          }
+          if (!deletedRows?.some(row => row.id === placa.id)) {
+            throw new Error(`La base de datos no confirmó la eliminación de la placa ${placa.id}.`);
+          }
+
+          const publicId = getCloudinaryPublicId(placa.photo_url);
+          if (publicId) {
+            try {
+              await deleteFromCloudinary({ publicId, imageUrl: placa.photo_url });
+            } catch (cloudinaryError) {
+              console.warn(`La placa ${placa.id} se eliminó, pero no fue posible limpiar su imagen de Cloudinary:`, cloudinaryError);
+            }
           }
 
           await logPlateActivity({
@@ -362,6 +377,7 @@ const EliminarPlacas: React.FC = () => {
       setTimeout(() => setDeleteSuccessMessage(null), 4500);
     } catch (err) {
       console.error('Error al eliminar placas:', err);
+      setDeleteErrorMessage('No se pudo completar la eliminación. Revisa tu conexión e inténtalo nuevamente.');
     } finally {
       setIsDeleting(false);
     }
@@ -697,6 +713,9 @@ const EliminarPlacas: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', justifyContent: 'flex-end', marginTop: '24px', paddingBottom: '40px' }}>
           {deleteSuccessMessage && (
             <span style={s.successMsg}>{deleteSuccessMessage}</span>
+          )}
+          {deleteErrorMessage && (
+            <span style={{ color: '#b91c1c', fontWeight: 700 }}>{deleteErrorMessage}</span>
           )}
           <button
             style={someSelected && !isDeleting ? s.deleteBtn : s.deleteBtnDisabled}

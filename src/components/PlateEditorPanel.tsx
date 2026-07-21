@@ -514,7 +514,7 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
                 const idx = group.representativeIndex;
 
                 return (
-                  <div key={`${group.label}-${group.firstIndex}`} style={mergedStyles.senalRow}>
+                  <div key={group.firstIndex} style={mergedStyles.senalRow}>
                     <span style={mergedStyles.senalNum}>{displayIndex + 1}</span>
                     <BoldField
                       as="input"
