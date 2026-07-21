@@ -156,22 +156,13 @@ export const clearAllAnalyticsEvents = async (): Promise<AnalyticsClearResult> =
     return { ok: true };
   }
 
-  const fallbackResult = await supabase
-    .from('site_analytics_events')
-    .delete()
-    .gte('id', 0);
-
-  if (fallbackResult.error) {
-    const message = fallbackResult.error.message || rpcResult.error.message || 'Error desconocido al borrar analitica.';
-    console.error('No fue posible reiniciar analitica:', {
-      rpcError: rpcResult.error,
-      deleteError: fallbackResult.error,
-    });
-    return { ok: false, error: message };
-  }
-
-  localStorage.removeItem(ANALYTICS_FALLBACK_KEY);
-  return { ok: true };
+  // No se intenta un DELETE directo: security_hardening.sql lo bloquea y la
+  // autorizacion del reinicio debe permanecer centralizada en la RPC.
+  console.error('No fue posible reiniciar analitica:', rpcResult.error);
+  return {
+    ok: false,
+    error: rpcResult.error.message || 'Error desconocido al borrar analitica.',
+  };
 };
 
 export const getRangeStartIso = (range: AnalyticsRangePreset): string | null => {

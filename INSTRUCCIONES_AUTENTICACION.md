@@ -107,7 +107,21 @@ El panel de estadisticas es solo para usuarios con rol `Administrador`.
 Reinicio de estadisticas:
 - Existe un boton para reiniciar estadisticas en el panel de Estadisticas.
 - Solo se muestra si el usuario autenticado tiene `is_protected = true`.
-- Para que funcione, la tabla `site_analytics_events` debe tener la politica DELETE (incluida en `setup_site_analytics_events.sql`).
+- El borrado valida en el servidor que la sesion pertenezca a un usuario `Administrador` con `is_protected = true`.
+- Si la instalacion ya habia ejecutado `security_hardening.sql`, ejecuta una vez `database/fix_reset_site_analytics_events.sql` en Supabase.
+
+## Centro de control del sitio
+
+Ejecuta `database/setup_site_maintenance_mode.sql` en Supabase para habilitar las herramientas administrativas avanzadas. El script es idempotente y puede volver a ejecutarse para actualizar una instalacion existente.
+
+El centro de control, visible solo para la cuenta administrativa protegida, incluye:
+- aviso publico global y mantenimiento inmediato o programado;
+- pausa independiente de evaluaciones, catalogo publico y buscador;
+- diagnostico de servicios y limpieza de presencias vencidas;
+- listado y cierre seguro de sesiones (sin permitir cerrar la sesion actual);
+- respaldo JSON de los datos principales;
+- inventario no destructivo de referencias de imagen;
+- registro de errores del navegador y auditoria de acciones administrativas.
 
 ## Indicador de usuarios activos (ojo flotante)
 

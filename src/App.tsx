@@ -4,6 +4,8 @@ import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 import { logSiteVisitOncePerSession } from './services/analytics';
 import SeoManager from './components/SeoManager';
+import MaintenanceGate from './components/MaintenanceGate';
+import { logClientError } from './services/adminControlCenter';
 
 const Home = lazy(() => import('./pages/Home'));
 const Edicion = lazy(() => import('./pages/Edicion'));
@@ -97,14 +99,26 @@ const SpellcheckEnabler: React.FC = () => {
   return null;
 };
 
+const ClientErrorReporter: React.FC = () => {
+  useEffect(() => {
+    const onError = (event: ErrorEvent) => { void logClientError('javascript_error', { message: event.message, source: event.filename, line: event.lineno, path: window.location.pathname }); };
+    const onRejection = (event: PromiseRejectionEvent) => { void logClientError('unhandled_rejection', { message: String(event.reason), path: window.location.pathname }); };
+    window.addEventListener('error', onError); window.addEventListener('unhandledrejection', onRejection);
+    return () => { window.removeEventListener('error', onError); window.removeEventListener('unhandledrejection', onRejection); };
+  }, []);
+  return null;
+};
+
 const App: React.FC = () => {
   return (
     <AuthProvider>
       <Router>
+        <MaintenanceGate>
         <SeoManager />
         <ScrollToTop />
         <SiteVisitTracker />
         <SpellcheckEnabler />
+        <ClientErrorReporter />
         <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
           {/* Ruta pública */}
@@ -277,6 +291,7 @@ const App: React.FC = () => {
           <Route path="*" element={<Home />} />
         </Routes>
         </Suspense>
+        </MaintenanceGate>
       </Router>
     </AuthProvider>
   );

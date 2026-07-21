@@ -56,11 +56,27 @@ CREATE OR REPLACE FUNCTION public.reset_site_analytics_events()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
-  DELETE FROM public.site_analytics_events;
-  ALTER SEQUENCE IF EXISTS public.site_analytics_events_id_seq RESTART WITH 1;
+  -- El reinicio es una operacion destructiva reservada a la cuenta protegida.
+  -- La sesion llega en X-Atlas-Session y atlas_session_user_id() la valida.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.usuarios u
+    WHERE u.id = public.atlas_session_user_id()
+      AND u.activo = true
+      AND u.rol = 'Administrador'
+      AND u.is_protected = true
+  ) THEN
+    RAISE EXCEPTION 'Operacion reservada al administrador protegido'
+      USING ERRCODE = '42501';
+  END IF;
+
+  -- La condicion explicita es necesaria cuando Supabase tiene habilitada la
+  -- proteccion "DELETE requires a WHERE clause".
+  DELETE FROM public.site_analytics_events
+  WHERE id IS NOT NULL;
 END;
 $$;
 

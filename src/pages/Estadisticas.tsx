@@ -13,6 +13,8 @@ import {
 } from '../services/analytics';
 import { useAuth } from '../contexts/AuthContext';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import { fetchSiteMaintenanceStatus, setSiteMaintenanceMode } from '../services/siteMaintenance';
+import SiteControlCenter from '../components/SiteControlCenter';
 
 type BucketBy = 'year' | 'month' | 'week' | 'day';
 type EventFilter = 'all' | AnalyticsEventType;
@@ -310,6 +312,10 @@ const Estadisticas: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [loading, setLoading] = useState(true);
   const [resetting, setResetting] = useState(false);
+  const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
+  const [maintenanceLoading, setMaintenanceLoading] = useState(true);
+  const [maintenanceSaving, setMaintenanceSaving] = useState(false);
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
   const [plateHistory, setPlateHistory] = useState<PlateActivityLog[]>([]);
   const [plateRefs, setPlateRefs] = useState<Map<number, PlateRef>>(new Map());
@@ -387,6 +393,12 @@ const Estadisticas: React.FC = () => {
   };
 
   useEffect(() => {
+    void fetchSiteMaintenanceStatus().then((status) => {
+      setMaintenanceEnabled(status.enabled);
+      setMaintenanceMessage(status.message);
+      setMaintenanceLoading(false);
+    });
+
     const loadRefs = async () => {
       const [{ data: temas }, { data: subtemas }] = await Promise.all([
         supabase.from('temas').select('id, nombre'),
@@ -433,6 +445,26 @@ const Estadisticas: React.FC = () => {
     }
 
     await loadAnalytics();
+  };
+
+  const handleToggleMaintenance = async () => {
+    const nextEnabled = !maintenanceEnabled;
+    const action = nextEnabled ? 'poner el sitio fuera de servicio' : 'volver a habilitar el sitio';
+    if (!window.confirm(`¿Deseas ${action}?`)) return;
+
+    setMaintenanceSaving(true);
+    const result = await setSiteMaintenanceMode(nextEnabled, maintenanceMessage);
+    setMaintenanceSaving(false);
+
+    if (!result.ok) {
+      window.alert(`No fue posible cambiar el estado del sitio: ${result.error ?? 'error desconocido'}`);
+      return;
+    }
+
+    setMaintenanceEnabled(nextEnabled);
+    window.alert(nextEnabled
+      ? 'El sitio está fuera de servicio para visitantes. Los usuarios con sesión iniciada conservan el acceso.'
+      : 'El sitio vuelve a estar disponible para todos los visitantes.');
   };
 
   const handleClearExtraFilters = () => {
@@ -807,6 +839,37 @@ const Estadisticas: React.FC = () => {
                 <BackButton onClick={handleGoBack} />
 
         <section style={s.card}>
+          {canResetStats && (
+            <section style={{ ...s.maintenanceControl, ...(maintenanceEnabled ? s.maintenanceControlActive : {}) }}>
+              <div style={s.maintenanceControlText}>
+                <h2 style={s.maintenanceControlTitle}>Estado público del sitio</h2>
+                <p style={s.maintenanceControlDescription}>
+                  {maintenanceEnabled
+                    ? 'Fuera de servicio para visitantes. Los usuarios con sesión iniciada pueden navegar normalmente.'
+                    : 'El sitio está disponible para todos los visitantes.'}
+                </p>
+                <textarea
+                  value={maintenanceMessage}
+                  onChange={(event) => setMaintenanceMessage(event.target.value)}
+                  maxLength={500}
+                  rows={2}
+                  disabled={maintenanceLoading || maintenanceSaving}
+                  aria-label="Mensaje de mantenimiento"
+                  style={s.maintenanceMessageInput}
+                />
+              </div>
+              <button
+                type="button"
+                style={maintenanceEnabled ? s.enableSiteButton : s.resetButton}
+                onClick={handleToggleMaintenance}
+                disabled={maintenanceLoading || maintenanceSaving}
+              >
+                {maintenanceSaving
+                  ? 'Guardando...'
+                  : maintenanceEnabled ? 'Volver a habilitar sitio' : 'Poner sitio fuera de servicio'}
+              </button>
+            </section>
+          )}
           <div style={s.headerRow}>
             <h1 style={s.title}>Estadisticas del sitio</h1>
             <div style={s.filtersWrap}>
@@ -868,6 +931,8 @@ const Estadisticas: React.FC = () => {
               )}
             </div>
           </div>
+
+          {canResetStats && <SiteControlCenter />}
 
           <div style={s.advancedFiltersWrap}>
             <input
@@ -1401,6 +1466,54 @@ const s: { [key: string]: React.CSSProperties } = {
     gap: '12px',
     flexWrap: 'wrap',
     marginBottom: '16px',
+  },
+  maintenanceControl: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '16px',
+    flexWrap: 'wrap',
+    padding: '16px',
+    marginBottom: '18px',
+    border: '1px solid #bfdbfe',
+    borderRadius: '12px',
+    background: '#eff6ff',
+  },
+  maintenanceControlActive: {
+    borderColor: '#fda4af',
+    background: '#fff1f2',
+  },
+  maintenanceControlText: {
+    flex: '1 1 420px',
+  },
+  maintenanceControlTitle: {
+    margin: '0 0 5px',
+    color: '#0f172a',
+    fontSize: '1.05rem',
+  },
+  maintenanceControlDescription: {
+    margin: '0 0 9px',
+    color: '#475569',
+  },
+  maintenanceMessageInput: {
+    width: '100%',
+    boxSizing: 'border-box',
+    resize: 'vertical',
+    border: '1px solid #cbd5e1',
+    borderRadius: '8px',
+    padding: '8px 10px',
+    color: '#0f172a',
+    background: '#fff',
+    fontFamily: 'inherit',
+  },
+  enableSiteButton: {
+    border: '1px solid #86efac',
+    borderRadius: '8px',
+    padding: '9px 13px',
+    background: '#f0fdf4',
+    color: '#166534',
+    fontWeight: 700,
+    cursor: 'pointer',
   },
   title: {
     margin: 0,
