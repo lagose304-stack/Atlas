@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import VisualBlockProperties from './VisualBlockProperties';
 import type { ContentBlock } from '../../types/contentBlocks';
 
+vi.mock('../../services/supabase', () => ({
+  supabase: { from: vi.fn() },
+}));
+
 const headingBlock: ContentBlock = {
   id: 'block-1',
   entity_type: 'home_page',
