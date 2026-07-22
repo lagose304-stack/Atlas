@@ -602,7 +602,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
               {borderMode
                 ? (!regionComplete
                     ? 'Cuando termines el contorno, pulsa “Finalizar borde”.'
-                    : 'Arrastra los puntos blancos para corregir el contorno, pulsa una línea para añadir otro punto y usa el punto azul para cambiar la dirección del puntero.')
+                    : 'Arrastra los puntos blancos para corregir el contorno o pulsa una línea para añadir otro punto.')
                 : 'Arrastra el punto azul del borde para cambiar la dirección del puntero.'}
             </p>
           </div>
@@ -723,29 +723,35 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                               pointerEvents="none"
                             />
                           )}
-                          <polygon
-                            points={`${outline[0].x},${outline[0].y} ${outline[1].x},${outline[1].y} ${outline[2].x},${outline[2].y} ${outline[3].x},${outline[3].y} ${outline[4].x},${outline[4].y}`}
-                            fill="rgba(255,255,255,0.6)"
-                            pointerEvents="none"
-                            shapeRendering="geometricPrecision"
-                          />
-                          <polygon
-                            points={`${core[0].x},${core[0].y} ${core[1].x},${core[1].y} ${core[2].x},${core[2].y} ${core[3].x},${core[3].y} ${core[4].x},${core[4].y}`}
-                            fill="#0a0a0a"
-                            pointerEvents="none"
-                            shapeRendering="geometricPrecision"
-                          />
+                          {!borderMode && (
+                            <>
+                              <polygon
+                                points={`${outline[0].x},${outline[0].y} ${outline[1].x},${outline[1].y} ${outline[2].x},${outline[2].y} ${outline[3].x},${outline[3].y} ${outline[4].x},${outline[4].y}`}
+                                fill="rgba(255,255,255,0.6)"
+                                pointerEvents="none"
+                                shapeRendering="geometricPrecision"
+                              />
+                              <polygon
+                                points={`${core[0].x},${core[0].y} ${core[1].x},${core[1].y} ${core[2].x},${core[2].y} ${core[3].x},${core[3].y} ${core[4].x},${core[4].y}`}
+                                fill="#0a0a0a"
+                                pointerEvents="none"
+                                shapeRendering="geometricPrecision"
+                              />
+                            </>
+                          )}
                         </g>
-                        <circle
-                          cx={startPx.x}
-                          cy={startPx.y}
-                          r={isCoarsePointer ? 12 : 8}
-                          fill={draggingPointerStart ? '#2563eb' : '#0ea5e9'}
-                          stroke="#ffffff"
-                          strokeWidth={2}
-                          onPointerDown={handlePointerStartDown}
-                          style={{ cursor: draggingPointerStart ? 'grabbing' : 'grab' }}
-                        />
+                        {!borderMode && (
+                          <circle
+                            cx={startPx.x}
+                            cy={startPx.y}
+                            r={isCoarsePointer ? 12 : 8}
+                            fill={draggingPointerStart ? '#2563eb' : '#0ea5e9'}
+                            stroke="#ffffff"
+                            strokeWidth={2}
+                            onPointerDown={handlePointerStartDown}
+                            style={{ cursor: draggingPointerStart ? 'grabbing' : 'grab' }}
+                          />
+                        )}
                         {borderMode && regionComplete && (
                           <polygon
                             points={Array.from({ length: regionPoints.length / 2 }, (_, index) => `${regionPoints[index * 2] * contentSize.width},${regionPoints[index * 2 + 1] * contentSize.height}`).join(' ')}
@@ -982,27 +988,49 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
             </button>
             <button
               type="button"
+              disabled={borderMode && regionPoints.length < 6}
               onClick={() => {
                 if (batchMode) {
                   onBatchSave?.(batchLocations);
                   return;
                 }
 
-                if (borderMode && (!regionComplete || regionPoints.length < 6)) return;
-                onSave(location && borderMode ? { ...location, regionPoints, regionColor, regionOpacity } : location);
+                if (borderMode && regionPoints.length < 6) return;
+                if (borderMode) {
+                  const pointCount = regionPoints.length / 2;
+                  let sumX = 0;
+                  let sumY = 0;
+                  for (let index = 0; index < regionPoints.length; index += 2) {
+                    sumX += regionPoints[index];
+                    sumY += regionPoints[index + 1];
+                  }
+                  onSave({
+                    x: sumX / pointCount,
+                    y: sumY / pointCount,
+                    startX: null,
+                    startY: null,
+                    regionPoints: [...regionPoints],
+                    regionColor,
+                    regionOpacity,
+                  });
+                  return;
+                }
+                onSave(location);
               }}
               style={{
                 border: 'none',
-                background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                background: borderMode && regionPoints.length < 6
+                  ? '#cbd5e1'
+                  : 'linear-gradient(135deg, #2563eb, #3b82f6)',
                 color: '#fff',
                 borderRadius: '8px',
                 padding: '8px 14px',
                 fontWeight: 800,
-                cursor: 'pointer',
+                cursor: borderMode && regionPoints.length < 6 ? 'not-allowed' : 'pointer',
                 fontFamily: 'inherit',
               }}
             >
-              {batchMode ? batchSaveLabel : borderMode ? 'Guardar borde y ubicación' : 'Guardar ubicación'}
+              {batchMode ? batchSaveLabel : borderMode ? 'Guardar borde' : 'Guardar ubicación'}
             </button>
           </div>
         </div>

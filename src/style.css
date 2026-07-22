@@ -3560,6 +3560,216 @@ body {
 .cb-weekly-topic:focus-visible { outline: 3px solid color-mix(in srgb, var(--weekly-accent) 28%, transparent); outline-offset: 2px; }
 .cb-weekly-topic-arrow { transition: transform .2s ease; }
 .cb-weekly-topic:hover .cb-weekly-topic-arrow { transform: translateX(3px); }
+.cb-weekly-test { isolation: isolate; transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; animation: cbWeeklyTestEntrance .6s cubic-bezier(.22,1,.36,1) both, cbWeeklyTestAmbient 4.8s ease-in-out .7s infinite; }
+.cb-weekly-test:not(.is-unconfigured):hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--weekly-test-accent) 42%, white) !important; box-shadow: 0 22px 48px color-mix(in srgb, var(--weekly-test-accent) 19%, transparent) !important; text-decoration: none !important; }
+.cb-weekly-test-action { animation: cbWeeklyTestButtonGradient 5s linear infinite, cbWeeklyTestButtonPulse 2.8s ease-in-out infinite; }
+.cb-weekly-test:not(.is-unconfigured):hover .cb-weekly-test-action { transform: translateX(4px) scale(1.02); box-shadow: 0 13px 28px color-mix(in srgb, var(--weekly-test-accent) 34%, transparent) !important; }
+.cb-weekly-test-orbit { transition: transform .25s ease; }
+.cb-weekly-test:not(.is-unconfigured) .cb-weekly-test-orbit { animation: cbWeeklyTestIconFloat 3s ease-in-out infinite; }
+.cb-weekly-test:not(.is-unconfigured):hover .cb-weekly-test-orbit { transform: rotate(-7deg) scale(1.08); }
+.cb-weekly-test-badge { animation: cbWeeklyTestBadgeGlow 3.2s ease-in-out infinite; }
+.cb-weekly-test-glow { position: absolute; z-index: -1; border-radius: 50%; filter: blur(2px); pointer-events: none; }
+.cb-weekly-test-glow-one { width: 150px; height: 150px; left: 38%; top: -95px; background: radial-gradient(circle,rgba(236,72,153,.18),transparent 68%); animation: cbWeeklyTestGlow 4s ease-in-out infinite; }
+.cb-weekly-test-glow-two { width: 120px; height: 120px; left: 5%; bottom: -88px; background: radial-gradient(circle,rgba(245,158,11,.16),transparent 68%); animation: cbWeeklyTestGlow 4.6s ease-in-out .8s infinite reverse; }
+.cb-weekly-test-spark { position: absolute; z-index: 1; pointer-events: none; font-weight: 900; line-height: 1; }
+.cb-weekly-test-spark-one { top: 16px; right: 31%; color: #ec4899; font-size: 15px; animation: cbWeeklyTestSpark 2.9s ease-in-out infinite; }
+.cb-weekly-test-spark-two { right: 27%; bottom: 17px; color: #f59e0b; font-size: 18px; animation: cbWeeklyTestSpark 3.4s ease-in-out .5s infinite; }
+.cb-weekly-test-spark-three { top: 24px; left: 48%; color: #8b5cf6; font-size: 17px; animation: cbWeeklyTestSpark 2.6s ease-in-out 1s infinite; }
+.cb-weekly-test:focus-visible { outline: 3px solid color-mix(in srgb, var(--weekly-test-accent) 45%, white); outline-offset: 4px; }
+@keyframes cbWeeklyTestEntrance { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes cbWeeklyTestAmbient { 0%,100% { box-shadow: 0 14px 36px color-mix(in srgb,var(--weekly-test-accent) 15%,transparent); } 50% { box-shadow: 0 18px 44px color-mix(in srgb,var(--weekly-test-pink) 17%,transparent); } }
+@keyframes cbWeeklyTestButtonGradient { to { background-position: 260% 0; } }
+@keyframes cbWeeklyTestButtonPulse { 0%,100% { box-shadow: 0 7px 18px color-mix(in srgb,var(--weekly-test-accent) 23%,transparent); } 50% { box-shadow: 0 10px 25px rgba(236,72,153,.3); } }
+@keyframes cbWeeklyTestIconFloat { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-4px) rotate(3deg); } }
+@keyframes cbWeeklyTestBadgeGlow { 0%,100% { box-shadow: 0 5px 14px rgba(236,72,153,.1); } 50% { box-shadow: 0 7px 20px rgba(245,158,11,.2); } }
+@keyframes cbWeeklyTestGlow { 0%,100% { transform: scale(.9); opacity: .55; } 50% { transform: scale(1.18); opacity: 1; } }
+@keyframes cbWeeklyTestSpark { 0%,100% { transform: translateY(0) rotate(0) scale(.8); opacity: .35; } 50% { transform: translateY(-7px) rotate(18deg) scale(1.2); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .cb-weekly-test, .cb-weekly-test-action, .cb-weekly-test-orbit, .cb-weekly-test-badge, .cb-weekly-test-glow, .cb-weekly-test-spark { animation: none !important; }
+}
+@media (max-width: 640px) {
+  .cb-weekly-test { grid-template-columns: 1fr !important; }
+  .cb-weekly-test-cta { width: 100%; min-width: 0 !important; grid-template-columns: auto minmax(0,1fr); align-items: center; justify-items: stretch !important; }
+  .cb-weekly-test-orbit { width: 48px !important; height: 48px !important; font-size: 1.35rem !important; }
+  .cb-weekly-test-action { width: 100%; box-sizing: border-box; }
+}
+
+/* Cajas destacadas: una retícula estable y una jerarquía visual común. */
+.cb-callout {
+  isolation: isolate;
+  transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+}
+
+.cb-callout:hover {
+  transform: translateY(-2px);
+}
+
+.cb-callout-line {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--callout-accent), color-mix(in srgb, var(--callout-accent) 35%, transparent));
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.cb-callout-modern .cb-callout-line,
+.cb-callout-tinted .cb-callout-line {
+  inset: 0 18px auto;
+  width: auto;
+  height: 3px;
+  border-radius: 0 0 999px 999px;
+  background: linear-gradient(90deg, transparent, var(--callout-accent), transparent);
+}
+
+.cb-callout-glow {
+  position: absolute;
+  z-index: -1;
+  top: -55px;
+  right: -45px;
+  width: 145px;
+  height: 145px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--callout-accent) 15%, transparent), transparent 70%);
+  pointer-events: none;
+}
+
+.cb-callout-theme {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  border-radius: inherit;
+  opacity: .48;
+  pointer-events: none;
+}
+
+/* Información: red de conocimiento y puntos conectados. */
+.cb-callout-info .cb-callout-theme {
+  background-image:
+    radial-gradient(circle at 2px 2px, color-mix(in srgb, var(--callout-accent) 34%, transparent) 1.3px, transparent 1.5px),
+    linear-gradient(90deg, transparent 74%, color-mix(in srgb, var(--callout-accent) 7%, transparent));
+  background-size: 18px 18px, 100% 100%;
+  mask-image: linear-gradient(90deg, transparent 48%, #000 100%);
+}
+
+/* Consejos: pequeños destellos que sugieren una idea. */
+.cb-callout-tip .cb-callout-theme {
+  background:
+    radial-gradient(circle at 86% 28%, color-mix(in srgb, var(--callout-accent) 35%, transparent) 0 2px, transparent 3px),
+    radial-gradient(circle at 92% 65%, color-mix(in srgb, var(--callout-accent) 28%, transparent) 0 3px, transparent 4px),
+    conic-gradient(from 0deg at 86% 28%, transparent 0 10%, color-mix(in srgb, var(--callout-accent) 18%, transparent) 11% 13%, transparent 14% 100%);
+}
+
+/* Éxito: arcos ascendentes y sensación de progreso. */
+.cb-callout-success .cb-callout-theme {
+  background:
+    radial-gradient(ellipse at 92% 115%, transparent 0 38%, color-mix(in srgb, var(--callout-accent) 18%, transparent) 39% 41%, transparent 42% 52%, color-mix(in srgb, var(--callout-accent) 12%, transparent) 53% 55%, transparent 56%),
+    linear-gradient(135deg, transparent 82%, color-mix(in srgb, var(--callout-accent) 8%, transparent));
+}
+
+/* Advertencia: franjas de precaución reconocibles sin dominar el texto. */
+.cb-callout-warning .cb-callout-theme {
+  inset: auto 0 0 auto;
+  width: 30%;
+  height: 7px;
+  border-radius: 0 0 18px 0;
+  background: repeating-linear-gradient(135deg, var(--callout-accent) 0 8px, transparent 8px 16px);
+  opacity: .38;
+}
+
+/* Atención crítica: ondas concéntricas de alerta. */
+.cb-callout-danger .cb-callout-theme {
+  background: repeating-radial-gradient(circle at 94% 50%, transparent 0 13px, color-mix(in srgb, var(--callout-accent) 13%, transparent) 14px 16px, transparent 17px 27px);
+  mask-image: linear-gradient(90deg, transparent 55%, #000);
+}
+
+/* Dato clínico: retícula de ficha médica con pulso sutil. */
+.cb-callout-clinical .cb-callout-theme {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--callout-accent) 10%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--callout-accent) 10%, transparent) 1px, transparent 1px),
+    linear-gradient(115deg, transparent 77%, color-mix(in srgb, var(--callout-accent) 18%, transparent) 77.5% 78%, transparent 78.5% 81%, color-mix(in srgb, var(--callout-accent) 18%, transparent) 81.5% 82%, transparent 82.5%);
+  background-size: 20px 20px, 20px 20px, 100% 100%;
+  mask-image: linear-gradient(90deg, transparent 52%, #000 100%);
+}
+
+.cb-callout-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: 999px;
+  background: rgba(255,255,255,.62);
+  backdrop-filter: blur(5px);
+}
+
+.cb-callout-label-centered {
+  position: absolute;
+  left: 52px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+
+.cb-callout-text,
+.cb-callout-text > :first-child {
+  margin-top: 0 !important;
+}
+
+.cb-callout-text,
+.cb-callout-text > :last-child {
+  margin-bottom: 0 !important;
+}
+
+.cb-callout-text p {
+  margin-block: 0 !important;
+}
+
+.cb-callout-text p + p {
+  margin-top: .38em !important;
+}
+
+.cb-callout-icon {
+  transition: transform .22s ease, box-shadow .22s ease;
+}
+
+.cb-callout:hover .cb-callout-icon {
+  transform: translateY(-1px) rotate(-2deg) scale(1.035);
+}
+
+.cb-callout:hover .cb-callout-layout-centered .cb-callout-icon {
+  transform: translateY(-50%) rotate(-2deg) scale(1.035);
+}
+
+@media (max-width: 520px) {
+  .cb-callout-layout {
+    grid-template-columns: 36px minmax(0, 1fr) !important;
+    gap: 9px !important;
+  }
+
+  .cb-callout-layout-centered {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .cb-callout-label-centered {
+    left: 45px;
+  }
+
+  .cb-callout-icon {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 11px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-callout,
+  .cb-callout-icon {
+    transition: none !important;
+  }
+}
 
 @media (max-width: 720px) {
   .cb-weekly-publication > div {

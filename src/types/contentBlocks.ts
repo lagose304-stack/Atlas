@@ -8,6 +8,7 @@ export type BlockType =
   | 'three_images'
   | 'callout'
   | 'weekly_publication'
+  | 'weekly_test'
   | 'list'
   | 'divider'
   | 'carousel'

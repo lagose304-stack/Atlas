@@ -187,6 +187,22 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
       style_text: '#000000',
     },
   },
+  weekly_test: {
+    meta: { label: 'Pruebita semanal', icon: 'TEST', description: 'Invita a realizar una prueba publicada que elijas.', color: '#0ea5e9' },
+    schemaVersion: 1,
+    defaultContent: {
+      weekly_test_eyebrow: 'Pruebita de la semana',
+      weekly_test_title: '¿Listo para poner a prueba lo aprendido?',
+      weekly_test_description: 'Completa esta breve evaluación y descubre cuánto has aprendido esta semana.',
+      weekly_test_button: 'Comenzar pruebita',
+      weekly_test_id: '',
+      weekly_test_name: '',
+      weekly_test_accent: '',
+      weekly_test_bg: '',
+      weekly_test_style: 'sky',
+      weekly_test_width: 'full',
+    },
+  },
   list: {
     meta: { label: 'Lista', icon: 'LISTA', description: 'Elementos en formato de lista.', color: '#06b6d4' },
     schemaVersion: 1,

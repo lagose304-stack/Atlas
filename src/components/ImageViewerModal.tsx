@@ -1035,7 +1035,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     const baseMaxWidth = isDesktop ? 360 : 320;
     const fallback = {
       top: `${fallbackTop}px`,
-      left: '16px',
+      right: '16px',
       maxWidth: `${baseMaxWidth}px`,
     };
 
@@ -1067,17 +1067,17 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
     const minTop = hasInfo && !isDesktop ? 64 : 12;
     const desiredTop = visibleTop + 12;
-    const desiredLeft = visibleLeft + 12;
+    const desiredRight = containerWidth - visibleRight + 12;
 
     const top = Math.round(clamp(desiredTop, minTop, Math.max(minTop, containerHeight - 56)));
-    const left = Math.round(clamp(desiredLeft, 12, Math.max(12, containerWidth - 180)));
-    const maxWidthByVisible = Math.max(180, Math.floor(visibleRight - left - 12));
-    const maxWidthByContainer = Math.max(180, Math.floor(containerWidth - left - 12));
+    const right = Math.round(clamp(desiredRight, 12, Math.max(12, containerWidth - 180)));
+    const maxWidthByVisible = Math.max(180, Math.floor(visibleRight - visibleLeft - 24));
+    const maxWidthByContainer = Math.max(180, Math.floor(containerWidth - right - 12));
     const maxWidth = Math.min(baseMaxWidth, maxWidthByVisible, maxWidthByContainer);
 
     return {
       top: `${top}px`,
-      left: `${left}px`,
+      right: `${right}px`,
       maxWidth: `${maxWidth}px`,
     };
   }, [hasInfo, imageSize, isDesktop, position.x, position.y, zoomLevel]);
@@ -1134,64 +1134,26 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         @keyframes commentHintIn {
           0% {
             opacity: 0;
-            filter: blur(1.2px);
+            transform: translate3d(10px, -4px, 0) scale(0.98);
           }
           100% {
             opacity: 1;
-            filter: blur(0);
+            transform: translate3d(0, 0, 0) scale(1);
           }
         }
         @keyframes commentHintOut {
           0% {
             opacity: 1;
-            transform: translateY(0) scale(1);
-            filter: blur(0);
+            transform: translate3d(0, 0, 0) scale(1);
           }
           100% {
             opacity: 0;
-            transform: translateY(-6px) scale(0.975);
-            filter: blur(1.5px);
+            transform: translate3d(8px, -4px, 0) scale(0.98);
           }
         }
-        @keyframes commentHintFloat {
-          0%, 100% {
-            transform: translateY(0px);
-          }
-          50% {
-            transform: translateY(-1px);
-          }
-        }
-        @keyframes commentHintBorderGlow {
-          0%, 100% {
-            box-shadow: 0 10px 24px rgba(76, 29, 149, 0.14), 0 0 0 0 rgba(56, 189, 248, 0.24);
-          }
-          50% {
-            box-shadow: 0 12px 28px rgba(76, 29, 149, 0.16), 0 0 0 5px rgba(56, 189, 248, 0);
-          }
-        }
-        @keyframes commentHintSheen {
-          0% {
-            transform: translateX(-140%) skewX(-18deg);
-            opacity: 0;
-          }
-          18% {
-            opacity: 0.3;
-          }
-          42% {
-            opacity: 0.12;
-          }
-          100% {
-            transform: translateX(160%) skewX(-18deg);
-            opacity: 0;
-          }
-        }
-        @keyframes commentHintTwinkle {
-          0%, 100% { opacity: 0.25; transform: scale(1); }
-          50% { opacity: 0.75; transform: scale(1.09); }
-        }
-        @keyframes commentHintIconPulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.04); }
+        @keyframes commentHintProgress {
+          from { transform: scaleX(1); }
+          to { transform: scaleX(0); }
         }
         @keyframes mapCtaGlow {
           0%, 100% {
@@ -1278,89 +1240,40 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
         {showCommentHint && (
           <div
+            role="status"
+            aria-live="polite"
             style={{
               position: 'absolute',
               ...commentHintPlacement,
-              padding: '10px 12px',
-              borderRadius: '14px',
-              background: 'linear-gradient(115deg, rgba(245,238,255,0.52) 0%, rgba(236,246,255,0.48) 47%, rgba(255,235,246,0.5) 100%)',
-              border: '1.3px solid rgba(125,211,252,0.72)',
-              color: '#1e3a8a',
-              fontSize: '0.8em',
-              fontWeight: 600,
-              lineHeight: 1.25,
-              boxShadow: '0 10px 24px rgba(76, 29, 149, 0.14), inset 0 0 0 1px rgba(255,255,255,0.24), inset 0 8px 18px rgba(255,255,255,0.2)',
+              display: 'grid',
+              gridTemplateColumns: 'auto minmax(0, 1fr)',
+              alignItems: 'center',
+              gap: '11px',
+              padding: isDesktop ? '12px 14px' : '10px 12px',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.97), rgba(240,249,255,0.95))',
+              border: '1px solid rgba(125,211,252,0.72)',
+              color: '#0f172a',
+              boxShadow: '0 14px 32px rgba(14,116,144,0.16), inset 0 1px 0 rgba(255,255,255,0.92)',
               zIndex: 10,
-              backdropFilter: 'blur(13px) saturate(130%)',
+              backdropFilter: 'blur(14px) saturate(120%)',
               pointerEvents: 'none',
               overflow: 'hidden',
-              willChange: 'transform, opacity, filter, box-shadow',
+              willChange: 'transform, opacity',
               animation: isCommentHintExiting
                 ? `commentHintOut ${COMMENT_HINT_EXIT_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards`
-                : 'commentHintIn 460ms cubic-bezier(0.22, 1, 0.36, 1) both, commentHintFloat 4.2s cubic-bezier(0.42, 0, 0.58, 1) 420ms infinite, commentHintBorderGlow 4.8s ease-in-out 420ms infinite',
+                : 'commentHintIn 320ms cubic-bezier(0.22, 1, 0.36, 1) both',
             }}
           >
-            <span
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                top: '-40%',
-                bottom: '-40%',
-                width: '34%',
-                background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.58) 50%, rgba(255,255,255,0) 100%)',
-                animation: isCommentHintExiting ? 'none' : 'commentHintSheen 4.6s cubic-bezier(0.4, 0, 0.2, 1) 520ms infinite',
-              }}
-            />
-            <span
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                top: '12px',
-                left: isDesktop ? '72px' : '62px',
-                width: '6px',
-                height: '6px',
-                borderRadius: '999px',
-                background: '#dbeafe',
-                boxShadow: '0 0 12px rgba(186,230,253,0.95)',
-                animation: isCommentHintExiting ? 'none' : 'commentHintTwinkle 2.8s ease-in-out infinite',
-              }}
-            />
-            <span
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                bottom: '14px',
-                left: isDesktop ? '66px' : '54px',
-                width: '4px',
-                height: '4px',
-                borderRadius: '999px',
-                background: '#bfdbfe',
-                boxShadow: '0 0 10px rgba(125,211,252,0.9)',
-                animation: isCommentHintExiting ? 'none' : 'commentHintTwinkle 3.4s ease-in-out 420ms infinite',
-              }}
-            />
-
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span aria-hidden="true" style={{ position: 'relative', width: isDesktop ? '46px' : '40px', height: isDesktop ? '46px' : '40px', flexShrink: 0 }}>
-                <span style={{ position: 'absolute', inset: '-8px', borderRadius: '999px', background: 'radial-gradient(circle, rgba(125,211,252,0.46) 0%, rgba(56,189,248,0) 72%)' }} />
-                <span style={{ position: 'absolute', inset: 0, borderRadius: '999px', border: '1.6px solid rgba(191,219,254,0.95)', background: 'linear-gradient(145deg, rgba(255,255,255,0.92), rgba(219,234,254,0.75))', boxShadow: 'inset 0 2px 6px rgba(255,255,255,0.75), 0 4px 14px rgba(37,99,235,0.28)' }} />
-                <span style={{ position: 'absolute', inset: isDesktop ? '8px' : '7px', borderRadius: '999px', background: 'radial-gradient(circle at 30% 30%, #f0f9ff 0%, #93c5fd 42%, #1d4ed8 100%)', border: '1.2px solid rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', fontSize: isDesktop ? '1em' : '0.9em', fontWeight: 900, textShadow: '0 2px 4px rgba(30,64,175,0.65)', animation: isCommentHintExiting ? 'none' : 'commentHintIconPulse 2.6s ease-in-out infinite' }}>
-                  !
-                </span>
-              </span>
-
-              <span style={{ position: 'relative', display: 'inline-flex', flexDirection: 'column', gap: '1px' }}>
-                <span style={{ color: '#60a5fa', fontSize: '0.68em', fontWeight: 800, letterSpacing: '0.09em', textTransform: 'uppercase' }}>
-                  Tip rápido
-                </span>
-                <span style={{ color: '#0f1f63', fontWeight: 900, fontSize: isDesktop ? '1.02em' : '0.92em', letterSpacing: '-0.01em', lineHeight: 1.06 }}>
-                  ¡Lee el comentario!
-                </span>
-                <span style={{ color: '#132866', fontWeight: 600, fontSize: isDesktop ? '0.82em' : '0.76em', maxWidth: '30ch' }}>
-                  Revisa el comentario para aprender más sobre esta placa.
-                </span>
-              </span>
-            </div>
+            <span aria-hidden="true" style={{ display: 'grid', placeItems: 'center', width: isDesktop ? '38px' : '34px', height: isDesktop ? '38px' : '34px', borderRadius: '12px', color: '#ffffff', background: 'linear-gradient(145deg,#38bdf8,#2563eb)', boxShadow: '0 6px 16px rgba(37,99,235,.22)', fontSize: isDesktop ? '1.05em' : '.95em', fontWeight: 950 }}>i</span>
+            <span style={{ display: 'grid', gap: '2px', minWidth: 0 }}>
+              <span style={{ color: '#0284c7', fontSize: '0.65em', fontWeight: 850, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Tip rápido</span>
+              <span style={{ color: '#0f172a', fontWeight: 850, fontSize: isDesktop ? '0.94em' : '0.86em', lineHeight: 1.15 }}>Revisa el comentario</span>
+              <span style={{ color: '#475569', fontWeight: 550, fontSize: isDesktop ? '0.76em' : '0.71em', lineHeight: 1.3 }}>Encontrarás información útil sobre esta placa.</span>
+            </span>
+            <span aria-hidden="true" style={{ position: 'absolute', right: 0, bottom: 0, left: 0, height: '3px', background: 'rgba(14,165,233,.12)' }}>
+              <span style={{ display: 'block', width: '100%', height: '100%', transformOrigin: 'left', background: 'linear-gradient(90deg,#38bdf8,#22d3ee)', animation: prefersReducedMotion || isCommentHintExiting ? 'none' : `commentHintProgress ${COMMENT_HINT_DURATION_MS - COMMENT_HINT_EXIT_MS}ms linear forwards` }} />
+            </span>
           </div>
         )}
 
@@ -1753,7 +1666,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                               style={{ transition: prefersReducedMotion ? 'none' : 'opacity 220ms ease' }}
                             />
                           )}
-                          {markerVisualMode === 'arrow' ? (
+                          {regionPixelPoints.length < 3 && (markerVisualMode === 'arrow' ? (
                             <>
                               <polygon
                                 points={pointsStr}
@@ -1784,7 +1697,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                                 shapeRendering="geometricPrecision"
                               />
                             </>
-                          )}
+                          ))}
                           {regionPixelPoints.length >= 3 && (
                             <g pointerEvents="none" style={{ animation: prefersReducedMotion ? 'none' : 'mapCalloutIn 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
                               <line

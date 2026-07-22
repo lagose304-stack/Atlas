@@ -289,7 +289,7 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
                 data-editor-block-id={editorMode ? group.block.id : undefined}
                 onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(group.block.id); } : undefined}
               >
-                <BlockWithCtas block={group.block} onZoom={handleZoom} columnChildren={columnChildrenByParent.get(group.block.id)} />
+                <BlockWithCtas block={group.block} onZoom={handleZoom} columnChildren={columnChildrenByParent.get(group.block.id)} editorMode={editorMode} />
               </div>
             );
           }
@@ -316,7 +316,7 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
                 className={`cb-shell cb-section-shell ${editorMode ? 'cb-editor-selectable' : ''} ${selectedBlockId === group.section.id ? 'is-editor-selected' : ''}`}
                 onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(group.section.id); } : undefined}
               >
-                <BlockWithCtas block={group.section} onZoom={handleZoom} />
+                <BlockWithCtas block={group.section} onZoom={handleZoom} editorMode={editorMode} />
               </div>
               {group.children.length > 0 && (
                 <div style={sectionChildrenStyle} className="cb-section-children">
@@ -329,7 +329,7 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
                         className={`cb-shell cb-shell-${child.block_type} ${editorMode ? 'cb-editor-selectable' : ''} ${selectedBlockId === child.id ? 'is-editor-selected' : ''}`}
                         onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(child.id); } : undefined}
                       >
-                        <BlockWithCtas block={child} onZoom={handleZoom} columnChildren={columnChildrenByParent.get(child.id)} />
+                        <BlockWithCtas block={child} onZoom={handleZoom} columnChildren={columnChildrenByParent.get(child.id)} editorMode={editorMode} />
                       </div>
                     );
                   })}
@@ -346,7 +346,7 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
   );
 };
 
-const BlockWithCtas: React.FC<{ block: ContentBlock; onZoom: (url: string, placaId?: string) => void; columnChildren?: ContentBlock[] }> = ({ block, onZoom, columnChildren }) => {
+const BlockWithCtas: React.FC<{ block: ContentBlock; onZoom: (url: string, placaId?: string) => void; columnChildren?: ContentBlock[]; editorMode?: boolean }> = ({ block, onZoom, columnChildren, editorMode = false }) => {
   const c = normalizeBlockContent(block.block_type, block.content);
   const ctaPosition = (c.cta_position as 'before' | 'after') ?? 'after';
   const renderInlineCtas = block.block_type === 'callout' || block.block_type === 'section';
@@ -358,6 +358,7 @@ const BlockWithCtas: React.FC<{ block: ContentBlock; onZoom: (url: string, placa
       inlineCtas={renderInlineCtas ? ctas : null}
       inlineCtaPosition={ctaPosition}
       columnChildren={columnChildren}
+      editorMode={editorMode}
     />
   );
 
@@ -456,7 +457,8 @@ const BlockItem: React.FC<{
   inlineCtas?: React.ReactNode;
   inlineCtaPosition?: 'before' | 'after';
   columnChildren?: ContentBlock[];
-}> = ({ block, onZoom, inlineCtas, inlineCtaPosition = 'after', columnChildren = [] }) => {
+  editorMode?: boolean;
+}> = ({ block, onZoom, inlineCtas, inlineCtaPosition = 'after', columnChildren = [], editorMode = false }) => {
   const [imgHovered, setImgHovered] = useState(false);
   const [imgHoveredLeft, setImgHoveredLeft] = useState(false);
   const [imgHoveredRight, setImgHoveredRight] = useState(false);
@@ -621,7 +623,7 @@ const BlockItem: React.FC<{
             {c[`col_title_${columnIndex + 1}`] && <RichTextValue style={{ color: accent, fontWeight: 800, fontSize: '1em' }} value={c[`col_title_${columnIndex + 1}`]} />}
             {children.map(child => {
               const childContent = normalizeBlockContent(child.block_type, child.content);
-              return <div key={child.id} className={`cb-shell cb-shell-${child.block_type}`} style={getBlockShellStyle(childContent, child.block_type)}><BlockWithCtas block={child} onZoom={onZoom} /></div>;
+              return <div key={child.id} className={`cb-shell cb-shell-${child.block_type}`} style={getBlockShellStyle(childContent, child.block_type)}><BlockWithCtas block={child} onZoom={onZoom} editorMode={editorMode} /></div>;
             })}
           </div>)}
         </div>;
@@ -967,14 +969,73 @@ const BlockItem: React.FC<{
       );
     }
 
+    case 'weekly_test': {
+      const presetMap: Record<string, { accent: string; bg: string; soft: string }> = {
+        sky: { accent: '#0284c7', bg: '#f0f9ff', soft: '#dbeafe' },
+        mint: { accent: '#059669', bg: '#ecfdf5', soft: '#d1fae5' },
+        lavender: { accent: '#7c3aed', bg: '#f5f3ff', soft: '#ede9fe' },
+      };
+      const preset = presetMap[c.weekly_test_style || 'sky'] || presetMap.sky;
+      const accent = c.weekly_test_accent || preset.accent;
+      const background = c.weekly_test_bg || preset.bg;
+      const widthMap: Record<string, string> = { full: '100%', wide: '1200px', medium: '820px' };
+      const testId = c.weekly_test_id?.trim();
+      return (
+        <a
+          className={`cb-weekly-test${testId && !editorMode ? '' : ' is-unconfigured'}`}
+          href={testId && !editorMode ? `/evaluaciones/ejecutar/${encodeURIComponent(testId)}` : undefined}
+          aria-disabled={!testId || editorMode}
+          style={{
+            ['--weekly-test-accent' as string]: accent,
+            ['--weekly-test-soft' as string]: preset.soft,
+            ['--weekly-test-pink' as string]: '#ec4899',
+            ['--weekly-test-gold' as string]: '#f59e0b',
+            position: 'relative', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', alignItems: 'center',
+            gap: 'clamp(18px,3vw,38px)', width: `min(100%, ${widthMap[c.weekly_test_width || 'full'] || widthMap.full})`,
+            margin: '0 auto', padding: 'clamp(19px,3vw,28px)', overflow: 'hidden', boxSizing: 'border-box',
+            borderRadius: '24px', border: `1px solid color-mix(in srgb, ${accent} 25%, white)`,
+            background: `linear-gradient(118deg, ${background} 0%, color-mix(in srgb, #fdf2f8 56%, white) 50%, color-mix(in srgb, #fef3c7 52%, white) 100%)`,
+            boxShadow: `0 14px 36px color-mix(in srgb, ${accent} 15%, transparent), inset 0 1px 0 rgba(255,255,255,.88)`, color: '#0f172a',
+            textDecoration: 'none', cursor: testId && !editorMode ? 'pointer' : 'default',
+          }}
+        >
+          <span aria-hidden style={{ position: 'absolute', width: '240px', height: '240px', right: '-72px', top: '-145px', borderRadius: '50%', border: `28px solid color-mix(in srgb, ${accent} 8%, transparent)`, boxShadow: `0 0 0 1px color-mix(in srgb, ${accent} 10%, transparent)` }} />
+          <span aria-hidden style={{ position: 'absolute', inset: '0 0 auto', height: '4px', background: `linear-gradient(90deg, ${accent}, color-mix(in srgb, ${accent} 45%, #67e8f9), transparent 82%)` }} />
+          <span aria-hidden className="cb-weekly-test-glow cb-weekly-test-glow-one" />
+          <span aria-hidden className="cb-weekly-test-glow cb-weekly-test-glow-two" />
+          <span aria-hidden className="cb-weekly-test-spark cb-weekly-test-spark-one">✦</span>
+          <span aria-hidden className="cb-weekly-test-spark cb-weekly-test-spark-two">✧</span>
+          <span aria-hidden className="cb-weekly-test-spark cb-weekly-test-spark-three">•</span>
+          <span aria-hidden style={{ position: 'absolute', inset: '14px auto 14px 0', width: '5px', borderRadius: '0 99px 99px 0', background: `linear-gradient(${accent}, color-mix(in srgb, ${accent} 45%, white))` }} />
+          <span style={{ position: 'relative', display: 'grid', gap: '6px', minWidth: 0 }}>
+            <span className="cb-weekly-test-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', width: 'fit-content', padding: '5px 9px', borderRadius: '999px', color: '#9d174d', background: 'linear-gradient(90deg,#fce7f3,#fef3c7)', border: '1px solid rgba(236,72,153,.22)', boxShadow: '0 5px 14px rgba(236,72,153,.1)', fontSize: '.66rem', fontWeight: 900, letterSpacing: '.1em', textTransform: 'uppercase' }}><span aria-hidden>✦</span>{c.weekly_test_eyebrow || 'Pruebita de la semana'}</span>
+            <RichTextValue value={c.weekly_test_title || '¿Listo para poner a prueba lo aprendido?'} style={{ color: '#0f172a', fontSize: 'clamp(1.22rem,2.3vw,1.75rem)', fontWeight: 880, lineHeight: 1.08, letterSpacing: '-.025em' }} />
+            <RichTextValue value={c.weekly_test_description || 'Completa esta breve evaluación y descubre cuánto has aprendido esta semana.'} style={{ maxWidth: '64ch', color: '#475569', fontSize: 'clamp(.82rem,1.35vw,.94rem)', lineHeight: 1.42 }} />
+            {(c.weekly_test_name || editorMode) && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', marginTop: '2px', color: accent, fontSize: '.74rem', fontWeight: 820 }}><span aria-hidden>✓</span>{c.weekly_test_name || 'Selecciona una prueba en el editor'}</span>}
+          </span>
+          <span className="cb-weekly-test-cta" style={{ position: 'relative', display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr)', alignItems: 'center', gap: '11px', minWidth: '255px', padding: '10px', borderRadius: '18px', border: `1px solid color-mix(in srgb, ${accent} 20%, white)`, background: 'rgba(255,255,255,.78)', boxShadow: '0 9px 24px rgba(15,23,42,.07)', backdropFilter: 'blur(8px)' }}>
+            <span aria-hidden className="cb-weekly-test-orbit" style={{ position: 'relative', display: 'grid', placeItems: 'center', width: '48px', height: '48px', borderRadius: '15px', color: '#fff', background: `linear-gradient(145deg, ${accent}, color-mix(in srgb, ${accent} 65%, #1d4ed8))`, boxShadow: `0 8px 20px color-mix(in srgb, ${accent} 28%, transparent)`, fontSize: '1.35rem', fontWeight: 900 }}>
+              ?
+            </span>
+            <span className="cb-weekly-test-action" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '9px', width: '100%', padding: '11px 14px', boxSizing: 'border-box', borderRadius: '12px', color: '#fff', background: `linear-gradient(105deg, ${accent}, #7c3aed, #ec4899, ${accent})`, backgroundSize: '260% 100%', boxShadow: `0 7px 18px color-mix(in srgb, ${accent} 23%, transparent)`, fontSize: '.82rem', fontWeight: 880, whiteSpace: 'nowrap', transition: 'transform .2s ease, box-shadow .2s ease' }}>
+              {c.weekly_test_button || 'Comenzar pruebita'} <span aria-hidden style={{ fontSize: '1.2em', lineHeight: 1 }}>→</span>
+            </span>
+          </span>
+        </a>
+      );
+    }
+
     case 'callout': {
       if (!c.text) return null;
-      const align = ((c.text_align as React.CSSProperties['textAlign']) ?? (c.style_align as React.CSSProperties['textAlign']) ?? 'left');
+      const embeddedAlign = c.text.match(/text-align\s*:\s*(left|center|right|justify)/i)?.[1]?.toLowerCase() as React.CSSProperties['textAlign'] | undefined;
+      const align = embeddedAlign ?? ((c.text_align as React.CSSProperties['textAlign']) ?? (c.style_align as React.CSSProperties['textAlign']) ?? 'left');
       const variants: Record<string, { icon: string; label: string; bgStart: string; bgEnd: string; border: string; color: string; accent: string }> = {
-        info:     { icon: 'ℹ️', label: 'Información', bgStart: '#dbeafe', bgEnd: '#f8fbff', border: '#60a5fa', color: '#1d4ed8', accent: '#2563eb' },
-        tip:      { icon: '💡', label: 'Consejo', bgStart: '#dcfce7', bgEnd: '#f8fff8', border: '#4ade80', color: '#15803d', accent: '#16a34a' },
-        warning:  { icon: '⚠️', label: 'Importante', bgStart: '#fef3c7', bgEnd: '#fffdf2', border: '#f59e0b', color: '#b45309', accent: '#d97706' },
-        clinical: { icon: '🔬', label: 'Dato clínico', bgStart: '#f3e8ff', bgEnd: '#fff8ff', border: '#c084fc', color: '#7e22ce', accent: '#9333ea' },
+        info:     { icon: 'i', label: 'Información', bgStart: '#e8f2ff', bgEnd: '#f8fbff', border: '#72aef8', color: '#1557b0', accent: '#2878df' },
+        tip:      { icon: '✦', label: 'Consejo', bgStart: '#e7f9ef', bgEnd: '#f8fffb', border: '#6ed69a', color: '#147543', accent: '#20a961' },
+        success:  { icon: '✓', label: 'Completado', bgStart: '#e8f9ee', bgEnd: '#f8fff9', border: '#68d391', color: '#146c3a', accent: '#18a957' },
+        warning:  { icon: '!', label: 'Importante', bgStart: '#fff5d9', bgEnd: '#fffdf5', border: '#f2bd52', color: '#9a5708', accent: '#e89518' },
+        danger:   { icon: '!', label: 'Atención', bgStart: '#ffebeb', bgEnd: '#fffafa', border: '#f38a8a', color: '#ad2626', accent: '#dc3f3f' },
+        clinical: { icon: '✚', label: 'Dato clínico', bgStart: '#f4ebff', bgEnd: '#fdf9ff', border: '#c793f4', color: '#7627a8', accent: '#9b43d3' },
       };
       const v = variants[(c.variant as string) ?? 'info'] ?? variants.info;
       const calloutStyle = c.callout_style || 'modern';
@@ -987,20 +1048,22 @@ const BlockItem: React.FC<{
       const widthMap: Record<string, string> = { full: '100%', wide: '900px', medium: '700px', compact: '520px' };
       const requestedWidth = widthMap[c.callout_width || 'full'] || '100%';
       const surfaceMap: Record<string, React.CSSProperties> = {
-        modern: { background: `linear-gradient(135deg, ${customBg} 0%, #ffffff 88%)`, border: `1px solid ${customBorder}`, boxShadow: '0 12px 30px rgba(25,74,120,.10)' },
-        accent: { background: '#ffffff', border: `1px solid ${customBorder}`, boxShadow: `inset 7px 0 0 ${customBorder}, 0 10px 24px rgba(25,74,120,.09)` },
-        tinted: { background: customBg, border: `1px solid ${customBorder}`, boxShadow: '0 8px 22px rgba(25,74,120,.08)' },
+        modern: { background: `linear-gradient(118deg, ${customBg} 0%, #ffffff 72%)`, border: `1px solid color-mix(in srgb, ${customBorder} 72%, white)`, boxShadow: `0 14px 34px color-mix(in srgb, ${v.accent} 12%, transparent)` },
+        accent: { background: '#ffffff', border: `1px solid color-mix(in srgb, ${customBorder} 72%, white)`, boxShadow: `inset 5px 0 0 ${v.accent}, 0 12px 28px color-mix(in srgb, ${v.accent} 10%, transparent)` },
+        tinted: { background: `linear-gradient(120deg, ${customBg}, color-mix(in srgb, ${customBg} 58%, white))`, border: `1px solid color-mix(in srgb, ${customBorder} 72%, white)`, boxShadow: `0 10px 26px color-mix(in srgb, ${v.accent} 10%, transparent)` },
         outline: { background: 'transparent', border: `2px solid ${customBorder}`, boxShadow: 'none' },
       };
       return (
-        <div role="note" style={{
+        <div role="note" className={`cb-callout cb-callout-${(c.variant as string) || 'info'} cb-callout-${calloutStyle}`} style={{
           position: 'relative',
+          ...({ '--callout-accent': v.accent } as React.CSSProperties),
           ...(surfaceMap[calloutStyle] || surfaceMap.modern),
-          borderRadius: 'clamp(14px, 1.8vw, 20px)',
-          padding: 'clamp(16px, 2.2vw, 24px)',
+          borderRadius: 'clamp(14px, 1.6vw, 18px)',
+          padding: 'clamp(11px, 1.45vw, 15px) clamp(13px, 1.8vw, 18px)',
           display: 'grid',
-          gap: 'clamp(12px, 1.8vw, 18px)',
-          alignItems: 'flex-start',
+          gap: 'clamp(8px, 1.2vw, 12px)',
+          alignItems: 'center',
+          alignContent: 'center',
           textAlign: align,
           overflow: 'hidden',
           minHeight: '0',
@@ -1008,26 +1071,32 @@ const BlockItem: React.FC<{
           boxSizing: 'border-box',
           marginInline: align === 'right' ? 'auto 0' : align === 'center' ? 'auto' : '0 auto 0 0',
         }}>
+          <span aria-hidden className="cb-callout-glow" />
+          <span aria-hidden className="cb-callout-theme" />
+          <span aria-hidden className="cb-callout-line" />
           {inlineCtas && inlineCtaPosition === 'before' && inlineCtas}
-          <div style={{ display: 'grid', gridTemplateColumns: showIcon ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)', gap: 'clamp(12px, 1.8vw, 18px)', alignItems: 'center', width: '100%' }}>
-            {showIcon && <span aria-hidden style={{
-              fontSize: 'clamp(1.15rem, 2vw, 1.45rem)',
+          <div className={`cb-callout-layout${align === 'center' ? ' cb-callout-layout-centered' : ''}`} style={{ display: 'grid', gridTemplateColumns: align === 'center' ? 'minmax(0, 1fr)' : showIcon ? '40px minmax(0, 1fr)' : 'minmax(0, 1fr)', gap: 'clamp(10px, 1.4vw, 14px)', alignItems: 'center', width: '100%', position: 'relative', zIndex: 1 }}>
+            {showIcon && <span aria-hidden className="cb-callout-icon" style={{
+              fontSize: '1rem',
+              fontWeight: 900,
               lineHeight: 1,
-              width: '2.35em', height: '2.35em', borderRadius: '14px',
+              width: '40px', height: '40px', borderRadius: '12px',
               display: 'inline-flex',
               alignItems: 'center', justifyContent: 'center',
-              background: '#ffffffcc',
-              border: `1px solid ${v.border}`,
-              boxShadow: `0 7px 18px ${v.border}22`,
+              color: '#fff',
+              background: `linear-gradient(145deg, ${v.accent}, color-mix(in srgb, ${v.accent} 70%, #172554))`,
+              border: '1px solid rgba(255,255,255,.7)',
+              boxShadow: `0 8px 18px color-mix(in srgb, ${v.accent} 24%, transparent), inset 0 1px 0 rgba(255,255,255,.35)`,
+              ...(align === 'center' ? { position: 'absolute' as const, left: 0, top: '50%', transform: 'translateY(-50%)' } : {}),
             }}>{v.icon}</span>}
-            <div style={{ minWidth: 0 }}>
-              {showLabel && <div style={{ marginBottom: '5px', color: labelColor, fontSize: '.7em', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase' }}>{label}</div>}
-              <RichTextValue style={{
+            <div style={{ minWidth: 0, paddingInline: align === 'center' && showIcon ? '52px' : undefined }}>
+              {showLabel && <div className={`cb-callout-label${align === 'center' ? ' cb-callout-label-centered' : ''}`} style={{ margin: align === 'center' ? 0 : '0 0 4px', color: labelColor, fontSize: '.65em', fontWeight: 900, letterSpacing: '.075em', textTransform: 'uppercase' }}><span aria-hidden style={{ width: '5px', height: '5px', flex: '0 0 5px', borderRadius: '50%', background: v.accent, boxShadow: `0 0 0 3px color-mix(in srgb, ${v.accent} 13%, transparent)` }} />{label}</div>}
+              <RichTextValue className="cb-callout-text" style={{
                 margin: 0,
                 width: '100%',
                 color: userTextColor || '#000000',
                 fontSize: userFontSize || '1em',
-                lineHeight: 1.6,
+                lineHeight: 1.45,
                 fontWeight: userFontWeight || 500,
                 whiteSpace: 'pre-wrap' as const,
                 wordBreak: 'break-word' as const,

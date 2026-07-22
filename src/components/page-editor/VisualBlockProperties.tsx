@@ -2,7 +2,15 @@ import React, { useState } from 'react';
 import { AlignCenter, AlignLeft, AlignRight, Bold, Copy, ImagePlus, Italic, Link2, List, ListOrdered, Palette, RemoveFormatting, RotateCcw, SlidersHorizontal, Strikethrough, Trash2, Type, Underline, X } from 'lucide-react';
 import { getBlockMeta } from '../blocks/blockRegistry';
 import { getCloudinaryImageUrl } from '../../services/cloudinaryImages';
+import { supabase } from '../../services/supabase';
 import type { ContentBlock } from '../../types/contentBlocks';
+
+interface WeeklyTestOption {
+  id: string;
+  nombre: string;
+  scope: string;
+  parcial_key: string;
+}
 
 interface VisualBlockPropertiesProps {
   block: ContentBlock;
@@ -164,6 +172,9 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
   const [activeTab, setActiveTab] = useState<'content' | 'appearance' | 'text' | 'layout' | 'buttons'>(embedded ? 'appearance' : 'content');
   const [textState, setTextState] = useState<Record<string, string | boolean>>({});
   const [activeTextEditorId, setActiveTextEditorId] = useState(block.id);
+  const [weeklyTests, setWeeklyTests] = useState<WeeklyTestOption[]>([]);
+  const [weeklyTestsLoading, setWeeklyTestsLoading] = useState(false);
+  const [weeklyTestsError, setWeeklyTestsError] = useState('');
   const content = block.content;
   const meta = getBlockMeta(block.block_type);
   const sendTextCommand = (command: string, value?: string) => {
@@ -181,6 +192,57 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
     window.addEventListener('atlas-rich-text-state', handleState);
     return () => window.removeEventListener('atlas-rich-text-state', handleState);
   }, [block.id]);
+
+  React.useEffect(() => {
+    if (block.block_type !== 'weekly_test') return;
+    let cancelled = false;
+    const loadTests = async () => {
+      setWeeklyTestsLoading(true);
+      setWeeklyTestsError('');
+      const { data, error } = await supabase
+        .from('pruebas')
+        .select('id, nombre, scope, parcial_key')
+        .eq('estado', 'publicada')
+        .order('created_at', { ascending: false });
+      if (cancelled) return;
+      if (error) {
+        setWeeklyTests([]);
+        setWeeklyTestsError('No se pudieron cargar las pruebas publicadas.');
+      } else {
+        setWeeklyTests((data ?? []) as WeeklyTestOption[]);
+      }
+      setWeeklyTestsLoading(false);
+    };
+    void loadTests();
+    return () => { cancelled = true; };
+  }, [block.block_type]);
+
+  React.useEffect(() => {
+    if (block.block_type === 'weekly_test') setActiveTab('appearance');
+  }, [block.id, block.block_type]);
+
+  const renderWeeklyTestPicker = () => {
+    if (block.block_type !== 'weekly_test') return null;
+    const options = [
+      { value: '', label: weeklyTestsLoading ? 'Cargando pruebas…' : 'Selecciona una prueba' },
+      ...weeklyTests.map(test => ({ value: test.id, label: `${test.nombre} · ${test.parcial_key || test.scope}` })),
+    ];
+    return <section className="visual-weekly-test-picker">
+      <div className="visual-weekly-test-picker-heading"><span aria-hidden>?</span><div><h4>Prueba de destino</h4><small>Al hacer clic en la tarjeta pública se abrirá esta prueba.</small></div></div>
+      <SelectField
+        label="Seleccionar prueba publicada"
+        value={content.weekly_test_id || ''}
+        options={options}
+        onChange={weekly_test_id => {
+          const selected = weeklyTests.find(test => test.id === weekly_test_id);
+          onChange({ weekly_test_id, weekly_test_name: selected?.nombre || '' });
+        }}
+      />
+      {content.weekly_test_name && <div className="visual-weekly-test-selected"><span>✓</span><div><small>Seleccionada</small><strong>{content.weekly_test_name}</strong></div></div>}
+      {weeklyTestsError && <p className="visual-properties-hint">{weeklyTestsError}</p>}
+      {!weeklyTestsLoading && !weeklyTestsError && weeklyTests.length === 0 && <p className="visual-properties-hint">No hay pruebas publicadas todavía.</p>}
+    </section>;
+  };
 
   const renderContentFields = () => {
     if (['heading', 'subheading', 'paragraph', 'callout'].includes(block.block_type)) {
@@ -206,6 +268,14 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
         <TextAreaField label="Segundo tema (opcional)" value={content.topic_2 ?? ''} onChange={topic_2 => onChange({ topic_2 })} />
         <ImageField url={content.image_url ?? ''} onPick={() => onPickImage('image_url')} onClear={() => onChange({ image_url: '', weekly_image_source: '', weekly_placa_id: '' })} />
         <TextAreaField label="Nombre de la placa semanal" value={content.image_caption ?? ''} onChange={image_caption => onChange({ image_caption })} />
+      </>;
+    }
+    if (block.block_type === 'weekly_test') {
+      return <>
+        <TextAreaField label="Etiqueta superior" value={content.weekly_test_eyebrow ?? ''} onChange={weekly_test_eyebrow => onChange({ weekly_test_eyebrow })} />
+        <TextAreaField label="Título" value={content.weekly_test_title ?? ''} onChange={weekly_test_title => onChange({ weekly_test_title })} />
+        <TextAreaField label="Descripción" value={content.weekly_test_description ?? ''} onChange={weekly_test_description => onChange({ weekly_test_description })} />
+        <label className="visual-properties-field"><span>Texto del botón</span><input value={content.weekly_test_button || ''} onChange={event => onChange({ weekly_test_button: event.target.value })} /></label>
       </>;
     }
     if (block.block_type === 'image') {
@@ -297,7 +367,7 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
     return <p className="visual-properties-hint">Este bloque no contiene texto ni imágenes editables.</p>;
   };
 
-  const hasLayoutOptions = ['section', 'columns_2', 'image', 'text_image', 'two_images', 'three_images', 'callout', 'weekly_publication', 'list', 'divider', 'carousel', 'text_carousel', 'double_carousel'].includes(block.block_type);
+  const hasLayoutOptions = ['section', 'columns_2', 'image', 'text_image', 'two_images', 'three_images', 'callout', 'weekly_publication', 'weekly_test', 'list', 'divider', 'carousel', 'text_carousel', 'double_carousel'].includes(block.block_type);
   const renderLayoutFields = () => {
     if (block.block_type === 'section') {
       return <>
@@ -370,6 +440,16 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
         <SelectField label="Posición de la placa" value={content.weekly_image_position || 'right'} options={[{ value: 'right', label: 'Imagen a la derecha' }, { value: 'left', label: 'Imagen a la izquierda' }]} onChange={weekly_image_position => onChange({ weekly_image_position })} />
         <SelectField label="Ajuste de la placa" value={content.weekly_image_fit || 'cover'} options={[{ value: 'cover', label: 'Llenar el espacio (puede recortar)' }, { value: 'contain', label: 'Mostrar la placa completa' }]} onChange={weekly_image_fit => onChange({ weekly_image_fit })} />
         <SelectField label="Ancho del componente" value={content.weekly_width || 'full'} options={[{ value: 'full', label: 'Todo el ancho' }, { value: 'wide', label: 'Amplio (1050 px)' }, { value: 'medium', label: 'Medio (850 px)' }]} onChange={weekly_width => onChange({ weekly_width })} />
+      </>;
+    }
+    if (block.block_type === 'weekly_test') {
+      return <>
+        <SelectField label="Estilo" value={content.weekly_test_style || 'sky'} options={[{ value: 'sky', label: 'Cielo luminoso' }, { value: 'mint', label: 'Menta fresca' }, { value: 'lavender', label: 'Lavanda suave' }]} onChange={weekly_test_style => {
+          const presets: Record<string, { accent: string; bg: string }> = { sky: { accent: '#0284c7', bg: '#f0f9ff' }, mint: { accent: '#059669', bg: '#ecfdf5' }, lavender: { accent: '#7c3aed', bg: '#f5f3ff' } };
+          const preset = presets[weekly_test_style] || presets.sky;
+          onChange({ weekly_test_style, weekly_test_accent: preset.accent, weekly_test_bg: preset.bg });
+        }} />
+        <SelectField label="Ancho" value={content.weekly_test_width || 'full'} options={[{ value: 'full', label: 'Todo el ancho' }, { value: 'wide', label: 'Amplio' }, { value: 'medium', label: 'Medio' }]} onChange={weekly_test_width => onChange({ weekly_test_width })} />
       </>;
     }
     if (block.block_type === 'list') {
@@ -662,6 +742,11 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       <label className="wide"><span>Separación superior: {content.style_text_space_top || 0}px</span><input type="range" min="0" max="64" value={Number(content.style_text_space_top || 0)} onChange={event => onChange({ style_text_space_top: event.target.value })} /></label>
       <label className="wide"><span>Separación inferior: {content.style_text_space_bottom || 0}px</span><input type="range" min="0" max="64" value={Number(content.style_text_space_bottom || 0)} onChange={event => onChange({ style_text_space_bottom: event.target.value })} /></label>
     </div>;
+    if (block.block_type === 'weekly_test') return <div className="visual-properties-specific-style">
+      <h4>Diseño de la pruebita semanal</h4>
+      <ColorField label="Color de acento" value={content.weekly_test_accent || ''} fallback="#0ea5e9" onChange={weekly_test_accent => onChange({ weekly_test_accent })} />
+      <ColorField label="Color de fondo" value={content.weekly_test_bg || ''} fallback="#f0f9ff" onChange={weekly_test_bg => onChange({ weekly_test_bg })} />
+    </div>;
     if (block.block_type === 'weekly_publication') return <div className="visual-properties-specific-style">
       <h4>Diseño de la publicación semanal</h4>
       <SelectField label="Estilo visual" value={content.weekly_style || 'premium'} options={[{ value: 'premium', label: 'Editorial premium' }, { value: 'clean', label: 'Blanco y limpio' }, { value: 'outline', label: 'Contorno elegante' }]} onChange={weekly_style => onChange({ weekly_style })} />
@@ -694,8 +779,10 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
         <button type="button" className="icon" onClick={onClose} aria-label="Terminar edición" title="Terminar y volver a los componentes"><X size={18} /></button>
       </header>
 
+      {renderWeeklyTestPicker()}
+
       <nav className="visual-properties-tabs" aria-label="Opciones del bloque">
-        {!embedded && <button type="button" className={activeTab === 'content' ? 'is-active' : ''} onClick={() => setActiveTab('content')}><Type size={15} /> Contenido</button>}
+        {(!embedded || block.block_type === 'weekly_test') && <button type="button" className={activeTab === 'content' ? 'is-active' : ''} onClick={() => setActiveTab('content')}><Type size={15} /> Contenido</button>}
         <button type="button" className={activeTab === 'appearance' ? 'is-active' : ''} onClick={() => setActiveTab('appearance')}><SlidersHorizontal size={15} /> Apariencia</button>
         <button type="button" className={activeTab === 'text' ? 'is-active' : ''} onClick={() => setActiveTab('text')}><Type size={15} /> Estilo del texto</button>
         {hasLayoutOptions && <button type="button" className={activeTab === 'layout' ? 'is-active' : ''} onClick={() => setActiveTab('layout')}><SlidersHorizontal size={15} /> Diseño</button>}

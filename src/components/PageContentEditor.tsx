@@ -229,7 +229,7 @@ export interface PageContentEditorHandle {
 const BLOCK_TOOLBAR_GROUPS: Array<{ title: string; types: BlockType[] }> = [
   {
     title: 'Texto',
-    types: ['heading', 'subheading', 'paragraph', 'list', 'callout', 'weekly_publication'],
+    types: ['heading', 'subheading', 'paragraph', 'list', 'callout', 'weekly_publication', 'weekly_test'],
   },
   {
     title: 'Imagenes y galerias',
@@ -257,6 +257,7 @@ const BLOCK_TYPE_VISUAL_ICON: Record<BlockType, string> = {
   three_images: '3IMG',
   callout: 'TIP',
   weekly_publication: 'SEM',
+  weekly_test: 'TEST',
   list: 'LIST',
   divider: 'SEP',
   carousel: 'GAL',

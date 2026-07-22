@@ -118,6 +118,16 @@
 .block-editor-sidebar.has-active-properties { padding-top: 0 !important; }
 .visual-properties-panel.is-embedded { max-height: none; margin: 0 -10px -12px; overflow: visible; }
 .visual-properties-panel > header { position: sticky; top: 0; z-index: 20; display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #dce6ef; background: #fff; box-shadow: 0 5px 10px rgba(30,64,175,.06); isolation: isolate; }
+.visual-weekly-test-picker { display: grid; gap: 11px; padding: 14px 15px !important; background: linear-gradient(145deg,#f0f9ff,#ffffff); border-bottom: 1px solid #bae6fd !important; }
+.visual-weekly-test-picker-heading { display: flex; align-items: center; gap: 10px; }
+.visual-weekly-test-picker-heading > span { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 11px; color: #fff; background: linear-gradient(145deg,#38bdf8,#2563eb); box-shadow: 0 6px 14px rgba(37,99,235,.2); font-weight: 950; }
+.visual-weekly-test-picker-heading h4 { margin: 0; color: #0f3d62; font-size: .82rem; }
+.visual-weekly-test-picker-heading small { display: block; margin-top: 2px; color: #64748b; font-size: .68rem; line-height: 1.35; }
+.visual-weekly-test-selected { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid #a7f3d0; border-radius: 10px; background: #ecfdf5; color: #065f46; }
+.visual-weekly-test-selected > span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: #fff; background: #10b981; font-weight: 900; }
+.visual-weekly-test-selected div { display: grid; min-width: 0; }
+.visual-weekly-test-selected small { font-size: .62rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.visual-weekly-test-selected strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .74rem; }
 .visual-properties-panel header small { color: #7890a8; font-size: .67rem; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
 .visual-properties-panel header h3 { margin: 3px 0 0; color: #1a4168; font-size: 1rem; }
 .visual-properties-panel button.icon { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #d6e0eb; border-radius: 9px; background: #f8fafc; color: #64748b; cursor: pointer; }
