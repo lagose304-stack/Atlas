@@ -13,4 +13,4 @@ Disallow: /estadisticas
 Disallow: /pruebas
 Disallow: /acceso-denegado
 
-Sitemap: https://atlas-histolab.pages.dev/sitemap.txt
+Sitemap: https://atlas-histolab.pages.dev/sitemap.xml

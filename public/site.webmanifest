@@ -1,0 +1,18 @@
+{
+  "name": "Histolab UNAH | Atlas de Histología",
+  "short_name": "Histolab UNAH",
+  "description": "Atlas de Histología del Laboratorio de Histología de la Facultad de Ciencias Médicas de la UNAH.",
+  "lang": "es-HN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

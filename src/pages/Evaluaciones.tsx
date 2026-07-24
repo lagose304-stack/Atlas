@@ -176,11 +176,11 @@ const Evaluaciones: React.FC = () => {
 
         <section style={s.card}>
           {isLoading ? (
-            <div style={s.statusBox}><span className="route-loading-spinner" /> <div><strong>Preparando evaluaciones</strong><span>Estamos organizando el contenido disponible.</span></div></div>
+            <div style={s.statusBox}><span className="route-loading-spinner" /> <div style={s.statusCopy}><strong>Preparando evaluaciones</strong><span>Estamos organizando el contenido disponible.</span></div></div>
           ) : error ? (
-            <div style={{ ...s.statusBox, ...s.errorBox }}><strong>No pudimos cargar las evaluaciones</strong><span>{error}</span></div>
+            <div style={{ ...s.statusBox, ...s.errorBox }}><div style={s.statusCopy}><strong>No pudimos cargar las evaluaciones</strong><span>{error}</span></div></div>
           ) : !hasAnyPublishedTest ? (
-            <div style={s.statusBox}><BookOpenCheck size={28} aria-hidden="true" /><div><strong>Aún no hay evaluaciones publicadas</strong><span>Cuando haya contenido disponible aparecerá organizado en esta página.</span></div></div>
+            <div style={s.statusBox}><BookOpenCheck size={28} aria-hidden="true" /><div style={s.statusCopy}><strong>Aún no hay evaluaciones publicadas</strong><span>Cuando haya contenido disponible, aparecerá organizado en esta página.</span></div></div>
           ) : (
             <>
               <div className="evaluaciones-overview-grid" style={s.overviewGrid}>
@@ -378,6 +378,10 @@ const s: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: '14px',
     boxShadow: '0 10px 26px rgba(20,67,112,.07)',
+  },
+  statusCopy: {
+    display: 'grid',
+    gap: '3px',
   },
   errorBox: { borderColor: '#fecaca', background: '#fff7f7', color: '#991b1b' },
   overviewGrid: {

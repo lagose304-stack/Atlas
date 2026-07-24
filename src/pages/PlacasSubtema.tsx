@@ -330,7 +330,7 @@ const PlacasSubtema: React.FC = () => {
               <h1 style={styles.title}>
                 {loading ? 'Cargando...' : subtema?.nombre ?? 'Placas'}
               </h1>
-              {!loading && (
+              {!loading && placas.length > 0 && (
                 <span style={styles.countBadge}>
                   {placas.length} {placas.length === 1 ? 'placa' : 'placas'}
                 </span>
@@ -349,12 +349,7 @@ const PlacasSubtema: React.FC = () => {
             <div style={styles.spinnerWrap}>
               <div style={styles.spinner} />
             </div>
-          ) : placas.length === 0 ? (
-            <div style={styles.emptyState}>
-              <span style={styles.emptyIcon}>🔬</span>
-              <p style={styles.emptyText}>Aún no hay placas registradas para este subtema.</p>
-            </div>
-          ) : (
+          ) : placas.length > 0 ? (
             <div style={styles.gridSectionsWrap}>
               {interactivePlacas.length > 0 && (
                 <section style={styles.gridSection}>
@@ -380,7 +375,7 @@ const PlacasSubtema: React.FC = () => {
                 </section>
               ))}
             </div>
-          )}
+          ) : null}
 
           {!loading && (navAnterior || navSiguiente) && (
             <section style={styles.navigationPanel}>
@@ -534,26 +529,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderTop: '5px solid #38bdf8',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
-  },
-  emptyState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 'clamp(32px, 8vw, 80px)',
-    background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
-    borderRadius: '12px',
-    border: '1px dashed #cbd5e1',
-    gap: '12px',
-  },
-  emptyIcon: {
-    fontSize: '3em',
-  },
-  emptyText: {
-    margin: 0,
-    color: '#64748b',
-    fontWeight: 500,
-    textAlign: 'center',
   },
   gridSectionsWrap: {
     display: 'flex',

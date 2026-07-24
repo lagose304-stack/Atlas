@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
 const SITE_URL = 'https://atlas-histolab.pages.dev';
-const DEFAULT_DESCRIPTION = 'Atlas de Histología del Laboratorio de Histología de la UNAH: temario, microscopía y colección de placas histológicas para estudiantes.';
+const DEFAULT_DESCRIPTION = 'Histolab UNAH: Atlas de Histología del Laboratorio de Histología de la Facultad de Ciencias Médicas, con temario, microscopía y placas histológicas.';
 
 type SeoData = { title: string; description: string; index?: boolean };
 
@@ -28,7 +28,7 @@ const getSeoData = (pathname: string): SeoData => {
     description: DEFAULT_DESCRIPTION,
     index: false,
   };
-  return { title: 'Atlas de Histología | Histolab UNAH', description: DEFAULT_DESCRIPTION };
+  return { title: 'Histolab UNAH | Atlas de Histología', description: DEFAULT_DESCRIPTION };
 };
 
 const setMeta = (selector: string, attribute: 'name' | 'property', key: string, content: string) => {

@@ -262,68 +262,66 @@ const Subtemas: React.FC = () => {
             )}
 
             {/* Grilla de subtemas */}
-            <h2 className="atlas-typo-section-title" style={styles.subtemasHeading}>Subtemas</h2>
-            {subtemas.length === 0 ? (
-              <div style={styles.emptyState}>
-                <p className="atlas-typo-body" style={styles.emptyText}>Aún no hay subtemas registrados para este tema.</p>
-              </div>
-            ) : (
-              <div className="subtemas-grid-page">
-                {subtemas.map(subtema => (
-                  <button
-                    type="button"
-                    className="subtema-public-card"
-                    key={subtema.id}
-                    style={{
-                      ...styles.subtemaCard,
-                      ...(hoveredSubtema === subtema.id ? styles.subtemaCardHover : {}),
-                      cursor: 'pointer',
-                      fontFamily: 'inherit',
-                    }}
-                    onMouseEnter={() => setHoveredSubtema(subtema.id)}
-                    onMouseLeave={() => setHoveredSubtema(null)}
-                    onClick={() => navigate(`/ver-placas/${subtema.id}`)}
-                  >
-                    <div style={styles.subtemaAccent} />
-                    {subtema.logo_url && !failedSubtemaLogos[subtema.id] ? (
-                      <div className="subtema-card-img-wrap" style={styles.subtemaLogoWrap}>
-                        <img
-                          src={getCloudinaryImageUrl(subtema.logo_url, 'thumb')}
-                          srcSet={`${getCloudinaryImageUrl(subtema.logo_url, 'thumbSmall')} 320w, ${getCloudinaryImageUrl(subtema.logo_url, 'thumb')} 560w`}
-                          sizes="(max-width: 640px) 70px, (max-width: 900px) 86px, (max-width: 1200px) 100px, 115px"
-                          alt={subtema.nombre}
-                          style={styles.subtemaLogo}
-                          loading="lazy"
-                          decoding="async"
-                          onError={(e) => {
-                            const img = e.currentTarget;
-                            if (img.dataset.fallbackTried !== '1') {
-                              img.dataset.fallbackTried = '1';
-                              img.srcset = '';
-                              img.sizes = '';
-                              img.src = subtema.logo_url as string;
-                              return;
-                            }
-                            setFailedSubtemaLogos((prev) => ({ ...prev, [subtema.id]: true }));
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <div className="subtema-card-img-wrap" style={styles.subtemaIconFallback}>
-                        <Microscope size={30} aria-hidden="true" />
-                      </div>
-                    )}
-                    <div className="subtema-public-copy" style={styles.subtemaCopy}>
-                      <span style={styles.subtemaEyebrow}><Layers3 size={13} /> Subtema</span>
-                      <h3 className="subtema-card-label atlas-typo-card" style={styles.subtemaTitle}>{subtema.nombre}</h3>
-                      {subtema.descripcion && (
-                        <p className="atlas-typo-body" style={styles.subtemaDesc}>{subtema.descripcion}</p>
+            {subtemas.length > 0 && (
+              <>
+                <h2 className="atlas-typo-section-title" style={styles.subtemasHeading}>Subtemas</h2>
+                <div className="subtemas-grid-page">
+                  {subtemas.map(subtema => (
+                    <button
+                      type="button"
+                      className="subtema-public-card"
+                      key={subtema.id}
+                      style={{
+                        ...styles.subtemaCard,
+                        ...(hoveredSubtema === subtema.id ? styles.subtemaCardHover : {}),
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                      onMouseEnter={() => setHoveredSubtema(subtema.id)}
+                      onMouseLeave={() => setHoveredSubtema(null)}
+                      onClick={() => navigate(`/ver-placas/${subtema.id}`)}
+                    >
+                      <div style={styles.subtemaAccent} />
+                      {subtema.logo_url && !failedSubtemaLogos[subtema.id] ? (
+                        <div className="subtema-card-img-wrap" style={styles.subtemaLogoWrap}>
+                          <img
+                            src={getCloudinaryImageUrl(subtema.logo_url, 'thumb')}
+                            srcSet={`${getCloudinaryImageUrl(subtema.logo_url, 'thumbSmall')} 320w, ${getCloudinaryImageUrl(subtema.logo_url, 'thumb')} 560w`}
+                            sizes="(max-width: 640px) 70px, (max-width: 900px) 86px, (max-width: 1200px) 100px, 115px"
+                            alt={subtema.nombre}
+                            style={styles.subtemaLogo}
+                            loading="lazy"
+                            decoding="async"
+                            onError={(e) => {
+                              const img = e.currentTarget;
+                              if (img.dataset.fallbackTried !== '1') {
+                                img.dataset.fallbackTried = '1';
+                                img.srcset = '';
+                                img.sizes = '';
+                                img.src = subtema.logo_url as string;
+                                return;
+                              }
+                              setFailedSubtemaLogos((prev) => ({ ...prev, [subtema.id]: true }));
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="subtema-card-img-wrap" style={styles.subtemaIconFallback}>
+                          <Microscope size={30} aria-hidden="true" />
+                        </div>
                       )}
-                      <span style={styles.subtemaAction}>Ver placas <ArrowRight size={15} /></span>
-                    </div>
-                  </button>
-                ))}
-              </div>
+                      <div className="subtema-public-copy" style={styles.subtemaCopy}>
+                        <span style={styles.subtemaEyebrow}><Layers3 size={13} /> Subtema</span>
+                        <h3 className="subtema-card-label atlas-typo-card" style={styles.subtemaTitle}>{subtema.nombre}</h3>
+                        {subtema.descripcion && (
+                          <p className="atlas-typo-body" style={styles.subtemaDesc}>{subtema.descripcion}</p>
+                        )}
+                        <span style={styles.subtemaAction}>Ver placas <ArrowRight size={15} /></span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
 
             {(navAnterior || navSiguiente) && (
@@ -552,20 +550,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     overflow: 'hidden',
   },
   subtemaAction: { display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', color: '#176a9d', fontSize: '.76rem', fontWeight: 900 },
-  emptyState: {
-    width: '100%',
-    padding: 'clamp(20px, 5vw, 48px)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
-    borderRadius: '12px',
-    border: '1px dashed #cbd5e1',
-  },
-  emptyText: {
-    fontStyle: 'italic',
-    textAlign: 'center',
-  },
   loadingWrap: {
     display: 'flex',
     flexDirection: 'column',

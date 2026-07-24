@@ -429,7 +429,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
 
             <div className="atlas-header-center-area" style={styles.centerArea}>
               <h1 className="atlas-header-title" style={styles.title}>Atlas de Histología</h1>
-              <p className="atlas-header-subtitle" style={styles.subtitle}>Laboratorio de Histología - Dr. Rafael Perdomo Vaquero</p>
+              <p className="atlas-header-subtitle" style={styles.subtitle}>Histolab UNAH · Laboratorio de Histología - Dr. Rafael Perdomo Vaquero</p>
               <div className="atlas-header-separator" style={styles.separator} />
               <p className="atlas-header-subtitle2" style={styles.subtitle2}>Facultad de Ciencias Médicas - UNAH</p>
             </div>
