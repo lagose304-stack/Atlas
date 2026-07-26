@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ATLAS_SESSION_TOKEN_KEY, supabase } from '../services/supabase';
 import type { UserRole } from '../security/permissions';
 
@@ -41,6 +41,10 @@ type SessionResponse = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const USER_KEY = 'atlas_user';
+const SESSION_VALIDATION_ATTEMPTS = 3;
+const SESSION_VALIDATION_RETRY_MS = 750;
+
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 const messageForStatus = (status: LoginStatus, remainingMs?: number) => {
   if (status === 'locked') {
@@ -56,6 +60,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const validationInFlight = useRef<Promise<boolean> | null>(null);
 
   const clearLocalSession = () => {
     localStorage.removeItem(ATLAS_SESSION_TOKEN_KEY);
@@ -73,19 +78,63 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsAuthenticated(true);
   };
 
-  const validateSession = async () => {
+  const restoreCachedSession = () => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(USER_KEY) || 'null') as AuthUser | null;
+      if (!cached || !Number.isInteger(cached.id) || typeof cached.username !== 'string') return false;
+      acceptSession(cached);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const performSessionValidation = async () => {
     if (!localStorage.getItem(ATLAS_SESSION_TOKEN_KEY)) {
       clearLocalSession();
       return false;
     }
-    const { data, error } = await supabase.rpc('atlas_validate_session');
-    const result = data as SessionResponse | null;
-    if (error || !result?.ok || !result.user) {
-      clearLocalSession();
-      return false;
+
+    // No se debe confundir estar sin conexión con tener una sesión revocada.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return isAuthenticated;
     }
-    acceptSession(result.user);
-    return true;
+
+    for (let attempt = 1; attempt <= SESSION_VALIDATION_ATTEMPTS; attempt += 1) {
+      try {
+        const { data, error } = await supabase.rpc('atlas_validate_session');
+        const result = data as SessionResponse | null;
+
+        if (!error) {
+          // Solo una respuesta válida del servidor puede cerrar la sesión.
+          if (!result?.ok || !result.user) {
+            clearLocalSession();
+            return false;
+          }
+          acceptSession(result.user);
+          return true;
+        }
+      } catch {
+        // La petición puede lanzar directamente en cortes de red.
+      }
+
+      if (attempt < SESSION_VALIDATION_ATTEMPTS) {
+        await wait(SESSION_VALIDATION_RETRY_MS * attempt);
+      }
+    }
+
+    // Si Supabase no respondió, conservamos la sesión y probamos de nuevo después.
+    // Las operaciones protegidas siguen siendo verificadas por el servidor.
+    return isAuthenticated || restoreCachedSession();
+  };
+
+  const validateSession = () => {
+    if (validationInFlight.current) return validationInFlight.current;
+    const validation = performSessionValidation().finally(() => {
+      if (validationInFlight.current === validation) validationInFlight.current = null;
+    });
+    validationInFlight.current = validation;
+    return validation;
   };
 
   const login = async (username: string, password: string): Promise<LoginResult> => {
@@ -142,7 +191,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     if (!isAuthenticated) return;
     const id = window.setInterval(() => void validateSession(), 60_000);
-    return () => window.clearInterval(id);
+    const validateWhenAvailable = () => void validateSession();
+    const validateWhenVisible = () => {
+      if (document.visibilityState === 'visible') void validateSession();
+    };
+    window.addEventListener('online', validateWhenAvailable);
+    document.addEventListener('visibilitychange', validateWhenVisible);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener('online', validateWhenAvailable);
+      document.removeEventListener('visibilitychange', validateWhenVisible);
+    };
   }, [isAuthenticated]);
 
   return (
