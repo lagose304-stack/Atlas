@@ -1222,6 +1222,7 @@ const Placas: React.FC = () => {
           imageSrc={selectedFilePreviewUrl}
           senaladoLabel={multipleSenaladoLabel}
           batchMode
+          allowBatchBorders
           batchSaveLabel="Guardar todos"
           onCancel={() => {
             setMultipleSenaladoBatchOpen(false);
@@ -1245,6 +1246,7 @@ const Placas: React.FC = () => {
           imageSrc={selectedFilePreviewUrl}
           senaladoLabel={editingSenaladoGroup.label}
           batchMode
+          allowBatchBorders
           batchSaveLabel="Guardar cambios del grupo"
           initialBatchLocations={editingSenaladoGroupLocations.filter((location): location is MarkerLocation => location !== null)}
           onCancel={() => {

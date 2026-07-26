@@ -19,6 +19,7 @@ interface SenaladoLocationPickerProps {
   batchMode?: boolean;
   batchSaveLabel?: string;
   borderMode?: boolean;
+  allowBatchBorders?: boolean;
   onCancel: () => void;
   onSave: (location: MarkerLocation | null) => void;
   onBatchSave?: (locations: MarkerLocation[]) => void;
@@ -138,6 +139,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   batchMode = false,
   batchSaveLabel = 'Guardar todos',
   borderMode = false,
+  allowBatchBorders = false,
   onCancel,
   onSave,
   onBatchSave,
@@ -146,6 +148,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   const [location, setLocation] = useState<MarkerLocation | null>(initialLocation);
   const stableInitialBatchLocations = initialBatchLocations ?? EMPTY_BATCH_LOCATIONS;
   const [batchLocations, setBatchLocations] = useState<MarkerLocation[]>(stableInitialBatchLocations);
+  const [batchBorderMode, setBatchBorderMode] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
   const [draggingPointerStart, setDraggingPointerStart] = useState(false);
@@ -157,6 +160,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   const [draggingRegionPointIndex, setDraggingRegionPointIndex] = useState<number | null>(null);
   const [selectedRegionPointIndex, setSelectedRegionPointIndex] = useState<number | null>(null);
   const [isCoarsePointer, setIsCoarsePointer] = useState(() => window.matchMedia?.('(pointer: coarse)').matches ?? false);
+  const effectiveBorderMode = borderMode || (batchMode && allowBatchBorders && batchBorderMode);
   const lastDirectPointerAtRef = useRef(0);
   const imageRef = useRef<HTMLImageElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -437,6 +441,10 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   const handleImageClick = (event: React.MouseEvent<HTMLImageElement>) => {
     if (Date.now() - lastDirectPointerAtRef.current < 450) return;
     if (batchMode) {
+      if (effectiveBorderMode) {
+        if (!regionComplete) addRegionPoint(event.clientX, event.clientY);
+        return;
+      }
       const imageEl = imageRef.current;
       if (!imageEl) return;
 
@@ -461,6 +469,10 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
     event.preventDefault();
     lastDirectPointerAtRef.current = Date.now();
     if (batchMode) {
+      if (effectiveBorderMode) {
+        if (!regionComplete) addRegionPoint(event.clientX, event.clientY);
+        return;
+      }
       const imageEl = imageRef.current;
       if (!imageEl) return;
       const rect = imageEl.getBoundingClientRect();
@@ -492,7 +504,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
     if (target.tagName.toLowerCase() === 'circle') return;
     event.preventDefault();
 
-    if (borderMode) {
+    if (effectiveBorderMode) {
       if (!regionComplete) addRegionPoint(event.clientX, event.clientY);
       return;
     }
@@ -594,17 +606,23 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
           }}
         >
           <div>
-            <p style={{ margin: 0, color: '#0f172a', fontWeight: 800, fontSize: '0.98em' }}>{borderMode ? 'Dibujar señalado con borde' : 'Ubicar señalado'}</p>
+            <p style={{ margin: 0, color: '#0f172a', fontWeight: 800, fontSize: '0.98em' }}>{effectiveBorderMode ? 'Dibujar señalado con borde' : batchMode ? 'Ubicar señalados múltiples' : 'Ubicar señalado'}</p>
             <p style={{ margin: '4px 0 0', color: '#475569', fontSize: '0.86em' }}>
-              {borderMode ? 'Marca al menos 3 puntos alrededor de la zona' : 'Haz clic sobre la imagen para ubicar'}: <strong>{senaladoLabel || 'Señalado'}</strong>
+              {effectiveBorderMode ? 'Marca al menos 3 puntos alrededor de la zona' : 'Haz clic sobre la imagen para ubicar'}: <strong>{senaladoLabel || 'Señalado'}</strong>
             </p>
             <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.8em' }}>
-              {borderMode
+              {effectiveBorderMode
                 ? (!regionComplete
                     ? 'Cuando termines el contorno, pulsa “Finalizar borde”.'
-                    : 'Arrastra los puntos blancos para corregir el contorno o pulsa una línea para añadir otro punto.')
-                : 'Arrastra el punto azul del borde para cambiar la dirección del puntero.'}
+                    : batchMode ? 'Revisa el contorno y agrégalo al grupo.' : 'Arrastra los puntos blancos para corregir el contorno o pulsa una línea para añadir otro punto.')
+                : batchMode ? 'Puedes combinar señalados normales y señalados con borde.' : 'Arrastra el punto azul del borde para cambiar la dirección del puntero.'}
             </p>
+            {batchMode && allowBatchBorders && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <button type="button" onClick={() => { setBatchBorderMode(false); setRegionPoints([]); setRegionComplete(false); setSelectedRegionPointIndex(null); }} style={{ border: batchBorderMode ? '1px solid #cbd5e1' : '2px solid #2563eb', background: batchBorderMode ? '#fff' : '#eff6ff', color: '#1e3a8a', borderRadius: 8, padding: '7px 11px', fontWeight: 800, cursor: 'pointer' }}>Señalado normal</button>
+                <button type="button" onClick={() => setBatchBorderMode(true)} style={{ border: batchBorderMode ? '2px solid #16a34a' : '1px solid #cbd5e1', background: batchBorderMode ? '#f0fdf4' : '#fff', color: '#166534', borderRadius: 8, padding: '7px 11px', fontWeight: 800, cursor: 'pointer' }}>Señalado con borde</button>
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -796,7 +814,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                 </svg>
               )}
 
-              {batchMode && contentSize && batchLocations.length > 0 && (
+              {batchMode && contentSize && (batchLocations.length > 0 || regionPoints.length > 0) && (
                 <svg
                   style={{
                     position: 'absolute',
@@ -812,6 +830,21 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                   viewBox={`0 0 ${contentSize.width} ${contentSize.height}`}
                 >
                   {batchLocations.map((item, index) => {
+                    if (item.regionPoints && item.regionPoints.length >= 6) {
+                      return (
+                        <polygon
+                          key={`batch-region-${index}`}
+                          points={Array.from({ length: item.regionPoints.length / 2 }, (_, pointIndex) => `${item.regionPoints![pointIndex * 2] * contentSize.width},${item.regionPoints![pointIndex * 2 + 1] * contentSize.height}`).join(' ')}
+                          fill={item.regionColor ?? '#22c55e'}
+                          fillOpacity={item.regionOpacity ?? 0.28}
+                          stroke={item.regionColor ?? '#22c55e'}
+                          strokeWidth={3}
+                          strokeDasharray="10 7"
+                          strokeLinejoin="round"
+                          pointerEvents="none"
+                        />
+                      );
+                    }
                     const geometry = resolvePointerGeometry(item);
                     if (!geometry) return null;
 
@@ -854,6 +887,32 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                       </g>
                     );
                   })}
+                  {effectiveBorderMode && regionPoints.length >= 4 && (
+                    <>
+                      <polygon
+                        points={Array.from({ length: regionPoints.length / 2 }, (_, index) => `${regionPoints[index * 2] * contentSize.width},${regionPoints[index * 2 + 1] * contentSize.height}`).join(' ')}
+                        fill={regionColor}
+                        fillOpacity={regionOpacity}
+                        stroke={regionColor}
+                        strokeWidth={3}
+                        strokeDasharray="10 7"
+                        strokeLinejoin="round"
+                        pointerEvents="none"
+                      />
+                      {regionPoints.map((_, flatIndex) => flatIndex % 2 === 0 ? (
+                        <circle
+                          key={`batch-region-point-${flatIndex / 2}`}
+                          cx={regionPoints[flatIndex] * contentSize.width}
+                          cy={regionPoints[flatIndex + 1] * contentSize.height}
+                          r={5.5}
+                          fill="#ffffff"
+                          stroke={regionColor}
+                          strokeWidth={2.5}
+                          pointerEvents="none"
+                        />
+                      ) : null)}
+                    </>
+                  )}
                 </svg>
               )}
             </div>
@@ -873,7 +932,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
           }}
         >
           <div style={{ flex: '1 1 0', display: 'flex', justifyContent: 'flex-start', gap: '8px', minWidth: 0, flexWrap: 'wrap' }}>
-            {borderMode && (
+            {effectiveBorderMode && (
               <>
                 <input type="color" value={regionColor} onChange={event => setRegionColor(event.target.value)} title="Color del borde" aria-label="Color del borde" style={{ width: 42, height: 38, border: '1px solid #cbd5e1', borderRadius: 8, padding: 3 }} />
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontSize: '0.8em', fontWeight: 700 }}>
@@ -900,6 +959,35 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                       style={{ border: '1px solid #fed7aa', borderRadius: 8, padding: '8px 12px', fontWeight: 700, background: '#fff7ed', color: '#c2410c', cursor: selectedRegionPointIndex == null || regionPoints.length <= 6 ? 'not-allowed' : 'pointer' }}
                     >Eliminar punto</button>
                     <button type="button" onClick={() => { setRegionPoints([]); setLocation(null); setSelectedRegionPointIndex(null); setRegionComplete(false); }} style={{ border: '1px solid #fca5a5', borderRadius: 8, padding: '8px 12px', fontWeight: 700, background: '#fff1f2', color: '#be123c', cursor: 'pointer' }}>Redibujar</button>
+                    {batchMode && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const pointCount = regionPoints.length / 2;
+                          let sumX = 0;
+                          let sumY = 0;
+                          for (let index = 0; index < regionPoints.length; index += 2) {
+                            sumX += regionPoints[index];
+                            sumY += regionPoints[index + 1];
+                          }
+                          setBatchLocations(previous => [...previous, {
+                            x: sumX / pointCount,
+                            y: sumY / pointCount,
+                            startX: null,
+                            startY: null,
+                            regionPoints: [...regionPoints],
+                            regionColor,
+                            regionOpacity,
+                          }]);
+                          setRegionPoints([]);
+                          setRegionComplete(false);
+                          setSelectedRegionPointIndex(null);
+                        }}
+                        style={{ border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 800, background: '#16a34a', color: '#fff', cursor: 'pointer' }}
+                      >
+                        Agregar borde al grupo
+                      </button>
+                    )}
                   </>
                 )}
               </>
@@ -988,9 +1076,28 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
             </button>
             <button
               type="button"
-              disabled={borderMode && regionPoints.length < 6}
+              disabled={(borderMode && regionPoints.length < 6) || (batchMode && regionPoints.length > 0 && !regionComplete)}
               onClick={() => {
                 if (batchMode) {
+                  if (regionComplete && regionPoints.length >= 6) {
+                    const pointCount = regionPoints.length / 2;
+                    let sumX = 0;
+                    let sumY = 0;
+                    for (let index = 0; index < regionPoints.length; index += 2) {
+                      sumX += regionPoints[index];
+                      sumY += regionPoints[index + 1];
+                    }
+                    onBatchSave?.([...batchLocations, {
+                      x: sumX / pointCount,
+                      y: sumY / pointCount,
+                      startX: null,
+                      startY: null,
+                      regionPoints: [...regionPoints],
+                      regionColor,
+                      regionOpacity,
+                    }]);
+                    return;
+                  }
                   onBatchSave?.(batchLocations);
                   return;
                 }
@@ -1019,14 +1126,14 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
               }}
               style={{
                 border: 'none',
-                background: borderMode && regionPoints.length < 6
+                background: (borderMode && regionPoints.length < 6) || (batchMode && regionPoints.length > 0 && !regionComplete)
                   ? '#cbd5e1'
                   : 'linear-gradient(135deg, #2563eb, #3b82f6)',
                 color: '#fff',
                 borderRadius: '8px',
                 padding: '8px 14px',
                 fontWeight: 800,
-                cursor: borderMode && regionPoints.length < 6 ? 'not-allowed' : 'pointer',
+                cursor: (borderMode && regionPoints.length < 6) || (batchMode && regionPoints.length > 0 && !regionComplete) ? 'not-allowed' : 'pointer',
                 fontFamily: 'inherit',
               }}
             >

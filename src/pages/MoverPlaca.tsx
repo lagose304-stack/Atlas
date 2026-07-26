@@ -1233,6 +1233,7 @@ const MoverPlaca: React.FC = () => {
           imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
           senaladoLabel={editingSenaladoGroup.label}
           batchMode
+          allowBatchBorders
           batchSaveLabel="Guardar cambios del grupo"
           initialBatchLocations={editingSenaladoGroupLocations.filter((location): location is MarkerLocation => location !== null)}
           onCancel={() => {
@@ -1312,6 +1313,7 @@ const MoverPlaca: React.FC = () => {
           imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
           senaladoLabel={multipleSenaladoLabel}
           batchMode
+          allowBatchBorders
           batchSaveLabel="Guardar todos"
           onCancel={() => {
             setMultipleSenaladoBatchOpen(false);

@@ -335,10 +335,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       const label = item.label.trim();
       if (!label) return;
 
-      const groupKey = item.regionPoints?.length ? `${label}::border::${index}` : label;
-      const existing = groups.get(groupKey);
+      const existing = groups.get(label);
       if (!existing) {
-        groups.set(groupKey, {
+        groups.set(label, {
           label,
           count: 1,
           firstIndex: index,
@@ -404,7 +403,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
     const activeMarker = senaladosItems[activeMarkerIndex];
     if (!activeMarker || !activeMarker.label.trim()) return [activeMarkerIndex];
-    if (activeMarker.regionPoints?.length) return [activeMarkerIndex];
 
     const activeLabel = activeMarker.label.trim();
     return senaladosItems
@@ -455,6 +453,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const lastTapAtRef = useRef(0);
   const commentHintTimeoutRef = useRef<number | null>(null);
   const commentHintExitTimeoutRef = useRef<number | null>(null);
+  const handledMapFocusRequestRef = useRef(0);
 
   const vibrateSelection = () => {
     if ('vibrate' in navigator) navigator.vibrate(12);
@@ -782,7 +781,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       if (count === 0) return;
       const next = activeMapSectionIndex === null ? (direction > 0 ? 0 : count - 1) : (activeMapSectionIndex + direction + count) % count;
       setActiveMapSectionIndex(next);
-      setMapFocusRequest(request => request + 1);
       setAnnouncement(`Zona ${next + 1} de ${count}: ${interactiveMapData.sections[next].title}`);
       vibrateSelection();
       return;
@@ -975,6 +973,22 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     const sectionHeight = Math.max(1, bounds.maxY - bounds.minY);
     const containerWidth = containerEl.clientWidth;
     const containerHeight = containerEl.clientHeight;
+    const explicitFocusRequested = mapFocusRequest !== handledMapFocusRequestRef.current;
+    handledMapFocusRequestRef.current = mapFocusRequest;
+
+    const currentZoom = stateRef.current.zoom;
+    const currentPosition = stateRef.current.pos;
+    const screenLeft = containerWidth / 2 + currentPosition.x + (bounds.minX - imageSize.width / 2) * currentZoom;
+    const screenRight = containerWidth / 2 + currentPosition.x + (bounds.maxX - imageSize.width / 2) * currentZoom;
+    const screenTop = containerHeight / 2 + currentPosition.y + (bounds.minY - imageSize.height / 2) * currentZoom;
+    const screenBottom = containerHeight / 2 + currentPosition.y + (bounds.maxY - imageSize.height / 2) * currentZoom;
+    const zoneIsVisible = screenRight >= 20
+      && screenLeft <= containerWidth - 20
+      && screenBottom >= 20
+      && screenTop <= containerHeight - 20;
+
+    if (!explicitFocusRequested && zoneIsVisible) return;
+
     const fitZoom = Math.min(containerWidth / (sectionWidth * 1.8), containerHeight / (sectionHeight * 1.8));
     const targetZoom = clamp(Math.max(1.25, Math.min(fitZoom, 2.15)), ZOOM_MIN, effectiveMaxZoom);
     const centerX = (bounds.minX + bounds.maxX) / 2;
@@ -1471,7 +1485,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                           fillOpacity={isActiveSection ? 0.12 : isHoveredSection || isFocusedSection ? 0.36 : 0.24}
                           stroke={section.color}
                           strokeWidth={isActiveSection ? 2.4 : isHoveredSection || isFocusedSection ? 2.2 : 1.5}
-                          strokeDasharray={isActiveSection ? '0' : '6 4'}
+                          strokeDasharray="6 4"
                           strokeLinejoin="round"
                           vectorEffect="non-scaling-stroke"
                           pointerEvents="visiblePainted"
@@ -1523,7 +1537,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                           strokeLinecap="round"
                           vectorEffect="non-scaling-stroke"
                         />
-                        <circle cx={activeZoneCenter.x} cy={activeZoneCenter.y} r={5.5 / zoomLevel} fill="#ffffff" stroke={activeMapSection.color} strokeWidth="2.2" vectorEffect="non-scaling-stroke" />
                         <rect x={calloutX + 2 / zoomLevel} y={calloutY + 3 / zoomLevel} width={calloutWidth} height={calloutHeight} rx={9 / zoomLevel} fill="rgba(15,23,42,0.24)" />
                         <rect x={calloutX} y={calloutY} width={calloutWidth} height={calloutHeight} rx={9 / zoomLevel} fill="rgba(255,255,255,0.97)" stroke="rgba(15,23,42,0.36)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
                         <rect x={calloutX + 6 / zoomLevel} y={calloutY + 6 / zoomLevel} width={4 / zoomLevel} height={calloutHeight - 12 / zoomLevel} rx={2 / zoomLevel} fill={activeMapSection.color} />

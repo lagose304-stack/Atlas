@@ -232,11 +232,10 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
       if (!label) return;
 
       const position = senaladosPos[index] ?? null;
-      const groupKey = position?.regionPoints?.length ? `${label}::border::${index}` : label;
-      const existing = groups.get(groupKey);
+      const existing = groups.get(label);
 
       if (!existing) {
-        groups.set(groupKey, {
+        groups.set(label, {
           label,
           count: 1,
           firstIndex: index,
