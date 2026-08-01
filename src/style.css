@@ -695,13 +695,13 @@ body {
 
   .atlas-header-main-row {
     min-height: 194px !important;
-    grid-template-columns: 182px 1fr 156px !important;
+    grid-template-columns: 182px minmax(0, 1fr) 182px !important;
     gap: 10px !important;
-    padding-left: 10px !important;
+    padding: 0 10px !important;
   }
 
   .atlas-header-right-side-panel {
-    width: 156px !important;
+    width: 182px !important;
   }
 
   .atlas-header-left-logo-aura {
@@ -975,13 +975,13 @@ body {
 
   .atlas-header-main-row {
     min-height: 172px !important;
-    grid-template-columns: 145px 1fr 126px !important;
+    grid-template-columns: 145px minmax(0, 1fr) 145px !important;
     gap: 8px !important;
-    padding-left: 8px !important;
+    padding: 0 8px !important;
   }
 
   .atlas-header-right-side-panel {
-    width: 126px !important;
+    width: 145px !important;
   }
 
   .atlas-header-left-logo-aura {
@@ -1058,13 +1058,13 @@ body {
 
   .atlas-header-main-row {
     min-height: 148px !important;
-    grid-template-columns: 106px 1fr 96px !important;
+    grid-template-columns: 106px minmax(0, 1fr) 106px !important;
     gap: 6px !important;
-    padding-left: 6px !important;
+    padding: 0 6px !important;
   }
 
   .atlas-header-right-side-panel {
-    width: 96px !important;
+    width: 106px !important;
   }
 
   .atlas-header-left-logo-aura {
@@ -1154,13 +1154,13 @@ body {
 
   .atlas-header-main-row {
     min-height: 136px !important;
-    grid-template-columns: 86px 1fr 74px !important;
+    grid-template-columns: 86px minmax(0, 1fr) 86px !important;
     gap: 5px !important;
-    padding-left: 4px !important;
+    padding: 0 4px !important;
   }
 
   .atlas-header-right-side-panel {
-    width: 74px !important;
+    width: 86px !important;
   }
 
   .atlas-header-left-logo-aura {
@@ -1240,13 +1240,13 @@ body {
 
   .atlas-header-main-row {
     min-height: 124px !important;
-    grid-template-columns: 74px 1fr 64px !important;
+    grid-template-columns: 74px minmax(0, 1fr) 74px !important;
     gap: 4px !important;
-    padding-left: 3px !important;
+    padding: 0 3px !important;
   }
 
   .atlas-header-right-side-panel {
-    width: 64px !important;
+    width: 74px !important;
   }
 
   .atlas-header-left-logo-aura {
@@ -1299,11 +1299,11 @@ body {
 
 @media (max-width: 360px) {
   .atlas-header-main-row {
-    grid-template-columns: 66px 1fr 56px !important;
+    grid-template-columns: 66px minmax(0, 1fr) 66px !important;
   }
 
   .atlas-header-right-side-panel {
-    width: 56px !important;
+    width: 66px !important;
   }
 
   .atlas-header-left-logo-aura {
