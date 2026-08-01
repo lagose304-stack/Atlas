@@ -2022,7 +2022,46 @@ body {
 }
 
 .site-maintenance-message { margin: 0; color: #334155; font-size: 1.05rem; line-height: 1.65; }
-.site-maintenance-help { margin: 12px 0 24px; color: #64748b; }
+.site-maintenance-intro {
+  max-width: 680px;
+  margin: 0 auto 24px;
+  color: #334155;
+  font-size: 1.08rem;
+  line-height: 1.7;
+}
+.site-maintenance-overview {
+  max-width: 680px;
+  margin: 0 auto 24px;
+  text-align: left;
+}
+.site-maintenance-overview h2 {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-size: 1.2rem;
+}
+.site-maintenance-overview p {
+  margin: 0;
+  color: #475569;
+  line-height: 1.65;
+}
+.site-maintenance-notice {
+  max-width: 680px;
+  margin: 0 auto 24px;
+  padding: 16px 18px;
+  border: 1px solid #99f6e4;
+  border-radius: 14px;
+  background: #f0fdfa;
+  color: #115e59;
+  text-align: left;
+}
+.site-maintenance-notice strong {
+  display: block;
+  margin-bottom: 5px;
+}
+.site-maintenance-notice .site-maintenance-message {
+  color: #334155;
+  font-size: 0.98rem;
+}
 .site-maintenance-login {
   border: 0;
   background: transparent;

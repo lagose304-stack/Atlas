@@ -38,10 +38,28 @@ const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
     <main className="site-maintenance-page">
       <section className="site-maintenance-panel" role="status" aria-live="polite">
         <div className="site-maintenance-icon" aria-hidden="true"><Wrench size={42} /></div>
-        <p className="site-maintenance-eyebrow">Mantenimiento</p>
-        <h1>Sitio temporalmente fuera de servicio</h1>
-        <p className="site-maintenance-message">{status.message}</p>
-        <p className="site-maintenance-help">Vuelve a intentarlo más tarde.</p>
+        <p className="site-maintenance-eyebrow">Histolab UNAH</p>
+        <h1>Atlas de Histología de la UNAH</h1>
+        <p className="site-maintenance-intro">
+          Recurso educativo del Laboratorio de Histología de la Facultad de Ciencias Médicas
+          de la Universidad Nacional Autónoma de Honduras.
+        </p>
+
+        <div className="site-maintenance-overview">
+          <h2>Estudio de histología y microscopía</h2>
+          <p>
+            Histolab reúne temarios, subtemas, evaluaciones y placas histológicas para apoyar
+            el aprendizaje y la identificación de tejidos mediante microscopía.
+          </p>
+        </div>
+
+        <aside className="site-maintenance-notice" aria-label="Aviso de mantenimiento">
+          <strong>Estamos preparando mejoras en el atlas.</strong>
+          <p className="site-maintenance-message">
+            Las herramientas interactivas están en mantenimiento; la información institucional
+            de esta página continúa disponible.
+          </p>
+        </aside>
         <button type="button" className="site-maintenance-login" onClick={() => setShowLogin(true)}>
           Acceso administrativo
         </button>
