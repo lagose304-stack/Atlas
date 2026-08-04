@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, ClipboardList, House, Search } from 'lucide-react';
+import { BadgeInfo, BookOpen, ClipboardList, House, Search } from 'lucide-react';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { supabase } from '../services/supabase';
 
@@ -12,6 +12,7 @@ const MENU_ITEMS = [
   { key: 'inicio', label: 'Inicio', icon: House, path: '/' },
   { key: 'temario', label: 'Temario', icon: BookOpen, path: '/temario' },
   { key: 'evaluaciones', label: 'Evaluaciones', icon: ClipboardList, path: '/evaluaciones' },
+  { key: 'creditos', label: 'Créditos', icon: BadgeInfo, path: '/creditos' },
 ] as const;
 
 interface SearchTemaRecord {
@@ -215,7 +216,8 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
     if (key === 'temario') {
       return pathname === '/temario' || pathname.startsWith('/subtemas/') || pathname.startsWith('/ver-placas/');
     }
-    return pathname === '/evaluaciones' || pathname.startsWith('/evaluaciones/');
+    if (key === 'evaluaciones') return pathname === '/evaluaciones' || pathname.startsWith('/evaluaciones/');
+    return pathname === '/creditos';
   }, [pathname]);
 
   const isInAdminEditingFlow = React.useMemo(() => {

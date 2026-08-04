@@ -11,10 +11,12 @@ import PageNavigator, {
   type PageSelection,
 } from '../components/page-editor/PageNavigator';
 import VisualBlockProperties from '../components/page-editor/VisualBlockProperties';
+import CreditsAdminPanel from '../components/CreditsAdminPanel';
 import '../components/page-editor/pageEditor.css';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { supabase } from '../services/supabase';
 import type { ContentBlock, PageEntityType } from '../types/contentBlocks';
+import { useAuth } from '../contexts/AuthContext';
 
 type WorkspaceMode = 'edit' | 'preview';
 
@@ -27,6 +29,9 @@ interface EditorConfig {
 }
 
 const getEditorConfig = (selection: PageSelection): EditorConfig => {
+  if (selection.kind === 'credits') {
+    return { entityType: 'home_page', entityId: 0, title: 'Créditos', context: 'Reconocimientos del sitio', publicUrl: '/creditos' };
+  }
   if (selection.kind === 'home') {
     return { entityType: 'home_page', entityId: 0, title: 'Inicio', context: 'Portada pública', publicUrl: '/' };
   }
@@ -46,8 +51,14 @@ const getEditorConfig = (selection: PageSelection): EditorConfig => {
 };
 
 const EditorPaginas: React.FC = () => {
+  const { user } = useAuth();
+  const isAdministrator = user?.rol === 'Administrador';
   const handleGoBack = useSmartBackNavigation('/edicion');
-  const [selection, setSelection] = useState<PageSelection>({ kind: 'home', label: 'Inicio' });
+  const [selection, setSelection] = useState<PageSelection>(() => (
+    isAdministrator && new URLSearchParams(window.location.search).get('pagina') === 'creditos'
+      ? { kind: 'credits', label: 'Créditos' }
+      : { kind: 'home', label: 'Inicio' }
+  ));
   const [temas, setTemas] = useState<EditorTemaItem[]>([]);
   const [subtemas, setSubtemas] = useState<EditorSubtemaItem[]>([]);
   const [loadingPages, setLoadingPages] = useState(true);
@@ -97,7 +108,7 @@ const EditorPaginas: React.FC = () => {
 
   const handleSelectPage = useCallback((nextSelection: PageSelection) => {
     const sameSelection = nextSelection.kind === selection.kind && (
-      nextSelection.kind === 'home' || nextSelection.kind === 'temario' ||
+      nextSelection.kind === 'home' || nextSelection.kind === 'temario' || nextSelection.kind === 'credits' ||
       ('id' in nextSelection && 'id' in selection && nextSelection.id === selection.id)
     );
     if (sameSelection) return;
@@ -142,6 +153,7 @@ const EditorPaginas: React.FC = () => {
               loading={loadingPages}
               onSelect={handleSelectPage}
               onClose={() => setIsPageNavigatorOpen(false)}
+              showCredits={isAdministrator}
             />}
 
           <div className="page-editor-main">
@@ -160,21 +172,21 @@ const EditorPaginas: React.FC = () => {
                 <small>{config.context}</small>
                 <h1>{config.title}</h1>
               </div>
-              <span className={isDirty ? 'page-editor-dirty' : 'page-editor-saved'}>
+              {selection.kind !== 'credits' && <span className={isDirty ? 'page-editor-dirty' : 'page-editor-saved'}>
                 {isDirty ? '● Autoguardado pendiente' : '✓ Borrador guardado'}
-              </span>
-              <div className="page-editor-mode-tabs" role="tablist" aria-label="Modo del editor">
+              </span>}
+              {selection.kind !== 'credits' && <div className="page-editor-mode-tabs" role="tablist" aria-label="Modo del editor">
                 <button className={mode === 'edit' ? 'is-active' : ''} onClick={() => setMode('edit')}>
                   <PencilLine size={15} /> Editar contenido
                 </button>
                 <button className={mode === 'preview' ? 'is-active' : ''} onClick={() => setMode('preview')}>
                   <Eye size={15} /> Vista previa
                 </button>
-              </div>
+              </div>}
             </div>
 
             <div className="page-editor-content">
-              <div hidden={mode !== 'edit'}>
+              {selection.kind === 'credits' ? <CreditsAdminPanel /> : <div hidden={mode !== 'edit'}>
                   <div className="page-editor-engine-note">
                     <AlertCircle size={18} />
                     <span><strong>Estás editando un borrador.</strong> La página pública seguirá mostrando la última versión publicada hasta que pulses “Publicar”.</span>
@@ -189,8 +201,8 @@ const EditorPaginas: React.FC = () => {
                     experienceMode="advanced"
                     autoSave
                   />
-              </div>
-              {mode === 'preview' && (
+              </div>}
+              {selection.kind !== 'credits' && mode === 'preview' && (
                 <PageDraftPreview
                   selection={selection}
                   blocks={draftBlocks}

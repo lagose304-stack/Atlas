@@ -131,7 +131,7 @@ const Edicion: React.FC = () => {
             <div style={s.cardBody}>
               <h2 style={s.cardTitle}>Ordenar contenido</h2>
               <p style={s.cardDesc}>
-                Ajusta el orden en que se presentarán los temas y subtemas del atlas.
+                Ajusta el orden en que se presentarán los temas, subtemas y placas del atlas.
               </p>
             </div>
             <div style={s.pagesBtnGroup} className="edicion-pages-btn-group">
@@ -169,6 +169,13 @@ const Edicion: React.FC = () => {
               >
                 Ordenar subtemas
               </button>
+              <button
+                style={s.pagesBtn}
+                className="edicion-pages-btn"
+                onClick={() => navigate('/ordenar-placas')}
+              >
+                Ordenar placas
+              </button>
             </div>
           </div>}
 
@@ -181,25 +188,22 @@ const Edicion: React.FC = () => {
                 Primero eliges qué página quieres editar y después abres las herramientas correspondientes.
               </p>
             </div>
-            <Link
-              to="/editor-paginas"
-              style={{ ...s.cardBtn, color: '#0ea5e9', background: '#f0f9ff', borderColor: '#bae6fd' }}
-              className="edicion-action-btn"
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, #0ea5e9, #38bdf8)';
-                (e.currentTarget as HTMLAnchorElement).style.color = '#fff';
-                (e.currentTarget as HTMLAnchorElement).style.borderColor = 'transparent';
-                (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLAnchorElement).style.background = '#f0f9ff';
-                (e.currentTarget as HTMLAnchorElement).style.color = '#0ea5e9';
-                (e.currentTarget as HTMLAnchorElement).style.borderColor = '#bae6fd';
-                (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(0)';
-              }}
-            >
-              Abrir editor →
-            </Link>
+            <div style={s.pagesBtnGroup}>
+              <Link
+                to="/editor-paginas"
+                style={{ ...s.cardBtn, color: '#0ea5e9', background: '#f0f9ff', borderColor: '#bae6fd' }}
+                className="edicion-action-btn"
+              >
+                Abrir editor →
+              </Link>
+              {canGestionUsuarios && <Link
+                to="/editor-paginas?pagina=creditos"
+                style={{ ...s.cardBtn, color: '#7c3aed', background: '#f5f3ff', borderColor: '#ddd6fe' }}
+                className="edicion-action-btn"
+              >
+                Añadir créditos →
+              </Link>}
+            </div>
           </div>}
 
           {canEditarPaginas && <div style={s.card} className="edicion-card">

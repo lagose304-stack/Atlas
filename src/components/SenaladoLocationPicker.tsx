@@ -159,6 +159,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   const [regionComplete, setRegionComplete] = useState((initialLocation?.regionPoints?.length ?? 0) >= 6);
   const [draggingRegionPointIndex, setDraggingRegionPointIndex] = useState<number | null>(null);
   const [selectedRegionPointIndex, setSelectedRegionPointIndex] = useState<number | null>(null);
+  const [selectedBatchRegionIndex, setSelectedBatchRegionIndex] = useState<number | null>(null);
   const [isCoarsePointer, setIsCoarsePointer] = useState(() => window.matchMedia?.('(pointer: coarse)').matches ?? false);
   const effectiveBorderMode = borderMode || (batchMode && allowBatchBorders && batchBorderMode);
   const lastDirectPointerAtRef = useRef(0);
@@ -365,6 +366,46 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
       startY: previous?.startY ?? null,
     }));
   };
+
+  const selectBatchRegion = (index: number) => {
+    const item = batchLocations[index];
+    if (!item?.regionPoints || item.regionPoints.length < 6) return;
+    setBatchBorderMode(true);
+    setSelectedBatchRegionIndex(index);
+    setRegionPoints([...item.regionPoints]);
+    setRegionColor(item.regionColor ?? '#22c55e');
+    setRegionOpacity(item.regionOpacity ?? 0.28);
+    setRegionComplete(true);
+    setSelectedRegionPointIndex(null);
+  };
+
+  const startNewBatchRegion = () => {
+    setBatchBorderMode(true);
+    setSelectedBatchRegionIndex(null);
+    setRegionPoints([]);
+    setLocation(null);
+    setRegionComplete(false);
+    setSelectedRegionPointIndex(null);
+  };
+
+  useEffect(() => {
+    if (selectedBatchRegionIndex == null || regionPoints.length < 6) return;
+    const pointCount = regionPoints.length / 2;
+    let sumX = 0;
+    let sumY = 0;
+    for (let index = 0; index < regionPoints.length; index += 2) {
+      sumX += regionPoints[index];
+      sumY += regionPoints[index + 1];
+    }
+    setBatchLocations(previous => previous.map((item, index) => index === selectedBatchRegionIndex ? {
+      ...item,
+      x: sumX / pointCount,
+      y: sumY / pointCount,
+      regionPoints: [...regionPoints],
+      regionColor,
+      regionOpacity,
+    } : item));
+  }, [selectedBatchRegionIndex, regionPoints, regionColor, regionOpacity]);
 
   const addRegionPoint = (clientX: number, clientY: number) => {
     const imageEl = imageRef.current;
@@ -619,8 +660,8 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
             </p>
             {batchMode && allowBatchBorders && (
               <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                <button type="button" onClick={() => { setBatchBorderMode(false); setRegionPoints([]); setRegionComplete(false); setSelectedRegionPointIndex(null); }} style={{ border: batchBorderMode ? '1px solid #cbd5e1' : '2px solid #2563eb', background: batchBorderMode ? '#fff' : '#eff6ff', color: '#1e3a8a', borderRadius: 8, padding: '7px 11px', fontWeight: 800, cursor: 'pointer' }}>Señalado normal</button>
-                <button type="button" onClick={() => setBatchBorderMode(true)} style={{ border: batchBorderMode ? '2px solid #16a34a' : '1px solid #cbd5e1', background: batchBorderMode ? '#f0fdf4' : '#fff', color: '#166534', borderRadius: 8, padding: '7px 11px', fontWeight: 800, cursor: 'pointer' }}>Señalado con borde</button>
+                <button type="button" onClick={() => { setBatchBorderMode(false); setSelectedBatchRegionIndex(null); setRegionPoints([]); setRegionComplete(false); setSelectedRegionPointIndex(null); }} style={{ border: batchBorderMode ? '1px solid #cbd5e1' : '2px solid #2563eb', background: batchBorderMode ? '#fff' : '#eff6ff', color: '#1e3a8a', borderRadius: 8, padding: '7px 11px', fontWeight: 800, cursor: 'pointer' }}>Señalado normal</button>
+                <button type="button" onClick={startNewBatchRegion} style={{ border: batchBorderMode ? '2px solid #16a34a' : '1px solid #cbd5e1', background: batchBorderMode ? '#f0fdf4' : '#fff', color: '#166534', borderRadius: 8, padding: '7px 11px', fontWeight: 800, cursor: 'pointer' }}>Señalado con borde</button>
               </div>
             )}
           </div>
@@ -838,10 +879,16 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                           fill={item.regionColor ?? '#22c55e'}
                           fillOpacity={item.regionOpacity ?? 0.28}
                           stroke={item.regionColor ?? '#22c55e'}
-                          strokeWidth={3}
+                          strokeWidth={selectedBatchRegionIndex === index ? 5 : 3}
                           strokeDasharray="10 7"
                           strokeLinejoin="round"
-                          pointerEvents="none"
+                          pointerEvents="all"
+                          onPointerDown={event => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            selectBatchRegion(index);
+                          }}
+                          style={{ cursor: 'pointer', filter: selectedBatchRegionIndex === index ? 'drop-shadow(0 0 5px rgba(37,99,235,.75))' : undefined }}
                         />
                       );
                     }
@@ -899,16 +946,38 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                         strokeLinejoin="round"
                         pointerEvents="none"
                       />
+                      {regionComplete && (
+                        <polygon
+                          points={Array.from({ length: regionPoints.length / 2 }, (_, index) => `${regionPoints[index * 2] * contentSize.width},${regionPoints[index * 2 + 1] * contentSize.height}`).join(' ')}
+                          fill="none"
+                          stroke="rgba(0,0,0,0.001)"
+                          strokeWidth={isCoarsePointer ? 24 : 18}
+                          strokeLinejoin="round"
+                          pointerEvents="stroke"
+                          onPointerDown={event => event.stopPropagation()}
+                          onClick={event => {
+                            event.stopPropagation();
+                            insertRegionPointFromClient(event.clientX, event.clientY);
+                          }}
+                          style={{ cursor: 'copy' }}
+                        />
+                      )}
                       {regionPoints.map((_, flatIndex) => flatIndex % 2 === 0 ? (
                         <circle
                           key={`batch-region-point-${flatIndex / 2}`}
                           cx={regionPoints[flatIndex] * contentSize.width}
                           cy={regionPoints[flatIndex + 1] * contentSize.height}
-                          r={5.5}
-                          fill="#ffffff"
+                          r={selectedRegionPointIndex === flatIndex / 2 ? (isCoarsePointer ? 12 : 7) : (isCoarsePointer ? 9 : 5.5)}
+                          fill={selectedRegionPointIndex === flatIndex / 2 ? '#f59e0b' : '#ffffff'}
                           stroke={regionColor}
                           strokeWidth={2.5}
-                          pointerEvents="none"
+                          onPointerDown={event => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setSelectedRegionPointIndex(flatIndex / 2);
+                            setDraggingRegionPointIndex(flatIndex / 2);
+                          }}
+                          style={{ cursor: draggingRegionPointIndex === flatIndex / 2 ? 'grabbing' : 'grab' }}
                         />
                       ) : null)}
                     </>
@@ -934,6 +1003,9 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
           <div style={{ flex: '1 1 0', display: 'flex', justifyContent: 'flex-start', gap: '8px', minWidth: 0, flexWrap: 'wrap' }}>
             {effectiveBorderMode && (
               <>
+                {batchMode && (
+                  <button type="button" onClick={startNewBatchRegion} style={{ border: '1px solid #86efac', borderRadius: 8, padding: '8px 12px', fontWeight: 800, background: '#f0fdf4', color: '#166534', cursor: 'pointer' }}>+ Nuevo borde</button>
+                )}
                 <input type="color" value={regionColor} onChange={event => setRegionColor(event.target.value)} title="Color del borde" aria-label="Color del borde" style={{ width: 42, height: 38, border: '1px solid #cbd5e1', borderRadius: 8, padding: 3 }} />
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontSize: '0.8em', fontWeight: 700 }}>
                   Transparencia
@@ -959,7 +1031,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                       style={{ border: '1px solid #fed7aa', borderRadius: 8, padding: '8px 12px', fontWeight: 700, background: '#fff7ed', color: '#c2410c', cursor: selectedRegionPointIndex == null || regionPoints.length <= 6 ? 'not-allowed' : 'pointer' }}
                     >Eliminar punto</button>
                     <button type="button" onClick={() => { setRegionPoints([]); setLocation(null); setSelectedRegionPointIndex(null); setRegionComplete(false); }} style={{ border: '1px solid #fca5a5', borderRadius: 8, padding: '8px 12px', fontWeight: 700, background: '#fff1f2', color: '#be123c', cursor: 'pointer' }}>Redibujar</button>
-                    {batchMode && (
+                    {batchMode && selectedBatchRegionIndex == null && (
                       <button
                         type="button"
                         onClick={() => {
@@ -987,6 +1059,26 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
                       >
                         Agregar borde al grupo
                       </button>
+                    )}
+                    {batchMode && selectedBatchRegionIndex != null && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedBatchRegionIndex(null); setRegionPoints([]); setRegionComplete(false); setSelectedRegionPointIndex(null); }}
+                          style={{ border: '1px solid #86efac', borderRadius: 8, padding: '8px 12px', fontWeight: 800, background: '#f0fdf4', color: '#166534', cursor: 'pointer' }}
+                        >Terminar edición</button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBatchLocations(previous => previous.filter((_, index) => index !== selectedBatchRegionIndex));
+                            setSelectedBatchRegionIndex(null);
+                            setRegionPoints([]);
+                            setRegionComplete(false);
+                            setSelectedRegionPointIndex(null);
+                          }}
+                          style={{ border: '1px solid #fca5a5', borderRadius: 8, padding: '8px 12px', fontWeight: 700, background: '#fff1f2', color: '#be123c', cursor: 'pointer' }}
+                        >Eliminar borde</button>
+                      </>
                     )}
                   </>
                 )}
@@ -1079,6 +1171,10 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
               disabled={(borderMode && regionPoints.length < 6) || (batchMode && regionPoints.length > 0 && !regionComplete)}
               onClick={() => {
                 if (batchMode) {
+                  if (selectedBatchRegionIndex != null) {
+                    onBatchSave?.(batchLocations);
+                    return;
+                  }
                   if (regionComplete && regionPoints.length >= 6) {
                     const pointCount = regionPoints.length / 2;
                     let sumX = 0;

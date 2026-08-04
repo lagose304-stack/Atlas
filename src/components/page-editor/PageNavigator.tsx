@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { FileText, FlaskConical, Home, Layers3, PanelLeftClose, Search } from 'lucide-react';
+import { BadgeInfo, FileText, FlaskConical, Home, Layers3, PanelLeftClose, Search } from 'lucide-react';
 
 export type PageSelection =
   | { kind: 'home'; label: string }
   | { kind: 'temario'; label: string }
+  | { kind: 'credits'; label: string }
   | { kind: 'tema'; id: number; label: string }
   | { kind: 'subtema'; id: number; temaId: number; label: string; parentLabel: string };
 
@@ -28,11 +29,12 @@ interface PageNavigatorProps {
   loading: boolean;
   onSelect: (selection: PageSelection) => void;
   onClose?: () => void;
+  showCredits?: boolean;
 }
 
 const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
-const PageNavigator: React.FC<PageNavigatorProps> = ({ selection, temas, subtemas, loading, onSelect, onClose }) => {
+const PageNavigator: React.FC<PageNavigatorProps> = ({ selection, temas, subtemas, loading, onSelect, onClose, showCredits = false }) => {
   const [search, setSearch] = useState('');
   const normalizedSearch = normalize(search.trim());
 
@@ -81,6 +83,14 @@ const PageNavigator: React.FC<PageNavigatorProps> = ({ selection, temas, subtema
           <Layers3 size={18} />
           <span><strong>Temario</strong><small>Catálogo general</small></span>
         </button>
+        {showCredits && <button
+          type="button"
+          className={`page-editor-nav-item ${selection.kind === 'credits' ? 'is-active' : ''}`}
+          onClick={() => onSelect({ kind: 'credits', label: 'Créditos' })}
+        >
+          <BadgeInfo size={18} />
+          <span><strong>Créditos</strong><small>Fotografías y reconocimientos</small></span>
+        </button>}
 
         <div className="page-editor-tree-label"><FlaskConical size={15} /> Temas y subtemas</div>
         {loading ? (

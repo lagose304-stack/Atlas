@@ -16,6 +16,7 @@ const Subtemas = lazy(() => import('./pages/Subtemas'));
 const PlacasSubtema = lazy(() => import('./pages/PlacasSubtema'));
 const EditarTemario = lazy(() => import('./pages/EditarTemario'));
 const EditarSubtemas = lazy(() => import('./pages/EditarSubtemas'));
+const OrdenarPlacas = lazy(() => import('./pages/OrdenarPlacas'));
 const EditarPlacas = lazy(() => import('./pages/EditarPlacas'));
 const EditorPaginas = lazy(() => import('./pages/EditorPaginas'));
 const EliminarPlacas = lazy(() => import('./pages/EliminarPlacas'));
@@ -31,6 +32,7 @@ const EjecutarPrueba = lazy(() => import('./pages/EjecutarPrueba'));
 const Evaluaciones = lazy(() => import('./pages/Evaluaciones'));
 const AccesoDenegado = lazy(() => import('./pages/AccesoDenegado'));
 const Estadisticas = lazy(() => import('./pages/Estadisticas'));
+const Creditos = lazy(() => import('./pages/Creditos'));
 
 const ROLE_ADMIN = 'Administrador' as const;
 const ROLE_MICRO = 'Microscopía' as const;
@@ -124,6 +126,7 @@ const App: React.FC = () => {
           {/* Ruta pública */}
           <Route path="/" element={<Home />} />
           <Route path="/temario" element={<TemarioPublico />} />
+          <Route path="/creditos" element={<Creditos />} />
           
           {/* Rutas protegidas */}
           <Route
@@ -163,6 +166,14 @@ const App: React.FC = () => {
             element={
               <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <EditarSubtemas />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/ordenar-placas"
+            element={
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
+                <OrdenarPlacas />
               </PrivateRoute>
             }
           />

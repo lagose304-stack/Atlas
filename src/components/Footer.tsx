@@ -223,7 +223,7 @@ const Footer: React.FC<FooterProps> = () => {
         <span style={s.creditBadge} className="footer-credit-badge">
           <Sparkles size={13} strokeWidth={2.2} aria-hidden="true" />
           <span>Diseñado y desarrollado por</span>
-          <strong style={s.creditName}>Elam Lagos</strong>
+          <strong style={s.creditName}>Elam Lagos :)</strong>
         </span>
       </div>
 

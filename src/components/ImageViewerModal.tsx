@@ -210,6 +210,38 @@ const polygonPoints = (points: ReadonlyArray<{ x: number; y: number }>) => (
   points.map(point => `${point.x},${point.y}`).join(' ')
 );
 
+interface RegionCalloutLayout {
+  boxX: number;
+  boxY: number;
+  boxWidth: number;
+  boxHeight: number;
+  anchorX: number;
+  anchorY: number;
+  connectorX: number;
+  connectorY: number;
+  fontSize: number;
+}
+
+const closestPointOnRegion = (points: Array<{ x: number; y: number }>, target: { x: number; y: number }) => {
+  let closest = points[0] ?? target;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  points.forEach((point, index) => {
+    const next = points[(index + 1) % points.length];
+    const dx = next.x - point.x;
+    const dy = next.y - point.y;
+    const lengthSquared = dx * dx + dy * dy || 1;
+    const t = clamp(((target.x - point.x) * dx + (target.y - point.y) * dy) / lengthSquared, 0, 1);
+    const candidate = { x: point.x + t * dx, y: point.y + t * dy };
+    const distance = Math.hypot(candidate.x - target.x, candidate.y - target.y);
+    if (distance < closestDistance) { closest = candidate; closestDistance = distance; }
+  });
+  return closest;
+};
+
+const rectanglesOverlap = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }, gap = 0) => (
+  a.x < b.x + b.width + gap && a.x + a.width + gap > b.x && a.y < b.y + b.height + gap && a.y + a.height + gap > b.y
+);
+
 const POINTER_CORE_WIDTH_PX = 6;
 const POINTER_OUTLINE_WIDTH_PX = 8.2;
 const POINTER_TAPER_PX = 18;
@@ -417,6 +449,72 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const activeMarkerColor = useMemo(() => {
     return MARKER_COLOR_OPTIONS.find(option => option.key === markerColorKey) ?? MARKER_COLOR_OPTIONS[0];
   }, [markerColorKey]);
+
+  const regionCalloutLayouts = useMemo(() => {
+    const layouts = new Map<number, RegionCalloutLayout>();
+    if (!imageSize) return layouts;
+    const margin = 8 / zoomLevel;
+    const gap = 13 / zoomLevel;
+    const placedBoxes: Array<{ x: number; y: number; width: number; height: number }> = [];
+    const regions = activeMarkerIndices.map(markerIndex => {
+      const marker = senaladosItems[markerIndex];
+      const points = marker?.regionPoints && marker.regionPoints.length >= 6
+        ? Array.from({ length: marker.regionPoints.length / 2 }, (_, index) => ({
+            x: marker.regionPoints![index * 2] * imageSize.width,
+            y: marker.regionPoints![index * 2 + 1] * imageSize.height,
+          }))
+        : [];
+      const xs = points.map(point => point.x);
+      const ys = points.map(point => point.y);
+      return { markerIndex, marker, points, bounds: points.length ? { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) } : null };
+    }).filter(region => region.bounds && region.marker);
+
+    regions.forEach(region => {
+      const { markerIndex, marker, points, bounds } = region;
+      if (!marker || !bounds) return;
+      const boxHeight = 32 / zoomLevel;
+      const boxWidth = Math.min(Math.max(112, 54 + marker.label.length * 6.2) / zoomLevel, Math.max(80 / zoomLevel, imageSize.width - margin * 2));
+      const centerX = (bounds.minX + bounds.maxX) / 2;
+      const centerY = (bounds.minY + bounds.maxY) / 2;
+      const rawCandidates = [
+        { x: centerX - boxWidth / 2, y: bounds.minY - boxHeight - gap },
+        { x: centerX - boxWidth / 2, y: bounds.maxY + gap },
+        { x: bounds.maxX + gap, y: centerY - boxHeight / 2 },
+        { x: bounds.minX - boxWidth - gap, y: centerY - boxHeight / 2 },
+        { x: centerX - boxWidth / 2, y: bounds.minY - boxHeight - gap - boxHeight },
+        { x: centerX - boxWidth / 2, y: bounds.maxY + gap + boxHeight },
+      ];
+      const candidates = rawCandidates.map(candidate => ({
+        x: clamp(candidate.x, margin, Math.max(margin, imageSize.width - boxWidth - margin)),
+        y: clamp(candidate.y, margin, Math.max(margin, imageSize.height - boxHeight - margin)),
+        width: boxWidth,
+        height: boxHeight,
+      }));
+      const scored = candidates.map((candidate, order) => {
+        const labelCollisions = placedBoxes.filter(box => rectanglesOverlap(candidate, box, 5 / zoomLevel)).length;
+        const regionCollisions = regions.filter(other => other.markerIndex !== markerIndex && other.bounds && rectanglesOverlap(candidate, {
+          x: other.bounds.minX, y: other.bounds.minY, width: other.bounds.maxX - other.bounds.minX, height: other.bounds.maxY - other.bounds.minY,
+        }, 2 / zoomLevel)).length;
+        const ownCollision = rectanglesOverlap(candidate, { x: bounds.minX, y: bounds.minY, width: bounds.maxX - bounds.minX, height: bounds.maxY - bounds.minY });
+        return { candidate, score: labelCollisions * 10000 + regionCollisions * 1000 + (ownCollision ? 500 : 0) + order };
+      }).sort((a, b) => a.score - b.score);
+      const box = scored[0].candidate;
+      placedBoxes.push(box);
+      const boxCenter = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      const connector = closestPointOnRegion(points, boxCenter);
+      const dx = connector.x - boxCenter.x;
+      const dy = connector.y - boxCenter.y;
+      const anchor = Math.abs(dx) > Math.abs(dy)
+        ? { x: dx > 0 ? box.x + box.width : box.x, y: clamp(connector.y, box.y + 6 / zoomLevel, box.y + box.height - 6 / zoomLevel) }
+        : { x: clamp(connector.x, box.x + 12 / zoomLevel, box.x + box.width - 12 / zoomLevel), y: dy > 0 ? box.y + box.height : box.y };
+      layouts.set(markerIndex, {
+        boxX: box.x, boxY: box.y, boxWidth: box.width, boxHeight: box.height,
+        anchorX: anchor.x, anchorY: anchor.y, connectorX: connector.x, connectorY: connector.y,
+        fontSize: clamp(((box.width * zoomLevel - 18) / Math.max(1, marker.label.length * 0.62)), 8, 12) / zoomLevel,
+      });
+    });
+    return layouts;
+  }, [activeMarkerIndices, imageSize, senaladosItems, zoomLevel]);
 
   const mapGeometry = useMemo(() => {
     if (!interactiveMapData || !imageSize) return null;
@@ -1711,7 +1809,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                               />
                             </>
                           ))}
-                          {regionPixelPoints.length >= 3 && (
+                          {false && regionPixelPoints.length >= 3 && (
                             <g pointerEvents="none" style={{ animation: prefersReducedMotion ? 'none' : 'mapCalloutIn 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
                               <line
                                 x1={regionAnchorX}
@@ -1758,6 +1856,20 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                               </text>
                             </g>
                           )}
+                        </g>
+                      );
+                    })}
+                    {activeMarkerIndices.map(markerIndex => {
+                      const marker = senaladosItems[markerIndex];
+                      const layout = regionCalloutLayouts.get(markerIndex);
+                      if (!marker || !layout) return null;
+                      return (
+                        <g key={`region-callout-${markerIndex}`} pointerEvents="none" style={{ animation: prefersReducedMotion ? 'none' : 'mapCalloutIn 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                          <line x1={layout.anchorX} y1={layout.anchorY} x2={layout.connectorX} y2={layout.connectorY} stroke="#ffffff" strokeWidth="4" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                          <line x1={layout.anchorX} y1={layout.anchorY} x2={layout.connectorX} y2={layout.connectorY} stroke={marker.regionColor ?? '#22c55e'} strokeWidth="1.8" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                          <rect x={layout.boxX + 2 / zoomLevel} y={layout.boxY + 3 / zoomLevel} width={layout.boxWidth} height={layout.boxHeight} rx={9 / zoomLevel} fill="rgba(15,23,42,0.25)" />
+                          <rect x={layout.boxX} y={layout.boxY} width={layout.boxWidth} height={layout.boxHeight} rx={9 / zoomLevel} fill="rgba(255,255,255,0.98)" stroke={marker.regionColor ?? '#22c55e'} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+                          <text x={layout.boxX + layout.boxWidth / 2} y={layout.boxY + layout.boxHeight / 2 + 0.5 / zoomLevel} fill="#111827" fontSize={layout.fontSize} fontWeight="750" fontFamily="Montserrat, Segoe UI, sans-serif" textAnchor="middle" dominantBaseline="middle">{marker.label}</text>
                         </g>
                       );
                     })}

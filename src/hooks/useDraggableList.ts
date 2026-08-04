@@ -37,8 +37,29 @@ export function useDraggableList() {
     if (state.dragKey !== listKey) return;
     e.preventDefault();
     e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const idx = e.clientY < rect.top + rect.height / 2 ? cardIndex : cardIndex + 1;
+    const card = e.currentTarget as HTMLElement;
+    const rect = card.getBoundingClientRect();
+    const container = card.parentElement;
+
+    // Las tarjetas se muestran normalmente en una cuadricula. En ese caso la
+    // mitad izquierda/derecha es una zona de insercion mucho mas natural y
+    // estable que la mitad superior/inferior. Para listas de una sola columna
+    // se conserva el comportamiento vertical.
+    let isMultiColumnGrid = false;
+    if (container) {
+      const containerStyle = window.getComputedStyle(container);
+      if (containerStyle.display === 'grid') {
+        const columns = containerStyle.gridTemplateColumns
+          .split(' ')
+          .filter(value => value.trim().length > 0);
+        isMultiColumnGrid = columns.length > 1;
+      }
+    }
+
+    const insertBefore = isMultiColumnGrid
+      ? e.clientX < rect.left + rect.width / 2
+      : e.clientY < rect.top + rect.height / 2;
+    const idx = insertBefore ? cardIndex : cardIndex + 1;
     if (idx !== state.dropIndex || listKey !== state.dropKey) {
       setState(prev => ({ ...prev, dropIndex: idx, dropKey: listKey }));
     }
