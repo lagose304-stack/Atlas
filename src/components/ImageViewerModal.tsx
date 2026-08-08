@@ -5,6 +5,7 @@ import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../c
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
 import { supabase } from '../services/supabase';
 import type { InteractiveMapViewerSection } from './InteractiveMapViewerModal';
+import laboratoryLogo from '../assets/logos/laboratorio.png';
 
 interface SenaladoMetaItem {
   label: string;
@@ -408,6 +409,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [useZoomSource, setUseZoomSource] = useState(false);
   const [zoomSourceFailed, setZoomSourceFailed] = useState(false);
+  const [isPlateImageLoading, setIsPlateImageLoading] = useState(false);
 
   const [zoomLevel, setZoomLevel]   = useState(1);
   const [position, setPosition]     = useState({ x: 0, y: 0 });
@@ -683,6 +685,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     if (!imageEl) return;
     setImageSize({ width: imageEl.clientWidth, height: imageEl.clientHeight });
     setImageNaturalSize({ width: imageEl.naturalWidth, height: imageEl.naturalHeight });
+  };
+
+  const handlePlateNavigation = (navigate?: () => void) => {
+    if (!navigate || isPlateImageLoading) return;
+    setIsPlateImageLoading(true);
+    setImageSize(null);
+    setImageNaturalSize(null);
+    navigate();
   };
 
   const effectiveMaxZoom = useMemo(() => {
@@ -1400,6 +1410,27 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           </div>
         )}
 
+        {isPlateImageLoading && (
+          <div
+            className="plate-navigation-loading"
+            role="status"
+            aria-live="polite"
+            aria-label="Cargando la placa seleccionada"
+          >
+            <div className="plate-navigation-loading__card">
+              <div className="atlas-loading-logo-wrap" aria-hidden="true">
+                <span className="atlas-loading-orbit"><i /></span>
+                <img className="atlas-loading-logo" src={laboratoryLogo} alt="" />
+              </div>
+              <div className="atlas-loading-copy">
+                <strong>Cargando placa</strong>
+                <span>Preparando la imagen...</span>
+              </div>
+              <span className="atlas-loading-progress" aria-hidden="true"><i /></span>
+            </div>
+          </div>
+        )}
+
         <div
           ref={containerRef}
           style={{
@@ -1427,8 +1458,12 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               src={useZoomSource && srcZoom ? srcZoom : src}
               alt="Vista ampliada"
               draggable={false}
-              onLoad={updateImageSize}
+              onLoad={() => {
+                updateImageSize();
+                setIsPlateImageLoading(false);
+              }}
               onError={() => {
+                setIsPlateImageLoading(false);
                 if (useZoomSource) {
                   setUseZoomSource(false);
                   setZoomSourceFailed(true);
@@ -2536,9 +2571,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               <nav aria-label="Navegación entre placas del subtema" style={{ ...sidebarSectionStyle, order: 5, margin: 'auto -10px -16px', flexShrink: 0, borderRadius: '10px 10px 0 0', borderInline: 0, borderBottom: 0, background: 'rgba(255,255,255,.96)', backdropFilter: 'blur(8px)' }}>
                 <span style={{ ...labelStyle, textAlign: 'center' }}>Placas del subtema</span>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '7px' }}>
-                  <button type="button" onClick={onPreviousPlate} disabled={!onPreviousPlate} aria-label="Ver placa anterior" style={{ border: '1px solid #bfdbfe', background: onPreviousPlate ? 'linear-gradient(135deg,#ffffff,#eff6ff)' : '#f1f5f9', color: onPreviousPlate ? '#1e3a8a' : '#94a3b8', borderRadius: '9px', padding: '8px 6px', fontWeight: 800, cursor: onPreviousPlate ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>← Anterior</button>
+                  <button type="button" onClick={() => handlePlateNavigation(onPreviousPlate)} disabled={!onPreviousPlate || isPlateImageLoading} aria-label="Ver placa anterior" style={{ border: '1px solid #bfdbfe', background: onPreviousPlate && !isPlateImageLoading ? 'linear-gradient(135deg,#ffffff,#eff6ff)' : '#f1f5f9', color: onPreviousPlate && !isPlateImageLoading ? '#1e3a8a' : '#94a3b8', borderRadius: '9px', padding: '8px 6px', fontWeight: 800, cursor: onPreviousPlate && !isPlateImageLoading ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>← Anterior</button>
                   <span style={{ color: '#475569', fontSize: '0.7em', fontWeight: 800, whiteSpace: 'nowrap' }}>{platePosition ?? '—'} / {plateCount}</span>
-                  <button type="button" onClick={onNextPlate} disabled={!onNextPlate} aria-label="Ver placa siguiente" style={{ border: '1px solid #bfdbfe', background: onNextPlate ? 'linear-gradient(135deg,#ffffff,#eff6ff)' : '#f1f5f9', color: onNextPlate ? '#1e3a8a' : '#94a3b8', borderRadius: '9px', padding: '8px 6px', fontWeight: 800, cursor: onNextPlate ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>Siguiente →</button>
+                  <button type="button" onClick={() => handlePlateNavigation(onNextPlate)} disabled={!onNextPlate || isPlateImageLoading} aria-label="Ver placa siguiente" style={{ border: '1px solid #bfdbfe', background: onNextPlate && !isPlateImageLoading ? 'linear-gradient(135deg,#ffffff,#eff6ff)' : '#f1f5f9', color: onNextPlate && !isPlateImageLoading ? '#1e3a8a' : '#94a3b8', borderRadius: '9px', padding: '8px 6px', fontWeight: 800, cursor: onNextPlate && !isPlateImageLoading ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>Siguiente →</button>
                 </div>
               </nav>
             )}
