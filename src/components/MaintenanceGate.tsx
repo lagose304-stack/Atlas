@@ -4,6 +4,8 @@ import { Wrench } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchSiteMaintenanceStatus, type SiteMaintenanceStatus } from '../services/siteMaintenance';
 import LoginForm from './LoginForm';
+import AtlasLoadingScreen from './AtlasLoadingScreen';
+import laboratoryLogo from '../assets/logos/laboratorio.png';
 
 const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -22,7 +24,7 @@ const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   }, [isAuthenticated, status]);
 
   if (authLoading || status === null) {
-    return <div className="site-maintenance-loading" role="status">Cargando sitio...</div>;
+    return <AtlasLoadingScreen fullScreen label="Preparando el sitio…" />;
   }
 
   if (!status.enabled || isAuthenticated) {
@@ -37,32 +39,24 @@ const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   return (
     <main className="site-maintenance-page">
       <section className="site-maintenance-panel" role="status" aria-live="polite">
-        <div className="site-maintenance-icon" aria-hidden="true"><Wrench size={42} /></div>
-        <p className="site-maintenance-eyebrow">Histolab UNAH</p>
-        <h1>Atlas de Histología de la UNAH</h1>
-        <p className="site-maintenance-intro">
-          Recurso educativo del Laboratorio de Histología de la Facultad de Ciencias Médicas
-          de la Universidad Nacional Autónoma de Honduras.
-        </p>
-
-        <div className="site-maintenance-overview">
-          <h2>Estudio de histología y microscopía</h2>
-          <p>
-            Histolab reúne temarios, subtemas, evaluaciones y placas histológicas para apoyar
-            el aprendizaje y la identificación de tejidos mediante microscopía.
-          </p>
+        <div className="site-maintenance-brand" aria-hidden="true">
+          <span className="site-maintenance-logo-orbit" />
+          <img src={laboratoryLogo} alt="" className="site-maintenance-logo" />
         </div>
-
-        <aside className="site-maintenance-notice" aria-label="Aviso de mantenimiento">
-          <strong>Estamos preparando mejoras en el atlas.</strong>
-          <p className="site-maintenance-message">
-            Las herramientas interactivas están en mantenimiento; la información institucional
-            de esta página continúa disponible.
-          </p>
-        </aside>
+        <p className="site-maintenance-eyebrow">Histolab UNAH</p>
+        <h1>Sitio en mantenimiento</h1>
+        <p className="site-maintenance-visible-message">Estamos preparando mejoras para brindarte una mejor experiencia. Volveremos muy pronto.</p>
+        <span className="site-maintenance-status"><i /> Trabajando en el atlas</span>
         <button type="button" className="site-maintenance-login" onClick={() => setShowLogin(true)}>
           Acceso administrativo
         </button>
+
+        <div className="site-maintenance-seo-copy" aria-hidden="true">
+          <h2>Atlas de Histología de la UNAH</h2>
+          <p>Recurso educativo del Laboratorio de Histología de la Facultad de Ciencias Médicas de la Universidad Nacional Autónoma de Honduras.</p>
+          <h2>Estudio de histología y microscopía</h2>
+          <p>Histolab reúne temarios, subtemas, evaluaciones y placas histológicas para apoyar el aprendizaje y la identificación de tejidos mediante microscopía.</p>
+        </div>
       </section>
       {showLogin && <LoginForm onClose={() => setShowLogin(false)} />}
     </main>

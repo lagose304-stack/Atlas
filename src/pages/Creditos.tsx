@@ -46,7 +46,7 @@ const CREDIT_GROUPS: CreditGroup[] = [
     accent: '#0ea5e9',
     soft: '#f0f9ff',
     icon: FlaskConical,
-    pendingLabel: 'Carolina Ardón / Instructora del 2024 - Actualidad / Coordinadora de microscopía del 2025 - 2026',
+    pendingLabel: 'Carolina Ardón / Instructora desde 2024 - Actualidad / Coordinadora de microscopía del 2025 - 2027',
     profileKey: 'microscopy_coordinator',
     people: [],
   },
@@ -78,10 +78,6 @@ const Creditos: React.FC = () => {
           <div style={s.heroContent}>
             <span style={s.eyebrow}><Sparkles size={15} /> Las personas detrás del atlas</span>
             <h1 id="creditos-title" style={s.title}>Créditos</h1>
-            <p style={s.heroText}>
-              Este proyecto es el resultado del conocimiento, el tiempo y la dedicación de personas
-              comprometidas con la enseñanza de la histología.
-            </p>
             <div style={s.heroRule} />
           </div>
           <div className="credits-hero-mark" style={s.heroMark} aria-hidden="true"><BookOpenCheck size={54} strokeWidth={1.7} /></div>
@@ -174,7 +170,11 @@ const Creditos: React.FC = () => {
           </div>
           <div className="credits-contributors-grid" style={s.contributorsGrid}>
             {contributors.map((person, index) => <article key={person.id} style={s.contributorCard}>
-              <span style={s.contributorNumber}>{String(index + 1).padStart(2, '0')}</span>
+              <div style={s.contributorPhoto}>
+                {person.photo_url
+                  ? <img src={getCloudinaryImageUrl(person.photo_url, 'thumb')} alt={`Fotografía de ${person.name}`} style={s.contributorPhotoImage} />
+                  : <span style={s.contributorNumber}>{String(index + 1).padStart(2, '0')}</span>}
+              </div>
               <div style={s.contributorBody}>
                 <h3 style={s.contributorName}>{person.name}</h3>
                 <span style={s.contributorPeriod}>{person.start_year} — {person.is_current ? 'Actualidad' : person.end_year}</span>
@@ -215,7 +215,7 @@ const s: Record<string, React.CSSProperties> = {
   closingIcon: { width: 52, height: 52, display: 'grid', placeItems: 'center', marginBottom: 14, borderRadius: 17, color: '#4f46e5', background: 'linear-gradient(135deg,#e0f2fe,#ede9fe)', border: '1px solid #c7d2fe', boxShadow: '0 8px 20px rgba(79,70,229,.13)', transform: 'rotate(-4deg)' },
   closingLead: { margin: '0 0 8px', fontSize: 'clamp(1.2rem,3vw,1.6rem)', fontWeight: 900, letterSpacing: '-.025em', background: 'linear-gradient(110deg,#0f172a,#1d4ed8 65%,#7c3aed)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' },
   closingText: { margin: 0, maxWidth: 680, color: '#64748b', fontSize: '.88rem', lineHeight: 1.65 },
-  contributorsSection: { padding: 'clamp(24px,4vw,42px)', borderRadius: 24, border: '1px solid #e2e8f0', background: 'rgba(255,255,255,.9)', boxShadow: '0 12px 34px rgba(15,23,42,.07)' }, contributorsHeading: { maxWidth: 760, marginBottom: 24 }, contributorsEyebrow: { color: '#4f46e5', fontSize: '.68rem', fontWeight: 850, letterSpacing: '.08em', textTransform: 'uppercase' }, contributorsTitle: { margin: '7px 0 8px', fontSize: 'clamp(1.35rem,3vw,1.9rem)', letterSpacing: '-.03em' }, contributorsIntro: { margin: 0, color: '#64748b', fontSize: '.88rem', lineHeight: 1.6 }, contributorsGrid: { display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 13 }, contributorCard: { position: 'relative', display: 'flex', gap: 13, padding: 17, borderRadius: 15, border: '1px solid #dbeafe', background: 'linear-gradient(145deg,#fff,#f8fafc)' }, contributorNumber: { flexShrink: 0, width: 34, height: 34, display: 'grid', placeItems: 'center', borderRadius: 10, color: '#4f46e5', background: '#eef2ff', fontSize: '.72rem', fontWeight: 900 }, contributorBody: { minWidth: 0 }, contributorName: { margin: '1px 0 5px', color: '#1e293b', fontSize: '.94rem', fontWeight: 900 }, contributorPeriod: { display: 'inline-flex', padding: '4px 9px', borderRadius: 999, color: '#0369a1', background: '#e0f2fe', fontSize: '.68rem', fontWeight: 800 }, contributorContribution: { margin: '9px 0 0', color: '#64748b', fontSize: '.76rem', lineHeight: 1.55 },
+  contributorsSection: { padding: 'clamp(24px,4vw,42px)', borderRadius: 24, border: '1px solid #e2e8f0', background: 'rgba(255,255,255,.9)', boxShadow: '0 12px 34px rgba(15,23,42,.07)' }, contributorsHeading: { maxWidth: 760, marginBottom: 24 }, contributorsEyebrow: { color: '#4f46e5', fontSize: '.68rem', fontWeight: 850, letterSpacing: '.08em', textTransform: 'uppercase' }, contributorsTitle: { margin: '7px 0 8px', fontSize: 'clamp(1.35rem,3vw,1.9rem)', letterSpacing: '-.03em' }, contributorsIntro: { margin: 0, color: '#64748b', fontSize: '.88rem', lineHeight: 1.6 }, contributorsGrid: { display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 13 }, contributorCard: { position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 15, padding: 17, borderRadius: 15, border: '1px solid #dbeafe', background: 'linear-gradient(145deg,#fff,#f8fafc)' }, contributorPhoto: { flexShrink: 0, width: 72, height: 72, overflow: 'hidden', display: 'grid', placeItems: 'center', borderRadius: 14, color: '#4f46e5', background: '#eef2ff', border: '1px solid #c7d2fe' }, contributorPhotoImage: { width: '100%', height: '100%', display: 'block', objectFit: 'cover', objectPosition: 'center' }, contributorNumber: { width: 34, height: 34, display: 'grid', placeItems: 'center', borderRadius: 10, color: '#4f46e5', background: '#fff', fontSize: '.72rem', fontWeight: 900 }, contributorBody: { minWidth: 0 }, contributorName: { margin: '1px 0 5px', color: '#1e293b', fontSize: '.94rem', fontWeight: 900 }, contributorPeriod: { display: 'inline-flex', padding: '4px 9px', borderRadius: 999, color: '#0369a1', background: '#e0f2fe', fontSize: '.68rem', fontWeight: 800 }, contributorContribution: { margin: '9px 0 0', color: '#64748b', fontSize: '.76rem', lineHeight: 1.55 },
 };
 
 export default Creditos;

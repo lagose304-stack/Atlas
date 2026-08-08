@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Facebook, Instagram, Mail, PenSquare, Sparkles } from 'lucide-react';
+import { AlertTriangle, Instagram, Mail, PenSquare, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import LoginForm from './LoginForm';
 import FloatingVisitorsIndicator from './FloatingVisitorsIndicator';
@@ -16,6 +16,7 @@ const Footer: React.FC<FooterProps> = () => {
   const navigate = useNavigate();
   const [showLogin, setShowLogin] = useState(false);
   const contactEmail = 'laboratoriohistologiaoficial@gmail.com';
+  const atlasEmail = 'atlashistolabfcm@gmail.com';
   const reportEmail = 'denunciashistolab@gmail.com';
 
   const handleContactEmailClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
@@ -41,6 +42,24 @@ const Footer: React.FC<FooterProps> = () => {
 
     const mailtoUrl = `mailto:${reportEmail}`;
     const gmailComposeUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(reportEmail)}`;
+    const isMobileOrTablet = /android|iphone|ipad|ipod|mobile|tablet/i.test(navigator.userAgent);
+
+    if (isMobileOrTablet) {
+      window.location.href = mailtoUrl;
+      return;
+    }
+
+    const opened = window.open(gmailComposeUrl, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      window.location.href = mailtoUrl;
+    }
+  };
+
+  const handleAtlasEmailClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+
+    const mailtoUrl = `mailto:${atlasEmail}`;
+    const gmailComposeUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(atlasEmail)}`;
     const isMobileOrTablet = /android|iphone|ipad|ipod|mobile|tablet/i.test(navigator.userAgent);
 
     if (isMobileOrTablet) {
@@ -159,6 +178,28 @@ const Footer: React.FC<FooterProps> = () => {
               {reportEmail}
             </a>
           </div>
+          <div style={s.contactItem} className="footer-contact-item">
+            <div style={s.iconWrap} className="footer-icon-wrap">
+              <Mail size={18} strokeWidth={2.2} style={s.contactIcon} aria-hidden="true" />
+            </div>
+            <a
+              href={`mailto:${atlasEmail}`}
+              title={atlasEmail}
+              style={s.link}
+              className="footer-col-text"
+              onClick={handleAtlasEmailClick}
+              onMouseEnter={e => {
+                e.currentTarget.style.color = '#1f65b5';
+                e.currentTarget.style.transform = 'translateX(4px)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.color = '#173f72';
+                e.currentTarget.style.transform = 'translateX(0)';
+              }}
+            >
+              {atlasEmail}
+            </a>
+          </div>
         </div>
 
         {/* Separador vertical */}
@@ -173,24 +214,6 @@ const Footer: React.FC<FooterProps> = () => {
           <p style={{ ...s.text, ...s.textCentered }} className="footer-col-text">Mantente conectado con nosotros</p>
           <div style={s.socialRowWrap}>
             <div style={s.socialRow} className="footer-social-row">
-              <a
-                href="https://www.facebook.com/LabHistologiaFCM/"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={s.socialIcon}
-                title="Facebook"
-                onMouseEnter={e => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 8px 18px rgba(10, 30, 58, 0.5)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 11px rgba(8, 26, 53, 0.38)';
-                }}
-              >
-                <Facebook size={18} strokeWidth={2.15} style={s.socialLucide} aria-hidden="true" />
-              </a>
-              <div style={s.goldDivider} aria-hidden="true" />
               <a
                 href="https://www.instagram.com/histolabunah/?hl=en"
                 target="_blank"

@@ -6,6 +6,7 @@ import { logSiteVisitOncePerSession } from './services/analytics';
 import SeoManager from './components/SeoManager';
 import MaintenanceGate from './components/MaintenanceGate';
 import { logClientError } from './services/adminControlCenter';
+import AtlasLoadingScreen from './components/AtlasLoadingScreen';
 
 const Home = lazy(() => import('./pages/Home'));
 const Edicion = lazy(() => import('./pages/Edicion'));
@@ -37,12 +38,7 @@ const Creditos = lazy(() => import('./pages/Creditos'));
 const ROLE_ADMIN = 'Administrador' as const;
 const ROLE_MICRO = 'Microscopía' as const;
 
-const RouteLoadingFallback = () => (
-  <div role="status" aria-live="polite" className="route-loading-fallback">
-    <span className="route-loading-spinner" aria-hidden="true" />
-    <span>Cargando sección...</span>
-  </div>
-);
+const RouteLoadingFallback = () => <AtlasLoadingScreen label="Cargando sección…" />;
 
 const ScrollToTop: React.FC = () => {
   const { pathname } = useLocation();

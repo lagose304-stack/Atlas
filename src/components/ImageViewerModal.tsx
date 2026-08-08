@@ -32,6 +32,10 @@ interface ImageViewerModalProps {
   senaladosMeta?: SenaladoMetaItem[] | null;
   comentario?: string | null;
   tincion?: string | null;
+  onPreviousPlate?: () => void;
+  onNextPlate?: () => void;
+  platePosition?: number;
+  plateCount?: number;
 }
 
 interface InteractiveMapRawSection {
@@ -333,6 +337,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   senaladosMeta,
   comentario,
   tincion,
+  onPreviousPlate,
+  onNextPlate,
+  platePosition,
+  plateCount,
 }) => {
   const resolvedInitialMarkerVisualMode: MarkerVisualMode = hideSidebar ? 'pointer' : initialMarkerVisualMode;
   const resolvedInitialMarkerIndex = hideSidebar && ((senaladosMeta?.length ?? senalados?.length ?? 0) > 0) ? 0 : null;
@@ -428,7 +436,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [announcement, setAnnouncement] = useState('');
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const pointerClipId = useId();
-  const hasInfo = hasPlateDetails || hasInteractiveMapHint === true || loadingInteractiveMap || interactiveMapData !== null;
+  const hasPlateNavigation = (plateCount ?? 0) > 1;
+  const hasInfo = hasPlateDetails || hasInteractiveMapHint === true || loadingInteractiveMap || interactiveMapData !== null || hasPlateNavigation;
 
   const activeMarkerIndices = useMemo(() => {
     if (activeMarkerIndex === null) return [];
@@ -586,6 +595,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   useEffect(() => {
     setUseZoomSource(false);
     setZoomSourceFailed(false);
+    setZoomLevel(1);
+    setPosition({ x: 0, y: 0 });
   }, [src, srcZoom]);
 
   useEffect(() => {
@@ -2520,6 +2531,16 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 <span style={labelStyle}>Comentario</span>
                 <p style={{ margin: 0, color: '#334155', fontSize: '0.87em', lineHeight: 1.62, background: '#f8fafc', borderRadius: '10px', padding: '10px 14px', border: '1px solid #dbe3ee' }}>{renderBoldText(comentario)}</p>
               </div>
+            )}
+            {hasPlateNavigation && (
+              <nav aria-label="Navegación entre placas del subtema" style={{ ...sidebarSectionStyle, order: 5, margin: 'auto -10px -16px', flexShrink: 0, borderRadius: '10px 10px 0 0', borderInline: 0, borderBottom: 0, background: 'rgba(255,255,255,.96)', backdropFilter: 'blur(8px)' }}>
+                <span style={{ ...labelStyle, textAlign: 'center' }}>Placas del subtema</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '7px' }}>
+                  <button type="button" onClick={onPreviousPlate} disabled={!onPreviousPlate} aria-label="Ver placa anterior" style={{ border: '1px solid #bfdbfe', background: onPreviousPlate ? 'linear-gradient(135deg,#ffffff,#eff6ff)' : '#f1f5f9', color: onPreviousPlate ? '#1e3a8a' : '#94a3b8', borderRadius: '9px', padding: '8px 6px', fontWeight: 800, cursor: onPreviousPlate ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>← Anterior</button>
+                  <span style={{ color: '#475569', fontSize: '0.7em', fontWeight: 800, whiteSpace: 'nowrap' }}>{platePosition ?? '—'} / {plateCount}</span>
+                  <button type="button" onClick={onNextPlate} disabled={!onNextPlate} aria-label="Ver placa siguiente" style={{ border: '1px solid #bfdbfe', background: onNextPlate ? 'linear-gradient(135deg,#ffffff,#eff6ff)' : '#f1f5f9', color: onNextPlate ? '#1e3a8a' : '#94a3b8', borderRadius: '9px', padding: '8px 6px', fontWeight: 800, cursor: onNextPlate ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>Siguiente →</button>
+                </div>
+              </nav>
             )}
           </div>
         </div>

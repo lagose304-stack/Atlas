@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS public.credit_contributors (
   end_year integer CHECK (end_year BETWEEN 1900 AND 2200),
   is_current boolean NOT NULL DEFAULT false,
   contribution text CHECK (contribution IS NULL OR length(trim(contribution)) <= 600),
+  photo_url text,
   sort_order integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -28,6 +29,9 @@ CREATE TABLE IF NOT EXISTS public.credit_contributors (
     OR (is_current = false AND end_year IS NOT NULL AND end_year >= start_year)
   )
 );
+
+ALTER TABLE public.credit_contributors
+  ADD COLUMN IF NOT EXISTS photo_url text;
 
 CREATE INDEX IF NOT EXISTS idx_credit_contributors_sort
   ON public.credit_contributors (sort_order, name);

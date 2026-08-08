@@ -261,6 +261,17 @@ const PlacasSubtema: React.FC = () => {
     setSelectedPlaca(placa);
   };
 
+  const selectedPlacaIndex = selectedPlaca
+    ? placas.findIndex((placa) => placa.id === selectedPlaca.id)
+    : -1;
+
+  const navigateToPlate = (index: number) => {
+    const targetPlate = placas[index];
+    if (!targetPlate) return;
+    void logPlacaView(targetPlate.id, Number(subtemaId));
+    setSelectedPlaca(targetPlate);
+  };
+
   const renderPlacaCard = (placa: Placa, keySuffix: string) => {
     const hasInteractiveMap = placasConMapa.has(placa.id);
     const isHovered = hoveredId === placa.id;
@@ -425,6 +436,10 @@ const PlacasSubtema: React.FC = () => {
           senaladosMeta={selectedPlaca.senalados_meta}
           comentario={selectedPlaca.comentario}
           tincion={selectedPlaca.tincion}
+          platePosition={selectedPlacaIndex + 1}
+          plateCount={placas.length}
+          onPreviousPlate={selectedPlacaIndex > 0 ? () => navigateToPlate(selectedPlacaIndex - 1) : undefined}
+          onNextPlate={selectedPlacaIndex >= 0 && selectedPlacaIndex < placas.length - 1 ? () => navigateToPlate(selectedPlacaIndex + 1) : undefined}
         />
       )}
     </div>

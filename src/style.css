@@ -1979,19 +1979,64 @@ body {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: radial-gradient(circle at top, #e0f2fe 0%, #f8fafc 50%, #e2e8f0 100%);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(125,211,252,.42), transparent 29%),
+    radial-gradient(circle at 85% 86%, rgba(129,140,248,.2), transparent 32%),
+    linear-gradient(145deg, #edf8ff 0%, #f8fbff 50%, #e7f1f8 100%);
   font-family: "Montserrat", "Segoe UI", sans-serif;
 }
 
 .site-maintenance-panel {
-  width: min(620px, 100%);
+  position: relative;
+  width: min(480px, 100%);
   box-sizing: border-box;
-  padding: clamp(28px, 6vw, 54px);
+  padding: clamp(32px, 6vw, 52px);
   text-align: center;
   border: 1px solid rgba(148, 163, 184, 0.35);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.15);
+  border-radius: 30px;
+  background: linear-gradient(145deg, rgba(255,255,255,.97), rgba(239,248,255,.92));
+  box-shadow: 0 28px 80px rgba(22, 74, 112, .17), inset 0 1px 0 #fff;
+  backdrop-filter: blur(14px) saturate(1.12);
+}
+
+.site-maintenance-brand {
+  position: relative;
+  width: 124px;
+  height: 124px;
+  margin: 0 auto 22px;
+  display: grid;
+  place-items: center;
+}
+
+.site-maintenance-logo {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  filter: drop-shadow(0 10px 18px rgba(17, 83, 128, .22));
+  animation: maintenance-logo-float 2.7s ease-in-out infinite;
+}
+
+.site-maintenance-logo-orbit {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(14,165,233,.15);
+  border-top-color: #1680b8;
+  border-right-color: #7dd3fc;
+  border-radius: 50%;
+  animation: route-loading-spin 3s linear infinite;
+}
+
+.site-maintenance-logo-orbit::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  top: 12px;
+  right: 16px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 0 6px rgba(56,189,248,.12);
 }
 
 .site-maintenance-icon {
@@ -2015,10 +2060,54 @@ body {
 }
 
 .site-maintenance-panel h1 {
-  margin: 0 0 16px;
+  margin: 0 0 14px;
   color: #0f172a;
   font-size: clamp(1.8rem, 5vw, 2.7rem);
   line-height: 1.1;
+}
+
+.site-maintenance-visible-message {
+  max-width: 370px;
+  margin: 0 auto 20px;
+  color: #52677f;
+  font-size: .95rem;
+  line-height: 1.7;
+}
+
+.site-maintenance-status {
+  width: fit-content;
+  margin: 0 auto 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid #bae6fd;
+  border-radius: 999px;
+  background: #f0f9ff;
+  color: #075985;
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.site-maintenance-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34,197,94,.12);
+  animation: maintenance-status-pulse 1.8s ease-in-out infinite;
+}
+
+.site-maintenance-seo-copy {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 .site-maintenance-message { margin: 0; color: #334155; font-size: 1.05rem; line-height: 1.65; }
@@ -2070,6 +2159,24 @@ body {
   cursor: pointer;
   font: inherit;
   font-size: 0.83rem;
+}
+
+.site-maintenance-login:hover {
+  color: #0369a1;
+}
+
+@keyframes maintenance-logo-float {
+  50% { transform: translateY(-5px) scale(1.025); }
+}
+
+@keyframes maintenance-status-pulse {
+  50% { opacity: .55; transform: scale(.82); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-maintenance-logo,
+  .site-maintenance-logo-orbit,
+  .site-maintenance-status i { animation: none !important; }
 }
 
 .maintenanceCard {
@@ -2830,6 +2937,7 @@ body {
 /* Fuerza el layout en fila en todos los tamaños, igual que el header */
 .footer-inner {
   flex-wrap: nowrap !important;
+  align-items: center !important;
 }
 
 .footer-col {
@@ -3572,6 +3680,147 @@ body {
   font-weight: 700;
 }
 
+/* Carga global del sitio y de las rutas. */
+.atlas-loading-screen {
+  position: relative;
+  isolation: isolate;
+  min-height: 55vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 28px 18px;
+  box-sizing: border-box;
+  font-family: "Montserrat", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(125, 211, 252, .22), transparent 28%),
+    linear-gradient(180deg, rgba(248, 252, 255, .92), rgba(239, 247, 253, .92));
+}
+
+.atlas-loading-screen--full {
+  min-height: 100vh;
+}
+
+.atlas-loading-glow {
+  position: absolute;
+  z-index: -1;
+  width: min(72vw, 520px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(56, 189, 248, .15), rgba(99, 102, 241, .07) 44%, transparent 70%);
+  animation: atlas-loading-breathe 2.4s ease-in-out infinite;
+}
+
+.atlas-loading-card {
+  width: min(100%, 330px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 17px;
+  padding: clamp(25px, 5vw, 36px);
+  border: 1px solid rgba(186, 230, 253, .9);
+  border-radius: 26px;
+  background: linear-gradient(145deg, rgba(255,255,255,.96), rgba(240,249,255,.91));
+  box-shadow: 0 22px 55px rgba(30, 64, 105, .14), inset 0 1px 0 #fff;
+  backdrop-filter: blur(12px) saturate(1.12);
+}
+
+.atlas-loading-logo-wrap {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  display: grid;
+  place-items: center;
+}
+
+.atlas-loading-logo {
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
+  border-radius: 50%;
+  filter: drop-shadow(0 8px 13px rgba(22, 83, 126, .2));
+  animation: atlas-loading-logo-turn 2.8s cubic-bezier(.65,.05,.36,1) infinite;
+}
+
+.atlas-loading-orbit {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(14, 165, 233, .16);
+  border-top-color: #1680b8;
+  border-right-color: #7dd3fc;
+  border-radius: 50%;
+  animation: atlas-loading-orbit 1.35s linear infinite;
+}
+
+.atlas-loading-orbit i {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  right: 7px;
+  top: 13px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 0 5px rgba(56, 189, 248, .13);
+}
+
+.atlas-loading-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.atlas-loading-copy strong {
+  color: #164e78;
+  font-size: .75rem;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.atlas-loading-copy span {
+  color: #475569;
+  font-size: .88rem;
+  font-weight: 650;
+}
+
+.atlas-loading-progress {
+  width: min(100%, 190px);
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dbeafe;
+}
+
+.atlas-loading-progress i {
+  display: block;
+  width: 44%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #38bdf8, #818cf8);
+  animation: atlas-loading-progress 1.25s ease-in-out infinite;
+}
+
+@keyframes atlas-loading-orbit { to { transform: rotate(360deg); } }
+@keyframes atlas-loading-logo-turn {
+  0%, 18% { transform: rotate(0deg) scale(.96); }
+  62%, 100% { transform: rotate(360deg) scale(1); }
+}
+@keyframes atlas-loading-breathe { 50% { transform: scale(1.08); opacity: .72; } }
+@keyframes atlas-loading-progress {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(350%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-loading-glow,
+  .atlas-loading-logo,
+  .atlas-loading-orbit,
+  .atlas-loading-progress i {
+    animation: none !important;
+  }
+}
+
 .credits-admin input[type="text"],
 .credits-admin input[type="number"],
 .credits-admin textarea,
@@ -3852,7 +4101,7 @@ body {
     direction: ltr !important;
   }
   .cb-weekly-publication figure {
-    min-height: 240px !important;
+    min-height: 180px !important;
   }
 }
 
