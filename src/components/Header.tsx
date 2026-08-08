@@ -543,7 +543,14 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
           </div>
         )}
 
-        <nav className="atlas-header-bottom-nav" style={styles.bottomNav} aria-label="Menú principal">
+        <nav
+          className="atlas-header-bottom-nav"
+          style={{
+            ...styles.bottomNav,
+            '--atlas-header-nav-background': `linear-gradient(180deg, rgba(4,29,54,.42), rgba(4,29,54,.62)), linear-gradient(105deg, rgba(6,33,86,.62), rgba(31,91,151,.28) 25%, rgba(224,242,254,.34) 50%, rgba(125,190,232,.28) 72%, rgba(10,52,112,.56)), url(${fondoHeader})`,
+          } as React.CSSProperties}
+          aria-label="Menú principal"
+        >
           <ul className="atlas-header-nav-list" style={styles.navList}>
             {MENU_ITEMS.map((item) => {
               const Icon = item.icon;
@@ -555,12 +562,14 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
                     style={{ ...styles.navButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
                     disabled={isHeaderLocked}
                     aria-current={isMenuItemActive(item.key) ? 'page' : undefined}
-                    onClick={() => {
-                      if ('path' in item && item.path) navigateFromHeader(item.path);
-                    }}
+                  onClick={() => {
+                    if ('path' in item && item.path) navigateFromHeader(item.path);
+                  }}
                   >
-                    <Icon size={15} />
-                    <span>{item.label}</span>
+                    <span className="atlas-header-nav-icon-shell" aria-hidden="true">
+                      <Icon size={17} strokeWidth={2.3} />
+                    </span>
+                    <span className="atlas-header-nav-label">{item.label}</span>
                   </button>
                 </li>
               );
@@ -610,8 +619,10 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
                     if ('path' in item && item.path) navigateFromHeader(item.path);
                   }}
                 >
-                  <Icon className="atlas-compact-nav-icon" size={15} />
-                  {item.label}
+                  <span className="atlas-compact-nav-icon-shell" aria-hidden="true">
+                    <Icon className="atlas-compact-nav-icon" size={15} strokeWidth={2.3} />
+                  </span>
+                  <span>{item.label}</span>
                 </button>
               </li>
             );})}
