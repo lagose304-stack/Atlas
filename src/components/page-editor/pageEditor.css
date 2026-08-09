@@ -64,6 +64,8 @@
 .visual-editor-commandbar { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 14px; padding: 11px 13px; border: 1px solid #d7e3ef; border-radius: 13px; background: #fff; }
 .visual-editor-commandbar-help { display: flex; flex-direction: column; gap: 2px; color: #6b7f95; font-size: .76rem; }
 .visual-editor-commandbar-help strong { color: #274e75; font-size: .84rem; }
+.visual-editor-shortcuts { margin-top: 4px; color: #526d87; line-height: 1.55; }
+.visual-editor-shortcuts kbd { display: inline-block; padding: 1px 5px; border: 1px solid #cbd9e7; border-bottom-width: 2px; border-radius: 5px; background: #f8fafc; color: #244b70; font: 700 .68rem/1.35 "Segoe UI", sans-serif; white-space: nowrap; }
 .visual-editor-history-actions { display: flex; gap: 6px; }
 .visual-editor-history-actions button { padding: 7px 10px; border: 1px solid #cbd8e7; border-radius: 9px; background: #f8fbfe; color: #315777; font-weight: 800; cursor: pointer; }
 .visual-editor-history-actions button:disabled { opacity: .4; cursor: not-allowed; }
@@ -142,6 +144,12 @@
 .visual-properties-field > span, .visual-properties-grid label > span { color: #60758d; font-size: .72rem; font-weight: 800; }
 .visual-properties-field textarea, .visual-properties-field select, .visual-properties-field input { resize: vertical; width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #cad7e5; border-radius: 9px; background: #fff; color: #264664; font: inherit; font-size: .79rem; line-height: 1.45; }
 .visual-properties-field textarea:focus, .visual-properties-field select:focus, .visual-properties-grid select:focus { outline: 0; border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+.visual-properties-rich-text { overflow: hidden; border: 1px solid #cad7e5; border-radius: 9px; background: #fff; transition: border-color .15s, box-shadow .15s; }
+.visual-properties-rich-text:focus-within { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+.visual-properties-rich-text-input { min-height: 76px; box-sizing: border-box; padding: 9px 10px; outline: 0; color: #264664; font: inherit; font-size: .79rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.visual-properties-rich-text-input p { margin: 0 0 .45em; }
+.visual-properties-rich-text-input p:last-child { margin-bottom: 0; }
+.visual-properties-rich-text-input p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; color: #94a3b8; pointer-events: none; }
 .visual-properties-field select.has-active-value { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; font-weight: 750; }
 .visual-properties-active-value { margin-top: -1px; color: #2563eb; font-size: .63rem; font-style: normal; font-weight: 750; }
 .visual-properties-gallery-fields { display: grid; gap: 12px; }

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Extension, type Editor } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
@@ -18,6 +17,7 @@ import { createContentVersion, listContentVersions, restoreContentVersion, type 
 import LoadingToast from './LoadingToast';
 import ContentBlockRenderer from './ContentBlockRenderer';
 import VisualBlockProperties from './page-editor/VisualBlockProperties';
+import SpanishEditorShortcuts from './page-editor/SpanishEditorShortcuts';
 import type { BlockType, ContentBlock } from '../types/contentBlocks';
 
 const FontSize = Extension.create({
@@ -1557,11 +1557,21 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
   const activeEditingBlock = blocks.find(block => !collapsedBlockIds.has(block.id)) ?? null;
 
   return (
-    <div style={es.sectionCard} className="block-editor-root">
+    <div
+      style={es.sectionCard}
+      className="block-editor-root"
+      lang="es"
+      spellCheck
+      autoCorrect="on"
+      autoCapitalize="sentences"
+    >
       <div className="visual-editor-commandbar">
         <div className="visual-editor-commandbar-help">
           <strong>Todas las herramientas están disponibles</strong>
           <span>Añade componentes, personaliza su diseño, reutiliza plantillas y consulta versiones anteriores. El borrador se guarda automáticamente.</span>
+          <span className="visual-editor-shortcuts">
+            Atajos al escribir: <kbd>Ctrl/Cmd + N</kbd> negrita · <kbd>Ctrl/Cmd + K</kbd> cursiva · <kbd>Ctrl/Cmd + S</kbd> subrayado. También funcionan B, I y U. Corrección del navegador en español habilitada.
+          </span>
         </div>
         <div className="visual-editor-history-actions">
           <button type="button" onClick={undoBlocks} disabled={historyPastRef.current.length === 0} title="Deshacer (Ctrl+Z)">↶ Deshacer</button>
@@ -2523,7 +2533,6 @@ const AutoTextarea: React.FC<{
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
       }),
-      Underline,
       Link.configure({
         openOnClick: false,
         autolink: true,
@@ -2539,6 +2548,7 @@ const AutoTextarea: React.FC<{
       FontSize,
       Color,
       Highlight.configure({ multicolor: true }),
+      SpanishEditorShortcuts,
     ],
     content: value || '',
     editorProps: {
@@ -2548,6 +2558,8 @@ const AutoTextarea: React.FC<{
         lang: 'es',
         autocorrect: 'on',
         autocapitalize: 'sentences',
+        'aria-label': placeholder ?? 'Editor de texto',
+        'aria-keyshortcuts': 'Control+N Meta+N Control+K Meta+K Control+S Meta+S Control+B Meta+B Control+I Meta+I Control+U Meta+U',
       },
     },
     onUpdate: ({ editor: currentEditor }) => {
@@ -2639,10 +2651,10 @@ const AutoTextarea: React.FC<{
   return (
     <div style={es.richTextWrap}>
       {showToolbar && <div className="richQuickToolbar" style={es.richQuickToolbar}>
-        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleBold().run()}>
+        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleBold().run()} title="Negrita (Ctrl/Cmd+N o B)">
           Negrita
         </button>
-        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleUnderline().run()}>
+        <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleUnderline().run()} title="Subrayado (Ctrl/Cmd+S o U)">
           Subrayado
         </button>
         <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().setTextAlign('left').run()}>
@@ -2667,7 +2679,7 @@ const AutoTextarea: React.FC<{
         <div style={{ width: '100%' }}>
           <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>Formato adicional del texto</div>
           <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '8px', marginTop: '10px' }}>
-            <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleItalic().run()}>
+            <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleItalic().run()} title="Cursiva (Ctrl/Cmd+K o I)">
               Cursiva
             </button>
             <button type="button" style={es.richQuickActionBtn} onClick={() => editor?.chain().focus().toggleStrike().run()}>

@@ -4,6 +4,7 @@ import { getBlockMeta } from '../blocks/blockRegistry';
 import { getCloudinaryImageUrl } from '../../services/cloudinaryImages';
 import { supabase } from '../../services/supabase';
 import type { ContentBlock } from '../../types/contentBlocks';
+import CompactRichTextField from './CompactRichTextField';
 
 interface WeeklyTestOption {
   id: string;
@@ -22,17 +23,7 @@ interface VisualBlockPropertiesProps {
   embedded?: boolean;
 }
 
-const TextAreaField: React.FC<{
-  label: string;
-  value: string;
-  placeholder?: string;
-  onChange: (value: string) => void;
-}> = ({ label, value, placeholder, onChange }) => (
-  <label className="visual-properties-field">
-    <span>{label}</span>
-    <textarea value={value} placeholder={placeholder} onChange={event => onChange(event.target.value)} rows={4} />
-  </label>
-);
+const TextAreaField = CompactRichTextField;
 
 const ImageField: React.FC<{
   url: string;
@@ -773,7 +764,14 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
   };
 
   return (
-    <aside className={`visual-properties-panel ${embedded ? 'is-embedded' : ''}`} aria-label={`Propiedades de ${meta.label}`}>
+    <aside
+      className={`visual-properties-panel ${embedded ? 'is-embedded' : ''}`}
+      aria-label={`Propiedades de ${meta.label}`}
+      lang="es"
+      spellCheck
+      autoCorrect="on"
+      autoCapitalize="sentences"
+    >
       <header>
         <div><small>Editando bloque</small><h3>{meta.label}</h3></div>
         <button type="button" className="icon" onClick={onClose} aria-label="Terminar edición" title="Terminar y volver a los componentes"><X size={18} /></button>
@@ -814,9 +812,9 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
         <div className="visual-properties-selection-format is-selection-only">
           <div className="visual-properties-word-toolbar" role="toolbar" aria-label="Formato del texto seleccionado">
             <div className="visual-properties-tool-group" aria-label="Formato básico">
-              <button type="button" aria-pressed={Boolean(textState.bold)} className={textState.bold ? 'is-active' : ''} onClick={() => sendTextCommand('bold')} title="Negrita" aria-label="Negrita"><Bold size={17} /></button>
-              <button type="button" aria-pressed={Boolean(textState.italic)} className={textState.italic ? 'is-active' : ''} onClick={() => sendTextCommand('italic')} title="Cursiva" aria-label="Cursiva"><Italic size={17} /></button>
-              <button type="button" aria-pressed={Boolean(textState.underline)} className={textState.underline ? 'is-active' : ''} onClick={() => sendTextCommand('underline')} title="Subrayado" aria-label="Subrayado"><Underline size={17} /></button>
+              <button type="button" aria-pressed={Boolean(textState.bold)} className={textState.bold ? 'is-active' : ''} onClick={() => sendTextCommand('bold')} title="Negrita (Ctrl/Cmd+N o B)" aria-label="Negrita"><Bold size={17} /></button>
+              <button type="button" aria-pressed={Boolean(textState.italic)} className={textState.italic ? 'is-active' : ''} onClick={() => sendTextCommand('italic')} title="Cursiva (Ctrl/Cmd+K o I)" aria-label="Cursiva"><Italic size={17} /></button>
+              <button type="button" aria-pressed={Boolean(textState.underline)} className={textState.underline ? 'is-active' : ''} onClick={() => sendTextCommand('underline')} title="Subrayado (Ctrl/Cmd+S o U)" aria-label="Subrayado"><Underline size={17} /></button>
               <button type="button" aria-pressed={Boolean(textState.strike)} className={textState.strike ? 'is-active' : ''} onClick={() => sendTextCommand('strike')} title="Tachado" aria-label="Tachado"><Strikethrough size={17} /></button>
             </div>
             <div className="visual-properties-tool-group" aria-label="Listas y enlace">

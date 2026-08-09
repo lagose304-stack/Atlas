@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import VisualBlockProperties from './VisualBlockProperties';
 import type { ContentBlock } from '../../types/contentBlocks';
@@ -17,7 +17,7 @@ const headingBlock: ContentBlock = {
 };
 
 describe('panel visual de propiedades', () => {
-  it('envía cambios de contenido al motor de bloques', () => {
+  it('envía cambios de contenido enriquecido al motor de bloques', async () => {
     const onChange = vi.fn();
     render(
       <VisualBlockProperties
@@ -30,8 +30,11 @@ describe('panel visual de propiedades', () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Escribe aquí…'), { target: { value: 'Nuevo título' } });
-    expect(onChange).toHaveBeenCalledWith({ text: 'Nuevo título' });
+    const editable = screen.getByRole('textbox', { name: 'Texto' });
+    editable.innerHTML = '<p>Nuevo título</p>';
+    fireEvent.input(editable);
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ text: '<p>Nuevo título</p>' }));
   });
 
   it('expone acciones claras para duplicar y eliminar', () => {

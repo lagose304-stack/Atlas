@@ -110,10 +110,10 @@ const BoldField: React.FC<BoldFieldProps> = ({
     sync();
   }, [sync]);
 
-  // Ctrl+B / Enter (bloqueado en modo input)
+  // Ctrl/Cmd+B o N / Enter (bloqueado en modo input)
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (as === 'input' && e.key === 'Enter') e.preventDefault();
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+    if ((e.ctrlKey || e.metaKey) && ['b', 'n'].includes(e.key.toLowerCase())) {
       e.preventDefault();
       document.execCommand('bold', false);
       sync();
@@ -202,7 +202,7 @@ const BoldField: React.FC<BoldFieldProps> = ({
         {editableDiv}
         <button
           type="button"
-          title="Negrita (Ctrl+B)"
+          title="Negrita (Ctrl/Cmd+N o B)"
           style={{
             flexShrink: 0,
             width: 28,
@@ -249,7 +249,7 @@ const BoldField: React.FC<BoldFieldProps> = ({
       >
         <button
           type="button"
-          title="Negrita (Ctrl+B)"
+          title="Negrita (Ctrl/Cmd+N o B)"
           style={{
             fontWeight: 900,
             fontSize: '0.82em',
