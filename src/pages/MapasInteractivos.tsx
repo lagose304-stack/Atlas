@@ -901,15 +901,16 @@ const MapasInteractivos: React.FC = () => {
   useEffect(() => {
     if (!selectedPlaca) {
       setImageElement(null);
-    setIsEditingExistingMap(false);
       setCurrentMapId(null);
       setCurrentMapNumber(null);
       setIsEditingExistingMap(false);
       setHasUnsavedMapChanges(false);
       setMapPersistMessage(null);
-        setIsEditingExistingMap(false);
+      setPersistedSelectionsSnapshot([]);
       setPersistedSelectionDetailsSnapshot([]);
       setShowUnsavedExitConfirm(false);
+      isSelectionHandleInteractingRef.current = false;
+      isPointerGestureActiveRef.current = false;
       return;
     }
 
@@ -941,6 +942,8 @@ const MapasInteractivos: React.FC = () => {
     setPersistedSelectionsSnapshot([]);
     setPersistedSelectionDetailsSnapshot([]);
     setShowUnsavedExitConfirm(false);
+    isSelectionHandleInteractingRef.current = false;
+    isPointerGestureActiveRef.current = false;
     targetZoomRef.current = 1;
     targetPanRef.current = { x: 0, y: 0 };
 
@@ -1418,7 +1421,7 @@ const MapasInteractivos: React.FC = () => {
     const mapNumber = (createdMap as { id: number; map_number: number }).map_number;
     setCurrentMapId(mapId);
     setCurrentMapNumber(mapNumber);
-    setIsEditingExistingMap(false);
+    setIsEditingExistingMap(true);
     setPersistedSelectionsSnapshot(cloneSelections(selectionsToPersist));
     setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(detailsToPersist));
     setPlacasConMapa((prev) => {
@@ -1683,6 +1686,7 @@ const MapasInteractivos: React.FC = () => {
         setCurrentMapId(null);
         setCurrentMapNumber(null);
         setIsEditingExistingMap(false);
+        setLassoInteractionMode('draw');
         setPlacasConMapa((prev) => {
           if (!selectedPlaca || !prev.has(selectedPlaca.id)) return prev;
           const next = new Set(prev);
@@ -2037,7 +2041,6 @@ const MapasInteractivos: React.FC = () => {
   const stopCircleDrag = (e: any) => {
     e?.evt?.preventDefault?.();
     isSelectionHandleInteractingRef.current = false;
-    e?.target?.stopDrag?.();
   };
 
   const canInsertPointIntoSelection = (flatPoints: number[], x: number, y: number): boolean => {
@@ -2048,6 +2051,21 @@ const MapasInteractivos: React.FC = () => {
 
   const hideInsertHint = () => {
     setInsertHint({ visible: false, x: 0, y: 0, snapped: false });
+  };
+
+  const activateNewSelectionMode = () => {
+    // Un mouseup fuera de un nodo puede dejar un gesto de Konva marcado como activo.
+    // Al entrar en Nuevo liberamos cualquier gesto residual para que el lienzo dibuje
+    // inmediatamente, incluso despues de mover nodos en modo Editar.
+    isSelectionHandleInteractingRef.current = false;
+    isPointerGestureActiveRef.current = false;
+    isPinchZoomingRef.current = false;
+    stopZoomDrag();
+    setSelectedTool('lasso');
+    setLassoInteractionMode('draw');
+    setActiveSavedSelectionIndex(null);
+    setShowDeleteConfirm(false);
+    hideInsertHint();
   };
 
   const showInsertHintAt = (x: number, y: number, snapped = false) => {
@@ -2153,7 +2171,15 @@ const MapasInteractivos: React.FC = () => {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedPlaca]);
+  }, [
+    selectedPlaca,
+    isDrawing,
+    activeLassoPoints.length,
+    selectionPoints.length,
+    hasUnsavedMapChanges,
+    persistedSelectionsSnapshot,
+    persistedSelectionDetailsSnapshot,
+  ]);
 
   const temasByParcial: Record<ParcialKey, Tema[]> = { primer: [], segundo: [], tercer: [] };
   temas.forEach(t => {
@@ -2649,6 +2675,8 @@ const MapasInteractivos: React.FC = () => {
                               }}
                               onTouchEnd={stopCircleDrag}
                               onTouchCancel={stopCircleDrag}
+                              onMouseUp={stopCircleDrag}
+                              onDragEnd={stopCircleDrag}
                               onDragMove={e =>
                                 moveSavedSelectionPoint(
                                   activeSavedSelectionIndex,
@@ -2772,6 +2800,8 @@ const MapasInteractivos: React.FC = () => {
                                 }}
                                 onTouchEnd={stopCircleDrag}
                                 onTouchCancel={stopCircleDrag}
+                                onMouseUp={stopCircleDrag}
+                                onDragEnd={stopCircleDrag}
                                 onDragStart={e => {
                                   e.cancelBubble = true;
                                   hideInsertHint();
@@ -2861,15 +2891,10 @@ const MapasInteractivos: React.FC = () => {
                         ...s.lassoModeBtn,
                         ...(lassoInteractionMode === 'draw' ? s.lassoModeBtnActive : {}),
                       }}
-                      onClick={() => {
-                        setLassoInteractionMode('draw');
-                        setActiveSavedSelectionIndex(null);
-                        setShowDeleteConfirm(false);
-                        hideInsertHint();
-                      }}
+                      onClick={activateNewSelectionMode}
                       title="Dibujar nueva selección dentro o fuera de otras"
                     >
-                      Nuevo
+                      Nueva selección
                     </button>
                     <button
                       type="button"

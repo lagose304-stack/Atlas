@@ -11,6 +11,7 @@ import { supabase } from '../services/supabase';
 type TestScope = 'parcial' | 'tema' | 'subtema';
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
+type ReferencePartialKey = ParcialKey | 'all';
 
 interface PruebaRow {
   id: string;
@@ -155,8 +156,7 @@ const refreshNativeSpellcheck = (element: HTMLInputElement | HTMLTextAreaElement
 
 interface ReferencePickerState {
   questionId: string;
-  scope: TestScope;
-  partialKey: ParcialKey | null;
+  partialKey: ReferencePartialKey | null;
   temaId: number | null;
   subtemaId: number | null;
   step: 'parcial' | 'tema' | 'subtema' | 'placa';
@@ -584,25 +584,33 @@ const EditorDePruebas: React.FC = () => {
     : null;
 
   const temasDisponibles = referencePicker
-    ? (referencePicker.partialKey
+    ? (referencePicker.partialKey && referencePicker.partialKey !== 'all'
         ? pickerTemas.filter(tema => tema.parcial === referencePicker.partialKey)
         : pickerTemas)
     : [];
 
+  const loadPickerTemas = async () => {
+    const { data, error: fetchError } = await supabase
+      .from('temas')
+      .select('id, nombre, parcial, sort_order')
+      .order('parcial', { ascending: true })
+      .order('sort_order', { ascending: true });
+
+    if (fetchError) {
+      setReferencePicker(prev => (prev ? {
+        ...prev,
+        loading: false,
+        error: 'No se pudieron cargar todos los temas. Intenta nuevamente.',
+      } : prev));
+      return;
+    }
+
+    setPickerTemas((data ?? []) as TemaRow[]);
+    setReferencePicker(prev => (prev ? { ...prev, loading: false, error: '' } : prev));
+  };
+
   useEffect(() => {
-    const fetchPickerTemas = async () => {
-      const { data, error: fetchError } = await supabase
-        .from('temas')
-        .select('id, nombre, parcial, sort_order')
-        .order('parcial', { ascending: true })
-        .order('sort_order', { ascending: true });
-
-      if (!fetchError) {
-        setPickerTemas((data ?? []) as TemaRow[]);
-      }
-    };
-
-    void fetchPickerTemas();
+    void loadPickerTemas();
   }, []);
 
   const openReferencePicker = async (questionId: string) => {
@@ -610,27 +618,17 @@ const EditorDePruebas: React.FC = () => {
 
     setReferencePicker({
       questionId,
-      scope: prueba.scope,
-      partialKey: prueba.parcial_key,
-      temaId: prueba.tema_id,
-      subtemaId: prueba.subtema_id,
-      step: prueba.scope === 'parcial' ? 'parcial' : prueba.scope === 'tema' ? 'subtema' : 'placa',
+      partialKey: 'all',
+      temaId: null,
+      subtemaId: null,
+      step: 'tema',
       placas: [],
-      loading: false,
+      loading: true,
       error: '',
     });
 
     setPickerSubtemas([]);
-
-    if (prueba.scope === 'tema' && prueba.tema_id) {
-      await loadSubtemasForTema(prueba.tema_id);
-      setReferencePicker(prev => (prev ? { ...prev, step: 'subtema' } : prev));
-      return;
-    }
-
-    if (prueba.scope === 'subtema' && prueba.subtema_id) {
-      await loadPlacasForSubtema(prueba.subtema_id);
-    }
+    await loadPickerTemas();
   };
 
   const loadSubtemasForTema = async (temaId: number) => {
@@ -666,7 +664,7 @@ const EditorDePruebas: React.FC = () => {
     setReferencePicker(prev => (prev ? { ...prev, loading: false, error: '', step: 'placa', placas: (data ?? []) as PlacaRow[] } : prev));
   };
 
-  const handleSelectPartial = (partialKey: ParcialKey) => {
+  const handleSelectPartial = (partialKey: ReferencePartialKey) => {
     setReferencePicker(prev => (prev ? {
       ...prev,
       partialKey,
@@ -1157,14 +1155,10 @@ const EditorDePruebas: React.FC = () => {
                 <div style={s.referenceModalCard}>
                   <span style={s.metaLabel}>Flujo</span>
                   <strong style={s.referenceModalFlowTitle}>
-                    {referencePicker.scope === 'parcial'
-                      ? 'Parcial → tema → subtema → placa'
-                      : referencePicker.scope === 'tema'
-                        ? 'Tema → subtema → placa'
-                        : 'Subtema → placa'}
+                    Todo el atlas → tema → subtema → placa
                   </strong>
                   <p style={s.referenceModalFlowText}>
-                    Solo eliges la imagen que acompañará a la pregunta.
+                    Puedes usar una placa de cualquier parcial, sin importar el alcance de la prueba.
                   </p>
                 </div>
 
@@ -1173,16 +1167,16 @@ const EditorDePruebas: React.FC = () => {
                     type="button"
                     style={s.referenceAccordionHeader}
                     onClick={() => {
-                      if (referencePicker.scope === 'parcial') {
-                        setReferencePicker(prev => (prev ? { ...prev, step: 'parcial' } : prev));
-                      }
+                      setReferencePicker(prev => (prev ? { ...prev, step: 'parcial' } : prev));
                     }}
                   >
                     <span>
                       <span style={s.referenceAccordionLabel}>Parcial</span>
                       <strong style={s.referenceAccordionValue}>
                         {referencePicker.partialKey
-                          ? PARCIALES.find(item => item.key === referencePicker.partialKey)?.label ?? 'Seleccionado'
+                          ? referencePicker.partialKey === 'all'
+                            ? 'Todos los parciales'
+                            : PARCIALES.find(item => item.key === referencePicker.partialKey)?.label ?? 'Seleccionado'
                           : 'Elige un parcial'}
                       </strong>
                     </span>
@@ -1191,9 +1185,16 @@ const EditorDePruebas: React.FC = () => {
                     </span>
                   </button>
 
-                  {referencePicker.step === 'parcial' && referencePicker.scope === 'parcial' && (
+                  {referencePicker.step === 'parcial' && (
                     <div style={s.referenceAccordionBody}>
                       <div style={s.referencePillRow}>
+                        <button
+                          type="button"
+                          style={referencePicker.partialKey === 'all' ? s.referencePillActive : s.referencePill}
+                          onClick={() => handleSelectPartial('all')}
+                        >
+                          Todos los parciales
+                        </button>
                         {PARCIALES.map(item => (
                           <button
                             key={item.key}
@@ -1209,13 +1210,12 @@ const EditorDePruebas: React.FC = () => {
                   )}
                 </div>
 
-                {referencePicker.scope !== 'subtema' && (
-                  <div style={s.referenceAccordionCard}>
+                <div style={s.referenceAccordionCard}>
                     <button
                       type="button"
                       style={s.referenceAccordionHeader}
                       onClick={() => {
-                        if (referencePicker.partialKey && referencePicker.step !== 'parcial') {
+                        if (referencePicker.partialKey) {
                           setReferencePicker(prev => (prev ? { ...prev, step: 'tema', subtemaId: null, placas: [], error: '' } : prev));
                         }
                       }}
@@ -1233,24 +1233,25 @@ const EditorDePruebas: React.FC = () => {
 
                     {referencePicker.step === 'tema' && (
                       <div style={s.referenceAccordionBody}>
-                        <div style={s.referenceList}>
-                          {temasDisponibles.map(tema => (
-                            <button
-                              key={tema.id}
-                              type="button"
-                              style={selectedReferenceTema?.id === tema.id ? s.referenceListItemActive : s.referenceListItem}
-                              onClick={() => handleSelectTema(tema)}
-                            >
-                              {tema.nombre}
-                            </button>
-                          ))}
-                        </div>
+                          <div style={s.referenceList}>
+                            {temasDisponibles.length > 0
+                              ? temasDisponibles.map(tema => (
+                                  <button
+                                    key={tema.id}
+                                    type="button"
+                                    style={selectedReferenceTema?.id === tema.id ? s.referenceListItemActive : s.referenceListItem}
+                                    onClick={() => handleSelectTema(tema)}
+                                  >
+                                    {tema.nombre}
+                                  </button>
+                                ))
+                              : <div style={s.referenceStateBox}>No hay temas disponibles en este filtro.</div>}
+                          </div>
                       </div>
                     )}
-                  </div>
-                )}
+                </div>
 
-                {(referencePicker.scope === 'tema' || referencePicker.scope === 'parcial') && referencePicker.temaId && (
+                {referencePicker.temaId && (
                   <div style={s.referenceAccordionCard}>
                     <button
                       type="button"
@@ -1278,16 +1279,18 @@ const EditorDePruebas: React.FC = () => {
                           <div style={s.referenceStateBox}>Cargando subtemas...</div>
                         ) : (
                           <div style={s.referenceList}>
-                            {pickerSubtemas.map(subtema => (
-                              <button
-                                key={subtema.id}
-                                type="button"
-                                style={selectedReferenceSubtema?.id === subtema.id ? s.referenceListItemActive : s.referenceListItem}
-                                onClick={() => handleSelectSubtema(subtema)}
-                              >
-                                {subtema.nombre}
-                              </button>
-                            ))}
+                            {pickerSubtemas.length > 0
+                              ? pickerSubtemas.map(subtema => (
+                                  <button
+                                    key={subtema.id}
+                                    type="button"
+                                    style={selectedReferenceSubtema?.id === subtema.id ? s.referenceListItemActive : s.referenceListItem}
+                                    onClick={() => handleSelectSubtema(subtema)}
+                                  >
+                                    {subtema.nombre}
+                                  </button>
+                                ))
+                              : <div style={s.referenceStateBox}>Este tema no tiene subtemas disponibles.</div>}
                           </div>
                         )}
                       </div>
@@ -1319,6 +1322,8 @@ const EditorDePruebas: React.FC = () => {
                       </button>
                     ))}
                   </div>
+                ) : referencePicker.step === 'placa' ? (
+                  <div style={s.referenceStateBox}>Este subtema no tiene placas disponibles.</div>
                 ) : (
                   <div style={s.referenceStateBox}>
                     Selecciona un parcial, tema y subtema para ver las placas disponibles.

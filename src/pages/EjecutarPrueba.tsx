@@ -77,6 +77,11 @@ interface PublicTestPayload {
   questions: Array<Omit<QuestionRow, 'retroalimentacion'> & { options: Omit<QuestionOptionRow, 'is_correct'>[] }>;
 }
 
+interface PrivateTestPreviewPayload {
+  test: PruebaRow;
+  questions: Array<QuestionRow & { options: QuestionOptionRow[] }>;
+}
+
 interface GradeResult {
   question_id: string;
   is_correct: boolean;
@@ -84,6 +89,54 @@ interface GradeResult {
   correct_option_text: string;
   feedback: string | null;
 }
+
+const loadPrivateTestPreview = async (pruebaId: string): Promise<PrivateTestPreviewPayload | null> => {
+  const { data: testData, error: testError } = await supabase
+    .from('pruebas')
+    .select('id, nombre, instrucciones, scope, parcial_key, created_at, estado')
+    .eq('id', pruebaId)
+    .single();
+
+  if (testError || !testData) return null;
+
+  const { data: questionsData, error: questionsError } = await supabase
+    .from('prueba_preguntas')
+    .select('id, sort_order, titulo, retroalimentacion, required, reference_photo_url, reference_tema_name, reference_subtema_name, reference_senalado_x, reference_senalado_y, reference_senalado_start_x, reference_senalado_start_y')
+    .eq('prueba_id', pruebaId)
+    .order('sort_order', { ascending: true });
+
+  if (questionsError) return null;
+
+  const questions = (questionsData ?? []) as QuestionRow[];
+  const questionIds = questions.map(question => question.id);
+  let options: QuestionOptionRow[] = [];
+
+  if (questionIds.length > 0) {
+    const { data: optionsData, error: optionsError } = await supabase
+      .from('prueba_pregunta_opciones')
+      .select('id, pregunta_id, sort_order, texto, is_correct')
+      .in('pregunta_id', questionIds)
+      .order('sort_order', { ascending: true });
+
+    if (optionsError) return null;
+    options = (optionsData ?? []) as QuestionOptionRow[];
+  }
+
+  const optionsByQuestion = new Map<string, QuestionOptionRow[]>();
+  options.forEach(option => {
+    const current = optionsByQuestion.get(option.pregunta_id) ?? [];
+    current.push(option);
+    optionsByQuestion.set(option.pregunta_id, current);
+  });
+
+  return {
+    test: testData as PruebaRow,
+    questions: questions.map(question => ({
+      ...question,
+      options: optionsByQuestion.get(question.id) ?? [],
+    })),
+  };
+};
 
 const parciales: Array<{ key: ParcialKey; label: string }> = [
   { key: 'primer', label: 'Primer parcial' },
@@ -108,6 +161,7 @@ const EjecutarPrueba: React.FC = () => {
   const [isGraded, setIsGraded] = useState(false);
   const [reviewedQuestions, setReviewedQuestions] = useState<Record<string, boolean>>({});
   const [gradingQuestionId, setGradingQuestionId] = useState<string | null>(null);
+  const [usesLocalGrading, setUsesLocalGrading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -125,16 +179,12 @@ const EjecutarPrueba: React.FC = () => {
         p_prueba_id: pruebaId,
       });
       const payload = data as PublicTestPayload | null;
-      if (pruebaError || !payload?.test) {
-        setError('No se pudo cargar la prueba.');
-        setIsLoading(false);
-        return;
-      }
+      const isManagementPreview = location.pathname.startsWith('/pruebas/ejecutar/');
 
-      const nextPrueba = payload.test;
-      setPrueba(nextPrueba);
-      setQuestions(payload.questions.map((pregunta) => {
-        return {
+      if (!pruebaError && payload?.test) {
+        setPrueba(payload.test);
+        setUsesLocalGrading(false);
+        setQuestions(payload.questions.map((pregunta) => ({
           id: pregunta.id,
           sortOrder: pregunta.sort_order,
           title: pregunta.titulo,
@@ -159,8 +209,47 @@ const EjecutarPrueba: React.FC = () => {
                   startY: pregunta.reference_senalado_start_y,
                 }
               : null,
-        };
-      }));
+        })));
+      } else if (isManagementPreview) {
+        const previewPayload = await loadPrivateTestPreview(pruebaId);
+        if (!previewPayload) {
+          setError('No se pudo cargar la prueba guardada para vista previa.');
+          setIsLoading(false);
+          return;
+        }
+
+        setPrueba(previewPayload.test);
+        setUsesLocalGrading(true);
+        setQuestions(previewPayload.questions.map((pregunta) => ({
+          id: pregunta.id,
+          sortOrder: pregunta.sort_order,
+          title: pregunta.titulo,
+          retroalimentacion: pregunta.retroalimentacion ?? '',
+          required: pregunta.required,
+          options: pregunta.options.map((opcion) => ({
+            id: opcion.id,
+            text: opcion.texto,
+            isCorrect: opcion.is_correct,
+            sortOrder: opcion.sort_order,
+          })),
+          referencePhotoUrl: pregunta.reference_photo_url,
+          referenceTemaName: pregunta.reference_tema_name ?? '',
+          referenceSubtemaName: pregunta.reference_subtema_name ?? '',
+          referenceSenaladoLocation:
+            pregunta.reference_senalado_x != null && pregunta.reference_senalado_y != null
+              ? {
+                  x: pregunta.reference_senalado_x,
+                  y: pregunta.reference_senalado_y,
+                  startX: pregunta.reference_senalado_start_x,
+                  startY: pregunta.reference_senalado_start_y,
+                }
+              : null,
+        })));
+      } else {
+        setError('Esta prueba todavía no está publicada.');
+        setIsLoading(false);
+        return;
+      }
 
       setCurrentQuestionIndex(0);
       setIsGraded(false);
@@ -171,7 +260,7 @@ const EjecutarPrueba: React.FC = () => {
     };
 
     void loadPrueba();
-  }, [pruebaId]);
+  }, [pruebaId, location.pathname]);
 
   const parcialLabel = prueba
     ? parciales.find(item => item.key === prueba.parcial_key)?.label ?? prueba.parcial_key
@@ -198,8 +287,14 @@ const EjecutarPrueba: React.FC = () => {
 
     const nextAnswers = { ...selectedAnswers, [questionId]: optionId };
     setSelectedAnswers(nextAnswers);
-    setGradingQuestionId(questionId);
     setAnswerError('');
+
+    if (usesLocalGrading) {
+      setReviewedQuestions(previous => ({ ...previous, [questionId]: true }));
+      return;
+    }
+
+    setGradingQuestionId(questionId);
 
     const { data, error: gradeError } = await supabase.rpc('atlas_grade_test', {
       p_prueba_id: pruebaId,
@@ -236,6 +331,14 @@ const EjecutarPrueba: React.FC = () => {
       setShowCompletion(true);
       return;
     }
+
+    if (usesLocalGrading) {
+      setReviewedQuestions(Object.fromEntries(questions.map(question => [question.id, true])));
+      setIsGraded(true);
+      setShowCompletion(true);
+      return;
+    }
+
     const { data, error: gradeError } = await supabase.rpc('atlas_grade_test', {
       p_prueba_id: pruebaId,
       p_answers: selectedAnswers,
@@ -275,7 +378,7 @@ const EjecutarPrueba: React.FC = () => {
 
         <section style={s.hero}>
           <div style={s.heroText}>
-            <p style={s.kicker}>Ejecutor</p>
+            <p style={s.kicker}>{usesLocalGrading ? 'Vista previa privada' : 'Ejecutor'}</p>
             <h1 style={s.title}>{prueba?.nombre ?? 'Prueba'}</h1>
             <p style={s.subtitle}>{prueba?.instrucciones || 'Sin instrucciones registradas.'}</p>
           </div>
