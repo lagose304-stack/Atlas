@@ -15,6 +15,16 @@ const SessionState = () => {
   return <div>{isLoading ? 'loading' : isAuthenticated ? 'authenticated' : 'anonymous'}</div>;
 };
 
+const LoginState = () => {
+  const { isLoading, login } = useAuth();
+  return (
+    <>
+      <div>{isLoading ? 'loading' : 'ready'}</div>
+      <button type="button" onClick={() => void login('admin', 'incorrecta')}>Ingresar</button>
+    </>
+  );
+};
+
 const validSession = {
   data: {
     ok: true,
@@ -76,5 +86,22 @@ describe('AuthProvider session validation', () => {
     await screen.findByText('authenticated', {}, { timeout: 4000 });
     expect(rpc).toHaveBeenCalledTimes(3);
     expect(localStorage.getItem(ATLAS_SESSION_TOKEN_KEY)).toBe('valid-token');
+  });
+
+  it('no vuelve a poner toda la aplicacion en carga durante un intento de login', async () => {
+    localStorage.clear();
+    let finishLogin!: (value: unknown) => void;
+    rpc.mockImplementationOnce(() => new Promise((resolve) => { finishLogin = resolve; }));
+
+    render(<AuthProvider><LoginState /></AuthProvider>);
+    await screen.findByText('ready');
+
+    act(() => screen.getByRole('button', { name: 'Ingresar' }).click());
+
+    expect(screen.getByText('ready')).toBeInTheDocument();
+
+    await act(async () => {
+      finishLogin({ data: { ok: false, status: 'invalid_credentials' }, error: null });
+    });
   });
 });

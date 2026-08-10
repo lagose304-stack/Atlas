@@ -142,12 +142,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!normalizedUsername || !password) {
       return { ok: false, status: 'missing_credentials', message: 'Debes ingresar usuario y contraseña.' };
     }
-    if (/\s/.test(username) || /\s/.test(password)) {
-      return { ok: false, status: 'credentials_with_whitespace', message: 'Usuario y contraseña no pueden contener espacios en blanco.' };
+    if (/\s/.test(username)) {
+      return { ok: false, status: 'credentials_with_whitespace', message: 'El usuario no puede contener espacios en blanco.' };
     }
 
     try {
-      setIsLoading(true);
       const { data, error } = await supabase.rpc('atlas_login', {
         p_username: normalizedUsername,
         p_password: password,
@@ -169,8 +168,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { ok: true, status: 'success', message: 'Inicio de sesión exitoso.' };
     } catch {
       return { ok: false, status: 'login_exception', message: 'Error de conexión al iniciar sesión.' };
-    } finally {
-      setIsLoading(false);
     }
   };
 

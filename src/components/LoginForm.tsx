@@ -23,14 +23,11 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
     if (!username.trim()) {
       return 'El nombre de usuario es obligatorio';
     }
-    if (!password.trim()) {
+    if (!password) {
       return 'La contraseña es obligatoria';
     }
     if (/\s/.test(username)) {
       return 'El usuario no puede contener espacios en blanco';
-    }
-    if (/\s/.test(password)) {
-      return 'La contraseña no puede contener espacios en blanco';
     }
     return null;
   };
@@ -108,6 +105,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
+              data-no-spellcheck="true"
             />
           </div>
           <div style={styles.formGroup}>
@@ -116,7 +114,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
-                onChange={(e) => setPassword(removeWhitespaces(e.target.value))}
+                onChange={(e) => setPassword(e.target.value)}
                 required
                 style={{ ...styles.input, ...styles.passwordInput }}
                 disabled={loading}
