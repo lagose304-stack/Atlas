@@ -1,7 +1,7 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BadgeInfo, BookOpen, ClipboardList, House, Search } from 'lucide-react';
-import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
+import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail, OPEN_HEADER_SEARCH_EVENT } from '../constants/uiEvents';
 import { supabase } from '../services/supabase';
 
 import logoFacultad from '../assets/logos/facultad.png';
@@ -301,6 +301,19 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
       window.removeEventListener(IMAGE_VIEWER_VISIBILITY_EVENT, handleImageViewerVisibility as EventListener);
     };
   }, []);
+
+  React.useEffect(() => {
+    const handleOpenHeaderSearch = () => {
+      if (isHeaderLocked) return;
+      setShowSearchBar(true);
+    };
+
+    window.addEventListener(OPEN_HEADER_SEARCH_EVENT, handleOpenHeaderSearch);
+
+    return () => {
+      window.removeEventListener(OPEN_HEADER_SEARCH_EVENT, handleOpenHeaderSearch);
+    };
+  }, [isHeaderLocked]);
 
   React.useEffect(() => {
     if (!showSearchBar) return;
