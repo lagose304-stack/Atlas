@@ -11,6 +11,7 @@ import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { logTemaView } from '../services/analytics';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { ArrowLeft, ArrowRight, Layers3, Microscope } from 'lucide-react';
+import MicroscopyTopicExperience from './MicroscopyTopicExperience';
 
 interface Tema {
   id: number;
@@ -36,7 +37,7 @@ const normalizeParcial = (parcial: string | null | undefined): string => {
   return normalized;
 };
 
-const Subtemas: React.FC = () => {
+const StandardSubtemas: React.FC = () => {
   const { temaId } = useParams<{ temaId: string }>();
   const navigate = useNavigate();
   const [tema, setTema] = useState<Tema | null>(null);
@@ -360,6 +361,18 @@ const Subtemas: React.FC = () => {
       <Footer />
     </div>
   );
+};
+
+const MICROSCOPY_TOPIC_ID = 62;
+
+const Subtemas: React.FC = () => {
+  const { temaId } = useParams<{ temaId: string }>();
+
+  if (Number(temaId) === MICROSCOPY_TOPIC_ID) {
+    return <MicroscopyTopicExperience temaId={MICROSCOPY_TOPIC_ID} />;
+  }
+
+  return <StandardSubtemas />;
 };
 
 const styles: { [key: string]: React.CSSProperties } = {
