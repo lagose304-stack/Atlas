@@ -5,6 +5,7 @@ import Footer from '../components/Footer';
 import Header from '../components/Header';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { deleteFromCloudinary } from '../services/cloudinary';
+import { deleteOwnedTestReferenceImages } from '../services/testReferenceImages';
 import { supabase } from '../services/supabase';
 
 type TestScope = 'parcial' | 'tema' | 'subtema';
@@ -225,6 +226,20 @@ const GestionPruebas: React.FC = () => {
     setError('');
     setShowDeleteModal(false);
 
+    const { data: referenceRows, error: referenceQueryError } = await supabase
+      .from('prueba_preguntas')
+      .select('reference_photo_url')
+      .eq('prueba_id', prueba.id);
+
+    if (referenceQueryError) {
+      setError('No se pudieron comprobar las imágenes exclusivas de la prueba. No se borró nada.');
+      setUpdatingTestId(null);
+      return;
+    }
+
+    const ownedReferenceUrls = (referenceRows ?? [])
+      .map(row => (row as { reference_photo_url: string | null }).reference_photo_url);
+
     const { error: deleteError } = await supabase
       .from('pruebas')
       .delete()
@@ -242,6 +257,11 @@ const GestionPruebas: React.FC = () => {
       } catch (cloudinaryError) {
         console.warn('No se pudo borrar la imagen asociada a la prueba:', cloudinaryError);
       }
+    }
+
+    const referenceCleanup = await deleteOwnedTestReferenceImages(ownedReferenceUrls, prueba.id);
+    if (referenceCleanup.failed.length > 0) {
+      setError(`La prueba se borró, pero no se pudieron eliminar ${referenceCleanup.failed.length} referencia(s) exclusiva(s).`);
     }
 
     setPruebas(prev => prev.filter(item => item.id !== prueba.id));
@@ -530,7 +550,7 @@ const GestionPruebas: React.FC = () => {
             </div>
 
             <p style={s.deleteModalText}>
-              Esta acción eliminará permanentemente <strong>{deleteTarget.nombre}</strong>, sus preguntas y la imagen asociada.
+              Esta acción eliminará permanentemente <strong>{deleteTarget.nombre}</strong>, sus preguntas, la imagen asociada y todas las referencias exclusivas que se hayan subido.
               No se puede deshacer.
             </p>
 

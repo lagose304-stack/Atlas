@@ -90,16 +90,18 @@ export const fetchRecentClientErrors = async (): Promise<AuditEntry[]> => {
 };
 
 export const getStorageInventory = async () => {
-  const [plates, waiting, tests, maps] = await Promise.all([
+  const [plates, waiting, tests, questionReferences, maps] = await Promise.all([
     supabase.from('placas').select('id, photo_url'),
     supabase.from('placas_sin_clasificar').select('id, photo_url'),
     supabase.from('pruebas').select('id, image_url'),
+    supabase.from('prueba_preguntas').select('id, reference_photo_url'),
     supabase.from('interactive_maps').select('id, image_url'),
   ]);
   const urls = [
     ...(plates.data ?? []).map((row) => row.photo_url),
     ...(waiting.data ?? []).map((row) => row.photo_url),
     ...(tests.data ?? []).map((row) => row.image_url),
+    ...(questionReferences.data ?? []).map((row) => row.reference_photo_url),
     ...(maps.data ?? []).map((row) => row.image_url),
   ].filter((url): url is string => typeof url === 'string' && url.trim().length > 0);
   return {
@@ -107,7 +109,7 @@ export const getStorageInventory = async () => {
     uniqueImages: new Set(urls).size,
     duplicateReferences: urls.length - new Set(urls).size,
     missingPlateUrls: (plates.data ?? []).filter((row) => !row.photo_url).length,
-    queryErrors: [plates.error, waiting.error, tests.error, maps.error].filter(Boolean).length,
+    queryErrors: [plates.error, waiting.error, tests.error, questionReferences.error, maps.error].filter(Boolean).length,
   };
 };
 

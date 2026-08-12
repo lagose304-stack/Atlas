@@ -164,6 +164,71 @@ const OBJECTIVES = [
   },
 ] as const;
 
+const MICROSCOPY_POWERS = [
+  {
+    id: 'amplification',
+    number: '01',
+    title: 'Amplificación',
+    summary: 'Aumenta el tamaño aparente, no la información.',
+    explanation: 'La misma muestra ocupa más espacio en el campo visual. Cuando la resolución ya alcanzó su límite, seguir ampliando produce magnificación vacía: una imagen mayor, pero sin detalle nuevo.',
+    controlLabel: 'Nivel de amplificación',
+    lowLabel: 'Imagen pequeña',
+    highLabel: 'Magnificación vacía',
+    visualLabel: 'La misma muestra',
+    changes: 'Tamaño aparente',
+    stays: 'Detalle disponible',
+    takeaway: 'Si la resolución no cambia, ampliar más solo agranda el mismo detalle.',
+  },
+  {
+    id: 'resolution',
+    number: '02',
+    title: 'Resolución',
+    summary: 'Permite distinguir puntos muy próximos.',
+    explanation: 'Los dos puntos permanecen exactamente en el mismo lugar. Al mejorar la resolución óptica, sus manchas de luz dejan de superponerse y aparece una separación visible entre ellas.',
+    controlLabel: 'Capacidad de resolución',
+    lowLabel: 'Parecen un punto',
+    highLabel: 'Se distinguen dos',
+    visualLabel: 'Dos puntos fijos',
+    changes: 'Separación perceptible',
+    stays: 'Distancia real',
+    takeaway: 'Resolver es reconocer dos estructuras como independientes; no moverlas ni solo agrandarlas.',
+  },
+  {
+    id: 'definition',
+    number: '03',
+    title: 'Definición',
+    summary: 'Hace visibles los contornos ya resueltos.',
+    explanation: 'Las células conservan el mismo tamaño y la misma separación. Al aumentar el contraste con el fondo, sus bordes y núcleos dejan de confundirse y se reconocen con claridad.',
+    controlLabel: 'Contraste de contornos',
+    lowLabel: 'Poco contraste',
+    highLabel: 'Contornos visibles',
+    visualLabel: 'Tejido teñido',
+    changes: 'Visibilidad de bordes',
+    stays: 'Tamaño y posición',
+    takeaway: 'Una estructura puede estar resuelta y aun ser difícil de reconocer si no contrasta con el fondo.',
+  },
+] as const;
+
+type MicroscopyPowerId = (typeof MICROSCOPY_POWERS)[number]['id'];
+
+const getMicroscopyPowerStatus = (power: MicroscopyPowerId, level: number): string => {
+  if (power === 'amplification') {
+    if (level < 34) return 'Imagen pequeña';
+    if (level < 78) return 'Magnificación útil';
+    return 'Magnificación vacía';
+  }
+
+  if (power === 'resolution') {
+    if (level < 38) return 'No resueltos: parecen uno';
+    if (level < 72) return 'Separación incipiente';
+    return 'Resueltos: se ven dos';
+  }
+
+  if (level < 40) return 'Contornos poco visibles';
+  if (level < 72) return 'Contraste intermedio';
+  return 'Contornos bien definidos';
+};
+
 const OBJECTIVE_SAMPLE_SESSION_KEY = 'atlas_microscopy_objective_samples_v1';
 const OBJECTIVE_MAGNIFICATIONS = OBJECTIVES.map((objective) => objective.value);
 
@@ -350,6 +415,12 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
   const [objectiveSamples, setObjectiveSamples] = useState<Record<number, ObjectiveSample>>({});
   const [selectedObjectiveSample, setSelectedObjectiveSample] = useState<ObjectiveSample | null>(null);
   const [objectiveValue, setObjectiveValue] = useState(4);
+  const [activePower, setActivePower] = useState<MicroscopyPowerId>('amplification');
+  const [powerLevels, setPowerLevels] = useState<Record<MicroscopyPowerId, number>>({
+    amplification: 38,
+    resolution: 28,
+    definition: 32,
+  });
   const [diaphragm, setDiaphragm] = useState(62);
   const [illumination, setIllumination] = useState(72);
   const [quizIndex, setQuizIndex] = useState(0);
@@ -460,6 +531,17 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
     : activeStationPlates[0] ?? null;
   const activeSections = parseMapSections(activeMap?.sections ?? null);
   const activeMeta = activeStation ? getStationMeta(activeStation.nombre) : null;
+  const activePowerMeta = MICROSCOPY_POWERS.find((power) => power.id === activePower) ?? MICROSCOPY_POWERS[0];
+  const activePowerLevel = powerLevels[activePower];
+  const powerVisualStyle = {
+    '--microscopy-power-scale': 0.45 + activePowerLevel * 0.012,
+    '--microscopy-amplification-blur': `${Math.max(0, activePowerLevel - 76) * 0.055}px`,
+    '--microscopy-power-blur': `${Math.max(0.2, (100 - activePowerLevel) * 0.075)}px`,
+    '--microscopy-resolution-separation': `${Math.max(0, (activePowerLevel - 18) / 82) * 17}px`,
+    '--microscopy-definition-opacity': 0.2 + activePowerLevel * 0.0078,
+    '--microscopy-definition-contrast': 0.62 + activePowerLevel * 0.0088,
+    '--microscopy-definition-saturation': 0.45 + activePowerLevel * 0.0095,
+  } as React.CSSProperties;
 
   const mapPlateIds = useMemo(() => new Set(maps.map((map) => map.placa_id)), [maps]);
 
@@ -627,6 +709,7 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
             <h2>De lo invisible a lo observable</h2>
             <p>El microscopio no solo agranda: permite distinguir detalles que el ojo humano no puede separar.</p>
           </div>
+
           <div className="microscopy-observation-journey">
             <article className="microscopy-observation-stage is-eye">
               <header>
@@ -671,29 +754,164 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
             </article>
           </div>
 
-          <div className="microscopy-concept-flow" aria-label="Proceso para obtener una imagen microscópica útil">
-            <article>
-              <span className="microscopy-concept-number">1</span>
-              <div className="microscopy-concept-graphic is-amplification" aria-hidden="true"><i /><i /></div>
-              <div><strong>Amplificación</strong><small>Aumenta el tamaño aparente de la imagen.</small></div>
-            </article>
-            <ArrowRight size={18} aria-hidden="true" />
-            <article>
-              <span className="microscopy-concept-number">2</span>
-              <div className="microscopy-concept-graphic is-resolution" aria-hidden="true"><i /><i /></div>
-              <div><strong>Resolución</strong><small>Separa detalles muy próximos.</small></div>
-            </article>
-            <ArrowRight size={18} aria-hidden="true" />
-            <article>
-              <span className="microscopy-concept-number">3</span>
-              <div className="microscopy-concept-graphic is-definition" aria-hidden="true"><i /><i /><i /></div>
-              <div><strong>Definición</strong><small>Presenta el detalle con nitidez.</small></div>
-            </article>
+          <div className="microscopy-power-lab" aria-labelledby="microscopy-power-lab-title">
+            <div className="microscopy-power-lab-header">
+              <div>
+                <span><SlidersHorizontal size={14} /> Laboratorio de conceptos</span>
+                <h3 id="microscopy-power-lab-title">Experimenta con los tres poderes del microscopio</h3>
+              </div>
+              <p>Selecciona un concepto y mueve el control para comprobar qué cambia realmente en la imagen.</p>
+            </div>
+
+            <div className="microscopy-power-selector" role="group" aria-label="Poderes del microscopio">
+              {MICROSCOPY_POWERS.map((power) => (
+                <button
+                  type="button"
+                  className={activePower === power.id ? 'is-active' : ''}
+                  aria-pressed={activePower === power.id}
+                  onClick={() => setActivePower(power.id)}
+                  key={power.id}
+                >
+                  <span className="microscopy-power-selector-number">{power.number}</span>
+                  <span className="microscopy-power-selector-icon" aria-hidden="true">
+                    {power.id === 'amplification' && <Focus size={18} />}
+                    {power.id === 'resolution' && <Eye size={18} />}
+                    {power.id === 'definition' && <SlidersHorizontal size={18} />}
+                  </span>
+                  <span>
+                    <strong>{power.title}</strong>
+                    <small>{power.summary}</small>
+                  </span>
+                  <ChevronRight size={16} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+
+            <div
+              className={`microscopy-power-panel is-${activePower}${activePower === 'amplification' && activePowerLevel >= 78 ? ' is-empty-magnification' : ''}`}
+              style={powerVisualStyle}
+            >
+              <div className="microscopy-power-stage">
+                <div className="microscopy-power-stage-heading">
+                  <span>Vista simulada</span>
+                  <output aria-live="polite">{getMicroscopyPowerStatus(activePower, activePowerLevel)}</output>
+                </div>
+
+                <div className="microscopy-power-view" aria-hidden="true">
+                  <span className="microscopy-power-view-caption">
+                    {activePower === 'resolution'
+                      ? activePowerLevel < 38
+                        ? 'Parece uno'
+                        : activePowerLevel < 72
+                          ? 'Se está separando'
+                          : 'Ahora se ven dos'
+                      : activePowerMeta.visualLabel}
+                  </span>
+
+                  {activePower === 'amplification' && (
+                    <>
+                      <div className="microscopy-power-sample is-amplification">
+                        <span /><span /><span /><span /><span /><span /><span /><span /><span />
+                      </div>
+                      {activePowerLevel >= 78 && (
+                        <span className="microscopy-empty-magnification-note">Más grande · mismo detalle</span>
+                      )}
+                    </>
+                  )}
+
+                  {activePower === 'resolution' && (
+                    <div className="microscopy-power-sample is-resolution">
+                      <span /><span />
+                      <i className="microscopy-resolution-distance" />
+                    </div>
+                  )}
+
+                  {activePower === 'definition' && (
+                    <div className="microscopy-power-sample is-definition">
+                      <span /><span /><span /><span /><span /><span />
+                      <i /><i /><i />
+                    </div>
+                  )}
+                </div>
+
+                <span className="microscopy-power-stage-hint"><MousePointerClick size={13} /> Observa mientras mueves el control</span>
+              </div>
+
+              <div className="microscopy-power-lesson">
+                <span className="microscopy-power-lesson-kicker">
+                  {activePowerMeta.number} · {activePowerMeta.title}
+                </span>
+                <h4>{activePowerMeta.summary}</h4>
+                <p>{activePowerMeta.explanation}</p>
+
+                <div className="microscopy-power-observation" aria-label="Comparación del ejemplo">
+                  <span><small>Cambia</small><strong>{activePowerMeta.changes}</strong></span>
+                  <span><small>No cambia</small><strong>{activePowerMeta.stays}</strong></span>
+                </div>
+
+                <div className="microscopy-power-control">
+                  <label htmlFor="microscopy-power-range">
+                    <span>{activePowerMeta.controlLabel}</span>
+                    <output>{activePowerLevel}%</output>
+                  </label>
+                  <input
+                    id="microscopy-power-range"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={activePowerLevel}
+                    aria-label={`${activePowerMeta.controlLabel} para ${activePowerMeta.title}`}
+                    onChange={(event) => {
+                      const nextLevel = Number(event.target.value);
+                      setPowerLevels((levels) => ({ ...levels, [activePower]: nextLevel }));
+                    }}
+                  />
+                  <div><span>{activePowerMeta.lowLabel}</span><span>{activePowerMeta.highLabel}</span></div>
+                </div>
+
+                <p className="microscopy-power-takeaway">
+                  <Check size={16} aria-hidden="true" />
+                  <span><strong>Idea clave</strong>{activePowerMeta.takeaway}</span>
+                </p>
+              </div>
+            </div>
           </div>
           <p className="microscopy-key-note">
             <Lightbulb size={18} /> El ocular aumenta la imagen formada por el objetivo, pero no añade nueva resolución.
           </p>
         </section>
+
+        <aside className="microscopy-lab-fact" aria-labelledby="microscopy-lab-fact-title">
+          <div className="microscopy-lab-fact-icon" aria-hidden="true">
+            <Microscope size={25} />
+          </div>
+
+          <div className="microscopy-lab-fact-copy">
+            <span><Sparkles size={14} /> Dato de microscopía</span>
+            <p id="microscopy-lab-fact-title">
+              <strong>
+                ¿Sabías que en el laboratorio utilizamos microscopios ópticos compuestos,
+                binoculares y de campo claro?
+              </strong>{' '}
+              Usan dos sistemas de lentes y luz transmitida para ampliar las preparaciones histológicas.
+            </p>
+          </div>
+
+          <div className="microscopy-lab-fact-visual" aria-hidden="true">
+            <span className="microscopy-lab-fact-visual-label">Campo claro</span>
+            <div className="microscopy-lab-fact-binocular">
+              <i className="microscopy-lab-fact-ocular microscopy-lab-fact-ocular-left" />
+              <i className="microscopy-lab-fact-ocular microscopy-lab-fact-ocular-right" />
+              <i className="microscopy-lab-fact-head" />
+              <i className="microscopy-lab-fact-stage" />
+              <i className="microscopy-lab-fact-light" />
+              <b className="microscopy-lab-fact-ray microscopy-lab-fact-ray-left" />
+              <b className="microscopy-lab-fact-ray microscopy-lab-fact-ray-right" />
+            </div>
+            <small>Luz transmitida</small>
+          </div>
+        </aside>
 
         <section id="explorador" className="microscopy-section microscopy-explorer-section">
           <div className="microscopy-section-heading is-light">

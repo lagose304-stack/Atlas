@@ -186,6 +186,35 @@ const Home: React.FC = () => {
           </section>
         )}
 
+        <section className="home-histology-fact home-reveal" aria-labelledby="home-histology-fact-title">
+          <div className="home-histology-fact-icon" aria-hidden="true">
+            <Microscope size={24} />
+          </div>
+
+          <div className="home-histology-fact-copy">
+            <span className="home-histology-fact-label">
+              <Sparkles size={14} /> Dato histológico
+            </span>
+            <p id="home-histology-fact-title">
+              <strong>¿Sabías que el tejido epitelial no posee vasos sanguíneos?</strong>{' '}
+              Recibe oxígeno y nutrientes por difusión desde el tejido conjuntivo que se encuentra debajo.
+            </p>
+          </div>
+
+          <div className="home-histology-tissue" aria-hidden="true">
+            <span className="home-tissue-caption">Epitelio</span>
+            <span className="home-tissue-cell home-tissue-cell-one" />
+            <span className="home-tissue-cell home-tissue-cell-two" />
+            <span className="home-tissue-cell home-tissue-cell-three" />
+            <span className="home-tissue-cell home-tissue-cell-four" />
+            <i className="home-tissue-membrane" />
+            <i className="home-tissue-diffusion home-tissue-diffusion-one" />
+            <i className="home-tissue-diffusion home-tissue-diffusion-two" />
+            <i className="home-tissue-connective" />
+            <span className="home-tissue-source">Tejido conectivo</span>
+          </div>
+        </section>
+
         <section className="home-learning-route home-reveal" aria-labelledby="home-route-title">
           <div className="home-route-intro">
             <span className="home-route-badge"><Microscope size={16} /> Primera vez en el atlas</span>

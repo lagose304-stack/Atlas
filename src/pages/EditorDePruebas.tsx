@@ -5,6 +5,11 @@ import Header from '../components/Header';
 import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { uploadToCloudinary, deleteFromCloudinary } from '../services/cloudinary';
+import {
+  deleteOwnedTestReferenceImages,
+  getTestReferenceFolder,
+  isOwnedTestReferenceUrl,
+} from '../services/testReferenceImages';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
 import { supabase } from '../services/supabase';
 
@@ -106,6 +111,8 @@ interface QuestionDraft {
   referenceTemaName: string;
   referenceSubtemaName: string;
   referenceSenaladoLocation: MarkerLocation | null;
+  referenceUploadFile: File | null;
+  referenceUploadPreviewUrl: string | null;
 }
 
 const createOption = (text: string, sortOrder: number, isCorrect = false): QuestionOptionDraft => ({
@@ -132,6 +139,8 @@ const createBlankQuestion = (index = 0): QuestionDraft => ({
   referenceTemaName: '',
   referenceSubtemaName: '',
   referenceSenaladoLocation: null,
+  referenceUploadFile: null,
+  referenceUploadPreviewUrl: null,
 });
 
 const normalizeQuestionSortOrder = (questions: QuestionDraft[]): QuestionDraft[] =>
@@ -156,6 +165,7 @@ const refreshNativeSpellcheck = (element: HTMLInputElement | HTMLTextAreaElement
 
 interface ReferencePickerState {
   questionId: string;
+  mode: 'atlas' | 'upload';
   partialKey: ReferencePartialKey | null;
   temaId: number | null;
   subtemaId: number | null;
@@ -167,11 +177,15 @@ interface ReferencePickerState {
 
 interface ReferenceMarkerState {
   questionId: string;
-  placaId: number;
+  source: 'atlas' | 'upload';
+  placaId: number | null;
   photoUrl: string;
   temaName: string;
   subtemaName: string;
   location: MarkerLocation | null;
+  uploadFile: File | null;
+  uploadPreviewUrl: string | null;
+  ownsUploadPreview: boolean;
 }
 
 const EditorDePruebas: React.FC = () => {
@@ -195,6 +209,25 @@ const EditorDePruebas: React.FC = () => {
   const [pickerTemas, setPickerTemas] = useState<TemaRow[]>([]);
   const [pickerSubtemas, setPickerSubtemas] = useState<SubtemaRow[]>([]);
   const [referenceMarkerPicker, setReferenceMarkerPicker] = useState<ReferenceMarkerState | null>(null);
+  const persistedOwnedReferenceUrlsRef = useRef<Set<string>>(new Set());
+  const localReferencePreviewUrlsRef = useRef<Set<string>>(new Set());
+
+  const createReferencePreviewUrl = (file: File): string => {
+    const previewUrl = URL.createObjectURL(file);
+    localReferencePreviewUrlsRef.current.add(previewUrl);
+    return previewUrl;
+  };
+
+  const releaseReferencePreviewUrl = (previewUrl: string | null | undefined) => {
+    if (!previewUrl || !localReferencePreviewUrlsRef.current.has(previewUrl)) return;
+    URL.revokeObjectURL(previewUrl);
+    localReferencePreviewUrlsRef.current.delete(previewUrl);
+  };
+
+  useEffect(() => () => {
+    localReferencePreviewUrlsRef.current.forEach(previewUrl => URL.revokeObjectURL(previewUrl));
+    localReferencePreviewUrlsRef.current.clear();
+  }, []);
 
   useEffect(() => {
     if (!referencePicker && !referenceMarkerPicker) return;
@@ -217,6 +250,11 @@ const EditorDePruebas: React.FC = () => {
     }
 
     const preguntas = (preguntasData ?? []) as PreguntaRow[];
+    persistedOwnedReferenceUrlsRef.current = new Set(
+      preguntas
+        .map(pregunta => pregunta.reference_photo_url)
+        .filter((url): url is string => isOwnedTestReferenceUrl(url, pruebaIdValue))
+    );
     if (preguntas.length === 0) {
       setQuestions([createBlankQuestion()]);
       return;
@@ -274,6 +312,8 @@ const EditorDePruebas: React.FC = () => {
                 startY: pregunta.reference_senalado_start_y,
               }
             : null,
+        referenceUploadFile: null,
+        referenceUploadPreviewUrl: null,
       };
     }));
   };
@@ -356,7 +396,51 @@ const EditorDePruebas: React.FC = () => {
     setMessage('');
 
     const orderedQuestions = normalizeQuestionSortOrder(questions);
-    const preguntasPayload = orderedQuestions.map(question => ({
+    const prevImageUrl = prueba?.image_url || '';
+    let uploadedImageUrl: string | null = null;
+    const newlyUploadedReferenceUrls: string[] = [];
+    const referenceUploadCache = new Map<File, string>();
+    let preparedQuestions = orderedQuestions;
+
+    try {
+      preparedQuestions = await Promise.all(orderedQuestions.map(async question => {
+        if (!question.referenceUploadFile) return question;
+
+        let referenceUrl = referenceUploadCache.get(question.referenceUploadFile) ?? null;
+        if (!referenceUrl) {
+          const uploadResult = await uploadToCloudinary(question.referenceUploadFile, {
+            folder: getTestReferenceFolder(prueba.id),
+            optimizeImage: true,
+          });
+          referenceUrl = uploadResult.secure_url || uploadResult.url || null;
+          if (!referenceUrl) {
+            throw new Error('Cloudinary no devolvió la URL de la referencia subida.');
+          }
+          referenceUploadCache.set(question.referenceUploadFile, referenceUrl);
+          newlyUploadedReferenceUrls.push(referenceUrl);
+        }
+
+        return {
+          ...question,
+          referencePlacaId: null,
+          referencePhotoUrl: referenceUrl,
+          referenceTemaName: 'Referencia subida',
+          referenceSubtemaName: 'Exclusiva de esta prueba',
+        };
+      }));
+
+      if (pruebaImageFile) {
+        const uploadResult = await uploadToCloudinary(pruebaImageFile, { folder: 'pruebas', optimizeImage: true });
+        uploadedImageUrl = uploadResult.secure_url || uploadResult.url || null;
+      }
+    } catch (uploadErr: unknown) {
+      await deleteOwnedTestReferenceImages(newlyUploadedReferenceUrls, prueba.id);
+      setError((uploadErr as Error).message || 'No se pudo subir la imagen de referencia.');
+      setIsSaving(false);
+      return;
+    }
+
+    const preguntasPayload = preparedQuestions.map(question => ({
       sortOrder: question.sortOrder,
       title: question.title.trim(),
       retroalimentacion: question.retroalimentacion.trim(),
@@ -380,20 +464,6 @@ const EditorDePruebas: React.FC = () => {
       })),
     }));
 
-    // If a new image file was selected, upload it first to Cloudinary under folder 'pruebas'
-    const prevImageUrl = prueba?.image_url || '';
-    let uploadedImageUrl: string | null = null;
-    if (pruebaImageFile) {
-      try {
-        const uploadResult = await uploadToCloudinary(pruebaImageFile, { folder: 'pruebas', optimizeImage: true });
-        uploadedImageUrl = uploadResult.secure_url || uploadResult.url || null;
-      } catch (uploadErr: unknown) {
-        setError((uploadErr as Error).message || 'No se pudo subir la imagen.');
-        setIsSaving(false);
-        return;
-      }
-    }
-
     const { error: updateError } = await supabase.rpc('guardar_prueba_completa', {
       p_prueba_id: prueba.id,
       p_nombre: nombre.trim(),
@@ -402,15 +472,30 @@ const EditorDePruebas: React.FC = () => {
     });
 
     if (updateError) {
+      await deleteOwnedTestReferenceImages(newlyUploadedReferenceUrls, prueba.id);
+      if (uploadedImageUrl) {
+        try {
+          await deleteFromCloudinary(uploadedImageUrl);
+        } catch (cleanupError) {
+          console.warn('No se pudo limpiar la imagen de portada tras fallar el guardado', cleanupError);
+        }
+      }
       setError(updateError.message || 'No se pudieron guardar los cambios.');
       setIsSaving(false);
       return;
     }
 
+    let cleanupWarning = '';
+
     // If uploadedImageUrl is available, persist it on the pruebas row
     if (uploadedImageUrl) {
       try {
-        await supabase.from('pruebas').update({ image_url: uploadedImageUrl }).eq('id', prueba.id);
+        const { error: imageUpdateError } = await supabase
+          .from('pruebas')
+          .update({ image_url: uploadedImageUrl })
+          .eq('id', prueba.id);
+        if (imageUpdateError) throw imageUpdateError;
+
         setPrueba(prev => (prev ? { ...prev, image_url: uploadedImageUrl } : prev));
         setPruebaImagePreview(uploadedImageUrl);
         setPruebaImageFile(null);
@@ -423,8 +508,14 @@ const EditorDePruebas: React.FC = () => {
             console.warn('No se pudo borrar la imagen previa en Cloudinary', delErr);
           }
         }
-      } catch (e) {
-        console.warn('No se pudo actualizar image_url en la prueba', e);
+      } catch (imageUpdateError) {
+        cleanupWarning = 'La prueba se guardó, pero no se pudo actualizar su imagen de portada.';
+        try {
+          await deleteFromCloudinary(uploadedImageUrl);
+        } catch (cleanupError) {
+          console.warn('No se pudo limpiar la nueva imagen de portada', cleanupError);
+        }
+        console.warn('No se pudo actualizar image_url en la prueba', imageUpdateError);
       }
     }
 
@@ -447,9 +538,29 @@ const EditorDePruebas: React.FC = () => {
       }
     }
 
-    setQuestions(orderedQuestions);
+    const currentOwnedReferenceUrls = new Set(
+      preparedQuestions
+        .map(question => question.referencePhotoUrl)
+        .filter((url): url is string => isOwnedTestReferenceUrl(url, prueba.id))
+    );
+    const staleReferenceUrls = Array.from(persistedOwnedReferenceUrlsRef.current)
+      .filter(url => !currentOwnedReferenceUrls.has(url));
+    const referenceCleanup = await deleteOwnedTestReferenceImages(staleReferenceUrls, prueba.id);
+    if (referenceCleanup.failed.length > 0) {
+      cleanupWarning = `${cleanupWarning ? `${cleanupWarning} ` : ''}No se pudieron borrar ${referenceCleanup.failed.length} referencia(s) anterior(es).`;
+    }
+    persistedOwnedReferenceUrlsRef.current = currentOwnedReferenceUrls;
+
+    preparedQuestions.forEach(question => releaseReferencePreviewUrl(question.referenceUploadPreviewUrl));
+    const savedQuestions = preparedQuestions.map(question => ({
+      ...question,
+      referenceUploadFile: null,
+      referenceUploadPreviewUrl: null,
+    }));
+
+    setQuestions(savedQuestions);
     setPrueba(prev => (prev ? { ...prev, nombre: nombre.trim(), instrucciones: instrucciones.trim() } : prev));
-    setMessage('Cambios guardados correctamente.');
+    setMessage(cleanupWarning || 'Cambios guardados correctamente.');
     setIsSaving(false);
   };
 
@@ -468,6 +579,9 @@ const EditorDePruebas: React.FC = () => {
         id: `question-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         sortOrder: index + 1,
         title: question.title ? `${question.title} (copia)` : '',
+        referenceUploadPreviewUrl: question.referenceUploadFile
+          ? createReferencePreviewUrl(question.referenceUploadFile)
+          : null,
         options: question.options.map(option => ({
           ...option,
           id: `option-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -482,6 +596,8 @@ const EditorDePruebas: React.FC = () => {
   };
 
   const removeQuestion = (questionId: string) => {
+    const removedQuestion = questions.find(question => question.id === questionId);
+    releaseReferencePreviewUrl(removedQuestion?.referenceUploadPreviewUrl);
     setQuestions(prev => {
       const next = prev.filter(question => question.id !== questionId);
       return normalizeQuestionSortOrder(next.length > 0 ? next : [createBlankQuestion()]);
@@ -618,6 +734,7 @@ const EditorDePruebas: React.FC = () => {
 
     setReferencePicker({
       questionId,
+      mode: 'atlas',
       partialKey: 'all',
       temaId: null,
       subtemaId: null,
@@ -706,25 +823,34 @@ const EditorDePruebas: React.FC = () => {
 
     setReferenceMarkerPicker({
       questionId,
+      source: 'atlas',
       placaId: placa.id,
       photoUrl: placa.photo_url,
       temaName,
       subtemaName,
       location: null,
+      uploadFile: null,
+      uploadPreviewUrl: null,
+      ownsUploadPreview: false,
     });
     setReferencePicker(null);
   };
 
   const handleEditReferenceMarker = (question: QuestionDraft) => {
-    if (!question.referencePlacaId || !question.referencePhotoUrl) return;
+    const photoUrl = question.referenceUploadPreviewUrl || question.referencePhotoUrl;
+    if (!photoUrl) return;
 
     setReferenceMarkerPicker({
       questionId: question.id,
+      source: question.referencePlacaId ? 'atlas' : 'upload',
       placaId: question.referencePlacaId,
-      photoUrl: question.referencePhotoUrl,
+      photoUrl,
       temaName: question.referenceTemaName,
       subtemaName: question.referenceSubtemaName,
       location: question.referenceSenaladoLocation,
+      uploadFile: question.referenceUploadFile,
+      uploadPreviewUrl: question.referenceUploadPreviewUrl,
+      ownsUploadPreview: false,
     });
   };
 
@@ -733,6 +859,28 @@ const EditorDePruebas: React.FC = () => {
 
     setQuestions(prev => prev.map(question => {
       if (question.id !== referenceMarkerPicker.questionId) return question;
+
+      if (referenceMarkerPicker.source === 'upload') {
+        if (
+          question.referenceUploadPreviewUrl &&
+          question.referenceUploadPreviewUrl !== referenceMarkerPicker.uploadPreviewUrl
+        ) {
+          releaseReferencePreviewUrl(question.referenceUploadPreviewUrl);
+        }
+
+        return {
+          ...question,
+          referencePlacaId: null,
+          referencePhotoUrl: referenceMarkerPicker.uploadFile ? null : question.referencePhotoUrl,
+          referenceTemaName: 'Referencia subida',
+          referenceSubtemaName: referenceMarkerPicker.uploadFile ? 'Pendiente de guardar' : 'Exclusiva de esta prueba',
+          referenceSenaladoLocation: location,
+          referenceUploadFile: referenceMarkerPicker.uploadFile,
+          referenceUploadPreviewUrl: referenceMarkerPicker.uploadPreviewUrl,
+        };
+      }
+
+      releaseReferencePreviewUrl(question.referenceUploadPreviewUrl);
       return {
         ...question,
         referencePlacaId: referenceMarkerPicker.placaId,
@@ -740,10 +888,65 @@ const EditorDePruebas: React.FC = () => {
         referenceTemaName: referenceMarkerPicker.temaName,
         referenceSubtemaName: referenceMarkerPicker.subtemaName,
         referenceSenaladoLocation: location,
+        referenceUploadFile: null,
+        referenceUploadPreviewUrl: null,
       };
     }));
 
     setReferenceMarkerPicker(null);
+  };
+
+  const handleReferenceUploadSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = '';
+    if (!file || !referencePicker) return;
+
+    if (!file.type.startsWith('image/')) {
+      setReferencePicker(prev => (prev ? { ...prev, error: 'Selecciona un archivo de imagen válido.' } : prev));
+      return;
+    }
+
+    const previewUrl = createReferencePreviewUrl(file);
+    setReferenceMarkerPicker({
+      questionId: referencePicker.questionId,
+      source: 'upload',
+      placaId: null,
+      photoUrl: previewUrl,
+      temaName: 'Referencia subida',
+      subtemaName: 'Pendiente de guardar',
+      location: null,
+      uploadFile: file,
+      uploadPreviewUrl: previewUrl,
+      ownsUploadPreview: true,
+    });
+    setReferencePicker(null);
+  };
+
+  const handleCancelReferenceMarker = () => {
+    if (referenceMarkerPicker?.ownsUploadPreview) {
+      releaseReferencePreviewUrl(referenceMarkerPicker.uploadPreviewUrl);
+    }
+    setReferenceMarkerPicker(null);
+  };
+
+  const clearQuestionReference = (questionId: string) => {
+    const previousQuestion = questions.find(question => question.id === questionId);
+    releaseReferencePreviewUrl(previousQuestion?.referenceUploadPreviewUrl);
+
+    setQuestions(prev => prev.map(question => (
+      question.id === questionId
+        ? {
+            ...question,
+            referencePlacaId: null,
+            referencePhotoUrl: null,
+            referenceTemaName: '',
+            referenceSubtemaName: '',
+            referenceSenaladoLocation: null,
+            referenceUploadFile: null,
+            referenceUploadPreviewUrl: null,
+          }
+        : question
+    )));
   };
 
   return (
@@ -1040,19 +1243,35 @@ const EditorDePruebas: React.FC = () => {
                           <span style={s.metaLabel}>Referencia visual</span>
                         </div>
 
-                        {question.referencePhotoUrl ? (
+                        {(question.referenceUploadPreviewUrl || question.referencePhotoUrl) ? (
                           <div style={s.referencePreviewWrap}>
                             <img
-                              src={getCloudinaryImageUrl(question.referencePhotoUrl, 'thumb')}
-                              alt="Placa seleccionada como referencia"
+                              src={question.referenceUploadPreviewUrl || getCloudinaryImageUrl(question.referencePhotoUrl ?? '', 'thumb')}
+                              alt={question.referencePlacaId ? 'Placa seleccionada como referencia' : 'Referencia subida para esta prueba'}
                               style={s.referencePreviewImg}
                             />
                             <div style={s.referencePreviewText}>
-                              <strong style={s.referencePreviewTitle}>Placa seleccionada</strong>
-                              <span style={s.referencePreviewMeta}>{question.referenceTemaName || 'Sin tema'} · {question.referenceSubtemaName || 'Sin subtema'}</span>
-                              <span style={s.referencePreviewMeta}>
-                                {question.referenceSenaladoLocation ? 'Señalado configurado' : 'Sin señalado todavía'}
-                              </span>
+                              <strong style={s.referencePreviewTitle}>
+                                {question.referencePlacaId ? 'Placa seleccionada' : 'Referencia subida'}
+                              </strong>
+                              {question.referencePlacaId ? (
+                                <>
+                                  <span style={s.referencePreviewMeta}>{question.referenceTemaName || 'Sin tema'} · {question.referenceSubtemaName || 'Sin subtema'}</span>
+                                  <span style={s.referencePreviewMeta}>
+                                    {question.referenceSenaladoLocation ? 'Señalado configurado' : 'Sin señalado todavía'}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span style={s.referencePreviewMeta}>Exclusiva de esta prueba</span>
+                                  <span style={s.referencePreviewMeta}>
+                                    {question.referenceUploadFile ? 'Se subirá cuando guardes' : 'Guardada en la prueba'}
+                                  </span>
+                                  <span style={s.referencePreviewMeta}>
+                                    {question.referenceSenaladoLocation ? 'Señalado configurado' : 'Sin señalado todavía'}
+                                  </span>
+                                </>
+                              )}
                             </div>
                             <div style={s.referenceActionRow}>
                               <button
@@ -1060,7 +1279,7 @@ const EditorDePruebas: React.FC = () => {
                                 style={s.referenceInlineActionButton}
                                 onClick={() => { void openReferencePicker(question.id); }}
                               >
-                                Reemplazar placa
+                                Cambiar referencia
                               </button>
                               <button
                                 type="button"
@@ -1072,20 +1291,7 @@ const EditorDePruebas: React.FC = () => {
                               <button
                                 type="button"
                                 style={s.referenceClearButton}
-                                onClick={() => {
-                                  setQuestions(prev => prev.map(item => (
-                                    item.id === question.id
-                                      ? {
-                                          ...item,
-                                          referencePlacaId: null,
-                                          referencePhotoUrl: null,
-                                          referenceTemaName: '',
-                                          referenceSubtemaName: '',
-                                          referenceSenaladoLocation: null,
-                                        }
-                                      : item
-                                  )));
-                                }}
+                                onClick={() => clearQuestionReference(question.id)}
                               >
                                 Quitar
                               </button>
@@ -1143,15 +1349,46 @@ const EditorDePruebas: React.FC = () => {
             <div style={s.referenceModalHeader}>
               <div>
                 <p style={s.referenceModalKicker}>Referencia por pregunta</p>
-                <h3 style={s.referenceModalTitle}>Selecciona una placa</h3>
+                <h3 style={s.referenceModalTitle}>
+                  {referencePicker.mode === 'atlas' ? 'Selecciona una placa' : 'Sube una referencia'}
+                </h3>
               </div>
               <button type="button" style={s.referenceCloseButton} onClick={() => setReferencePicker(null)}>
                 Cerrar
               </button>
             </div>
 
-            <div style={s.referenceModalBody}>
-              <aside style={s.referenceModalSidebar}>
+            <div style={s.referenceSourceTabs} role="tablist" aria-label="Origen de la referencia">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={referencePicker.mode === 'atlas'}
+                style={referencePicker.mode === 'atlas' ? s.referenceSourceTabActive : s.referenceSourceTab}
+                onClick={() => setReferencePicker(prev => (prev ? { ...prev, mode: 'atlas', error: '' } : prev))}
+              >
+                Buscar una placa
+                <small>Elegir una imagen existente del atlas</small>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={referencePicker.mode === 'upload'}
+                style={referencePicker.mode === 'upload' ? s.referenceSourceTabActive : s.referenceSourceTab}
+                onClick={() => setReferencePicker(prev => (prev ? { ...prev, mode: 'upload', error: '' } : prev))}
+              >
+                Subir una referencia
+                <small>Usar una imagen exclusiva para esta prueba</small>
+              </button>
+            </div>
+
+            <div style={{
+              ...s.referenceModalBody,
+              ...(referencePicker.mode === 'upload' ? s.referenceModalBodyUpload : {}),
+            }}>
+              <aside style={{
+                ...s.referenceModalSidebar,
+                ...(referencePicker.mode === 'upload' ? { display: 'none' } : {}),
+              }}>
                 <div style={s.referenceModalCard}>
                   <span style={s.metaLabel}>Flujo</span>
                   <strong style={s.referenceModalFlowTitle}>
@@ -1300,7 +1537,32 @@ const EditorDePruebas: React.FC = () => {
               </aside>
 
               <section style={s.referenceModalContent}>
-                {referencePicker.loading ? (
+                {referencePicker.mode === 'upload' ? (
+                  <div style={s.referenceUploadPanel}>
+                    <div style={s.referenceUploadIcon} aria-hidden="true">↑</div>
+                    <div style={s.referenceUploadCopy}>
+                      <span style={s.metaLabel}>Referencia exclusiva</span>
+                      <h4 style={s.referenceUploadTitle}>Sube una imagen solo para esta prueba</h4>
+                      <p style={s.referenceUploadText}>
+                        La imagen no se añadirá a las placas del atlas. Después de seleccionarla colocarás el señalado igual que en una placa existente; se subirá cuando guardes los cambios y se eliminará automáticamente si luego la reemplazas, quitas la pregunta o borras la prueba.
+                      </p>
+                    </div>
+
+                    <label style={s.referenceUploadButton}>
+                      Seleccionar imagen
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleReferenceUploadSelection}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                    <small style={s.referenceUploadHelp}>Formatos de imagen compatibles con el navegador. La subida se optimizará automáticamente.</small>
+                    {referencePicker.error && (
+                      <div style={s.referenceUploadError}>{referencePicker.error}</div>
+                    )}
+                  </div>
+                ) : referencePicker.loading ? (
                   <div style={s.referenceStateBox}>Cargando placas...</div>
                 ) : referencePicker.error ? (
                   <div style={s.referenceStateBox}>{referencePicker.error}</div>
@@ -1341,7 +1603,7 @@ const EditorDePruebas: React.FC = () => {
           senaladoLabel="Señalado exclusivo de esta prueba"
           initialLocation={referenceMarkerPicker.location}
           required
-          onCancel={() => setReferenceMarkerPicker(null)}
+          onCancel={handleCancelReferenceMarker}
           onSave={handleSaveReferenceMarker}
         />
       )}
@@ -1920,6 +2182,45 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: '1.35rem',
     lineHeight: 1.15,
   },
+  referenceSourceTabs: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: '10px',
+    padding: '14px 18px 0',
+  },
+  referenceSourceTab: {
+    minWidth: 0,
+    border: '1px solid #dbeafe',
+    borderRadius: '16px',
+    background: '#fff',
+    color: '#475569',
+    padding: '12px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '4px',
+    fontFamily: 'inherit',
+    fontWeight: 900,
+    cursor: 'pointer',
+    textAlign: 'left',
+  },
+  referenceSourceTabActive: {
+    minWidth: 0,
+    border: '1px solid #818cf8',
+    borderRadius: '16px',
+    background: 'linear-gradient(135deg, #eef2ff, #eff6ff)',
+    color: '#4338ca',
+    padding: '12px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '4px',
+    fontFamily: 'inherit',
+    fontWeight: 900,
+    cursor: 'pointer',
+    textAlign: 'left',
+    boxShadow: '0 10px 22px rgba(99,102,241,0.10)',
+  },
   referenceCloseButton: {
     border: '1px solid #cbd5e1',
     borderRadius: '999px',
@@ -1938,6 +2239,9 @@ const s: Record<string, React.CSSProperties> = {
     padding: '18px',
     minHeight: 0,
     overflow: 'hidden',
+  },
+  referenceModalBodyUpload: {
+    gridTemplateColumns: 'minmax(0, 1fr)',
   },
   referenceModalSidebar: {
     display: 'flex',
@@ -2125,6 +2429,70 @@ const s: Record<string, React.CSSProperties> = {
     minHeight: 0,
     overflow: 'auto',
     paddingRight: '4px',
+  },
+  referenceUploadPanel: {
+    minHeight: '340px',
+    border: '1px dashed #93c5fd',
+    borderRadius: '24px',
+    background: 'radial-gradient(circle at top, rgba(224,231,255,0.88), transparent 48%), linear-gradient(180deg, #ffffff, #f8fafc)',
+    padding: 'clamp(24px, 5vw, 52px)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '14px',
+    textAlign: 'center',
+  },
+  referenceUploadIcon: {
+    width: '64px',
+    height: '64px',
+    borderRadius: '22px',
+    display: 'grid',
+    placeItems: 'center',
+    color: '#fff',
+    background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+    boxShadow: '0 18px 34px rgba(79,70,229,0.24)',
+    fontSize: '2rem',
+    fontWeight: 900,
+  },
+  referenceUploadCopy: {
+    maxWidth: '620px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  referenceUploadTitle: {
+    margin: 0,
+    color: '#0f172a',
+    fontSize: 'clamp(1.2rem, 2vw, 1.65rem)',
+    lineHeight: 1.2,
+  },
+  referenceUploadText: {
+    margin: 0,
+    color: '#475569',
+    lineHeight: 1.65,
+  },
+  referenceUploadButton: {
+    borderRadius: '14px',
+    padding: '12px 18px',
+    color: '#fff',
+    background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+    boxShadow: '0 14px 28px rgba(79,70,229,0.18)',
+    fontWeight: 900,
+    cursor: 'pointer',
+  },
+  referenceUploadHelp: {
+    color: '#64748b',
+    lineHeight: 1.45,
+  },
+  referenceUploadError: {
+    border: '1px solid #fecaca',
+    borderRadius: '12px',
+    padding: '10px 12px',
+    color: '#b91c1c',
+    background: '#fff1f2',
+    fontWeight: 750,
   },
   referenceStateBox: {
     borderRadius: '22px',
