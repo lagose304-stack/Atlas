@@ -1,4 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('./cloudinary', () => ({
+  deleteFromCloudinary: vi.fn(),
+  getCloudinaryPublicId: (url: string) => {
+    const pathname = new URL(url).pathname;
+    const afterUpload = pathname.split('/image/upload/')[1] ?? '';
+    return afterUpload
+      .replace(/^v\d+\//, '')
+      .replace(/\.[^.]+$/, '');
+  },
+}));
+
 import { getTestReferenceFolder, isOwnedTestReferenceUrl } from './testReferenceImages';
 
 describe('testReferenceImages', () => {
