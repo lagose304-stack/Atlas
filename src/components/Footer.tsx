@@ -241,7 +241,7 @@ const Footer: React.FC<FooterProps> = () => {
 
       {/* Copyright */}
       <div style={s.copyright} className="footer-copyright">
-        <span>© {currentYear} Atlas de Histología — UNAH. Todos los derechos reservados.</span>
+        <span>© {currentYear} Atlas de Histología. Todos los derechos reservados.</span>
         <span style={s.creditDivider} aria-hidden="true">·</span>
         <span style={s.creditBadge} className="footer-credit-badge">
           <Sparkles size={13} strokeWidth={2.2} aria-hidden="true" />
