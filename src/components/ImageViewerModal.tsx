@@ -419,6 +419,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [isCommentHintExiting, setIsCommentHintExiting] = useState(false);
   const [hoveredMarkerIndex, setHoveredMarkerIndex] = useState<number | null>(null);
   const [focusedMarkerIndex, setFocusedMarkerIndex] = useState<number | null>(null);
+  const [hoveredNavigationId, setHoveredNavigationId] = useState<string | null>(null);
+  const [pressedNavigationId, setPressedNavigationId] = useState<string | null>(null);
   const [markerVisualMode, setMarkerVisualMode] = useState<MarkerVisualMode>(resolvedInitialMarkerVisualMode);
   const [markerColorKey, setMarkerColorKey] = useState<MarkerColorKey>('black');
   const [isDragging, setIsDragging] = useState(false);
@@ -440,6 +442,21 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const pointerClipId = useId();
   const hasPlateNavigation = (plateCount ?? 0) > 1;
   const hasInfo = hasPlateDetails || hasInteractiveMapHint === true || loadingInteractiveMap || interactiveMapData !== null || hasPlateNavigation;
+
+  const getNavigationButtonInteractionStyle = (id: string): React.CSSProperties => {
+    const isHovered = hoveredNavigationId === id;
+    const isPressed = pressedNavigationId === id;
+
+    return {
+      borderColor: isPressed ? '#5abbd8' : isHovered ? '#79cde5' : '#a8d9e9',
+      boxShadow: isPressed
+        ? '0 1px 4px rgba(15, 105, 135, 0.16)'
+        : isHovered
+          ? '0 7px 15px rgba(15, 105, 135, 0.2)'
+          : '0 3px 9px rgba(15, 105, 135, 0.1)',
+      transform: isPressed ? 'translateY(0) scale(0.96)' : isHovered ? 'translateY(-2px)' : 'none',
+    };
+  };
 
   const activeMarkerIndices = useMemo(() => {
     if (activeMarkerIndex === null) return [];
@@ -1989,24 +2006,24 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           width: isDesktop ? '320px' : 'min(320px, 90vw)',
           position: isDesktop ? 'relative' : 'absolute',
           top: 0, right: 0, height: '100%',
-          background: 'linear-gradient(180deg, #f7fafd 0%, #edf2f7 100%)',
+          background: 'linear-gradient(180deg, #f5fbfd 0%, #e8f4f8 52%, #f7fbfc 100%)',
           backdropFilter: isDesktop ? 'none' : 'blur(6px) saturate(112%)',
-          borderLeft: '1px solid #c7d2e2',
+          borderLeft: '1px solid #b9dbe8',
           overflowY: 'auto', display: 'flex', flexDirection: 'column',
           zIndex: isDesktop ? 1 : 20,
           fontFamily: "'Montserrat', 'Segoe UI', sans-serif",
           boxShadow: isDesktop
-            ? '-12px 0 32px rgba(15,23,42,0.18), inset 1px 0 0 rgba(255,255,255,0.62)'
-            : '-12px 0 34px rgba(15,23,42,0.26)',
+            ? '-14px 0 34px rgba(15, 75, 105, 0.17), inset 1px 0 0 rgba(255,255,255,0.82)'
+            : '-12px 0 34px rgba(15, 75, 105, 0.24)',
         }}>
           {/* Cabecera */}
           <div style={{
             position: 'sticky',
             top: 0,
             zIndex: 2,
-            padding: '14px 15px 12px',
-            borderBottom: '1px solid #d4dde8',
-            background: 'linear-gradient(180deg, rgba(247,250,253,0.98) 0%, rgba(239,244,250,0.95) 100%)',
+            padding: '15px 15px 14px',
+            borderBottom: '1px solid rgba(14, 116, 144, 0.24)',
+            background: 'linear-gradient(135deg, #0f4c67 0%, #176a85 58%, #2181a6 100%)',
             backdropFilter: 'blur(6px)',
             display: 'flex',
             alignItems: 'center',
@@ -2014,11 +2031,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             flexShrink: 0,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '4px', height: '24px', borderRadius: '999px', background: 'linear-gradient(180deg, #2563eb, #1e293b)' }} />
+              <div style={{ width: '4px', height: '26px', borderRadius: '999px', background: 'linear-gradient(180deg, #b8ecfa, #e8fbff)', boxShadow: '0 0 12px rgba(186, 230, 253, 0.58)' }} />
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '7px', flexWrap: 'wrap' }}>
-                <span style={{ color: '#1e293b', fontSize: '0.71em', fontWeight: 800, letterSpacing: '0.11em', textTransform: 'uppercase' }}>Info de la placa</span>
+                <span style={{ color: '#ffffff', fontSize: '0.71em', fontWeight: 850, letterSpacing: '0.11em', textTransform: 'uppercase' }}>Info de la placa</span>
                 {placaId != null && (
-                  <span style={{ color: '#475569', fontSize: '0.63em', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  <span style={{ color: 'rgba(232, 251, 255, 0.82)', fontSize: '0.63em', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                     - ID {placaId}
                   </span>
                 )}
@@ -2029,7 +2046,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             )}
           </div>
           {/* Contenido */}
-          <div style={{ padding: '12px 10px 16px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
+          <div style={{ padding: '14px 12px 18px', display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
             {(temaNombre || subtemaNombre) && (
               <div
                 style={{
@@ -2136,8 +2153,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             )}
 
             {(groupedSenaladosItems.length > 0 || interactiveMapData || loadingInteractiveMap || interactiveMapError) && (
-              <div style={{ ...sidebarSectionStyle, order: 3 }}>
-                <span style={labelStyle}>Visualización</span>
+              <div style={{ ...sidebarSectionStyle, order: 3, background: 'linear-gradient(145deg, rgba(255,255,255,0.99), rgba(232,247,252,0.94))', borderColor: 'rgba(125, 211, 235, 0.56)' }}>
+                <span style={{ ...labelStyle, marginBottom: '12px', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(125, 211, 235, 0.48)', background: 'linear-gradient(135deg, #e9f8fc, #f8fdff)', color: '#0f526d', fontWeight: 900, textAlign: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95)' }}>Señalados</span>
                 {groupedSenaladosItems.length > 0 && viewerMode !== 'map' && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '0.72em', fontWeight: 800, color: '#64748b', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Color</span>
@@ -2260,23 +2277,23 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                       display: 'flex',
                       alignItems: 'stretch',
                       gap: '10px',
-                      background: isActive ? '#eff6ff' : '#f8fafc',
-                      borderRadius: '12px',
-                      padding: '8px 10px',
-                      border: isActive ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
-                      boxShadow: isActive ? '0 8px 18px rgba(37,99,235,0.12)' : '0 1px 0 rgba(148,163,184,0.12)',
+                      background: isActive ? '#dff3f9' : 'rgba(243, 251, 253, 0.9)',
+                      borderRadius: '14px',
+                      padding: '7px',
+                      border: isActive ? '1px solid #72c9e6' : '1px solid #cce8f1',
+                      boxShadow: isActive ? '0 8px 18px rgba(14,116,144,0.15)' : '0 2px 7px rgba(15,75,105,0.05)',
                       transition: 'all 0.2s ease',
                       animation: prefersReducedMotion ? 'none' : 'senaladoCardIn 320ms ease both',
                       animationDelay: `${group.firstIndex * 45}ms`,
                     }}>
                       <span style={{
-                        minWidth: '24px',
-                        height: '24px',
-                        borderRadius: '999px',
+                        minWidth: '28px',
+                        height: '28px',
+                        borderRadius: '9px',
                         background: isActive
-                          ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
+                          ? 'linear-gradient(135deg, #0f6f91, #1683aa)'
                           : hasMarker
-                            ? 'linear-gradient(135deg, #818cf8, #6366f1)'
+                            ? 'linear-gradient(135deg, #4aa7c4, #217c9d)'
                             : 'linear-gradient(135deg, #cbd5e1, #94a3b8)',
                         color: '#fff',
                         fontWeight: 800,
@@ -2285,8 +2302,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
-                        marginTop: '6px',
-                        boxShadow: isActive ? '0 4px 10px rgba(37,99,235,0.35)' : 'none',
+                        marginTop: '5px',
+                        boxShadow: isActive ? '0 4px 10px rgba(14,116,144,0.3)' : 'none',
                       }}>{groupIndex + 1}</span>
                       <button
                         type="button"
@@ -2307,32 +2324,32 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                         title={isOffscreen ? 'Fuera de la vista; pulsa para centrar' : undefined}
                         style={{
                           width: '100%',
-                          border: isActive ? '1px solid #93c5fd' : isHovered ? '1px solid #bfdbfe' : '1px solid #cbd5e1',
+                          border: isActive ? '1px solid #72c9e6' : isHovered ? '1px solid #9ed9eb' : '1px solid #c5e4ee',
                           background: isActive
-                            ? '#e8f0ff'
+                            ? 'linear-gradient(135deg, #f5fdff, #ddf3f9)'
                             : isHovered
-                              ? '#f0f7ff'
-                            : hasMarker
-                              ? '#ffffff'
-                              : '#f1f5f9',
-                          color: '#111111',
+                              ? '#f0fbfe'
+                              : hasMarker
+                                ? '#ffffff'
+                                : '#f1f5f9',
+                          color: '#12445b',
                           fontSize: '0.72em',
                           lineHeight: 1.35,
                           cursor: hasMarker ? 'pointer' : 'not-allowed',
                           fontWeight: isActive ? 700 : 600,
-                          borderRadius: '10px',
-                          padding: '7px 10px',
+                          borderRadius: '11px',
+                          padding: '8px 10px',
                           textAlign: 'center',
                           fontFamily: 'inherit',
                           transition: 'all 0.18s ease',
-                          boxShadow: isActive ? '0 4px 12px rgba(59,130,246,0.16)' : isHovered ? '0 2px 10px rgba(14,165,233,0.12)' : 'none',
+                          boxShadow: isActive ? '0 4px 12px rgba(14,116,144,0.14)' : isHovered ? '0 2px 10px rgba(14,165,233,0.1)' : 'none',
                           opacity: hasMarker ? 1 : 0.82,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           gap: '10px',
                           transform: hasMarker && isHovered && !isActive ? 'translateY(-1px)' : 'none',
-                          outline: isFocused ? '2px solid #38bdf8' : 'none',
+                          outline: isFocused ? '2px solid #4ab8d8' : 'none',
                           outlineOffset: '1px',
                         }}
                       >
@@ -2553,10 +2570,38 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                   </div>
                 )}
                 {activeNavigationCount > 1 && (
-                  <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '7px' }}>
-                    <button type="button" onClick={() => navigateActiveItem(-1)} aria-label="Elemento anterior" style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#334155', borderRadius: '9px', padding: '7px', fontWeight: 800, cursor: 'pointer' }}>← Anterior</button>
-                    <span style={{ color: '#64748b', fontSize: '0.68em', fontWeight: 800, whiteSpace: 'nowrap' }}>{activeNavigationPosition || '—'} / {activeNavigationCount}</span>
-                    <button type="button" onClick={() => navigateActiveItem(1)} aria-label="Elemento siguiente" style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#334155', borderRadius: '9px', padding: '7px', fontWeight: 800, cursor: 'pointer' }}>Siguiente →</button>
+                  <div style={{ marginTop: '13px', paddingTop: '12px', borderTop: '1px solid #cce7f0', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => navigateActiveItem(-1)}
+                      onMouseEnter={() => setHoveredNavigationId('senalados-previous')}
+                      onMouseLeave={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
+                      onMouseDown={() => setPressedNavigationId('senalados-previous')}
+                      onMouseUp={() => setPressedNavigationId(null)}
+                      onFocus={() => setHoveredNavigationId('senalados-previous')}
+                      onBlur={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
+                      aria-label="Elemento anterior"
+                      style={{ ...compactNavigationButtonStyle, ...getNavigationButtonInteractionStyle('senalados-previous'), justifyContent: 'flex-start' }}
+                    >
+                      <span style={compactNavigationIconStyle} aria-hidden="true">←</span>
+                      <span>Anterior</span>
+                    </button>
+                    <span style={compactNavigationCounterStyle}>{activeNavigationPosition || '—'} / {activeNavigationCount}</span>
+                    <button
+                      type="button"
+                      onClick={() => navigateActiveItem(1)}
+                      onMouseEnter={() => setHoveredNavigationId('senalados-next')}
+                      onMouseLeave={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
+                      onMouseDown={() => setPressedNavigationId('senalados-next')}
+                      onMouseUp={() => setPressedNavigationId(null)}
+                      onFocus={() => setHoveredNavigationId('senalados-next')}
+                      onBlur={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
+                      aria-label="Elemento siguiente"
+                      style={{ ...compactNavigationButtonStyle, ...getNavigationButtonInteractionStyle('senalados-next'), justifyContent: 'flex-end' }}
+                    >
+                      <span>Siguiente</span>
+                      <span style={compactNavigationIconStyle} aria-hidden="true">→</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -2568,12 +2613,42 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               </div>
             )}
             {hasPlateNavigation && (
-              <nav aria-label="Navegación entre placas del subtema" style={{ ...sidebarSectionStyle, order: 5, margin: 'auto -10px -16px', flexShrink: 0, borderRadius: '10px 10px 0 0', borderInline: 0, borderBottom: 0, background: 'rgba(255,255,255,.96)', backdropFilter: 'blur(8px)' }}>
+              <nav aria-label="Navegación entre placas del subtema" style={{ ...sidebarSectionStyle, order: 5, margin: 'auto -12px -18px', flexShrink: 0, borderRadius: '14px 14px 0 0', borderInline: 0, borderBottom: 0, background: 'linear-gradient(135deg, rgba(231, 247, 252, 0.98), rgba(255, 255, 255, 0.98))', boxShadow: '0 -8px 22px rgba(15, 75, 105, 0.09)', backdropFilter: 'blur(8px)' }}>
                 <span style={{ ...labelStyle, textAlign: 'center' }}>Placas del subtema</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '7px' }}>
-                  <button type="button" onClick={() => handlePlateNavigation(onPreviousPlate)} disabled={!onPreviousPlate || isPlateImageLoading} aria-label="Ver placa anterior" style={{ border: '1px solid #bfdbfe', background: onPreviousPlate && !isPlateImageLoading ? 'linear-gradient(135deg,#ffffff,#eff6ff)' : '#f1f5f9', color: onPreviousPlate && !isPlateImageLoading ? '#1e3a8a' : '#94a3b8', borderRadius: '9px', padding: '8px 6px', fontWeight: 800, cursor: onPreviousPlate && !isPlateImageLoading ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>← Anterior</button>
-                  <span style={{ color: '#475569', fontSize: '0.7em', fontWeight: 800, whiteSpace: 'nowrap' }}>{platePosition ?? '—'} / {plateCount}</span>
-                  <button type="button" onClick={() => handlePlateNavigation(onNextPlate)} disabled={!onNextPlate || isPlateImageLoading} aria-label="Ver placa siguiente" style={{ border: '1px solid #bfdbfe', background: onNextPlate && !isPlateImageLoading ? 'linear-gradient(135deg,#ffffff,#eff6ff)' : '#f1f5f9', color: onNextPlate && !isPlateImageLoading ? '#1e3a8a' : '#94a3b8', borderRadius: '9px', padding: '8px 6px', fontWeight: 800, cursor: onNextPlate && !isPlateImageLoading ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>Siguiente →</button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => handlePlateNavigation(onPreviousPlate)}
+                    onMouseEnter={() => setHoveredNavigationId('plates-previous')}
+                    onMouseLeave={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
+                    onMouseDown={() => setPressedNavigationId('plates-previous')}
+                    onMouseUp={() => setPressedNavigationId(null)}
+                    onFocus={() => setHoveredNavigationId('plates-previous')}
+                    onBlur={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
+                    disabled={!onPreviousPlate || isPlateImageLoading}
+                    aria-label="Ver placa anterior"
+                    style={{ ...compactNavigationButtonStyle, ...getNavigationButtonInteractionStyle('plates-previous'), justifyContent: 'flex-start', opacity: onPreviousPlate && !isPlateImageLoading ? 1 : 0.56, cursor: onPreviousPlate && !isPlateImageLoading ? 'pointer' : 'not-allowed' }}
+                  >
+                    <span style={compactNavigationIconStyle} aria-hidden="true">←</span>
+                    <span>Anterior</span>
+                  </button>
+                  <span style={compactNavigationCounterStyle}>{platePosition ?? '—'} / {plateCount}</span>
+                  <button
+                    type="button"
+                    onClick={() => handlePlateNavigation(onNextPlate)}
+                    onMouseEnter={() => setHoveredNavigationId('plates-next')}
+                    onMouseLeave={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
+                    onMouseDown={() => setPressedNavigationId('plates-next')}
+                    onMouseUp={() => setPressedNavigationId(null)}
+                    onFocus={() => setHoveredNavigationId('plates-next')}
+                    onBlur={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
+                    disabled={!onNextPlate || isPlateImageLoading}
+                    aria-label="Ver placa siguiente"
+                    style={{ ...compactNavigationButtonStyle, ...getNavigationButtonInteractionStyle('plates-next'), justifyContent: 'flex-end', opacity: onNextPlate && !isPlateImageLoading ? 1 : 0.56, cursor: onNextPlate && !isPlateImageLoading ? 'pointer' : 'not-allowed' }}
+                  >
+                    <span>Siguiente</span>
+                    <span style={compactNavigationIconStyle} aria-hidden="true">→</span>
+                  </button>
                 </div>
               </nav>
             )}
@@ -2587,11 +2662,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 };
 
 const sidebarSectionStyle: React.CSSProperties = {
-  background: '#ffffff',
-  border: '1px solid #d8e1ec',
-  borderRadius: '10px',
+  background: 'linear-gradient(145deg, rgba(255,255,255,0.98), rgba(243,250,252,0.96))',
+  border: '1px solid rgba(166, 211, 228, 0.72)',
+  borderRadius: '14px',
   padding: '12px',
-  boxShadow: '0 3px 9px rgba(15,23,42,0.06)',
+  boxShadow: '0 6px 16px rgba(15, 75, 105, 0.07), inset 0 1px 0 rgba(255,255,255,0.92)',
 };
 
 const compactSidebarSectionStyle: React.CSSProperties = {
@@ -2615,8 +2690,54 @@ const singleLineEllipsisStyle: React.CSSProperties = {
 };
 
 const labelStyle: React.CSSProperties = {
-  display: 'block', color: '#475569', fontSize: '0.64em', fontWeight: 800,
+  display: 'block', color: '#39708a', fontSize: '0.64em', fontWeight: 850,
   letterSpacing: '0.125em', textTransform: 'uppercase', marginBottom: '7px',
+};
+
+const compactNavigationButtonStyle: React.CSSProperties = {
+  minHeight: '36px',
+  border: '1px solid #a8d9e9',
+  background: 'linear-gradient(135deg, #f7fdff, #dff3f9)',
+  color: '#13516a',
+  borderRadius: '10px',
+  padding: '6px 7px',
+  fontFamily: 'inherit',
+  fontSize: '0.69em',
+  fontWeight: 850,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  boxShadow: '0 3px 9px rgba(15, 105, 135, 0.1)',
+  transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
+  willChange: 'transform',
+};
+
+const compactNavigationIconStyle: React.CSSProperties = {
+  width: '21px',
+  height: '21px',
+  borderRadius: '7px',
+  color: '#ffffff',
+  background: 'linear-gradient(135deg, #177898, #279bbd)',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: '1.1em',
+  lineHeight: 1,
+  boxShadow: '0 2px 5px rgba(15, 105, 135, 0.2)',
+};
+
+const compactNavigationCounterStyle: React.CSSProperties = {
+  minWidth: '38px',
+  padding: '5px 6px',
+  border: '1px solid #c6e6ef',
+  borderRadius: '999px',
+  background: '#ffffff',
+  color: '#39708a',
+  fontSize: '0.66em',
+  fontWeight: 850,
+  textAlign: 'center',
+  whiteSpace: 'nowrap',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9)',
 };
 
 export default ImageViewerModal;
