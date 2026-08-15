@@ -326,29 +326,41 @@ const StandardSubtemas: React.FC = () => {
             )}
 
             {(navAnterior || navSiguiente) && (
-              <section style={styles.navigationPanel}>
-                <div style={styles.navigationButtonsWrap}>
+              <section aria-label="Navegación entre temas" style={styles.navigationPanel}>
+                <div style={styles.navigationButtonGrid}>
                   {navAnterior && (
                     <button
                       type="button"
-                      style={styles.navigationButton}
+                      style={{ ...styles.navigationButton, ...styles.navigationButtonPrevious }}
                       onClick={() => {
                         navigate(`/subtemas/${navAnterior.targetId}`);
                       }}
                     >
-                      <ArrowLeft size={16} /> {navAnterior.label.replace('← ', '')}
+                      <span style={styles.navigationIconShell} aria-hidden="true">
+                        <ArrowLeft size={19} strokeWidth={2.4} />
+                      </span>
+                      <span style={styles.navigationCopy}>
+                        <span style={styles.navigationEyebrow}>Tema anterior</span>
+                        <span style={styles.navigationTitle}>{navAnterior.label.replace('← Tema anterior: ', '')}</span>
+                      </span>
                     </button>
                   )}
 
                   {navSiguiente && (
                     <button
                       type="button"
-                      style={styles.navigationButton}
+                      style={{ ...styles.navigationButton, ...styles.navigationButtonNext }}
                       onClick={() => {
                         navigate(`/subtemas/${navSiguiente.targetId}`);
                       }}
                     >
-                      {navSiguiente.label.replace(' →', '')} <ArrowRight size={16} />
+                      <span style={styles.navigationCopy}>
+                        <span style={styles.navigationEyebrow}>Siguiente tema</span>
+                        <span style={styles.navigationTitle}>{navSiguiente.label.replace('Siguiente tema: ', '').replace(' →', '')}</span>
+                      </span>
+                      <span style={styles.navigationIconShell} aria-hidden="true">
+                        <ArrowRight size={19} strokeWidth={2.4} />
+                      </span>
                     </button>
                   )}
                 </div>
@@ -618,29 +630,74 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   navigationPanel: {
     marginTop: 'clamp(18px, 4vw, 34px)',
-    borderTop: '1px solid rgba(148, 163, 184, 0.28)',
-    paddingTop: 'clamp(14px, 3vw, 20px)',
+    padding: '18px',
+    border: '1px solid rgba(125, 211, 252, 0.34)',
+    borderRadius: '18px',
+    background: 'linear-gradient(135deg, rgba(239, 248, 255, 0.94), rgba(255, 255, 255, 0.96))',
+    boxShadow: '0 12px 32px rgba(30, 64, 175, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
   },
-  navigationButtonsWrap: {
+  navigationButtonGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-    gap: '10px',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+    gap: '12px',
     width: '100%',
   },
   navigationButton: {
-    border: '1px solid #cbd5e1',
-    background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
-    color: '#0f172a',
-    borderRadius: '10px',
-    padding: '10px 12px',
-    fontWeight: 700,
-    textAlign: 'center',
+    minHeight: '62px',
+    border: '1px solid #a9d9ed',
+    background: 'linear-gradient(135deg, #eaf7fc 0%, #d9f0fa 100%)',
+    color: '#0f3b5c',
+    borderRadius: '14px',
+    padding: '8px 12px',
+    fontFamily: 'inherit',
+    textAlign: 'left',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+    transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    boxShadow: '0 6px 15px rgba(23, 106, 157, 0.12)',
+  },
+  navigationButtonPrevious: {
+    justifyContent: 'flex-start',
+  },
+  navigationButtonNext: {
+    justifyContent: 'flex-end',
+    textAlign: 'right',
+  },
+  navigationIconShell: {
+    width: '38px',
+    height: '38px',
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '12px',
+    color: '#ffffff',
+    background: 'linear-gradient(135deg, #176a9d, #2386bb)',
+    boxShadow: '0 6px 13px rgba(23, 106, 157, 0.25)',
+  },
+  navigationCopy: {
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '3px',
+  },
+  navigationEyebrow: {
+    color: '#2386bb',
+    fontSize: '0.67rem',
+    fontWeight: 900,
+    letterSpacing: '0.09em',
+    textTransform: 'uppercase',
+  },
+  navigationTitle: {
+    color: '#0f3b5c',
+    fontSize: '0.9rem',
+    fontWeight: 800,
+    lineHeight: 1.25,
   },
 };
 
