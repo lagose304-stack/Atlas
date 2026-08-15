@@ -6,6 +6,7 @@ import Header from '../components/Header';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { deleteFromCloudinary } from '../services/cloudinary';
 import { deleteOwnedTestReferenceImages } from '../services/testReferenceImages';
+import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { supabase } from '../services/supabase';
 
 type TestScope = 'parcial' | 'tema' | 'subtema';
@@ -56,6 +57,17 @@ const PARCIALES: Array<{ key: ParcialKey; label: string }> = [
   { key: 'segundo', label: 'Segundo parcial' },
   { key: 'tercer', label: 'Tercer parcial' },
 ];
+
+const toPlainText = (value: string): string => (value || '').replace(/<[^>]+>/g, '').trim();
+
+const InlineRichText: React.FC<{ value: string; fallback?: string }> = ({ value, fallback = '' }) => {
+  const content = (value || '').trim();
+  if (!content) return <span>{fallback}</span>;
+  if (hasHtmlMarkup(content)) {
+    return <span dangerouslySetInnerHTML={{ __html: toSafeHtml(content) }} />;
+  }
+  return <span>{content}</span>;
+};
 
 const GestionPruebas: React.FC = () => {
   const handleGoBack = useSmartBackNavigation('/edicion');
@@ -350,13 +362,12 @@ const GestionPruebas: React.FC = () => {
                         <article key={prueba.id} style={s.testCard}>
                           <div style={s.testCardTop}>
                             <div>
-                              <h3 style={s.testTitle}>{prueba.nombre}</h3>
+                              <h3 style={s.testTitle}><InlineRichText value={prueba.nombre} fallback="Prueba sin nombre" /></h3>
                               <p style={s.testMeta}>{prueba.estado} · {new Date(prueba.created_at).toLocaleDateString('es-MX')}</p>
                             </div>
                             <span style={s.statePill}>{prueba.estado}</span>
                           </div>
-
-                          <p style={s.testDesc}>{prueba.instrucciones || 'Sin instrucciones registradas.'}</p>
+                          <p style={s.testDesc}><InlineRichText value={prueba.instrucciones} fallback="Sin instrucciones registradas." /></p>
 
                           <div style={s.cardActions}>
                             <button
@@ -412,12 +423,12 @@ const GestionPruebas: React.FC = () => {
                                 <article key={prueba.id} style={s.testCard}>
                                   <div style={s.testCardTop}>
                                     <div>
-                                      <h3 style={s.testTitle}>{prueba.nombre}</h3>
+                                      <h3 style={s.testTitle}><InlineRichText value={prueba.nombre} fallback="Prueba sin nombre" /></h3>
                                       <p style={s.testMeta}>{prueba.estado} · {new Date(prueba.created_at).toLocaleDateString('es-MX')}</p>
                                     </div>
                                     <span style={s.statePill}>{prueba.estado}</span>
                                   </div>
-                                  <p style={s.testDesc}>{prueba.instrucciones || 'Sin instrucciones registradas.'}</p>
+                                  <p style={s.testDesc}><InlineRichText value={prueba.instrucciones} fallback="Sin instrucciones registradas." /></p>
                                   <div style={s.cardActions}>
                                     <button
                                       type="button"
@@ -470,12 +481,12 @@ const GestionPruebas: React.FC = () => {
                                       <article key={prueba.id} style={s.testCard}>
                                         <div style={s.testCardTop}>
                                           <div>
-                                            <h3 style={s.testTitle}>{prueba.nombre}</h3>
+                                            <h3 style={s.testTitle}><InlineRichText value={prueba.nombre} fallback="Prueba sin nombre" /></h3>
                                             <p style={s.testMeta}>{prueba.estado} · {new Date(prueba.created_at).toLocaleDateString('es-MX')}</p>
                                           </div>
                                           <span style={s.statePill}>{prueba.estado}</span>
                                         </div>
-                                        <p style={s.testDesc}>{prueba.instrucciones || 'Sin instrucciones registradas.'}</p>
+                                        <p style={s.testDesc}><InlineRichText value={prueba.instrucciones} fallback="Sin instrucciones registradas." /></p>
                                         <div style={s.cardActions}>
                                           <button
                                             type="button"
@@ -550,7 +561,7 @@ const GestionPruebas: React.FC = () => {
             </div>
 
             <p style={s.deleteModalText}>
-              Esta acción eliminará permanentemente <strong>{deleteTarget.nombre}</strong>, sus preguntas, la imagen asociada y todas las referencias exclusivas que se hayan subido.
+              Esta acción eliminará permanentemente <strong>{toPlainText(deleteTarget.nombre) || 'esta prueba'}</strong>, sus preguntas, la imagen asociada y todas las referencias exclusivas que se hayan subido.
               No se puede deshacer.
             </p>
 

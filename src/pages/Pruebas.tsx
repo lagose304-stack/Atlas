@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import BackButton from '../components/BackButton';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
+import TestRichTextField from '../components/TestRichTextField';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { supabase } from '../services/supabase';
 
@@ -230,10 +231,11 @@ const Pruebas: React.FC = () => {
 
             <div style={s.fieldGroup}>
               <label style={s.label}>Nombre de la prueba</label>
-              <input
-                type="text"
+              <TestRichTextField
                 value={nombre}
-                onChange={event => setNombre(event.target.value)}
+                onChange={setNombre}
+                ariaLabel="Nombre de la prueba"
+                singleLine
                 placeholder="Ej. Prueba de epitelios - Parcial 1"
                 style={s.input}
               />
@@ -241,11 +243,11 @@ const Pruebas: React.FC = () => {
 
             <div style={s.fieldGroup}>
               <label style={s.label}>Instrucciones</label>
-              <textarea
+              <TestRichTextField
                 value={instrucciones}
-                onChange={event => setInstrucciones(event.target.value)}
+                onChange={setInstrucciones}
+                ariaLabel="Instrucciones"
                 placeholder="Escribe aquí las instrucciones que verá el estudiante antes de iniciar..."
-                rows={6}
                 style={s.textarea}
               />
             </div>

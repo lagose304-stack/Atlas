@@ -4,6 +4,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { supabase } from '../services/supabase';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { ArrowRight, BookOpenCheck, CalendarDays, ClipboardCheck, Sparkles } from 'lucide-react';
 
 interface PruebaPublica {
@@ -32,12 +33,24 @@ const PARCIALES: Array<{ key: 'primer' | 'segundo' | 'tercer'; title: string }> 
   { key: 'tercer', title: 'Tercer parcial' },
 ];
 
+const toPlainText = (value: string): string => (value || '').replace(/<[^>]+>/g, '').trim();
+
+const InlineRichText: React.FC<{ value: string; fallback?: string }> = ({ value, fallback = '' }) => {
+  const content = (value || '').trim();
+  if (!content) return <span>{fallback}</span>;
+  if (hasHtmlMarkup(content)) {
+    return <span dangerouslySetInnerHTML={{ __html: toSafeHtml(content) }} />;
+  }
+  return <span>{content}</span>;
+};
+
 const TestCard: React.FC<{
   prueba: PruebaPublica;
   badge: string;
   badges?: string[];
 }> = ({ prueba, badge, badges = [] }) => {
   const [logoFailed, setLogoFailed] = React.useState(false);
+  const plainName = toPlainText(prueba.nombre) || 'Prueba';
   const logoSrc = prueba.image_url ? getCloudinaryImageUrl(prueba.image_url, 'cardWide') : '';
   const logoSrcSet = prueba.image_url
     ? `${getCloudinaryImageUrl(prueba.image_url, 'cardWideSmall')} 640w, ${getCloudinaryImageUrl(prueba.image_url, 'cardWide')} 960w`
@@ -78,14 +91,14 @@ const TestCard: React.FC<{
             src={logoSrc}
             srcSet={logoSrcSet}
             sizes="(max-width: 760px) 50vw, (max-width: 1100px) 33vw, 420px"
-            alt={prueba.nombre}
+            alt={plainName}
             style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center' }}
             loading="lazy"
             decoding="async"
             onError={() => setLogoFailed(true)}
           />
         ) : (
-          <span style={s.imageFallback}><BookOpenCheck size={28} aria-hidden="true" /><strong>{prueba.nombre}</strong></span>
+          <span style={s.imageFallback}><BookOpenCheck size={28} aria-hidden="true" /><strong>{plainName}</strong></span>
         )}
       </div>
 
@@ -95,8 +108,8 @@ const TestCard: React.FC<{
           <span style={s.meta}><CalendarDays size={13} aria-hidden="true" />{new Date(prueba.created_at).toLocaleDateString('es-MX')}</span>
         </div>
 
-        <h4 style={s.cardTitle}>{prueba.nombre}</h4>
-        <p style={s.cardText}>{prueba.instrucciones || 'Sin instrucciones registradas.'}</p>
+        <h4 style={s.cardTitle}><InlineRichText value={prueba.nombre} fallback="Prueba" /></h4>
+        <p style={s.cardText}><InlineRichText value={prueba.instrucciones} fallback="Sin instrucciones registradas." /></p>
 
         <div style={s.cardFooter}>
           {badges.map((b) => (

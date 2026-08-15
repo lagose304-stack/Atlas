@@ -4,6 +4,7 @@ import { CheckCircle2, ClipboardCheck, ListChecks, XCircle, ZoomIn } from 'lucid
 import BackButton from '../components/BackButton';
 import ImageViewerModal from '../components/ImageViewerModal';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { supabase } from '../services/supabase';
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
@@ -89,6 +90,26 @@ interface GradeResult {
   correct_option_text: string;
   feedback: string | null;
 }
+
+const SafeRichText: React.FC<{
+  value: string;
+  fallback?: string;
+  as?: 'span' | 'p' | 'strong';
+  style?: React.CSSProperties;
+}> = ({ value, fallback = '', as = 'span', style }) => {
+  const content = (value || '').trim();
+  const Component = as;
+
+  if (!content) {
+    return <Component style={style}>{fallback}</Component>;
+  }
+
+  if (hasHtmlMarkup(content)) {
+    return <Component style={style} dangerouslySetInnerHTML={{ __html: toSafeHtml(content) }} />;
+  }
+
+  return <Component style={style}>{content}</Component>;
+};
 
 const loadPrivateTestPreview = async (pruebaId: string): Promise<PrivateTestPreviewPayload | null> => {
   const { data: testData, error: testError } = await supabase
@@ -379,8 +400,8 @@ const EjecutarPrueba: React.FC = () => {
         <section style={s.hero}>
           <div style={s.heroText}>
             <p style={s.kicker}>{usesLocalGrading ? 'Vista previa privada' : 'Ejecutor'}</p>
-            <h1 style={s.title}>{prueba?.nombre ?? 'Prueba'}</h1>
-            <p style={s.subtitle}>{prueba?.instrucciones || 'Sin instrucciones registradas.'}</p>
+            <h1 style={s.title}><SafeRichText value={prueba?.nombre ?? ''} fallback="Prueba" /></h1>
+            <p style={s.subtitle}><SafeRichText value={prueba?.instrucciones ?? ''} fallback="Sin instrucciones registradas." /></p>
           </div>
         </section>
 
@@ -448,12 +469,20 @@ const EjecutarPrueba: React.FC = () => {
                         </div>
                         <div style={s.reviewContent}>
                           <span style={s.reviewNumber}>Pregunta {index + 1}</span>
-                          <h3 style={s.reviewQuestion}>{question.title}</h3>
+                          <h3 style={s.reviewQuestion}><SafeRichText value={question.title} fallback="Pregunta sin título" /></h3>
                           <div style={s.reviewAnswers}>
-                            <p><strong>Tu respuesta:</strong> {selectedOption?.text ?? 'Sin responder'}</p>
-                            {!wasCorrect && <p><strong>Respuesta correcta:</strong> {correctOption?.text ?? 'No definida'}</p>}
+                            <p>
+                              <strong>Tu respuesta:</strong>{' '}
+                              <SafeRichText value={selectedOption?.text ?? ''} fallback="Sin responder" />
+                            </p>
+                            {!wasCorrect && (
+                              <p>
+                                <strong>Respuesta correcta:</strong>{' '}
+                                <SafeRichText value={correctOption?.text ?? ''} fallback="No definida" />
+                              </p>
+                            )}
                           </div>
-                          {question.retroalimentacion && <p style={s.reviewFeedback}>{question.retroalimentacion}</p>}
+                          {question.retroalimentacion && <p style={s.reviewFeedback}><SafeRichText value={question.retroalimentacion} /></p>}
                         </div>
                         <button
                           type="button"
@@ -503,7 +532,7 @@ const EjecutarPrueba: React.FC = () => {
                         <div style={s.questionHeaderLeft}>
                           <span style={s.questionIndex}>{currentQuestionIndex + 1}</span>
                           <div>
-                            <h2 style={s.questionTitle}>{currentQuestion.title || 'Pregunta sin título'}</h2>
+                            <h2 style={s.questionTitle}><SafeRichText value={currentQuestion.title} fallback="Pregunta sin título" /></h2>
                           </div>
                         </div>
                         <span style={isQuestionGraded ? (isCorrect ? s.correctPill : s.wrongPill) : s.pendingPill}>
@@ -599,7 +628,7 @@ const EjecutarPrueba: React.FC = () => {
                                   disabled={isQuestionGraded || Boolean(gradingQuestionId)}
                                 >
                                   <span style={s.optionLetter}>{String.fromCharCode(65 + option.sortOrder)}</span>
-                                  <span style={s.optionText}>{option.text}</span>
+                                  <span style={s.optionText}><SafeRichText value={option.text} /></span>
                                 </button>
                               );
                             })}
@@ -610,14 +639,17 @@ const EjecutarPrueba: React.FC = () => {
                               <span className="exam-feedback-icon"><CheckCircle2 size={19} aria-hidden="true" /></span>
                               {isCorrect
                                 ? 'Seleccionaste la respuesta correcta.'
-                                : `Incorrecta. La correcta es: ${correctOption?.text ?? 'No definida'}`}
+                                : <>
+                                    Incorrecta. La correcta es:{' '}
+                                    <SafeRichText value={correctOption?.text ?? ''} fallback="No definida" />
+                                  </>}
                             </div>
                           )}
 
                           {isQuestionGraded && currentQuestion.retroalimentacion.trim().length > 0 && (
                             <div style={s.feedbackNoteBox}>
                               <span style={s.feedbackNoteLabel}>Retroalimentación</span>
-                              <p style={s.feedbackNoteText}>{currentQuestion.retroalimentacion}</p>
+                              <p style={s.feedbackNoteText}><SafeRichText value={currentQuestion.retroalimentacion} /></p>
                             </div>
                           )}
 
@@ -666,7 +698,7 @@ const EjecutarPrueba: React.FC = () => {
               <section style={s.completionOverlay}>
                 <div style={s.completionCard}>
                   <h2 style={s.completionTitle}>¡Felicidades!</h2>
-                  <p style={s.completionText}>Has completado la prueba <strong>{prueba?.nombre}</strong>.</p>
+                  <p style={s.completionText}>Has completado la prueba <SafeRichText as="strong" value={prueba?.nombre ?? ''} fallback="Prueba" />.</p>
                   <p style={s.completionScore}>Tu puntuación: <strong>{correctCount}</strong> de <strong>{totalQuestions}</strong> ({totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0}%)</p>
                   <div style={s.completionActions}>
                     <button type="button" style={s.primaryFinishButton} onClick={() => navigate('/evaluaciones')}>Finalizar y volver a Evaluaciones</button>
@@ -848,7 +880,7 @@ const s: Record<string, React.CSSProperties> = {
   reviewStatusWrong: { width: '36px', height: '36px', borderRadius: '50%', display: 'grid', placeItems: 'center', color: '#b91c1c', background: '#fee2e2' },
   reviewContent: { minWidth: 0 },
   reviewNumber: { color: '#64748b', fontSize: '.72rem', fontWeight: 850, textTransform: 'uppercase', letterSpacing: '.06em' },
-  reviewQuestion: { margin: '4px 0 9px', color: '#0f172a', fontSize: '1rem', lineHeight: 1.4 },
+  reviewQuestion: { margin: '4px 0 9px', color: '#0f172a', fontSize: '1rem', lineHeight: 1.4, fontWeight: 400 },
   reviewAnswers: { color: '#475569', fontSize: '.85rem', lineHeight: 1.5 },
   reviewFeedback: { margin: '9px 0 0', padding: '10px 12px', borderRadius: '11px', background: '#eef6fb', color: '#315b82', fontSize: '.84rem', lineHeight: 1.5 },
   reviewQuestionButton: {
@@ -905,6 +937,7 @@ const s: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: '1.06rem',
     color: '#0f172a',
+    fontWeight: 400,
   },
   questionDesc: {
     margin: '6px 0 0',
@@ -1132,7 +1165,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   optionText: {
     color: '#0f172a',
-    fontWeight: 700,
+    fontWeight: 400,
     lineHeight: 1.5,
   },
   feedbackSuccess: {

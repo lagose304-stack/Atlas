@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
 import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
+import TestRichTextField from '../components/TestRichTextField';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { uploadToCloudinary, deleteFromCloudinary } from '../services/cloudinary';
 import {
@@ -152,16 +153,6 @@ const normalizeQuestionSortOrder = (questions: QuestionDraft[]): QuestionDraft[]
       sortOrder: optionIndex,
     })),
   }));
-
-const refreshNativeSpellcheck = (element: HTMLInputElement | HTMLTextAreaElement) => {
-  const previousSpellcheck = element.getAttribute('spellcheck');
-  element.setAttribute('spellcheck', 'false');
-
-  window.requestAnimationFrame(() => {
-    element.setAttribute('spellcheck', previousSpellcheck ?? 'true');
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-};
 
 interface ReferencePickerState {
   questionId: string;
@@ -970,6 +961,15 @@ const EditorDePruebas: React.FC = () => {
             <h2 style={s.sectionTitle}>Datos de la prueba</h2>
           </div>
 
+          <div style={s.shortcutsInfo}>
+            <strong style={s.shortcutsInfoTitle}>Atajos de formato disponibles</strong>
+            <p style={s.shortcutsInfoText}>
+              En todos los campos de texto de este editor puedes usar: Ctrl/Cmd+N (negrita), Ctrl/Cmd+K (cursiva) y Ctrl/Cmd+S (subrayado).
+              Tambien funcionan los atajos universales Ctrl/Cmd+B, Ctrl/Cmd+I y Ctrl/Cmd+U.
+              Para corregir ortografia, haz clic derecho sobre la palabra subrayada en rojo y el navegador te mostrara sugerencias.
+            </p>
+          </div>
+
           {isLoading ? (
             <div style={s.emptyState}>
               <p style={s.emptyTitle}>Cargando prueba...</p>
@@ -986,26 +986,22 @@ const EditorDePruebas: React.FC = () => {
               <div style={s.formColumn}>
                 <div style={s.fieldGroup}>
                   <label style={s.label}>Nombre de la prueba</label>
-                  <input
-                    type="text"
+                  <TestRichTextField
                     value={nombre}
-                    onChange={event => setNombre(event.target.value)}
-                    spellCheck
-                    lang="es"
-                    onFocus={event => refreshNativeSpellcheck(event.currentTarget)}
+                    onChange={setNombre}
+                    ariaLabel="Nombre de la prueba"
+                    singleLine
                     style={s.input}
                   />
                 </div>
 
                 <div style={s.fieldGroup}>
                   <label style={s.label}>Instrucciones</label>
-                  <textarea
+                  <TestRichTextField
                     value={instrucciones}
-                    onChange={event => setInstrucciones(event.target.value)}
-                    rows={8}
-                    spellCheck
-                    lang="es"
-                    onFocus={event => refreshNativeSpellcheck(event.currentTarget)}
+                    onChange={setInstrucciones}
+                    ariaLabel="Instrucciones"
+                    placeholder="Escribe las instrucciones que verá el estudiante antes de iniciar..."
                     style={s.textarea}
                   />
                 </div>
@@ -1169,14 +1165,12 @@ const EditorDePruebas: React.FC = () => {
                     <div style={s.questionMainColumn}>
                       <div style={s.fieldGroup}>
                         <label style={s.label}>Pregunta</label>
-                        <input
-                          type="text"
+                        <TestRichTextField
                           value={question.title}
-                          onChange={event => updateQuestionField(question.id, 'title', event.target.value)}
+                          onChange={value => updateQuestionField(question.id, 'title', value)}
                           placeholder="Escribe la pregunta"
-                          spellCheck
-                          lang="es"
-                          onFocus={event => refreshNativeSpellcheck(event.currentTarget)}
+                          ariaLabel={`Pregunta ${questionIndex + 1}`}
+                          singleLine
                           style={s.input}
                         />
                       </div>
@@ -1195,13 +1189,11 @@ const EditorDePruebas: React.FC = () => {
                               <span style={s.optionRadioText}>{String.fromCharCode(65 + optionIndex)}</span>
                             </label>
 
-                            <input
-                              type="text"
+                            <TestRichTextField
                               value={option.text}
-                              onChange={event => updateQuestionOption(question.id, option.id, event.target.value)}
-                              spellCheck
-                              lang="es"
-                              onFocus={event => refreshNativeSpellcheck(event.currentTarget)}
+                              onChange={value => updateQuestionOption(question.id, option.id, value)}
+                              ariaLabel={`Opción ${String.fromCharCode(65 + optionIndex)} de la pregunta ${questionIndex + 1}`}
+                              singleLine
                               style={s.optionInput}
                             />
 
@@ -1224,14 +1216,11 @@ const EditorDePruebas: React.FC = () => {
 
                       <div style={s.fieldGroup}>
                         <label style={s.label}>Retroalimentación</label>
-                        <textarea
+                        <TestRichTextField
                           value={question.retroalimentacion}
-                          onChange={event => updateQuestionField(question.id, 'retroalimentacion', event.target.value)}
+                          onChange={value => updateQuestionField(question.id, 'retroalimentacion', value)}
                           placeholder="Explica por qué la respuesta correcta es correcta o por qué la incorrecta no lo es"
-                          rows={4}
-                          spellCheck
-                          lang="es"
-                          onFocus={event => refreshNativeSpellcheck(event.currentTarget)}
+                          ariaLabel={`Retroalimentación de la pregunta ${questionIndex + 1}`}
                           style={s.questionFeedback}
                         />
                       </div>
@@ -2567,6 +2556,29 @@ const s: Record<string, React.CSSProperties> = {
     lineHeight: 1.55,
     fontSize: '0.92rem',
     maxWidth: '72ch',
+  },
+  shortcutsInfo: {
+    borderRadius: '16px',
+    border: '1px solid #bfdbfe',
+    background: 'linear-gradient(135deg, #eff6ff, #ffffff)',
+    padding: '12px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  shortcutsInfoTitle: {
+    margin: 0,
+    color: '#1d4ed8',
+    fontSize: '0.86rem',
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    fontWeight: 900,
+  },
+  shortcutsInfoText: {
+    margin: 0,
+    color: '#334155',
+    lineHeight: 1.5,
+    fontSize: '0.9rem',
   },
   successBox: {
     borderRadius: '16px',

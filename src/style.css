@@ -4489,3 +4489,28 @@ body {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Campos enriquecidos del editor de pruebas. */
+.test-rich-text-field .ProseMirror {
+  min-height: inherit;
+  outline: none;
+  overflow-wrap: anywhere;
+}
+
+.test-rich-text-field__content--single-line {
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.test-rich-text-field .ProseMirror p {
+  margin: 0;
+}
+
+.test-rich-text-field .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #94a3b8;
+  pointer-events: none;
+  height: 0;
+}
