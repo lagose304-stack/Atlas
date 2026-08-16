@@ -190,6 +190,7 @@ const EditorDePruebas: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [saveToast, setSaveToast] = useState('');
   const [error, setError] = useState('');
   const [questions, setQuestions] = useState<QuestionDraft[]>([createBlankQuestion()]);
   const [pruebaImageFile, setPruebaImageFile] = useState<File | null>(null);
@@ -228,6 +229,16 @@ const EditorDePruebas: React.FC = () => {
       releaseAtlasScrollLock();
     };
   }, [referencePicker, referenceMarkerPicker]);
+
+  useEffect(() => {
+    if (!saveToast) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setSaveToast('');
+    }, 2600);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [saveToast]);
 
   const loadQuestionsFromDatabase = async (pruebaIdValue: string) => {
     const { data: preguntasData, error: preguntasError } = await supabase
@@ -377,16 +388,23 @@ const EditorDePruebas: React.FC = () => {
     return Boolean(prueba) && nombre.trim().length > 0;
   }, [nombre, prueba]);
 
-  const handleSave = async () => {
+  const persistChanges = async (saveSource: 'manual' | 'auto', overrideQuestions?: QuestionDraft[]) => {
     if (!prueba || !canSave || isSaving) {
       return;
     }
 
+    const orderedQuestions = normalizeQuestionSortOrder(overrideQuestions ?? questions);
+
     setIsSaving(true);
     setError('');
-    setMessage('');
+    if (saveSource === 'auto') {
+      setSaveToast('Guardando automáticamente...');
+    }
+    if (saveSource === 'manual') {
+      setMessage('');
+      setSaveToast('Guardando cambios...');
+    }
 
-    const orderedQuestions = normalizeQuestionSortOrder(questions);
     const prevImageUrl = prueba?.image_url || '';
     let uploadedImageUrl: string | null = null;
     const newlyUploadedReferenceUrls: string[] = [];
@@ -478,7 +496,6 @@ const EditorDePruebas: React.FC = () => {
 
     let cleanupWarning = '';
 
-    // If uploadedImageUrl is available, persist it on the pruebas row
     if (uploadedImageUrl) {
       try {
         const { error: imageUpdateError } = await supabase
@@ -491,7 +508,6 @@ const EditorDePruebas: React.FC = () => {
         setPruebaImagePreview(uploadedImageUrl);
         setPruebaImageFile(null);
 
-        // If there was a previous image, attempt to delete it from Cloudinary
         if (prevImageUrl) {
           try {
             await deleteFromCloudinary(prevImageUrl);
@@ -510,12 +526,10 @@ const EditorDePruebas: React.FC = () => {
       }
     }
 
-    // If user requested to remove existing image without uploading a new one
     if (!uploadedImageUrl && removeExistingImage) {
       try {
         await supabase.from('pruebas').update({ image_url: '' }).eq('id', prueba.id);
         setPrueba(prev => (prev ? { ...prev, image_url: '' } : prev));
-        // delete previous image from Cloudinary if present
         if (prevImageUrl) {
           try {
             await deleteFromCloudinary(prevImageUrl);
@@ -551,12 +565,29 @@ const EditorDePruebas: React.FC = () => {
 
     setQuestions(savedQuestions);
     setPrueba(prev => (prev ? { ...prev, nombre: nombre.trim(), instrucciones: instrucciones.trim() } : prev));
-    setMessage(cleanupWarning || 'Cambios guardados correctamente.');
+    setMessage(saveSource === 'auto' ? 'Guardado automático.' : (cleanupWarning || 'Cambios guardados correctamente.'));
+    setSaveToast(saveSource === 'auto' ? 'Guardado automático.' : (cleanupWarning || 'Cambios guardados.'));
     setIsSaving(false);
   };
 
+  const handleSave = async () => {
+    if (!prueba || !canSave || isSaving) {
+      return;
+    }
+    await persistChanges('manual');
+  };
+
+  const triggerAutoSave = async (nextQuestions?: QuestionDraft[]) => {
+    if (!prueba || !canSave || isSaving) {
+      return;
+    }
+    await persistChanges('auto', nextQuestions);
+  };
+
   const addQuestion = () => {
-    setQuestions(prev => normalizeQuestionSortOrder([...prev, createBlankQuestion(prev.length)]));
+    const nextQuestions = normalizeQuestionSortOrder([...questions, createBlankQuestion(questions.length)]);
+    setQuestions(nextQuestions);
+    void triggerAutoSave(nextQuestions);
   };
 
   const duplicateQuestion = (questionId: string) => {
@@ -848,7 +879,7 @@ const EditorDePruebas: React.FC = () => {
   const handleSaveReferenceMarker = (location: MarkerLocation | null) => {
     if (!referenceMarkerPicker) return;
 
-    setQuestions(prev => prev.map(question => {
+    const nextQuestions = questions.map(question => {
       if (question.id !== referenceMarkerPicker.questionId) return question;
 
       if (referenceMarkerPicker.source === 'upload') {
@@ -882,9 +913,11 @@ const EditorDePruebas: React.FC = () => {
         referenceUploadFile: null,
         referenceUploadPreviewUrl: null,
       };
-    }));
+    });
 
+    setQuestions(nextQuestions);
     setReferenceMarkerPicker(null);
+    void triggerAutoSave(nextQuestions);
   };
 
   const handleReferenceUploadSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1086,6 +1119,7 @@ const EditorDePruebas: React.FC = () => {
 
                 {message && <div style={s.successBox}>{message}</div>}
                 {error && <div style={s.errorBox}>{error}</div>}
+                {saveToast && <div style={s.toast}>{saveToast}</div>}
               </div>
 
               <div style={s.infoColumn}>
@@ -2588,6 +2622,21 @@ const s: Record<string, React.CSSProperties> = {
     padding: '14px 16px',
     lineHeight: 1.6,
     fontSize: '0.92rem',
+  },
+  toast: {
+    position: 'fixed',
+    right: '22px',
+    bottom: '22px',
+    zIndex: 2000,
+    borderRadius: '999px',
+    border: '1px solid rgba(59, 130, 246, 0.25)',
+    background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(37, 99, 235, 0.94))',
+    color: '#f8fafc',
+    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.2)',
+    padding: '10px 16px',
+    fontSize: '0.85rem',
+    fontWeight: 800,
+    letterSpacing: '0.02em',
   },
   warningBox: {
     borderRadius: '16px',

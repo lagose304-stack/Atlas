@@ -187,31 +187,56 @@ const Home: React.FC = () => {
         )}
 
         <section className="home-histology-fact home-reveal" aria-labelledby="home-histology-fact-title">
-          <div className="home-histology-fact-icon" aria-hidden="true">
-            <Microscope size={24} />
-          </div>
+          <div className="home-histology-fact-top">
+            <div className="home-histology-fact-icon" aria-hidden="true">
+              <Microscope size={24} />
+            </div>
 
-          <div className="home-histology-fact-copy">
             <span className="home-histology-fact-label">
-              <Sparkles size={14} /> Dato histológico
+              <Sparkles size={14} /> Dato histológico de la semana
             </span>
-            <p id="home-histology-fact-title">
-              <strong>¿Sabías que el tejido epitelial no posee vasos sanguíneos?</strong>{' '}
-              Recibe oxígeno y nutrientes por difusión desde el tejido conjuntivo que se encuentra debajo.
-            </p>
           </div>
 
-          <div className="home-histology-tissue" aria-hidden="true">
-            <span className="home-tissue-caption">Epitelio</span>
-            <span className="home-tissue-cell home-tissue-cell-one" />
-            <span className="home-tissue-cell home-tissue-cell-two" />
-            <span className="home-tissue-cell home-tissue-cell-three" />
-            <span className="home-tissue-cell home-tissue-cell-four" />
-            <i className="home-tissue-membrane" />
-            <i className="home-tissue-diffusion home-tissue-diffusion-one" />
-            <i className="home-tissue-diffusion home-tissue-diffusion-two" />
-            <i className="home-tissue-connective" />
-            <span className="home-tissue-source">Tejido conectivo</span>
+          <div className="home-histology-fact-body">
+            <div className="home-histology-fact-copy">
+              <p id="home-histology-fact-title">
+                <strong>Tema Glándulas:</strong>{' '}
+                Las células de Leydig del testículo se consideran glándulas endocrinas en acúmulos. Estos pequeños agrupamientos celulares en el tejido intersticial funcionan como estructuras glandulares que secretan testosterona directamente en el torrente sanguíneo, sin conductos de excrección.
+              </p>
+            </div>
+
+            <svg className="home-histology-tissue" viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Esquema de células de Leydig en el intersticio testicular">
+              <title>Esquema simplificado de las células de Leydig en el intersticio testicular</title>
+              <desc>Dos túbulos seminíferos con un acúmulo de células de Leydig entre ellos, que secretan testosterona directamente hacia un vaso sanguíneo cercano.</desc>
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M2 1L8 5L2 9" fill="none" stroke="#D85A30" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </marker>
+              </defs>
+
+              <circle cx="200" cy="150" r="88" fill="#FAECE7" stroke="#993C1D" strokeWidth="0.5"/>
+              <circle cx="480" cy="150" r="88" fill="#FAECE7" stroke="#993C1D" strokeWidth="0.5"/>
+              <text x="200" y="145" textAnchor="middle" fontFamily="sans-serif" fontSize="14" fontWeight="500" fill="#712B13">Túbulo</text>
+              <text x="200" y="162" textAnchor="middle" fontFamily="sans-serif" fontSize="12" fill="#993C1D">seminífero</text>
+
+              <path d="M120 255 Q 340 230, 560 255" fill="none" stroke="#D85A30" strokeWidth="4" strokeLinecap="round"/>
+
+              <circle cx="325" cy="185" r="13" fill="#CECBF6" stroke="#3C3489" strokeWidth="0.5"/>
+              <circle cx="355" cy="180" r="13" fill="#CECBF6" stroke="#3C3489" strokeWidth="0.5"/>
+              <circle cx="340" cy="208" r="13" fill="#CECBF6" stroke="#3C3489" strokeWidth="0.5"/>
+              <circle cx="310" cy="210" r="13" fill="#CECBF6" stroke="#3C3489" strokeWidth="0.5"/>
+              <circle cx="368" cy="205" r="13" fill="#CECBF6" stroke="#3C3489" strokeWidth="0.5"/>
+
+              <line x1="340" y1="220" x2="340" y2="245" stroke="#D85A30" strokeWidth="1.5" markerEnd="url(#arrow)"/>
+
+              <line x1="340" y1="195" x2="415" y2="160" stroke="#5F5E5A" strokeWidth="1.4" strokeDasharray="2,2"/>
+              <circle cx="340" cy="195" r="3.2" fill="#5F5E5A"/>
+              <text x="422" y="156" fontFamily="sans-serif" fontSize="14" fontWeight="500" fill="#2C2C2A">Células de Leydig</text>
+
+              <line x1="340" y1="255" x2="340" y2="285" stroke="#5F5E5A" strokeWidth="1.4" strokeDasharray="2,2"/>
+              <circle cx="340" cy="255" r="3.2" fill="#5F5E5A"/>
+              <text x="340" y="318" textAnchor="middle" fontFamily="sans-serif" fontSize="14" fontWeight="500" fill="#2C2C2A">Vaso sanguíneo</text>
+            </svg>
           </div>
         </section>
 

@@ -5,6 +5,8 @@ import Footer from '../components/Footer';
 import { supabase } from '../services/supabase';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
+import { getRenderableBlocks } from '../services/contentPublication';
+import { collectWeeklyThemeIds, groupHistoricalTestsByPartial, orderTestsByWeeklyPriority } from './evaluacionesUtils';
 import { ArrowRight, BookOpenCheck, CalendarDays, ClipboardCheck, Sparkles } from 'lucide-react';
 
 interface PruebaPublica {
@@ -15,6 +17,8 @@ interface PruebaPublica {
   parcial_key: 'primer' | 'segundo' | 'tercer';
   created_at: string;
   image_url?: string | null;
+  tema_id?: number | null;
+  subtema_id?: number | null;
   tema?: { id: number; nombre: string } | null;
   subtema?: { id: number; nombre: string } | null;
 }
@@ -32,6 +36,12 @@ const PARCIALES: Array<{ key: 'primer' | 'segundo' | 'tercer'; title: string }> 
   { key: 'segundo', title: 'Segundo parcial' },
   { key: 'tercer', title: 'Tercer parcial' },
 ];
+
+const HISTORICAL_SCOPE_ORDER: Record<PruebaPublica['scope'], number> = {
+  parcial: 0,
+  tema: 1,
+  subtema: 2,
+};
 
 const toPlainText = (value: string): string => (value || '').replace(/<[^>]+>/g, '').trim();
 
@@ -124,9 +134,23 @@ const TestCard: React.FC<{
 
 const Evaluaciones: React.FC = () => {
   const [pruebas, setPruebas] = React.useState<PruebaPublica[]>([]);
+  const [weeklyThemeIds, setWeeklyThemeIds] = React.useState<number[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState('');
-  const [selectedParcial, setSelectedParcial] = React.useState<ParcialSection['key']>('primer');
+
+  React.useEffect(() => {
+    const loadWeeklyThemes = async () => {
+      try {
+        const blocks = await getRenderableBlocks('home_page', 0);
+        setWeeklyThemeIds(collectWeeklyThemeIds(blocks));
+      } catch (loadError) {
+        console.warn('No se pudieron cargar los temas activos de la semana.', loadError);
+        setWeeklyThemeIds([]);
+      }
+    };
+
+    void loadWeeklyThemes();
+  }, []);
 
   React.useEffect(() => {
     const loadPublicTests = async () => {
@@ -135,7 +159,7 @@ const Evaluaciones: React.FC = () => {
 
       const { data, error: queryError } = await supabase
         .from('pruebas')
-        .select('id, nombre, instrucciones, scope, parcial_key, created_at, image_url, tema:temas(id, nombre), subtema:subtemas(id, nombre)')
+        .select('id, nombre, instrucciones, scope, parcial_key, created_at, image_url, tema_id, subtema_id, tema:temas(id, nombre), subtema:subtemas(id, nombre)')
         .eq('estado', 'publicada')
         .order('created_at', { ascending: false });
 
@@ -152,19 +176,73 @@ const Evaluaciones: React.FC = () => {
     void loadPublicTests();
   }, []);
 
+  const orderedPruebas = React.useMemo(
+    () => orderTestsByWeeklyPriority(pruebas, weeklyThemeIds),
+    [pruebas, weeklyThemeIds],
+  );
+
   const parcialSections = React.useMemo<ParcialSection[]>(() => {
     return PARCIALES.map((parcial) => {
-      const testsForParcial = pruebas.filter((item) => item.parcial_key === parcial.key);
+      const testsForParcial = orderedPruebas.filter((item) => item.parcial_key === parcial.key);
+      const weeklyTests = testsForParcial.filter((item) => item.tema_id != null && weeklyThemeIds.includes(item.tema_id));
+      const historicalTests = testsForParcial.filter((item) => !(item.tema_id != null && weeklyThemeIds.includes(item.tema_id)));
 
       return {
         key: parcial.key,
         title: parcial.title,
-        parcialTests: testsForParcial.filter((item) => item.scope === 'parcial'),
-        temaTests: testsForParcial.filter((item) => item.scope === 'tema'),
-        subtemaTests: testsForParcial.filter((item) => item.scope === 'subtema'),
+        parcialTests: weeklyTests.filter((item) => item.scope === 'parcial').concat(historicalTests.filter((item) => item.scope === 'parcial')),
+        temaTests: weeklyTests.filter((item) => item.scope === 'tema').concat(historicalTests.filter((item) => item.scope === 'tema')),
+        subtemaTests: weeklyTests.filter((item) => item.scope === 'subtema').concat(historicalTests.filter((item) => item.scope === 'subtema')),
       };
     });
-  }, [pruebas]);
+  }, [orderedPruebas, weeklyThemeIds]);
+
+  const getHistoricalParcialGroups = React.useCallback((section: ParcialSection) => {
+    const historicalItems = [
+      ...section.parcialTests.filter((prueba) => !(prueba.tema_id != null && weeklyThemeIds.includes(prueba.tema_id))),
+      ...section.temaTests.filter((prueba) => !(prueba.tema_id != null && weeklyThemeIds.includes(prueba.tema_id))),
+      ...section.subtemaTests.filter((prueba) => !(prueba.tema_id != null && weeklyThemeIds.includes(prueba.tema_id))),
+    ];
+
+    return groupHistoricalTestsByPartial(historicalItems).map((group) => ({
+      key: group.key,
+      title: PARCIALES.find((parcial) => parcial.key === group.key)?.title ?? 'Parcial',
+      items: group.items,
+    })).sort((a, b) => {
+      const aIndex = PARCIALES.findIndex((parcial) => parcial.key === a.key);
+      const bIndex = PARCIALES.findIndex((parcial) => parcial.key === b.key);
+      return aIndex - bIndex;
+    });
+  }, [weeklyThemeIds]);
+
+  const getWeeklyThemeGroups = React.useCallback((section: ParcialSection) => {
+    const weeklyItems = [
+      ...section.parcialTests.filter((prueba) => prueba.tema_id != null && weeklyThemeIds.includes(prueba.tema_id)),
+      ...section.temaTests.filter((prueba) => prueba.tema_id != null && weeklyThemeIds.includes(prueba.tema_id)),
+      ...section.subtemaTests.filter((prueba) => prueba.tema_id != null && weeklyThemeIds.includes(prueba.tema_id)),
+    ];
+
+    const grouped = new Map<string, PruebaPublica[]>();
+
+    weeklyItems.forEach((prueba) => {
+      const themeKey = String(prueba.tema_id ?? prueba.tema?.id ?? 'sin-tema');
+      const current = grouped.get(themeKey) ?? [];
+      current.push(prueba);
+      grouped.set(themeKey, current);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([key, items]) => ({
+        key,
+        temaNombre: items[0]?.tema?.nombre || (items[0]?.tema_id ? `Tema ${items[0].tema_id}` : 'Tema sin identificar'),
+        items: [...items].sort((a, b) => {
+          const scopeDelta = HISTORICAL_SCOPE_ORDER[a.scope] - HISTORICAL_SCOPE_ORDER[b.scope];
+          if (scopeDelta !== 0) return scopeDelta;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        }),
+      }))
+      .sort((a, b) => a.temaNombre.localeCompare(b.temaNombre, 'es'));
+  }, [weeklyThemeIds]);
 
   const hasAnyPublishedTest = parcialSections.some(
     (section) => section.parcialTests.length || section.temaTests.length || section.subtemaTests.length,
@@ -172,6 +250,26 @@ const Evaluaciones: React.FC = () => {
 
   return (
     <div style={s.page}>
+      <style>{`
+        @media (max-width: 680px) {
+          .evaluaciones-hero {
+            grid-template-columns: 1fr !important;
+            justify-items: center;
+            text-align: center;
+          }
+
+          .evaluaciones-hero-stat {
+            width: fit-content;
+            min-width: 0;
+          }
+
+          .evaluaciones-title {
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+          }
+        }
+      `}</style>
       <Header />
       <main style={s.main}>
         <section className="evaluaciones-hero" style={s.hero}>
@@ -179,7 +277,7 @@ const Evaluaciones: React.FC = () => {
           <div style={s.heroIcon}><ClipboardCheck size={30} strokeWidth={2} aria-hidden="true" /></div>
           <div style={s.heroCopy}>
             <p style={s.kicker}><Sparkles size={14} aria-hidden="true" /> Zona de reto académico</p>
-            <h1 style={s.title}>Pon a prueba lo que has aprendido</h1>
+            <h1 className="evaluaciones-title" style={s.title}>Pon a prueba lo que has aprendido</h1>
           </div>
           <div className="evaluaciones-hero-stat" style={s.heroStat}>
             <strong>{pruebas.length}</strong>
@@ -196,26 +294,8 @@ const Evaluaciones: React.FC = () => {
             <div style={s.statusBox}><BookOpenCheck size={28} aria-hidden="true" /><div style={s.statusCopy}><strong>Aún no hay evaluaciones publicadas</strong><span>Cuando haya contenido disponible, aparecerá organizado en esta página.</span></div></div>
           ) : (
             <>
-              <div className="evaluaciones-overview-grid" style={s.overviewGrid}>
-                {parcialSections.map((section, index) => {
-                  const count = section.parcialTests.length + section.temaTests.length + section.subtemaTests.length;
-                  const isActive = section.key === selectedParcial;
-                  return <button
-                    key={section.key}
-                    type="button"
-                    className={`evaluaciones-filter${isActive ? ' is-active' : ''}`}
-                    aria-pressed={isActive}
-                    onClick={() => setSelectedParcial(section.key)}
-                    style={s.overviewCard}
-                  >
-                    <span style={s.overviewNumber}>{index + 1}</span>
-                    <span><strong style={s.overviewTitle}>{section.title}</strong><small style={s.overviewMeta}>{count} {count === 1 ? 'prueba' : 'pruebas'}</small></span>
-                    <ArrowRight size={17} aria-hidden="true" />
-                  </button>;
-                })}
-              </div>
               <div style={s.parcialSections}>
-              {parcialSections.filter((section) => section.key === selectedParcial).map((section) => {
+              {parcialSections.filter((section) => section.parcialTests.length || section.temaTests.length || section.subtemaTests.length).map((section) => {
                 const hasTests = section.parcialTests.length || section.temaTests.length || section.subtemaTests.length;
 
                 return (
@@ -231,32 +311,209 @@ const Evaluaciones: React.FC = () => {
                       <div style={s.innerEmpty}>Sin pruebas publicadas en este parcial.</div>
                     ) : (
                       <>
-                        {section.parcialTests.length > 0 && <div className="evaluaciones-scope" style={s.scopeBlock}>
-                          <h3 style={s.scopeTitle}>Pruebas por parcial</h3>
-                          <div className="evaluaciones-grid" style={s.grid}>
-                              {section.parcialTests.map((prueba) => (
-                                <TestCard key={prueba.id} prueba={prueba} badge="Parcial" />
-                              ))}
-                            </div>
-                        </div>}
+                        {(() => {
+                          const weeklyThemeGroups = getWeeklyThemeGroups(section);
+                          const hasWeeklyTests = weeklyThemeGroups.length > 0;
 
-                        {section.temaTests.length > 0 && <div className="evaluaciones-scope" style={s.scopeBlock}>
-                          <h3 style={s.scopeTitle}>Pruebas por tema</h3>
-                          <div className="evaluaciones-grid" style={s.grid}>
-                              {section.temaTests.map((prueba) => (
-                                <TestCard key={prueba.id} prueba={prueba} badge="Tema" badges={[prueba.tema?.nombre ?? 'Tema sin identificar']} />
-                              ))}
-                            </div>
-                        </div>}
+                          if (!hasWeeklyTests) {
+                            return null;
+                          }
 
-                        {section.subtemaTests.length > 0 && <div className="evaluaciones-scope" style={s.scopeBlock}>
-                          <h3 style={s.scopeTitle}>Pruebas por subtema</h3>
-                          <div className="evaluaciones-grid" style={s.grid}>
-                              {section.subtemaTests.map((prueba) => (
-                                <TestCard key={prueba.id} prueba={prueba} badge="Subtema" badges={[prueba.tema?.nombre ?? 'Tema sin identificar', prueba.subtema?.nombre ?? 'Subtema sin identificar']} />
-                              ))}
+                          return (
+                            <div className="evaluaciones-scope" style={s.scopeBlock}>
+                              <h3 style={s.scopeTitle}>{weeklyThemeIds.length > 0 ? 'Contenido actual de la semana' : 'Pruebas por parcial'}</h3>
+                              <div style={{ display: 'grid', gap: '12px' }}>
+                                {weeklyThemeGroups.map((themeGroup) => {
+                                  const parcialItems = themeGroup.items.filter((prueba) => prueba.scope === 'parcial');
+                                  const temaItems = themeGroup.items.filter((prueba) => prueba.scope === 'tema');
+                                  const subtemaItems = themeGroup.items.filter((prueba) => prueba.scope === 'subtema');
+
+                                  return (
+                                    <details key={`${section.key}-${themeGroup.key}`} style={s.historyAccordion} open>
+                                      <summary style={{ ...s.historySummary, background: 'linear-gradient(135deg, rgba(248,250,252,0.96), rgba(239,246,255,0.9))' }}>
+                                        <span style={s.weekThemeSummary}>
+                                          <span style={s.weekThemeLabelWrap}>
+                                            {themeGroup.items[0]?.image_url ? (
+                                              <img
+                                                src={getCloudinaryImageUrl(themeGroup.items[0].image_url, 'thumb')}
+                                                alt={themeGroup.temaNombre}
+                                                style={s.weekThemeThumb}
+                                              />
+                                            ) : (
+                                              <span style={s.weekThemeThumbFallback}>{(themeGroup.temaNombre || 'T').slice(0, 1).toUpperCase()}</span>
+                                            )}
+                                            <span style={s.weekThemeTitle}>{themeGroup.temaNombre}</span>
+                                          </span>
+                                          <span style={s.historySummaryMeta}>
+                                            <span style={s.historySummaryCount}>{themeGroup.items.length} {themeGroup.items.length === 1 ? 'prueba' : 'pruebas'}</span>
+                                            <span aria-hidden="true" style={s.historySummaryArrow}>▾</span>
+                                          </span>
+                                        </span>
+                                      </summary>
+                                      <div style={s.historyAccordionBody}>
+                                        {parcialItems.length > 0 && (
+                                          <div style={s.historyGroupBlock}>
+                                            <h4 style={s.historyGroupTitle}>Parcial</h4>
+                                            <div className="evaluaciones-grid" style={s.grid}>
+                                              {parcialItems.map((prueba) => (
+                                                <TestCard key={`week-${section.key}-${themeGroup.key}-parcial-${prueba.id}`} prueba={prueba} badge="Parcial" />
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {temaItems.length > 0 && (
+                                          <div style={s.historyGroupBlock}>
+                                            <h4 style={s.historyGroupTitle}>Tema</h4>
+                                            <div className="evaluaciones-grid" style={s.grid}>
+                                              {temaItems.map((prueba) => (
+                                                <TestCard key={`week-${section.key}-${themeGroup.key}-tema-${prueba.id}`} prueba={prueba} badge="Tema" badges={[prueba.tema?.nombre ?? 'Tema sin identificar']} />
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {subtemaItems.length > 0 && (
+                                          <div style={s.historyGroupBlock}>
+                                            <h4 style={s.historyGroupTitle}>Subtema</h4>
+                                            <div className="evaluaciones-grid" style={s.grid}>
+                                              {subtemaItems.map((prueba) => (
+                                                <TestCard key={`week-${section.key}-${themeGroup.key}-subtema-${prueba.id}`} prueba={prueba} badge="Subtema" badges={[prueba.tema?.nombre ?? 'Tema sin identificar', prueba.subtema?.nombre ?? 'Subtema sin identificar']} />
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </details>
+                                  );
+                                })}
+                              </div>
                             </div>
-                        </div>}
+                          );
+                        })()} 
+
+                        {(() => {
+                          const historicalGroups = getHistoricalParcialGroups(section);
+                          const hasHistoricalTests = historicalGroups.some((group) => group.items.length > 0);
+                          return hasHistoricalTests ? (
+                            <div className="evaluaciones-scope" style={{ ...s.scopeBlock, marginTop: '10px' }}>
+                              <div style={s.historyDivider}>
+                                <span style={s.historyDividerLabel}>Pruebas anteriores / historial</span>
+                              </div>
+                              <div style={{ display: 'grid', gap: '12px' }}>
+                                {historicalGroups.map((partialGroup) => {
+                                  const groupedByTema = new Map<string, PruebaPublica[]>();
+                                  partialGroup.items.forEach((prueba) => {
+                                    const themeKey = prueba.tema_id ?? prueba.tema?.id;
+                                    if (themeKey == null) {
+                                      return;
+                                    }
+
+                                    const key = String(themeKey);
+                                    const current = groupedByTema.get(key) ?? [];
+                                    current.push(prueba);
+                                    groupedByTema.set(key, current);
+                                  });
+
+                                  const themeGroups = Array.from(groupedByTema.entries())
+                                    .map(([key, items]) => ({
+                                      key,
+                                      temaNombre: items[0]?.tema?.nombre || `Tema ${items[0]?.tema_id ?? key}`,
+                                      items: [...items].sort((a, b) => {
+                                        const scopeDelta = HISTORICAL_SCOPE_ORDER[a.scope] - HISTORICAL_SCOPE_ORDER[b.scope];
+                                        if (scopeDelta !== 0) return scopeDelta;
+                                        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                                      }),
+                                    }))
+                                    .sort((a, b) => a.temaNombre.localeCompare(b.temaNombre, 'es'));
+
+                                  return (
+                                    <details key={`${section.key}-${partialGroup.key}`} style={s.historyAccordion}>
+                                      <summary style={{ ...s.historySummary, background: 'linear-gradient(135deg, rgba(248,250,252,0.96), rgba(239,246,255,0.9))' }}>
+                                        <span style={s.historySummaryLabel}>{partialGroup.title}</span>
+                                        <span style={s.historySummaryMeta}>
+                                          <span style={s.historySummaryCount}>{partialGroup.items.length} {partialGroup.items.length === 1 ? 'prueba' : 'pruebas'}</span>
+                                          <span aria-hidden="true" style={s.historySummaryArrow}>▾</span>
+                                        </span>
+                                      </summary>
+                                      <div style={s.historyAccordionBody}>
+                                        {partialGroup.items.filter((prueba) => prueba.scope === 'parcial').length > 0 && (
+                                          <div style={s.historyGroupBlock}>
+                                            <h4 style={s.historyGroupTitle}>Parcial</h4>
+                                            <div className="evaluaciones-grid" style={s.grid}>
+                                              {partialGroup.items.filter((prueba) => prueba.scope === 'parcial').map((prueba) => (
+                                                <TestCard key={`history-${section.key}-${partialGroup.key}-${prueba.id}`} prueba={prueba} badge="Historial" />
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {themeGroups.length > 0 && (
+                                          <div style={s.historyGroupBlock}>
+                                            <h4 style={s.historyGroupTitle}>Temas</h4>
+                                            <div style={{ display: 'grid', gap: '12px' }}>
+                                              {themeGroups.map((themeGroup) => {
+                                                const partialThemeItems = themeGroup.items.filter((prueba) => prueba.scope === 'parcial');
+                                                const temaItems = themeGroup.items.filter((prueba) => prueba.scope === 'tema');
+                                                const subtemaItems = themeGroup.items.filter((prueba) => prueba.scope === 'subtema');
+
+                                                return (
+                                                  <details key={`${section.key}-${partialGroup.key}-${themeGroup.key}`} style={{ ...s.historyAccordion, borderRadius: '14px' }}>
+                                                    <summary style={{ ...s.historySummary, padding: '12px 14px', fontSize: '0.92rem', background: 'linear-gradient(135deg, rgba(248,250,252,0.9), rgba(224,242,254,0.8))' }}>
+                                                      <span style={s.historySummaryLabel}>{themeGroup.temaNombre}</span>
+                                                      <span style={s.historySummaryMeta}>
+                                                        <span style={s.historySummaryCount}>{themeGroup.items.length} {themeGroup.items.length === 1 ? 'prueba' : 'pruebas'}</span>
+                                                        <span aria-hidden="true" style={s.historySummaryArrow}>▾</span>
+                                                      </span>
+                                                    </summary>
+                                                    <div style={{ ...s.historyAccordionBody, padding: '0 14px 14px' }}>
+                                                      {partialThemeItems.length > 0 && (
+                                                        <div style={s.historyGroupBlock}>
+                                                          <h5 style={{ ...s.historyGroupTitle, fontSize: '0.68rem' }}>Parcial</h5>
+                                                          <div className="evaluaciones-grid" style={s.grid}>
+                                                            {partialThemeItems.map((prueba) => (
+                                                              <TestCard key={`history-theme-partial-${section.key}-${prueba.id}`} prueba={prueba} badge="Historial" />
+                                                            ))}
+                                                          </div>
+                                                        </div>
+                                                      )}
+
+                                                      {temaItems.length > 0 && (
+                                                        <div style={s.historyGroupBlock}>
+                                                          <h5 style={{ ...s.historyGroupTitle, fontSize: '0.68rem' }}>Tema</h5>
+                                                          <div className="evaluaciones-grid" style={s.grid}>
+                                                            {temaItems.map((prueba) => (
+                                                              <TestCard key={`history-theme-tema-${section.key}-${prueba.id}`} prueba={prueba} badge="Historial" badges={[prueba.tema?.nombre ?? 'Tema sin identificar']} />
+                                                            ))}
+                                                          </div>
+                                                        </div>
+                                                      )}
+
+                                                      {subtemaItems.length > 0 && (
+                                                        <div style={s.historyGroupBlock}>
+                                                          <h5 style={{ ...s.historyGroupTitle, fontSize: '0.68rem' }}>Subtema</h5>
+                                                          <div className="evaluaciones-grid" style={s.grid}>
+                                                            {subtemaItems.map((prueba) => (
+                                                              <TestCard key={`history-theme-subtema-${section.key}-${prueba.id}`} prueba={prueba} badge="Historial" badges={[prueba.tema?.nombre ?? 'Tema sin identificar', prueba.subtema?.nombre ?? 'Subtema sin identificar']} />
+                                                            ))}
+                                                          </div>
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  </details>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </details>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null;
+                        })()}
                       </>
                     )}
                   </section>
@@ -365,10 +622,14 @@ const s: { [key: string]: React.CSSProperties } = {
   title: {
     margin: '9px 0 8px',
     color: '#0f172a',
-    fontSize: 'clamp(1.8rem, 3.8vw, 2.8rem)',
-    lineHeight: 1.15,
+    fontSize: 'clamp(1.35rem, 2.2vw, 1.9rem)',
+    lineHeight: 1.1,
     fontWeight: 900,
-    maxWidth: '30ch',
+    maxWidth: '36ch',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: 'block',
   },
   text: {
     margin: 0,
@@ -479,6 +740,162 @@ const s: { [key: string]: React.CSSProperties } = {
     textTransform: 'uppercase',
     letterSpacing: '0.08em',
     fontWeight: 900,
+  },
+  historyAccordion: {
+    borderRadius: '16px',
+    border: '1px solid rgba(191,219,254,.6)',
+    background: 'linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,252,.94))',
+    boxShadow: '0 8px 18px rgba(59,130,246,.03)',
+    overflow: 'hidden',
+    transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+  },
+  historySummary: {
+    listStyle: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    cursor: 'pointer',
+    padding: '12px 14px',
+    color: '#1e293b',
+    fontWeight: 700,
+    fontSize: '0.98rem',
+    userSelect: 'none',
+    WebkitAppearance: 'none',
+    transition: 'background 0.2s ease, border-color 0.2s ease',
+  },
+  historySummaryLabel: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    minWidth: 0,
+    fontWeight: 900,
+  },
+  weekThemeSummary: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    width: '100%',
+  },
+  weekThemeLabelWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    minWidth: 0,
+    gap: '10px',
+    textAlign: 'center',
+  },
+  weekThemeThumb: {
+    width: '52px',
+    height: '52px',
+    borderRadius: '14px',
+    objectFit: 'cover',
+    border: '2px solid rgba(147,197,253,0.9)',
+    boxShadow: '0 10px 24px rgba(59,130,246,0.18)',
+    background: 'linear-gradient(135deg, #e0f2fe, #dbeafe)',
+    flexShrink: 0,
+  },
+  weekThemeThumbFallback: {
+    width: '52px',
+    height: '52px',
+    borderRadius: '14px',
+    display: 'grid',
+    placeItems: 'center',
+    fontSize: '1.06rem',
+    fontWeight: 900,
+    color: '#1d4ed8',
+    background: 'linear-gradient(135deg, #dbeafe, #e0f2fe)',
+    border: '2px solid rgba(147,197,253,0.9)',
+    boxShadow: '0 10px 24px rgba(59,130,246,0.12)',
+    flexShrink: 0,
+  },
+  weekThemeTitle: {
+    margin: 0,
+    fontSize: '1.08rem',
+    lineHeight: 1.2,
+    color: '#0f172a',
+    textAlign: 'center',
+    letterSpacing: '0.01em',
+  },
+  historySummaryMeta: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  historySummaryCount: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '999px',
+    background: 'rgba(59,130,246,0.08)',
+    color: '#1d4ed8',
+    padding: '5px 10px',
+    fontSize: '0.76rem',
+    fontWeight: 800,
+    minWidth: '84px',
+  },
+  historySummaryArrow: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '28px',
+    height: '28px',
+    borderRadius: '999px',
+    background: 'linear-gradient(135deg, rgba(191,219,254,0.7), rgba(224,242,254,0.9))',
+    color: '#1d4ed8',
+    fontSize: '1rem',
+    fontWeight: 900,
+    lineHeight: 1,
+    boxShadow: 'inset 0 0 0 1px rgba(96,165,250,0.18)',
+    transform: 'rotate(0deg)',
+    transition: 'transform 0.2s ease',
+  },
+  historyAccordionBody: {
+    display: 'grid',
+    gap: '14px',
+    padding: '12px 14px 14px',
+    borderTop: '1px solid rgba(191,219,254,.45)',
+    background: 'rgba(255,255,255,.18)',
+  },
+  historyGroupBlock: {
+    display: 'grid',
+    gap: '10px',
+    paddingTop: '10px',
+  },
+  historyGroupTitle: {
+    margin: 0,
+    color: '#2563eb',
+    fontSize: '0.72rem',
+    fontWeight: 800,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+  },
+  historyDivider: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: '14px',
+    paddingTop: '14px',
+    borderTop: '1px solid rgba(191,219,254,0.35)',
+  },
+  historyDividerLabel: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    color: '#475569',
+    fontSize: '0.74rem',
+    fontWeight: 800,
+    textTransform: 'uppercase',
+    letterSpacing: '0.09em',
+    padding: '7px 14px',
+    borderRadius: '999px',
+    background: 'rgba(255,255,255,0.6)',
+    border: '1px solid rgba(191,219,254,0.5)',
+    boxShadow: '0 4px 12px rgba(96,165,250,0.05)',
+    textAlign: 'center',
   },
   innerEmpty: {
     borderRadius: '14px',
