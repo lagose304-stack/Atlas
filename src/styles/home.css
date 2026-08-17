@@ -6,7 +6,6 @@
   padding: clamp(8px, 2vw, 24px);
   color: #10243d;
   font-family: "Montserrat", "Segoe UI", sans-serif;
-  contain: paint;
 }
 
 .atlas-home-main {
@@ -196,7 +195,6 @@
   border: 1px solid rgba(153, 232, 251, .26);
   border-radius: 50%;
   will-change: transform;
-  transform: translateZ(0);
   backface-visibility: hidden;
 }
 
