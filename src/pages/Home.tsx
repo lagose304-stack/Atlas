@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -34,16 +34,22 @@ const Home: React.FC = () => {
   const [isDeviceTipLeaving, setIsDeviceTipLeaving] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchBlocks = async () => {
       try {
         const blocks = await getRenderableBlocks('home_page', 0);
-        setContentBlocks(blocks as ContentBlock[]);
+        if (isMounted) {
+          setContentBlocks(blocks as ContentBlock[]);
+        }
       } catch (error) {
         console.error('Error fetching home content blocks:', error);
       }
     };
 
     void fetchBlocks();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -85,9 +91,11 @@ const Home: React.FC = () => {
     };
   }, [showDeviceTip]);
 
-  const weeklyPublication = contentBlocks
-    .filter(block => block.block_type === 'weekly_publication')
-    .slice(0, 1);
+  const weeklyPublication = useMemo(() => {
+    return contentBlocks
+      .filter(block => block.block_type === 'weekly_publication')
+      .slice(0, 1);
+  }, [contentBlocks]);
 
   return (
     <div className="atlas-home-page">

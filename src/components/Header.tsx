@@ -253,15 +253,9 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
   }, [isHeaderLocked, isInAdminEditingFlow, navigate]);
 
   React.useEffect(() => {
-    const handleScroll = () => {
-      if (!headerRef.current) {
-        setShowCompactBar(false);
-        return;
-      }
-
+    const updateFrame = () => {
+      if (!headerRef.current) return;
       const rect = headerRef.current.getBoundingClientRect();
-      setShowCompactBar(rect.bottom <= 0);
-
       const nextLeft = Math.max(0, Math.round(rect.left));
       const nextRight = Math.min(window.innerWidth, Math.round(rect.right));
       const nextWidth = Math.max(0, nextRight - nextLeft);
@@ -273,13 +267,27 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
       ));
     };
 
-    handleScroll();
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', handleScroll);
+    if (!headerRef.current) return;
+
+    updateFrame();
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const isPastHeader = !entry.isIntersecting && entry.boundingClientRect.top <= 0;
+        setShowCompactBar(isPastHeader);
+        if (isPastHeader) {
+          updateFrame();
+        }
+      },
+      { threshold: 0 }
+    );
+
+    observer.observe(headerRef.current);
+    window.addEventListener('resize', updateFrame, { passive: true });
 
     return () => {
-      window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleScroll);
+      observer.disconnect();
+      window.removeEventListener('resize', updateFrame);
     };
   }, []);
 
@@ -331,34 +339,40 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
       return;
     }
 
+    let rafId: number | null = null;
+
     const syncSearchFrame = () => {
-      const rect = searchFieldShellRef.current?.getBoundingClientRect();
-      if (!rect) {
-        setSearchSuggestionsFrame(null);
-        return;
-      }
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        const rect = searchFieldShellRef.current?.getBoundingClientRect();
+        if (!rect) {
+          setSearchSuggestionsFrame(null);
+          return;
+        }
 
-      const viewportPadding = 8;
-      const maxWidth = Math.max(0, window.innerWidth - viewportPadding * 2);
-      const preferredWidth = Math.round(rect.width);
-      const boundedWidth = Math.min(preferredWidth, maxWidth);
-      const boundedLeft = Math.max(
-        viewportPadding,
-        Math.min(Math.round(rect.left), window.innerWidth - viewportPadding - boundedWidth),
-      );
-      const boundedTop = Math.max(viewportPadding, Math.round(rect.bottom + 8));
+        const viewportPadding = 8;
+        const maxWidth = Math.max(0, window.innerWidth - viewportPadding * 2);
+        const preferredWidth = Math.round(rect.width);
+        const boundedWidth = Math.min(preferredWidth, maxWidth);
+        const boundedLeft = Math.max(
+          viewportPadding,
+          Math.min(Math.round(rect.left), window.innerWidth - viewportPadding - boundedWidth),
+        );
+        const boundedTop = Math.max(viewportPadding, Math.round(rect.bottom + 8));
 
-      const nextFrame = {
-        top: boundedTop,
-        left: boundedLeft,
-        width: boundedWidth,
-      };
+        const nextFrame = {
+          top: boundedTop,
+          left: boundedLeft,
+          width: boundedWidth,
+        };
 
-      setSearchSuggestionsFrame((prev) => (
-        prev?.top === nextFrame.top && prev?.left === nextFrame.left && prev?.width === nextFrame.width
-          ? prev
-          : nextFrame
-      ));
+        setSearchSuggestionsFrame((prev) => (
+          prev?.top === nextFrame.top && prev?.left === nextFrame.left && prev?.width === nextFrame.width
+            ? prev
+            : nextFrame
+        ));
+      });
     };
 
     syncSearchFrame();
@@ -366,6 +380,9 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
     window.addEventListener('scroll', syncSearchFrame, { passive: true, capture: true });
 
     return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
       window.removeEventListener('resize', syncSearchFrame);
       window.removeEventListener('scroll', syncSearchFrame, true);
     };

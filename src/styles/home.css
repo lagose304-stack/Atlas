@@ -6,6 +6,7 @@
   padding: clamp(8px, 2vw, 24px);
   color: #10243d;
   font-family: "Montserrat", "Segoe UI", sans-serif;
+  contain: paint;
 }
 
 .atlas-home-main {
@@ -20,16 +21,21 @@
   overflow: hidden;
 }
 
-.home-semester-welcome,
+.home-semester-welcome {
+  width: min(100%, 1280px);
+  contain: layout style;
+}
+
 .home-weekly-publication,
 .home-histology-fact,
 .home-study-tools,
 .home-learning-route,
 .home-site-notice {
   width: min(100%, 1280px);
+  contain: layout style;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
 }
-
-
 
 .home-semester-welcome {
   position: relative;
@@ -48,6 +54,8 @@
     linear-gradient(110deg, rgba(7, 38, 72, .98), rgba(8, 83, 117, .94)),
     #0a355d;
   box-shadow: 0 28px 62px rgba(8, 47, 78, .27), inset 0 1px 0 rgba(255,255,255,.19);
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .home-semester-welcome::before {
@@ -71,6 +79,7 @@
     linear-gradient(118deg, transparent 52%, rgba(76, 209, 237, .2) 52.5%, transparent 53%);
   background-size: 32px 32px, 100% 100%;
   mask-image: linear-gradient(90deg, transparent, #000 55%);
+  pointer-events: none;
 }
 
 .home-welcome-glow {
@@ -113,10 +122,12 @@
   border-radius: 999px;
   color: #9cecff;
   background: rgba(255,255,255,.08);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 0 14px rgba(93, 220, 247, .12);
   font-size: .69rem;
   font-weight: 850;
   letter-spacing: .12em;
+  will-change: transform, opacity;
+  transform: translateZ(0);
   animation: home-badge-breathe 4.5s ease-in-out infinite;
 }
 
@@ -183,6 +194,9 @@
   inset: 0;
   border: 1px solid rgba(153, 232, 251, .26);
   border-radius: 50%;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .home-emblem-orbit-outer::before,
@@ -215,6 +229,8 @@
     linear-gradient(145deg, rgba(41, 163, 196, .43), rgba(8, 49, 83, .72));
   box-shadow: 0 22px 48px rgba(2, 24, 47, .35), inset 0 1px 0 rgba(255,255,255,.3);
   backdrop-filter: blur(8px);
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .home-emblem-core strong {
@@ -291,6 +307,8 @@
     0 4px 14px rgba(12, 69, 104, 0.04),
     inset 0 1px 0 #ffffff,
     inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+  will-change: transform, box-shadow;
+  transform: translateZ(0);
   transition: transform .32s cubic-bezier(.22, 1, .36, 1), border-color .32s ease, box-shadow .32s ease;
 }
 
@@ -320,14 +338,15 @@
   position: absolute;
   inset: 0;
   background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.45) 45%, transparent 60%);
-  transform: translateX(-100%);
-  transition: transform 0.8s ease;
+  transform: translate3d(-100%, 0, 0);
+  transition: transform 0.8s cubic-bezier(.22, 1, .36, 1);
   pointer-events: none;
   z-index: 0;
+  will-change: transform;
 }
 
 .home-histology-fact:hover .home-fact-shine {
-  transform: translateX(100%);
+  transform: translate3d(100%, 0, 0);
 }
 
 /* Auras de color de fondo */
@@ -361,6 +380,9 @@
   border-radius: 50%;
   pointer-events: none;
   z-index: 0;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .home-fact-orbit-one {
@@ -717,6 +739,9 @@
   overflow: hidden;
   border-radius: clamp(20px, 2.2vw, 28px);
   text-decoration: none;
+  will-change: transform, box-shadow;
+  transform: translateZ(0);
+  backface-visibility: hidden;
   transition: transform .3s cubic-bezier(.22, 1, .36, 1), box-shadow .3s ease, border-color .3s ease;
 }
 
@@ -745,6 +770,8 @@ button.home-bento-card:focus-visible {
     radial-gradient(circle at 15% 95%, rgba(99, 102, 241, 0.3), transparent 40%),
     linear-gradient(145deg, #092d54 0%, #0b4d77 50%, #0e7093 100%);
   box-shadow: 0 20px 46px rgba(8, 46, 80, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  will-change: transform, box-shadow;
+  transform: translateZ(0);
 }
 
 .home-bento-atlas:hover {
@@ -756,13 +783,14 @@ button.home-bento-card:focus-visible {
   position: absolute;
   inset: 0;
   background: linear-gradient(115deg, transparent 18%, rgba(255, 255, 255, 0.16) 42%, transparent 58%);
-  transform: translateX(-100%);
-  transition: transform .75s ease;
+  transform: translate3d(-100%, 0, 0);
+  transition: transform .75s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
+  will-change: transform;
 }
 
 .home-bento-atlas:hover .home-card-shine {
-  transform: translateX(100%);
+  transform: translate3d(100%, 0, 0);
 }
 
 .home-bento-atlas .home-orbit {
@@ -770,6 +798,9 @@ button.home-bento-card:focus-visible {
   border: 1px solid rgba(186, 233, 255, 0.28);
   border-radius: 999px;
   pointer-events: none;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .home-bento-atlas .home-orbit::after {
@@ -1109,6 +1140,8 @@ button.home-bento-card:focus-visible {
     0 4px 14px rgba(12, 69, 104, 0.04),
     inset 0 1px 0 #ffffff,
     inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+  will-change: transform, box-shadow;
+  transform: translateZ(0);
   transition: transform .32s cubic-bezier(.22, 1, .36, 1), border-color .32s ease, box-shadow .32s ease;
 }
 
@@ -1138,14 +1171,15 @@ button.home-bento-card:focus-visible {
   position: absolute;
   inset: 0;
   background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.45) 45%, transparent 60%);
-  transform: translateX(-100%);
-  transition: transform 0.8s ease;
+  transform: translate3d(-100%, 0, 0);
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
   z-index: 0;
+  will-change: transform;
 }
 
 .home-learning-route:hover .home-route-shine {
-  transform: translateX(100%);
+  transform: translate3d(100%, 0, 0);
 }
 
 /* Auras de color de fondo */
@@ -1300,6 +1334,9 @@ button.home-bento-card:focus-visible {
   border-radius: 18px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 250, 255, 0.9) 100%);
   box-shadow: 0 6px 18px rgba(12, 69, 104, 0.05), inset 0 1px 0 #ffffff;
+  will-change: transform, box-shadow;
+  transform: translateZ(0);
+  backface-visibility: hidden;
   transition: transform .28s cubic-bezier(.22, 1, .36, 1), border-color .28s ease, box-shadow .28s ease;
 }
 
@@ -1394,6 +1431,8 @@ button.home-bento-card:focus-visible {
     0 4px 14px rgba(180, 83, 9, 0.04),
     inset 0 1px 0 #ffffff,
     inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+  will-change: transform, box-shadow;
+  transform: translateZ(0);
   transition: transform .32s cubic-bezier(.22, 1, .36, 1), border-color .32s ease, box-shadow .32s ease;
 }
 
@@ -1423,14 +1462,15 @@ button.home-bento-card:focus-visible {
   position: absolute;
   inset: 0;
   background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.45) 45%, transparent 60%);
-  transform: translateX(-100%);
-  transition: transform 0.8s ease;
+  transform: translate3d(-100%, 0, 0);
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
   z-index: 0;
+  will-change: transform;
 }
 
 .home-site-notice:hover .home-notice-shine {
-  transform: translateX(100%);
+  transform: translate3d(100%, 0, 0);
 }
 
 /* Auras de color de fondo */
@@ -1458,7 +1498,7 @@ button.home-bento-card:focus-visible {
   background: radial-gradient(circle, rgba(56, 189, 248, 0.18), transparent 70%);
 }
 
-/* Órbita decorativa */
+/* Órbitas decorativas */
 .home-notice-orbit {
   position: absolute;
   width: 170px;
@@ -1469,6 +1509,9 @@ button.home-bento-card:focus-visible {
   border-radius: 50%;
   pointer-events: none;
   z-index: 0;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 /* Malla de puntos */
@@ -1505,6 +1548,8 @@ button.home-bento-card:focus-visible {
   background: linear-gradient(135deg, #fef3c7 0%, #fde68a 50%, #fbbf24 100%);
   border: 1.5px solid rgba(251, 191, 36, 0.6);
   box-shadow: 0 8px 20px rgba(245, 158, 11, 0.22), inset 0 1px 0 #ffffff;
+  will-change: transform;
+  transform: translateZ(0);
   animation: home-symbol-float 4.8s ease-in-out infinite;
 }
 
@@ -1530,6 +1575,8 @@ button.home-bento-card:focus-visible {
   border-radius: 50%;
   background: #f59e0b;
   box-shadow: 0 0 8px #f59e0b;
+  will-change: transform, opacity;
+  transform: translateZ(0);
   animation: home-badge-pulse 2s infinite;
 }
 
@@ -1702,31 +1749,23 @@ button.home-bento-card:focus-visible {
 }
 
 @keyframes home-gentle-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-7px); }
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -7px, 0); }
 }
 
 @keyframes home-detail-rise {
-  from { opacity: 0; transform: translateY(14px) scale(.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes home-route-flow {
-  to { background-position: -220% 0; }
-}
-
-@keyframes home-grid-drift {
-  to { background-position: 32px 32px, 0 0; }
+  from { opacity: 0; transform: translate3d(0, 14px, 0) scale(.98); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
 }
 
 @keyframes home-badge-breathe {
-  0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 rgba(93, 220, 247, 0); }
-  50% { box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 0 22px rgba(93, 220, 247, .15); }
+  0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.94; }
+  50% { transform: translate3d(0, -1px, 0); opacity: 1; }
 }
 
 @keyframes home-symbol-float {
-  0%, 100% { transform: translateY(0) rotate(0); }
-  50% { transform: translateY(-4px) rotate(-3deg); }
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0); }
+  50% { transform: translate3d(0, -4px, 0) rotate(-3deg); }
 }
 
 @keyframes home-emblem-spin {
@@ -1734,15 +1773,30 @@ button.home-bento-card:focus-visible {
 }
 
 @keyframes home-tissue-diffuse {
-  0%, 100% { opacity: .25; translate: 0 7px; }
-  50% { opacity: .9; translate: 0 -3px; }
+  0%, 100% { opacity: .25; transform: translate3d(0, 7px, 0); }
+  50% { opacity: .9; transform: translate3d(0, -3px, 0); }
 }
 
-.home-emblem-orbit-outer { animation: home-emblem-spin 20s linear infinite; }
-.home-emblem-orbit-inner { animation: home-emblem-spin 15s linear infinite reverse; }
-.home-semester-welcome::after { animation: home-grid-drift 16s linear infinite; }
-.home-orbit-one { animation: home-gentle-float 5s ease-in-out infinite; }
-.home-orbit-two { animation: home-gentle-float 6.5s ease-in-out .6s infinite reverse; }
+.home-emblem-orbit-outer {
+  will-change: transform;
+  transform: translateZ(0);
+  animation: home-emblem-spin 20s linear infinite;
+}
+.home-emblem-orbit-inner {
+  will-change: transform;
+  transform: translateZ(0);
+  animation: home-emblem-spin 15s linear infinite reverse;
+}
+.home-orbit-one {
+  will-change: transform;
+  transform: translateZ(0);
+  animation: home-gentle-float 5s ease-in-out infinite;
+}
+.home-orbit-two {
+  will-change: transform;
+  transform: translateZ(0);
+  animation: home-gentle-float 6.5s ease-in-out .6s infinite reverse;
+}
 
 @media (hover: hover) and (pointer: fine) {
   .home-weekly-publication .cb-weekly-publication:hover {

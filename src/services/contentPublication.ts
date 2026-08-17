@@ -44,6 +44,17 @@ const normalizeBlocks = (rows: unknown[] | null | undefined): PublicationBlock[]
     .sort((a, b) => a.sort_order - b.sort_order);
 };
 
+const renderableBlocksCache = new Map<string, { timestamp: number; blocks: PublicationBlock[] }>();
+const CACHE_TTL_MS = 60_000;
+
+export const clearRenderableBlocksCache = (entityType?: PageEntityType, entityId?: number) => {
+  if (entityType !== undefined && entityId !== undefined) {
+    renderableBlocksCache.delete(`${entityType}:${entityId}`);
+  } else {
+    renderableBlocksCache.clear();
+  }
+};
+
 export const getPublicationInfo = async (entityType: PageEntityType, entityId: number) => {
   const { data, error } = await supabase
     .from('content_page_publications')
@@ -61,12 +72,22 @@ export const getPublicationInfo = async (entityType: PageEntityType, entityId: n
 };
 
 export const getRenderableBlocks = async (entityType: PageEntityType, entityId: number): Promise<PublicationBlock[]> => {
+  const cacheKey = `${entityType}:${entityId}`;
+  const cached = renderableBlocksCache.get(cacheKey);
+  const now = Date.now();
+
+  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+    return cached.blocks;
+  }
+
   try {
     const publication = await getPublicationInfo(entityType, entityId);
     // El estado draft significa que existe una edicion en curso. La web publica
     // debe seguir mostrando el ultimo snapshot publicado hasta la proxima publicacion.
     if (publication) {
-      return normalizeBlocks(publication.published_blocks as unknown[]);
+      const normalized = normalizeBlocks(publication.published_blocks as unknown[]);
+      renderableBlocksCache.set(cacheKey, { timestamp: now, blocks: normalized });
+      return normalized;
     }
   } catch (error) {
     console.warn('No se pudo consultar publicacion. Se usara draft en vivo.', error);
@@ -80,7 +101,9 @@ export const getRenderableBlocks = async (entityType: PageEntityType, entityId: 
     .order('sort_order', { ascending: true });
 
   if (error) throw error;
-  return normalizeBlocks((data as unknown[]) ?? []);
+  const result = normalizeBlocks((data as unknown[]) ?? []);
+  renderableBlocksCache.set(cacheKey, { timestamp: now, blocks: result });
+  return result;
 };
 
 export const publishBlocksSnapshot = async (
@@ -113,6 +136,7 @@ export const publishBlocksSnapshot = async (
     );
 
   if (error) throw error;
+  clearRenderableBlocksCache(entityType, entityId);
   return now;
 };
 
@@ -129,4 +153,5 @@ export const setPublicationDraft = async (entityType: PageEntityType, entityId: 
     );
 
   if (error) throw error;
+  clearRenderableBlocksCache(entityType, entityId);
 };
