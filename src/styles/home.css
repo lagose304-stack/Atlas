@@ -80,6 +80,7 @@
   background-size: 32px 32px, 100% 100%;
   mask-image: linear-gradient(90deg, transparent, #000 55%);
   pointer-events: none;
+  animation: home-grid-drift 16s linear infinite;
 }
 
 .home-welcome-glow {
@@ -258,9 +259,9 @@
   box-shadow: 0 0 13px #8ceaff;
 }
 
-.home-emblem-dot-one { left: 4%; top: 55%; }
-.home-emblem-dot-two { right: 13%; top: 15%; width: 3px; height: 3px; }
-.home-emblem-dot-three { right: 0; bottom: 31%; }
+.home-emblem-dot-one { left: 4%; top: 55%; animation: home-gentle-float 4.5s ease-in-out infinite; }
+.home-emblem-dot-two { right: 13%; top: 15%; width: 3px; height: 3px; animation: home-gentle-float 5.5s ease-in-out 0.8s infinite reverse; }
+.home-emblem-dot-three { right: 0; bottom: 31%; animation: home-gentle-float 6s ease-in-out 1.2s infinite; }
 
 .home-weekly-publication .cb-container {
   gap: 0 !important;
@@ -1770,6 +1771,10 @@ button.home-bento-card:focus-visible {
 
 @keyframes home-emblem-spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes home-grid-drift {
+  to { background-position: 32px 32px, 0 0; }
 }
 
 @keyframes home-tissue-diffuse {

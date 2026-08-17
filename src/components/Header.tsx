@@ -253,41 +253,43 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
   }, [isHeaderLocked, isInAdminEditingFlow, navigate]);
 
   React.useEffect(() => {
-    const updateFrame = () => {
-      if (!headerRef.current) return;
-      const rect = headerRef.current.getBoundingClientRect();
-      const nextLeft = Math.max(0, Math.round(rect.left));
-      const nextRight = Math.min(window.innerWidth, Math.round(rect.right));
-      const nextWidth = Math.max(0, nextRight - nextLeft);
+    let rafId: number | null = null;
 
-      setCompactBarFrame((prev) => (
-        prev.left === nextLeft && prev.width === nextWidth
-          ? prev
-          : { left: nextLeft, width: nextWidth }
-      ));
+    const handleScroll = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        if (!headerRef.current) {
+          setShowCompactBar(false);
+          return;
+        }
+
+        const rect = headerRef.current.getBoundingClientRect();
+        const shouldShow = rect.bottom <= 0;
+        setShowCompactBar(shouldShow);
+
+        const nextLeft = Math.max(0, Math.round(rect.left));
+        const nextRight = Math.min(window.innerWidth, Math.round(rect.right));
+        const nextWidth = Math.max(0, nextRight - nextLeft);
+
+        setCompactBarFrame((prev) => (
+          prev.left === nextLeft && prev.width === nextWidth
+            ? prev
+            : { left: nextLeft, width: nextWidth }
+        ));
+      });
     };
 
-    if (!headerRef.current) return;
-
-    updateFrame();
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        const isPastHeader = !entry.isIntersecting && entry.boundingClientRect.top <= 0;
-        setShowCompactBar(isPastHeader);
-        if (isPastHeader) {
-          updateFrame();
-        }
-      },
-      { threshold: 0 }
-    );
-
-    observer.observe(headerRef.current);
-    window.addEventListener('resize', updateFrame, { passive: true });
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll, { passive: true });
 
     return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', updateFrame);
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
     };
   }, []);
 
