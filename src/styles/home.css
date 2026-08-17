@@ -1782,12 +1782,10 @@ button.home-bento-card:focus-visible {
 
 .home-emblem-orbit-outer {
   will-change: transform;
-  transform: translateZ(0);
   animation: home-emblem-spin 20s linear infinite;
 }
 .home-emblem-orbit-inner {
   will-change: transform;
-  transform: translateZ(0);
   animation: home-emblem-spin 15s linear infinite reverse;
 }
 .home-orbit-one {
