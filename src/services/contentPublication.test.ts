@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const supabaseMock = vi.hoisted(() => ({ from: vi.fn() }));
 vi.mock('./supabase', () => ({ supabase: supabaseMock }));
 
-import { getRenderableBlocks } from './contentPublication';
+import { clearRenderableBlocksCache, getRenderableBlocks } from './contentPublication';
 
 const publicationBlock = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -15,7 +15,10 @@ const publicationBlock = {
 };
 
 describe('separación entre borrador y publicación', () => {
-  beforeEach(() => supabaseMock.from.mockReset());
+  beforeEach(() => {
+    supabaseMock.from.mockReset();
+    clearRenderableBlocksCache();
+  });
 
   it('muestra el último snapshot aunque la página esté nuevamente en borrador', async () => {
     const maybeSingle = vi.fn().mockResolvedValue({
@@ -51,4 +54,22 @@ describe('separación entre borrador y publicación', () => {
     expect(blocks).toHaveLength(1);
     expect(supabaseMock.from).toHaveBeenCalledTimes(2);
   });
+
+  it('reutiliza la caché en memoria para llamadas sucesivas', async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { status: 'published', published_blocks: [publicationBlock], published_at: '2026-01-01T00:00:00Z' },
+      error: null,
+    });
+    const eqEntityId = vi.fn().mockReturnValue({ maybeSingle });
+    const eqEntityType = vi.fn().mockReturnValue({ eq: eqEntityId });
+    const select = vi.fn().mockReturnValue({ eq: eqEntityType });
+    supabaseMock.from.mockReturnValue({ select });
+
+    const first = await getRenderableBlocks('home_page', 0);
+    const second = await getRenderableBlocks('home_page', 0);
+
+    expect(first).toEqual(second);
+    expect(supabaseMock.from).toHaveBeenCalledTimes(1);
+  });
 });
+
