@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -89,30 +89,6 @@ const Home: React.FC = () => {
     .filter(block => block.block_type === 'weekly_publication')
     .slice(0, 1);
 
-  useEffect(() => {
-    const sections = Array.from(document.querySelectorAll<HTMLElement>('.home-reveal'));
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    if (prefersReducedMotion || !('IntersectionObserver' in window)) {
-      sections.forEach(section => section.classList.add('is-visible'));
-      return;
-    }
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add('is-visible');
-        observer.unobserve(entry.target);
-      });
-    }, {
-      threshold: 0.12,
-      rootMargin: '0px 0px -6% 0px',
-    });
-
-    sections.forEach(section => observer.observe(section));
-    return () => observer.disconnect();
-  }, [weeklyPublication.length]);
-
   return (
     <div className="atlas-home-page">
       <Header />
@@ -187,78 +163,147 @@ const Home: React.FC = () => {
         )}
 
         <section className="home-histology-fact home-reveal" aria-labelledby="home-histology-fact-title">
-          <div className="home-histology-fact-top">
-            <div className="home-histology-fact-icon" aria-hidden="true">
-              <Microscope size={24} />
+          {/* Elementos decorativos de fondo */}
+          <span className="home-fact-shine" aria-hidden="true" />
+          <span className="home-fact-glow home-fact-glow-cyan" aria-hidden="true" />
+          <span className="home-fact-glow home-fact-glow-violet" aria-hidden="true" />
+          <span className="home-fact-orbit home-fact-orbit-one" aria-hidden="true" />
+          <span className="home-fact-orbit home-fact-orbit-two" aria-hidden="true" />
+          <span className="home-histology-fact-mesh" aria-hidden="true" />
+          <span className="home-fact-crosshair home-fact-crosshair-tl" aria-hidden="true" />
+          <span className="home-fact-crosshair home-fact-crosshair-br" aria-hidden="true" />
+
+          <div className="home-histology-fact-header">
+            <div className="home-histology-fact-brand">
+              <div className="home-histology-fact-icon" aria-hidden="true">
+                <Microscope size={20} />
+              </div>
+              <span className="home-histology-fact-label">
+                <Sparkles size={15} /> Dato histológico de la semana
+              </span>
             </div>
 
-            <span className="home-histology-fact-label">
-              <Sparkles size={14} /> Dato histológico de la semana
-            </span>
+            <div className="home-histology-fact-badges">
+              <span className="home-histology-fact-chip">Glándulas</span>
+            </div>
           </div>
 
           <div className="home-histology-fact-body">
             <div className="home-histology-fact-copy">
-              <p id="home-histology-fact-title">
-                <strong>Tema Glándulas:</strong>{' '}
-                Las células de Leydig del testículo se consideran glándulas endocrinas en acúmulos. Estos pequeños agrupamientos celulares en el tejido intersticial funcionan como estructuras glandulares que secretan testosterona directamente en el torrente sanguíneo, sin conductos de excrección.
-              </p>
+              <div className="home-histology-fact-quote-card">
+                <p id="home-histology-fact-title">
+                  Las <strong>células de Leydig</strong> del testículo se consideran glándulas endocrinas en acúmulos. Estos pequeños agrupamientos celulares en el tejido intersticial funcionan como estructuras glandulares que secretan <strong>testosterona</strong> directamente en el torrente sanguíneo, sin conductos de excreción.
+                </p>
+                <div className="home-histology-fact-pills" aria-hidden="true">
+                  <span>🧬 Secreción endocrina</span>
+                  <span>🩸 Hacia capilares</span>
+                </div>
+              </div>
             </div>
 
-            <svg className="home-histology-tissue" viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Esquema de células de Leydig en el intersticio testicular">
-              <title>Esquema simplificado de las células de Leydig en el intersticio testicular</title>
-              <desc>Dos túbulos seminíferos con un acúmulo de células de Leydig entre ellos, que secretan testosterona directamente hacia un vaso sanguíneo cercano.</desc>
-              <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M2 1L8 5L2 9" fill="none" stroke="#D85A30" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </marker>
-              </defs>
+            <div className="home-histology-tissue-wrapper">
+              <svg className="home-histology-tissue" viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Esquema de células de Leydig en el intersticio testicular">
+                <title>Esquema simplificado de las células de Leydig en el intersticio testicular</title>
+                <desc>Dos túbulos seminíferos con un acúmulo de células de Leydig entre ellos, que secretan testosterona directamente hacia un vaso sanguíneo cercano.</desc>
+                <defs>
+                  <marker id="fact-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                    <path d="M2 1L8 5L2 9" fill="none" stroke="#0284c7" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  </marker>
+                  <radialGradient id="tubuleGrad" cx="50%" cy="40%" r="60%">
+                    <stop offset="0%" stopColor="#f0f9ff" />
+                    <stop offset="100%" stopColor="#e0f2fe" />
+                  </radialGradient>
+                  <filter id="labelShadow" x="-10%" y="-15%" width="120%" height="140%">
+                    <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#0c4568" floodOpacity="0.08" />
+                  </filter>
+                </defs>
 
-              <circle cx="200" cy="150" r="88" fill="#FAECE7" stroke="#993C1D" strokeWidth="0.5"/>
-              <circle cx="480" cy="150" r="88" fill="#FAECE7" stroke="#993C1D" strokeWidth="0.5"/>
-              <text x="200" y="145" textAnchor="middle" fontFamily="sans-serif" fontSize="14" fontWeight="500" fill="#712B13">Túbulo</text>
-              <text x="200" y="162" textAnchor="middle" fontFamily="sans-serif" fontSize="12" fill="#993C1D">seminífero</text>
+                {/* Retículas de enfoque microscópico */}
+                <path d="M 12 18 L 12 12 L 18 12" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M 628 18 L 628 12 L 622 12" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M 12 212 L 12 218 L 18 218" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M 628 212 L 628 218 L 622 218" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
 
-              <path d="M120 255 Q 340 230, 560 255" fill="none" stroke="#D85A30" strokeWidth="4" strokeLinecap="round"/>
+                {/* Túbulos seminíferos con membrana basal */}
+                <circle cx="150" cy="115" r="77" fill="none" stroke="#bae6fd" strokeWidth="1" strokeDasharray="3,3"/>
+                <circle cx="150" cy="115" r="72" fill="url(#tubuleGrad)" stroke="#38bdf8" strokeWidth="1.4"/>
+                <circle cx="490" cy="115" r="77" fill="none" stroke="#bae6fd" strokeWidth="1" strokeDasharray="3,3"/>
+                <circle cx="490" cy="115" r="72" fill="url(#tubuleGrad)" stroke="#38bdf8" strokeWidth="1.4"/>
 
-              <circle cx="325" cy="185" r="13" fill="#CECBF6" stroke="#3C3489" strokeWidth="0.5"/>
-              <circle cx="355" cy="180" r="13" fill="#CECBF6" stroke="#3C3489" strokeWidth="0.5"/>
-              <circle cx="340" cy="208" r="13" fill="#CECBF6" stroke="#3C3489" strokeWidth="0.5"/>
-              <circle cx="310" cy="210" r="13" fill="#CECBF6" stroke="#3C3489" strokeWidth="0.5"/>
-              <circle cx="368" cy="205" r="13" fill="#CECBF6" stroke="#3C3489" strokeWidth="0.5"/>
+                <text x="150" y="108" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="15" fontWeight="750" fill="#0369a1">Túbulo</text>
+                <text x="150" y="128" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="13.5" fontWeight="600" fill="#0284c7">seminífero</text>
+                <text x="490" y="108" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="15" fontWeight="750" fill="#0369a1">Túbulo</text>
+                <text x="490" y="128" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="13.5" fontWeight="600" fill="#0284c7">seminífero</text>
 
-              <line x1="340" y1="220" x2="340" y2="245" stroke="#D85A30" strokeWidth="1.5" markerEnd="url(#arrow)"/>
+                {/* Vaso sanguíneo (Capilar) */}
+                <path d="M 80 178 Q 320 156, 560 178" fill="none" stroke="#ef4444" strokeWidth="4.5" strokeLinecap="round"/>
+                <circle cx="210" cy="172" r="3" fill="#fca5a5" />
+                <circle cx="280" cy="166" r="3" fill="#fca5a5" />
+                <circle cx="360" cy="166" r="3" fill="#fca5a5" />
+                <circle cx="430" cy="172" r="3" fill="#fca5a5" />
 
-              <line x1="340" y1="195" x2="415" y2="160" stroke="#5F5E5A" strokeWidth="1.4" strokeDasharray="2,2"/>
-              <circle cx="340" cy="195" r="3.2" fill="#5F5E5A"/>
-              <text x="422" y="156" fontFamily="sans-serif" fontSize="14" fontWeight="500" fill="#2C2C2A">Células de Leydig</text>
+                {/* Células de Leydig con núcleo visible */}
+                <circle cx="300" cy="108" r="12.5" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="1.3"/>
+                <circle cx="300" cy="108" r="4" fill="#a78bfa"/>
+                <circle cx="338" cy="108" r="12.5" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="1.3"/>
+                <circle cx="338" cy="108" r="4" fill="#a78bfa"/>
+                <circle cx="319" cy="128" r="12.5" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="1.3"/>
+                <circle cx="319" cy="128" r="4" fill="#a78bfa"/>
+                <circle cx="292" cy="130" r="11" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="1.3"/>
+                <circle cx="292" cy="130" r="3.5" fill="#a78bfa"/>
+                <circle cx="346" cy="130" r="11" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="1.3"/>
+                <circle cx="346" cy="130" r="3.5" fill="#a78bfa"/>
 
-              <line x1="340" y1="255" x2="340" y2="285" stroke="#5F5E5A" strokeWidth="1.4" strokeDasharray="2,2"/>
-              <circle cx="340" cy="255" r="3.2" fill="#5F5E5A"/>
-              <text x="340" y="318" textAnchor="middle" fontFamily="sans-serif" fontSize="14" fontWeight="500" fill="#2C2C2A">Vaso sanguíneo</text>
-            </svg>
+                {/* Flecha de secreción hacia el vaso */}
+                <line x1="319" y1="143" x2="319" y2="160" stroke="#0284c7" strokeWidth="1.8" markerEnd="url(#fact-arrow)"/>
+                <rect x="330" y="142" width="94" height="19" rx="4" fill="#f0f9ff" stroke="#bae6fd" strokeWidth="0.8" filter="url(#labelShadow)"/>
+                <text x="377" y="156" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="11" fontWeight="800" fill="#0284c7">Testosterona</text>
+
+                {/* Etiqueta superior Células de Leydig */}
+                <line x1="319" y1="94" x2="319" y2="42" stroke="#94a3b8" strokeWidth="1" strokeDasharray="2,2"/>
+                <circle cx="319" cy="94" r="3" fill="#8b5cf6"/>
+                <rect x="224" y="14" width="190" height="28" rx="7" fill="#f5f3ff" stroke="#c7d2fe" strokeWidth="1.3" filter="url(#labelShadow)"/>
+                <text x="319" y="33" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="13.5" fontWeight="750" fill="#5b21b6">Células de Leydig</text>
+
+                {/* Etiqueta inferior Vaso sanguíneo */}
+                <line x1="319" y1="168" x2="319" y2="190" stroke="#94a3b8" strokeWidth="1" strokeDasharray="2,2"/>
+                <circle cx="319" cy="168" r="3" fill="#ef4444"/>
+                <rect x="234" y="190" width="170" height="28" rx="7" fill="#fef2f2" stroke="#fecaca" strokeWidth="1.3" filter="url(#labelShadow)"/>
+                <text x="319" y="209" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="13.5" fontWeight="750" fill="#991b1b">Vaso sanguíneo</text>
+              </svg>
+            </div>
           </div>
         </section>
 
         <section className="home-learning-route home-reveal" aria-labelledby="home-route-title">
+          {/* Fondo y decoraciones de ambientación */}
+          <span className="home-route-edge-bar" aria-hidden="true" />
+          <span className="home-route-glow home-route-glow-cyan" aria-hidden="true" />
+          <span className="home-route-glow home-route-glow-violet" aria-hidden="true" />
+          <span className="home-route-orbit" aria-hidden="true" />
+          <span className="home-route-dots home-route-dots-left" aria-hidden="true" />
+          <span className="home-route-dots home-route-dots-right" aria-hidden="true" />
+          <span className="home-route-shine" aria-hidden="true" />
+
           <div className="home-route-intro">
-            <span className="home-route-badge"><Microscope size={16} /> Primera vez en el atlas</span>
+            <span className="home-route-badge"><Microscope size={15} /> Primera vez en el atlas</span>
             <h2 id="home-route-title">Así puedes comenzar</h2>
+            <div className="home-route-title-bar" aria-hidden="true" />
             <p>Tres pasos para convertir cada observación en aprendizaje.</p>
           </div>
 
           <ol className="home-route-steps">
-            <li>
+            <li className="home-step-item home-step-one">
               <span className="home-step-number">01</span>
               <div className="home-step-icon"><BookOpen size={20} /></div>
               <div><strong>Elige</strong><p>Abre el tema que estás estudiando.</p></div>
             </li>
-            <li>
+            <li className="home-step-item home-step-two">
               <span className="home-step-number">02</span>
               <div className="home-step-icon"><Eye size={20} /></div>
               <div><strong>Observa</strong><p>Compara placas y reconoce estructuras.</p></div>
             </li>
-            <li>
+            <li className="home-step-item home-step-three">
               <span className="home-step-number">03</span>
               <div className="home-step-icon"><Brain size={20} /></div>
               <div><strong>Comprueba</strong><p>Refuerza lo aprendido con una evaluación.</p></div>
@@ -280,6 +325,7 @@ const Home: React.FC = () => {
 
           <div className="home-bento-grid">
             <Link to="/temario" className="home-bento-card home-bento-atlas">
+              <span className="home-card-edge-bar" aria-hidden="true" />
               <span className="home-card-shine" aria-hidden="true" />
               <span className="home-orbit home-orbit-one" aria-hidden="true" />
               <span className="home-orbit home-orbit-two" aria-hidden="true" />
@@ -306,6 +352,7 @@ const Home: React.FC = () => {
               aria-label="Abrir el buscador de temas y subtemas"
               aria-controls="atlas-header-search-panel"
             >
+              <span className="home-card-edge-bar" aria-hidden="true" />
               <div className="home-card-icon home-card-icon-cyan"><Search size={22} /></div>
               <div className="home-card-copy">
                 <span className="home-card-kicker">Encuentra en segundos</span>
@@ -320,6 +367,7 @@ const Home: React.FC = () => {
             </button>
 
             <Link to="/evaluaciones" className="home-bento-card home-bento-evaluation">
+              <span className="home-card-edge-bar" aria-hidden="true" />
               <div className="home-card-icon home-card-icon-violet"><ClipboardCheck size={23} /></div>
               <div className="home-card-copy">
                 <span className="home-card-kicker">Ponlo en práctica</span>
@@ -337,29 +385,42 @@ const Home: React.FC = () => {
         </section>
 
         <section className="home-site-notice home-reveal" aria-labelledby="home-site-notice-title">
-          <span className="home-notice-glow" aria-hidden="true" />
+          {/* Fondo y ambientación decorativa */}
+          <span className="home-notice-edge-bar" aria-hidden="true" />
+          <span className="home-notice-glow home-notice-glow-amber" aria-hidden="true" />
+          <span className="home-notice-glow home-notice-glow-cyan" aria-hidden="true" />
+          <span className="home-notice-orbit" aria-hidden="true" />
+          <span className="home-notice-dots" aria-hidden="true" />
+          <span className="home-notice-shine" aria-hidden="true" />
 
           <div className="home-notice-intro">
-            <div className="home-notice-symbol" aria-hidden="true"><Wrench size={23} /></div>
+            <div className="home-notice-symbol" aria-hidden="true"><Wrench size={24} /></div>
             <div>
-              <span className="home-notice-badge"><AlertTriangle size={14} /> Sitio en desarrollo</span>
+              <span className="home-notice-badge"><span className="home-notice-pulse-dot" aria-hidden="true" /><AlertTriangle size={13} /> Sitio en desarrollo activo</span>
               <h2 id="home-site-notice-title">Una experiencia que seguimos mejorando</h2>
+              <div className="home-notice-title-bar" aria-hidden="true" />
               <p>
-                El Atlas es un sitio nuevo y continúa en desarrollo, por lo que podrías encontrar
-                algunos detalles o errores visuales mientras seguimos perfeccionándolo.
+                El Atlas es un proyecto vivo y continúa en constante evolución. Podrías encontrar
+                algunos detalles o ajustes visuales mientras seguimos perfeccionando la plataforma.
               </p>
             </div>
           </div>
 
           <div className="home-notice-recommendations">
-            <div className="home-notice-item">
-              <span className="home-notice-item-icon" aria-hidden="true"><Monitor size={19} /><Tablet size={15} /></span>
-              <span><strong>Mejor experiencia</strong>Utiliza una computadora, tablet o dispositivo de pantalla grande.</span>
+            <div className="home-notice-item home-notice-item-desktop">
+              <span className="home-notice-item-icon" aria-hidden="true"><Monitor size={18} /><Tablet size={14} /></span>
+              <div>
+                <strong>Mejor experiencia</strong>
+                <p>Utiliza una computadora, tablet o dispositivo de pantalla grande.</p>
+              </div>
             </div>
 
-            <div className="home-notice-item">
-              <span className="home-notice-item-icon" aria-hidden="true"><Smartphone className="home-notice-phone" size={20} /></span>
-              <span><strong>Desde el celular</strong>Te recomendamos navegar con la pantalla en modo horizontal.</span>
+            <div className="home-notice-item home-notice-item-mobile">
+              <span className="home-notice-item-icon" aria-hidden="true"><Smartphone className="home-notice-phone" size={19} /></span>
+              <div>
+                <strong>Desde el celular</strong>
+                <p>Te recomendamos navegar con la pantalla en modo horizontal.</p>
+              </div>
             </div>
 
             <a
@@ -367,9 +428,12 @@ const Home: React.FC = () => {
               href="mailto:atlashistolabfcm@gmail.com?subject=Reporte%20de%20error%20-%20Atlas%20de%20Histolog%C3%ADa"
               aria-label="Reportar un error a atlashistolabfcm@gmail.com"
             >
-              <span className="home-notice-item-icon" aria-hidden="true"><Mail size={20} /></span>
-              <span><strong>¿Encontraste un error?</strong>Escríbenos a atlashistolabfcm@gmail.com</span>
-              <ArrowRight size={17} aria-hidden="true" />
+              <span className="home-notice-item-icon" aria-hidden="true"><Mail size={19} /></span>
+              <div>
+                <strong>¿Encontraste un error o tienes sugerencias?</strong>
+                <p>Escríbenos a <span className="home-notice-email-highlight">atlashistolabfcm@gmail.com</span></p>
+              </div>
+              <span className="home-notice-action-btn" aria-hidden="true">Reportar <ArrowRight size={15} /></span>
             </a>
           </div>
         </section>
