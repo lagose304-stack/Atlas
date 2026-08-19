@@ -1,5 +1,6 @@
-﻿import React, { useId, useState, useEffect, useMemo, useRef } from 'react';
+import React, { useId, useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { ZoomIn, ZoomOut, RotateCcw, Pencil, X } from 'lucide-react';
 import { renderBoldText } from './BoldField';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
@@ -413,6 +414,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const [zoomLevel, setZoomLevel]   = useState(1);
   const [position, setPosition]     = useState({ x: 0, y: 0 });
+  const [isAnnotationMode, setIsAnnotationMode] = useState(false);
+  const [annotationTool, setAnnotationTool] = useState<'laser' | null>(null);
+  const laserCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const laserTrailRef = useRef<Array<{ x: number; y: number; time: number }>>([]);
+  const laserCurrentPosRef = useRef<{ x: number; y: number } | null>(null);
+  const laserStabilizedPosRef = useRef<{ x: number; y: number } | null>(null);
+  const laserAnimFrameRef = useRef<number | null>(null);
   const [activeMarkerIndex, setActiveMarkerIndex] = useState<number | null>(resolvedInitialMarkerIndex);
   const [markerRecenterRequest, setMarkerRecenterRequest] = useState(0);
   const [showCommentHint, setShowCommentHint] = useState(false);
@@ -752,11 +760,341 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     };
   }, [src, useZoomSource, srcZoom]);
 
+  const addLaserPoint = (rawX: number, rawY: number) => {
+    const now = performance.now();
+    const trail = laserTrailRef.current;
+
+    // Estabilizador Streamline de pulso (amortiguador de temblor)
+    const prevStable = laserStabilizedPosRef.current ?? { x: rawX, y: rawY };
+    const smoothFactor = 0.38;
+    const sx = prevStable.x + (rawX - prevStable.x) * smoothFactor;
+    const sy = prevStable.y + (rawY - prevStable.y) * smoothFactor;
+    laserStabilizedPosRef.current = { x: sx, y: sy };
+    laserCurrentPosRef.current = { x: sx, y: sy };
+
+    const lastPoint = trail.length > 0 ? trail[trail.length - 1] : null;
+
+    if (lastPoint) {
+      const dx = sx - lastPoint.x;
+      const dy = sy - lastPoint.y;
+      const dist = Math.hypot(dx, dy);
+
+      // Si el cursor se mueve muy poco, evitamos acumulación
+      if (dist < 4) {
+        return;
+      }
+
+      // Si el movimiento es rápido, interpolamos para mantener densidad homogénea
+      if (dist > 14) {
+        const steps = Math.min(5, Math.floor(dist / 7));
+        for (let i = 1; i < steps; i++) {
+          const t = i / steps;
+          trail.push({
+            x: lastPoint.x + dx * t,
+            y: lastPoint.y + dy * t,
+            time: lastPoint.time + (now - lastPoint.time) * t,
+          });
+        }
+      }
+    }
+
+    trail.push({ x: sx, y: sy, time: now });
+  };
+
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const canvas = laserCanvasRef.current;
+    if (!canvas) return;
+
+    let running = true;
+
+    const resizeCanvas = () => {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+    };
+
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // Duración de la estela (~1750ms)
+    const TRAIL_LIFETIME = 1750;
+
+    const render = () => {
+      if (!running) return;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const dpr = window.devicePixelRatio || 1;
+        const now = performance.now();
+        const width = canvas.width / dpr;
+        const height = canvas.height / dpr;
+
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, width, height);
+
+        laserTrailRef.current = laserTrailRef.current.filter(p => now - p.time < TRAIL_LIFETIME);
+        const rawPoints = laserTrailRef.current;
+
+        if (rawPoints.length >= 2) {
+          // Generador de Curva Spline Catmull-Rom continua (tensión = 0.5)
+          // Elimina cualquier quiebre angular o irregularidad por falta de pulso
+          const generateSmoothSpline = (pts: typeof rawPoints, stepsPerSeg = 5): typeof rawPoints => {
+            if (pts.length < 3) return pts;
+            const res: typeof rawPoints = [];
+            const ext = [pts[0], ...pts, pts[pts.length - 1]];
+
+            for (let i = 1; i < ext.length - 2; i++) {
+              const p0 = ext[i - 1];
+              const p1 = ext[i];
+              const p2 = ext[i + 1];
+              const p3 = ext[i + 2];
+
+              for (let s = 0; s < stepsPerSeg; s++) {
+                const t = s / stepsPerSeg;
+                const t2 = t * t;
+                const t3 = t2 * t;
+
+                const f1 = -0.5 * t3 + t2 - 0.5 * t;
+                const f2 = 1.5 * t3 - 2.5 * t2 + 1.0;
+                const f3 = -1.5 * t3 + 2.0 * t2 + 0.5 * t;
+                const f4 = 0.5 * t3 - 0.5 * t2;
+
+                const cx = p0.x * f1 + p1.x * f2 + p2.x * f3 + p3.x * f4;
+                const cy = p0.y * f1 + p1.y * f2 + p2.y * f3 + p3.y * f4;
+                const ctime = p1.time + (p2.time - p1.time) * t;
+
+                res.push({ x: cx, y: cy, time: ctime });
+              }
+            }
+
+            res.push(pts[pts.length - 1]);
+            return res;
+          };
+
+          const points = generateSmoothSpline(rawPoints, 5);
+
+          const drawLaserRibbon = (
+            baseWidth: number,
+            r: number,
+            g: number,
+            b: number,
+            baseAlpha: number
+          ) => {
+            const n = points.length;
+            if (n < 2) return;
+
+            const rawNormals: Array<{ nx: number; ny: number }> = [];
+            const alphas: number[] = [];
+
+            for (let i = 0; i < n; i++) {
+              const p = points[i];
+              const age = now - p.time;
+              const progress = Math.max(0, Math.min(1, age / TRAIL_LIFETIME));
+              const alpha = Math.pow(1 - progress, 1.25);
+              alphas.push(alpha);
+
+              let tx = 0;
+              let ty = 0;
+              if (i === 0) {
+                tx = points[1].x - p.x;
+                ty = points[1].y - p.y;
+              } else if (i === n - 1) {
+                tx = p.x - points[n - 2].x;
+                ty = p.y - points[n - 2].y;
+              } else {
+                tx = points[i + 1].x - points[i - 1].x;
+                ty = points[i + 1].y - points[i - 1].y;
+              }
+
+              const len = Math.hypot(tx, ty);
+              if (len > 0.0001) {
+                rawNormals.push({ nx: -ty / len, ny: tx / len });
+              } else {
+                rawNormals.push(i > 0 ? rawNormals[i - 1] : { nx: 0, ny: 1 });
+              }
+            }
+
+            // Suavizado de normales para mantener grosor homogéneo
+            const smoothNormals = rawNormals.map((norm, i, arr) => {
+              if (i === 0 || i === arr.length - 1) return norm;
+              const prev = arr[i - 1];
+              const next = arr[i + 1];
+              const sx = 0.25 * prev.nx + 0.5 * norm.nx + 0.25 * next.nx;
+              const sy = 0.25 * prev.ny + 0.5 * norm.ny + 0.25 * next.ny;
+              const sLen = Math.hypot(sx, sy);
+              return sLen > 0.0001 ? { nx: sx / sLen, ny: sy / sLen } : norm;
+            });
+
+            const lefts: Array<{ x: number; y: number }> = [];
+            const rights: Array<{ x: number; y: number }> = [];
+
+            for (let i = 0; i < n; i++) {
+              const p = points[i];
+              const norm = smoothNormals[i];
+              const alpha = alphas[i];
+              const halfW = (baseWidth * alpha + 0.4) / 2;
+              lefts.push({ x: p.x + norm.nx * halfW, y: p.y + norm.ny * halfW });
+              rights.push({ x: p.x - norm.nx * halfW, y: p.y - norm.ny * halfW });
+            }
+
+            for (let i = 1; i < n; i++) {
+              const a0 = alphas[i - 1];
+              const a1 = alphas[i];
+              const avgAlpha = (a0 + a1) / 2;
+              if (avgAlpha <= 0.01) continue;
+
+              const L0 = lefts[i - 1];
+              const L1 = lefts[i];
+              const R1 = rights[i];
+              const R0 = rights[i - 1];
+
+              ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(avgAlpha * baseAlpha).toFixed(3)})`;
+              ctx.beginPath();
+              ctx.moveTo(L0.x, L0.y);
+              ctx.lineTo(L1.x, L1.y);
+              ctx.lineTo(R1.x, R1.y);
+              ctx.lineTo(R0.x, R0.y);
+              ctx.closePath();
+              ctx.fill();
+            }
+
+            const tailAlpha = alphas[0];
+            if (tailAlpha > 0.02) {
+              const tailW = (baseWidth * tailAlpha + 0.4) / 2;
+              ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(tailAlpha * baseAlpha).toFixed(3)})`;
+              ctx.beginPath();
+              ctx.arc(points[0].x, points[0].y, tailW, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          };
+
+          // Capa 1: Halo exterior amplio neón carmesí
+          drawLaserRibbon(16, 255, 15, 65, 0.28);
+          // Capa 2: Resplandor medio rojo neón eléctrico
+          drawLaserRibbon(7.5, 255, 30, 75, 0.68);
+          // Capa 3: Haz de luz de alta intensidad
+          drawLaserRibbon(3.4, 255, 110, 140, 0.88);
+          // Capa 4: Núcleo blanco-rosado incandescente
+          drawLaserRibbon(1.5, 255, 255, 255, 0.98);
+        }
+
+        if (isAnnotationMode && annotationTool === 'laser' && laserCurrentPosRef.current) {
+          const { x, y } = laserCurrentPosRef.current;
+          const gradient = ctx.createRadialGradient(x, y, 1, x, y, 14);
+          gradient.addColorStop(0, 'rgba(255, 20, 65, 0.95)');
+          gradient.addColorStop(0.35, 'rgba(255, 35, 80, 0.55)');
+          gradient.addColorStop(1, 'rgba(255, 35, 80, 0)');
+
+          ctx.beginPath();
+          ctx.arc(x, y, 14, 0, Math.PI * 2);
+          ctx.fillStyle = gradient;
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+          ctx.fillStyle = '#ff0f3f';
+          ctx.shadowColor = '#ff003b';
+          ctx.shadowBlur = 9;
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(x, y, 1.7, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowBlur = 3;
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
+
+      laserAnimFrameRef.current = requestAnimationFrame(render);
+    };
+
+    laserAnimFrameRef.current = requestAnimationFrame(render);
+
+    return () => {
+      running = false;
+      window.removeEventListener('resize', resizeCanvas);
+      if (laserAnimFrameRef.current !== null) {
+        cancelAnimationFrame(laserAnimFrameRef.current);
+      }
+    };
+  }, [isAnnotationMode, annotationTool]);
+
+  const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = laserCanvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+  };
+
+  const getTouchCoords = (touch: React.Touch) => {
+    const canvas = laserCanvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top,
+    };
+  };
+
+  const handleLaserMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isAnnotationMode || annotationTool !== 'laser') return;
+    const { x, y } = getCanvasCoords(e);
+    addLaserPoint(x, y);
+  };
+
+  const handleLaserMouseEnter = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isAnnotationMode || annotationTool !== 'laser') return;
+    const { x, y } = getCanvasCoords(e);
+    laserStabilizedPosRef.current = { x, y };
+    laserCurrentPosRef.current = { x, y };
+  };
+
+  const handleLaserMouseLeave = () => {
+    laserCurrentPosRef.current = null;
+    laserStabilizedPosRef.current = null;
+  };
+
+  const handleLaserTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isAnnotationMode || annotationTool !== 'laser' || e.touches.length === 0) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const { x, y } = getTouchCoords(touch);
+    addLaserPoint(x, y);
+  };
+
+  const handleLaserTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isAnnotationMode || annotationTool !== 'laser' || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    const { x, y } = getTouchCoords(touch);
+    laserStabilizedPosRef.current = { x, y };
+    addLaserPoint(x, y);
+  };
+
+  const handleLaserTouchEnd = () => {
+    laserCurrentPosRef.current = null;
+    laserStabilizedPosRef.current = null;
+  };
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isAnnotationMode) {
+          setIsAnnotationMode(false);
+          setAnnotationTool(null);
+        } else {
+          onClose();
+        }
+      }
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  }, [onClose, isAnnotationMode]);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -1320,12 +1658,38 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           50% {
             transform: translateX(2px) scale(1.16);
           }
+        }
+        @keyframes specialBarIn {
+          0% { opacity: 0; transform: translate3d(-50%, 14px, 0) scale(0.95); }
+          100% { opacity: 1; transform: translate3d(-50%, 0, 0) scale(1); }
         }`}
       </style>
       <div style={{
         flex: 1, position: 'relative', background: 'radial-gradient(ellipse at top, #334155 0%, #0f172a 58%, #020617 100%)',
         overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
+        {/* Canvas de estela de luz / Puntero Láser */}
+        <canvas
+          ref={laserCanvasRef}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: isAnnotationMode && annotationTool === 'laser' ? 'auto' : 'none',
+            zIndex: 12,
+            cursor: isAnnotationMode && annotationTool === 'laser' ? 'none' : 'default',
+            touchAction: 'none',
+          }}
+          onMouseMove={handleLaserMouseMove}
+          onMouseEnter={handleLaserMouseEnter}
+          onMouseLeave={handleLaserMouseLeave}
+          onTouchStart={handleLaserTouchStart}
+          onTouchMove={handleLaserTouchMove}
+          onTouchEnd={handleLaserTouchEnd}
+          onWheel={handleWheel}
+        />
+
         <button
           onClick={onClose}
           title="Cerrar visor"
@@ -1961,44 +2325,321 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           );
         })()}
 
-        <div
-          style={{
-            position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
-            display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center',
-            background: 'rgba(255,255,255,0.90)', backdropFilter: 'blur(10px)',
-            padding: '12px 20px', borderRadius: '14px',
-            boxShadow: '0 4px 20px rgba(14,165,233,0.15)', zIndex: 5,
-            border: '1px solid rgba(186,230,253,0.6)',
-          }}
-        >
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button onClick={handleZoomOut} style={{ background: 'linear-gradient(135deg,#38bdf8,#0ea5e9)', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', fontSize: '1.2em', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(14,165,233,0.3)' }} title="Alejar">−</button>
-            <span style={{ color: '#0f172a', fontWeight: 800, minWidth: '55px', textAlign: 'center', fontSize: '0.95em' }}>{Math.round(zoomLevel * 100)}%</span>
-            <button onClick={handleZoomIn} style={{ background: 'linear-gradient(135deg,#38bdf8,#0ea5e9)', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', fontSize: '1.2em', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(14,165,233,0.3)' }} title="Acercar">+</button>
-          </div>
-          <button
-            type="button"
-            onClick={handleResetViewport}
-            disabled={zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5}
+        {/* Barra de herramientas vertical fija al lado de la barra lateral (Modo normal) */}
+        {!isAnnotationMode && (
+          <div
+            role="toolbar"
+            aria-label="Controles de zoom y visualización"
             style={{
-              border: '1px solid #bae6fd',
-              background: '#ffffff',
-              color: '#0369a1',
-              borderRadius: '9px',
-              padding: '6px 12px',
-              fontWeight: 750,
-              fontSize: '0.72em',
-              fontFamily: 'inherit',
-              cursor: zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 ? 'not-allowed' : 'pointer',
-              opacity: zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 ? 0.5 : 1,
+              position: 'absolute',
+              top: '50%',
+              right: '16px',
+              transform: 'translateY(-50%)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'rgba(255, 255, 255, 0.94)',
+              backdropFilter: 'blur(16px) saturate(140%)',
+              padding: '8px 5px',
+              borderRadius: '999px',
+              boxShadow: '0 8px 26px rgba(15, 75, 105, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)',
+              border: '1px solid rgba(186, 230, 253, 0.85)',
+              zIndex: 15,
+              userSelect: 'none',
+              width: '42px',
             }}
           >
-            Recentrar
-          </button>
-          <span style={{ color: '#64748b', fontSize: '0.72em', textAlign: 'center' }}>
-            {zoomLevel > 1 ? '✋ Arrastra para mover' : '🖱️ Rueda para zoom'}
-          </span>
-        </div>
+            {/* Botón Zoom In */}
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              title="Acercar imagen (+)"
+              aria-label="Acercar imagen"
+              style={{
+                background: 'linear-gradient(135deg, #38bdf8, #0ea5e9)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '50%',
+                width: '30px',
+                height: '30px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 2px 6px rgba(14, 165, 233, 0.3)',
+                transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+              }}
+            >
+              <ZoomIn size={16} strokeWidth={2.4} />
+            </button>
+
+            {/* Indicador de porcentaje con clic para 100% */}
+            <button
+              type="button"
+              onClick={handleResetViewport}
+              title="Clic para volver al 100%"
+              aria-label={`Zoom actual ${Math.round(zoomLevel * 100)}%. Clic para 100%`}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#0f172a',
+                fontWeight: 800,
+                textAlign: 'center',
+                fontSize: '0.72em',
+                fontFamily: 'inherit',
+                cursor: 'pointer',
+                padding: '2px 0',
+                lineHeight: 1.1,
+                width: '100%',
+              }}
+            >
+              {Math.round(zoomLevel * 100)}%
+            </button>
+
+            {/* Botón Zoom Out */}
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              title="Alejar imagen (-)"
+              aria-label="Alejar imagen"
+              style={{
+                background: 'linear-gradient(135deg, #38bdf8, #0ea5e9)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '50%',
+                width: '30px',
+                height: '30px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 2px 6px rgba(14, 165, 233, 0.3)',
+                transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+              }}
+            >
+              <ZoomOut size={16} strokeWidth={2.4} />
+            </button>
+
+            <div style={{ width: '22px', height: '1px', background: 'rgba(186, 230, 253, 0.85)', margin: '2px 0' }} />
+
+            {/* Presets rápidos */}
+            <button
+              type="button"
+              onClick={() => applyZoom(1)}
+              title="Ajustar al 100%"
+              style={{
+                border: Math.abs(zoomLevel - 1) < 0.05 ? '1px solid #38bdf8' : '1px solid #e2e8f0',
+                background: Math.abs(zoomLevel - 1) < 0.05 ? '#e0f2fe' : '#ffffff',
+                color: Math.abs(zoomLevel - 1) < 0.05 ? '#0369a1' : '#475569',
+                borderRadius: '7px',
+                padding: '2px 0',
+                width: '28px',
+                fontWeight: 800,
+                fontSize: '0.68em',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'all 0.15s ease',
+                textAlign: 'center',
+              }}
+            >
+              1x
+            </button>
+            <button
+              type="button"
+              onClick={() => applyZoom(Math.min(2, effectiveMaxZoom))}
+              title="Zoom 2x"
+              style={{
+                border: Math.abs(zoomLevel - 2) < 0.1 ? '1px solid #38bdf8' : '1px solid #e2e8f0',
+                background: Math.abs(zoomLevel - 2) < 0.1 ? '#e0f2fe' : '#ffffff',
+                color: Math.abs(zoomLevel - 2) < 0.1 ? '#0369a1' : '#475569',
+                borderRadius: '7px',
+                padding: '2px 0',
+                width: '28px',
+                fontWeight: 800,
+                fontSize: '0.68em',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'all 0.15s ease',
+                textAlign: 'center',
+              }}
+            >
+              2x
+            </button>
+
+            <div style={{ width: '22px', height: '1px', background: 'rgba(186, 230, 253, 0.85)', margin: '2px 0' }} />
+
+            {/* Botón Recentrar */}
+            <button
+              type="button"
+              onClick={handleResetViewport}
+              disabled={zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5}
+              title="Recentrar vista"
+              aria-label="Recentrar vista"
+              style={{
+                border: '1px solid #bae6fd',
+                background: '#ffffff',
+                color: '#0369a1',
+                borderRadius: '50%',
+                width: '30px',
+                height: '30px',
+                cursor: zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 ? 'not-allowed' : 'pointer',
+                opacity: zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 2px 4px rgba(15, 75, 105, 0.08)',
+              }}
+            >
+              <RotateCcw size={14} strokeWidth={2.4} />
+            </button>
+
+            <div style={{ width: '22px', height: '1px', background: 'rgba(186, 230, 253, 0.85)', margin: '2px 0' }} />
+
+            {/* Botón Lápiz (Abre modo especial) */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsAnnotationMode(true);
+                setAnnotationTool('laser');
+              }}
+              title="Abrir herramientas de anotación y puntero láser"
+              aria-label="Abrir herramientas de anotación"
+              style={{
+                border: '1px solid #bae6fd',
+                background: '#ffffff',
+                color: '#0369a1',
+                borderRadius: '50%',
+                width: '30px',
+                height: '30px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease, transform 0.12s ease',
+                boxShadow: '0 2px 4px rgba(15, 75, 105, 0.08)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.08)';
+                e.currentTarget.style.borderColor = '#38bdf8';
+                e.currentTarget.style.color = '#0284c7';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.borderColor = '#bae6fd';
+                e.currentTarget.style.color = '#0369a1';
+              }}
+            >
+              <Pencil size={14} strokeWidth={2.4} />
+            </button>
+          </div>
+        )}
+
+        {/* Barra de herramientas horizontal para Modo Especial / Anotaciones */}
+        {isAnnotationMode && (
+          <div
+            role="toolbar"
+            aria-label="Herramientas de anotación y presentación"
+            style={{
+              position: 'absolute',
+              bottom: '24px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'rgba(15, 23, 42, 0.92)',
+              backdropFilter: 'blur(16px) saturate(160%)',
+              padding: '6px 10px 6px 14px',
+              borderRadius: '999px',
+              boxShadow: '0 14px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(239, 68, 68, 0.35)',
+              zIndex: 20,
+              border: '1px solid rgba(239, 68, 68, 0.45)',
+              color: '#ffffff',
+              animation: prefersReducedMotion ? 'none' : 'specialBarIn 260ms cubic-bezier(0.22, 1, 0.36, 1) both',
+              userSelect: 'none',
+            }}
+          >
+            {/* Opción 1: Puntero Láser Rojo */}
+            <button
+              type="button"
+              onClick={() => setAnnotationTool(annotationTool === 'laser' ? null : 'laser')}
+              title="Puntero Láser Rojo (deja una estela de luz que se disipa sola)"
+              aria-label="Puntero Láser Rojo"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: annotationTool === 'laser'
+                  ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.38), rgba(185, 28, 28, 0.55))'
+                  : 'rgba(30, 41, 59, 0.75)',
+                border: annotationTool === 'laser' ? '1.5px solid #ef4444' : '1px solid rgba(148, 163, 184, 0.3)',
+                borderRadius: '999px',
+                padding: '6px 14px',
+                color: annotationTool === 'laser' ? '#ffffff' : '#cbd5e1',
+                cursor: 'pointer',
+                fontWeight: 750,
+                fontSize: '0.82em',
+                fontFamily: 'inherit',
+                boxShadow: annotationTool === 'laser' ? '0 0 16px rgba(239, 68, 68, 0.48)' : 'none',
+                transition: 'all 0.18s ease',
+              }}
+            >
+              <span
+                style={{
+                  width: '9px',
+                  height: '9px',
+                  borderRadius: '50%',
+                  background: '#ef4444',
+                  boxShadow: '0 0 8px #ef4444, 0 0 12px #ef4444',
+                  display: 'inline-block',
+                }}
+              />
+              <span>Puntero Láser</span>
+            </button>
+
+            {/* Separador */}
+            <div style={{ width: '1px', height: '22px', background: 'rgba(148, 163, 184, 0.35)', margin: '0 2px' }} />
+
+            {/* Botón Salir / Volver */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsAnnotationMode(false);
+                setAnnotationTool(null);
+              }}
+              title="Cerrar modo especial y volver a la barra de zoom"
+              aria-label="Volver a controles de zoom"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                color: '#fca5a5',
+                borderRadius: '999px',
+                padding: '6px 12px',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '0.78em',
+                fontFamily: 'inherit',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)';
+                e.currentTarget.style.color = '#ffffff';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                e.currentTarget.style.color = '#fca5a5';
+              }}
+            >
+              <X size={14} strokeWidth={2.4} />
+              <span>Salir</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {showSidebar && (
