@@ -420,6 +420,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const laserTrailRef = useRef<Array<{ x: number; y: number; time: number }>>([]);
   const laserCurrentPosRef = useRef<{ x: number; y: number } | null>(null);
   const laserStabilizedPosRef = useRef<{ x: number; y: number } | null>(null);
+  const laserPinchRef = useRef<{
+    dist: number;
+    startZoom: number;
+    midX: number;
+    midY: number;
+    startPos: { x: number; y: number };
+  } | null>(null);
   const laserAnimFrameRef = useRef<number | null>(null);
   const [activeMarkerIndex, setActiveMarkerIndex] = useState<number | null>(resolvedInitialMarkerIndex);
   const [markerRecenterRequest, setMarkerRecenterRequest] = useState(0);
@@ -1060,25 +1067,92 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     laserStabilizedPosRef.current = null;
   };
 
-  const handleLaserTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isAnnotationMode || annotationTool !== 'laser' || e.touches.length === 0) return;
-    e.preventDefault();
-    const touch = e.touches[0];
-    const { x, y } = getTouchCoords(touch);
-    addLaserPoint(x, y);
+  const getTouchDistance = (t0: React.Touch, t1: React.Touch) => {
+    const dx = t0.clientX - t1.clientX;
+    const dy = t0.clientY - t1.clientY;
+    return Math.hypot(dx, dy);
   };
 
   const handleLaserTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (!isAnnotationMode || annotationTool !== 'laser' || e.touches.length === 0) return;
-    const touch = e.touches[0];
-    const { x, y } = getTouchCoords(touch);
-    laserStabilizedPosRef.current = { x, y };
-    addLaserPoint(x, y);
+    e.preventDefault();
+
+    if (e.touches.length === 1) {
+      laserPinchRef.current = null;
+      const touch = e.touches[0];
+      const { x, y } = getTouchCoords(touch);
+      laserStabilizedPosRef.current = { x, y };
+      addLaserPoint(x, y);
+    } else if (e.touches.length >= 2) {
+      // 2 dedos en tablet: Zoom & Navegación / Pan
+      laserCurrentPosRef.current = null;
+      laserStabilizedPosRef.current = null;
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      const dist = getTouchDistance(t0, t1);
+      const midX = (t0.clientX + t1.clientX) / 2;
+      const midY = (t0.clientY + t1.clientY) / 2;
+      laserPinchRef.current = {
+        dist,
+        startZoom: stateRef.current.zoom,
+        midX,
+        midY,
+        startPos: { ...stateRef.current.pos },
+      };
+    }
   };
 
-  const handleLaserTouchEnd = () => {
-    laserCurrentPosRef.current = null;
-    laserStabilizedPosRef.current = null;
+  const handleLaserTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isAnnotationMode || annotationTool !== 'laser' || e.touches.length === 0) return;
+    e.preventDefault();
+
+    if (e.touches.length === 1 && !laserPinchRef.current) {
+      const touch = e.touches[0];
+      const { x, y } = getTouchCoords(touch);
+      addLaserPoint(x, y);
+    } else if (e.touches.length >= 2 && laserPinchRef.current) {
+      laserCurrentPosRef.current = null;
+      laserStabilizedPosRef.current = null;
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      const newDist = getTouchDistance(t0, t1);
+      const pinchData = laserPinchRef.current;
+
+      if (pinchData.dist > 0) {
+        const scale = newDist / pinchData.dist;
+        const targetZoom = clamp(pinchData.startZoom * scale, ZOOM_MIN, effectiveMaxZoom);
+        stateRef.current.zoom = targetZoom;
+        setZoomLevel(targetZoom);
+
+        // Desplazamiento / Navegación con 2 dedos en la placa
+        const currentMidX = (t0.clientX + t1.clientX) / 2;
+        const currentMidY = (t0.clientY + t1.clientY) / 2;
+        const deltaX = currentMidX - pinchData.midX;
+        const deltaY = currentMidY - pinchData.midY;
+
+        if (targetZoom > 1) {
+          const newPos = {
+            x: pinchData.startPos.x + deltaX,
+            y: pinchData.startPos.y + deltaY,
+          };
+          stateRef.current.pos = newPos;
+          setPosition(newPos);
+        } else {
+          stateRef.current.pos = { x: 0, y: 0 };
+          setPosition({ x: 0, y: 0 });
+        }
+      }
+    }
+  };
+
+  const handleLaserTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length < 2) {
+      laserPinchRef.current = null;
+    }
+    if (e.touches.length === 0) {
+      laserCurrentPosRef.current = null;
+      laserStabilizedPosRef.current = null;
+    }
   };
 
   useEffect(() => {
@@ -2333,21 +2407,24 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             style={{
               position: 'absolute',
               top: '50%',
-              right: '16px',
+              right: isDesktop ? '16px' : '12px',
               transform: 'translateY(-50%)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '6px',
-              background: 'rgba(255, 255, 255, 0.94)',
+              background: 'rgba(255, 255, 255, 0.95)',
               backdropFilter: 'blur(16px) saturate(140%)',
-              padding: '8px 5px',
-              borderRadius: '999px',
+              padding: '10px 5px',
+              borderRadius: '24px',
               boxShadow: '0 8px 26px rgba(15, 75, 105, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)',
               border: '1px solid rgba(186, 230, 253, 0.85)',
               zIndex: 15,
               userSelect: 'none',
-              width: '42px',
+              width: '46px',
+              boxSizing: 'border-box',
+              flexShrink: 0,
             }}
           >
             {/* Botón Zoom In */}
@@ -2361,14 +2438,17 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '50%',
-                width: '30px',
-                height: '30px',
+                width: '34px',
+                height: '34px',
+                minWidth: '34px',
+                minHeight: '34px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 boxShadow: '0 2px 6px rgba(14, 165, 233, 0.3)',
                 transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+                flexShrink: 0,
               }}
             >
               <ZoomIn size={16} strokeWidth={2.4} />
@@ -2386,12 +2466,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 color: '#0f172a',
                 fontWeight: 800,
                 textAlign: 'center',
-                fontSize: '0.72em',
+                fontSize: '0.74em',
                 fontFamily: 'inherit',
                 cursor: 'pointer',
                 padding: '2px 0',
                 lineHeight: 1.1,
-                width: '100%',
+                width: '36px',
+                flexShrink: 0,
               }}
             >
               {Math.round(zoomLevel * 100)}%
@@ -2408,20 +2489,23 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '50%',
-                width: '30px',
-                height: '30px',
+                width: '34px',
+                height: '34px',
+                minWidth: '34px',
+                minHeight: '34px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 boxShadow: '0 2px 6px rgba(14, 165, 233, 0.3)',
                 transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+                flexShrink: 0,
               }}
             >
               <ZoomOut size={16} strokeWidth={2.4} />
             </button>
 
-            <div style={{ width: '22px', height: '1px', background: 'rgba(186, 230, 253, 0.85)', margin: '2px 0' }} />
+            <div style={{ width: '26px', height: '1px', background: 'rgba(186, 230, 253, 0.85)', margin: '2px 0', flexShrink: 0 }} />
 
             {/* Presets rápidos */}
             <button
@@ -2434,13 +2518,18 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 color: Math.abs(zoomLevel - 1) < 0.05 ? '#0369a1' : '#475569',
                 borderRadius: '7px',
                 padding: '2px 0',
-                width: '28px',
+                width: '34px',
+                height: '24px',
                 fontWeight: 800,
-                fontSize: '0.68em',
+                fontSize: '0.72em',
                 cursor: 'pointer',
                 fontFamily: 'inherit',
                 transition: 'all 0.15s ease',
                 textAlign: 'center',
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
               1x
@@ -2455,19 +2544,24 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 color: Math.abs(zoomLevel - 2) < 0.1 ? '#0369a1' : '#475569',
                 borderRadius: '7px',
                 padding: '2px 0',
-                width: '28px',
+                width: '34px',
+                height: '24px',
                 fontWeight: 800,
-                fontSize: '0.68em',
+                fontSize: '0.72em',
                 cursor: 'pointer',
                 fontFamily: 'inherit',
                 transition: 'all 0.15s ease',
                 textAlign: 'center',
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
               2x
             </button>
 
-            <div style={{ width: '22px', height: '1px', background: 'rgba(186, 230, 253, 0.85)', margin: '2px 0' }} />
+            <div style={{ width: '26px', height: '1px', background: 'rgba(186, 230, 253, 0.85)', margin: '2px 0', flexShrink: 0 }} />
 
             {/* Botón Recentrar */}
             <button
@@ -2481,8 +2575,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 background: '#ffffff',
                 color: '#0369a1',
                 borderRadius: '50%',
-                width: '30px',
-                height: '30px',
+                width: '34px',
+                height: '34px',
+                minWidth: '34px',
+                minHeight: '34px',
                 cursor: zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 ? 'not-allowed' : 'pointer',
                 opacity: zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 ? 0.5 : 1,
                 display: 'flex',
@@ -2490,12 +2586,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 justifyContent: 'center',
                 transition: 'all 0.15s ease',
                 boxShadow: '0 2px 4px rgba(15, 75, 105, 0.08)',
+                flexShrink: 0,
               }}
             >
-              <RotateCcw size={14} strokeWidth={2.4} />
+              <RotateCcw size={15} strokeWidth={2.4} />
             </button>
 
-            <div style={{ width: '22px', height: '1px', background: 'rgba(186, 230, 253, 0.85)', margin: '2px 0' }} />
+            <div style={{ width: '26px', height: '1px', background: 'rgba(186, 230, 253, 0.85)', margin: '2px 0', flexShrink: 0 }} />
 
             {/* Botón Lápiz (Abre modo especial) */}
             <button
@@ -2511,14 +2608,17 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 background: '#ffffff',
                 color: '#0369a1',
                 borderRadius: '50%',
-                width: '30px',
-                height: '30px',
+                width: '34px',
+                height: '34px',
+                minWidth: '34px',
+                minHeight: '34px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 transition: 'all 0.15s ease, transform 0.12s ease',
                 boxShadow: '0 2px 4px rgba(15, 75, 105, 0.08)',
+                flexShrink: 0,
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'scale(1.08)';
@@ -2531,7 +2631,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 e.currentTarget.style.color = '#0369a1';
               }}
             >
-              <Pencil size={14} strokeWidth={2.4} />
+              <Pencil size={15} strokeWidth={2.4} />
             </button>
           </div>
         )}
