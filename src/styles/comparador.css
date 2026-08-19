@@ -461,6 +461,45 @@
 }
 
 /* --------------------------------------------------------------------------
+   Histological Comment Drawer
+   -------------------------------------------------------------------------- */
+.comparador-comment-drawer {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  right: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid #bae6fd;
+  border-radius: 14px;
+  box-shadow: 0 10px 25px rgba(12, 56, 82, 0.18);
+  padding: 12px 14px;
+  z-index: 25;
+  animation: fadeIn 0.15s ease;
+}
+
+.comparador-comment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e0f2fe;
+}
+
+.comparador-comment-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #0c3852;
+}
+
+.comparador-comment-drawer p strong {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+/* --------------------------------------------------------------------------
    Empty / Select Plate State inside Pane (Light Medical Card)
    -------------------------------------------------------------------------- */
 .comparador-empty-pane {

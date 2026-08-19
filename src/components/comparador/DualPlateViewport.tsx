@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState, useId, useMemo, useCallback } from 'react';
-import { Eye, EyeOff, MessageSquare, Microscope, Plus, Minus, RotateCcw } from 'lucide-react';
+import { Eye, EyeOff, MessageSquare, Microscope, Plus, Minus, RotateCcw, RotateCw } from 'lucide-react';
 import type { ComparadorPlacaItem } from './PlatePickerModal';
 import { getCloudinaryImageUrl } from '../../services/cloudinaryImages';
+import { renderBoldText } from '../BoldField';
 
 interface DualPlateViewportProps {
   letter: 'A' | 'B';
@@ -136,6 +137,7 @@ export const DualPlateViewport: React.FC<DualPlateViewportProps> = ({
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const pinchRef = useRef<{ dist: number } | null>(null);
   const [showComment, setShowComment] = useState(false);
+  const [rotation, setRotation] = useState(0);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(null);
@@ -274,7 +276,22 @@ export const DualPlateViewport: React.FC<DualPlateViewportProps> = ({
 
   const handleZoomIn = () => applyZoom(stateRef.current.zoom + 0.25);
   const handleZoomOut = () => applyZoom(stateRef.current.zoom - 0.25);
-  const handleReset = () => onPanZoomChange(1, { x: 0, y: 0 });
+  const handleReset = () => {
+    onPanZoomChange(1, { x: 0, y: 0 });
+    setRotation(0);
+  };
+
+  const handleRotateLeft = useCallback(() => {
+    setRotation((prev) => (prev - 90) % 360);
+  }, []);
+
+  const handleRotateRight = useCallback(() => {
+    setRotation((prev) => (prev + 90) % 360);
+  }, []);
+
+  useEffect(() => {
+    setRotation(0);
+  }, [plate?.id]);
 
   // Mouse wheel zoom
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -673,6 +690,27 @@ export const DualPlateViewport: React.FC<DualPlateViewportProps> = ({
             </button>
           )}
 
+          {/* Botones de Rotación de Placa (90° a la izquierda y derecha) */}
+          <button
+            type="button"
+            className="comparador-pane-btn"
+            onClick={handleRotateLeft}
+            title="Rotar 90° a la izquierda"
+            aria-label="Rotar 90° a la izquierda"
+          >
+            <RotateCcw size={15} />
+          </button>
+
+          <button
+            type="button"
+            className="comparador-pane-btn"
+            onClick={handleRotateRight}
+            title="Rotar 90° a la derecha"
+            aria-label="Rotar 90° a la derecha"
+          >
+            <RotateCw size={15} />
+          </button>
+
           <button
             type="button"
             className="comparador-btn"
@@ -710,7 +748,8 @@ export const DualPlateViewport: React.FC<DualPlateViewportProps> = ({
           style={{
             position: 'relative',
             display: 'inline-block',
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)`,
+            transformOrigin: 'center center',
             cursor: zoom > 1 ? (isDraggingRef.current ? 'grabbing' : 'grab') : 'default',
             transition: isDraggingRef.current ? 'none' : 'transform 0.25s ease',
           }}
@@ -911,8 +950,8 @@ export const DualPlateViewport: React.FC<DualPlateViewportProps> = ({
                 ✕
               </button>
             </div>
-            <p style={{ margin: 0, color: '#334155', fontSize: '0.85rem', lineHeight: 1.55 }}>
-              {plate.comentario}
+            <p style={{ margin: 0, color: '#334155', fontSize: '0.85rem', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+              {renderBoldText(plate.comentario)}
             </p>
           </div>
         )}
