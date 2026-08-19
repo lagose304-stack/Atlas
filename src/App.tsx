@@ -33,6 +33,8 @@ const EjecutarPrueba = lazy(() => import('./pages/EjecutarPrueba'));
 const Evaluaciones = lazy(() => import('./pages/Evaluaciones'));
 const AccesoDenegado = lazy(() => import('./pages/AccesoDenegado'));
 const Estadisticas = lazy(() => import('./pages/Estadisticas'));
+const Herramientas = lazy(() => import('./pages/Herramientas'));
+const ComparadorPlacas = lazy(() => import('./pages/ComparadorPlacas'));
 const Creditos = lazy(() => import('./pages/Creditos'));
 
 const ROLE_ADMIN = 'Administrador' as const;
@@ -122,6 +124,8 @@ const App: React.FC = () => {
           {/* Ruta pública */}
           <Route path="/" element={<Home />} />
           <Route path="/temario" element={<TemarioPublico />} />
+          <Route path="/herramientas" element={<Herramientas />} />
+          <Route path="/herramientas/comparador" element={<ComparadorPlacas />} />
           <Route path="/creditos" element={<Creditos />} />
           
           {/* Rutas protegidas */}

@@ -1,0 +1,1035 @@
+/* ==========================================================================
+   Atlas de Histología - Versus de Placas Design System (Light Medical Mode)
+   ========================================================================== */
+
+.comparador-fullscreen-app {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  background: linear-gradient(180deg, #f0f7fb 0%, #e4f1f8 50%, #d8ebf5 100%);
+  color: #0f172a;
+  font-family: 'Montserrat', 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1000;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+/* Top Accent Line */
+.comparador-top-accent-line {
+  height: 3.5px;
+  width: 100%;
+  background: linear-gradient(90deg, #38bdf8 0%, #0284c7 40%, #818cf8 80%, #c084fc 100%);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Top App Bar (Header Controls - Atlas Medical Blue)
+   -------------------------------------------------------------------------- */
+.comparador-appbar {
+  height: 56px;
+  min-height: 56px;
+  background: linear-gradient(135deg, #0c3852 0%, #12516f 55%, #18688c 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(186, 230, 253, 0.4);
+  box-shadow: 0 6px 20px rgba(12, 56, 82, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  gap: 12px;
+  z-index: 30;
+  box-sizing: border-box;
+  color: #ffffff;
+}
+
+.comparador-appbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Close / Exit Button (Styled like ImageViewerModal) */
+.comparador-appbar-close-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(248, 113, 113, 0.85);
+  background: linear-gradient(135deg, rgba(255, 250, 250, 0.98) 0%, rgba(254, 226, 226, 0.95) 100%);
+  color: #991b1b;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.comparador-appbar-close-btn:hover {
+  background: linear-gradient(135deg, #fee2e2 0%, #fca5a5 100%);
+  transform: translateX(-2px);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.35);
+}
+
+.comparador-appbar-close-badge {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.comparador-appbar-divider {
+  width: 1px;
+  height: 26px;
+  background: rgba(186, 230, 253, 0.3);
+}
+
+.comparador-appbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.comparador-appbar-logo-aura {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(186, 230, 253, 0.45);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+}
+
+.comparador-appbar-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.comparador-appbar-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comparador-appbar-title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.comparador-appbar-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+  color: #0369a1;
+  border: 1px solid #7dd3fc;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.comparador-appbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: nowrap;
+}
+
+/* Header Action Buttons */
+.comparador-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  border: 1px solid rgba(186, 230, 253, 0.35);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.comparador-btn:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.12));
+  border-color: rgba(186, 230, 253, 0.7);
+  transform: translateY(-1px);
+}
+
+.comparador-btn:active {
+  transform: translateY(0);
+}
+
+.comparador-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.comparador-btn-sync {
+  background: rgba(224, 242, 254, 0.15);
+  border-color: rgba(186, 230, 253, 0.5);
+  color: #bae6fd;
+}
+
+.comparador-btn-sync.is-active {
+  background: linear-gradient(135deg, #38bdf8, #0284c7);
+  color: #ffffff;
+  border-color: #e0f2fe;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.6);
+}
+
+.comparador-btn-icon-only {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+}
+
+/* --------------------------------------------------------------------------
+   Full Viewport Workspace (Light Medical Canvas)
+   -------------------------------------------------------------------------- */
+.comparador-viewport-workspace {
+  flex: 1;
+  width: 100%;
+  height: calc(100vh - 59.5px);
+  height: calc(100dvh - 59.5px);
+  display: grid;
+  gap: 4px;
+  background: #cbd5e1;
+  overflow: hidden;
+  position: relative;
+}
+
+.comparador-viewport-workspace.layout-horizontal {
+  grid-template-columns: 1fr 1fr;
+}
+
+.comparador-viewport-workspace.layout-vertical {
+  grid-template-rows: 1fr 1fr;
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 800px) {
+  .comparador-viewport-workspace.layout-horizontal {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Single Plate Viewport Pane (Light Medical Theme)
+   -------------------------------------------------------------------------- */
+.comparador-pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(145deg, #f4fafd 0%, #e5f1f7 50%, #dbebf5 100%);
+  overflow: hidden;
+  user-select: none;
+}
+
+.comparador-pane-header {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.comparador-pane-header > * {
+  pointer-events: auto;
+}
+
+/* Floating Badges Group (Atlas Glossy Light Pill) */
+.comparador-plate-badge-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(240, 249, 255, 0.94));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 6px 12px;
+  border-radius: 14px;
+  border: 1px solid #bae6fd;
+  color: #0f172a;
+  box-shadow: 0 4px 18px rgba(15, 75, 105, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  max-width: calc(100% - 110px);
+}
+
+.comparador-plate-letter {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  font-size: 0.74rem;
+  font-weight: 900;
+  flex-shrink: 0;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+.comparador-plate-letter-a {
+  background: linear-gradient(135deg, #0284c7, #2563eb);
+  color: #ffffff;
+  border: 1px solid #7dd3fc;
+}
+
+.comparador-plate-letter-b {
+  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  color: #ffffff;
+  border: 1px solid #c4b5fd;
+}
+
+.comparador-plate-name {
+  font-size: 0.86rem;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+  color: #0f172a;
+}
+
+.comparador-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.comparador-tag-aumento {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #9fe9b9;
+}
+
+.comparador-tag-tincion {
+  background: #fff7ed;
+  color: #92400e;
+  border: 1px solid #f8d88c;
+}
+
+.comparador-pane-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.comparador-pane-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ffffff, #f0f9ff);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid #bae6fd;
+  color: #0369a1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 12px rgba(15, 75, 105, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.comparador-pane-btn:hover {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+  color: #0284c7;
+  transform: scale(1.05);
+}
+
+.comparador-pane-btn.is-active {
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  border-color: #38bdf8;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+}
+
+/* --------------------------------------------------------------------------
+   Interactive Canvas Stage (Light Microscopy Canvas)
+   -------------------------------------------------------------------------- */
+.comparador-stage {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  background: radial-gradient(circle at 50% 50%, #f4fafd 0%, #d8ebf5 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.comparador-stage.is-dragging {
+  cursor: grabbing;
+}
+
+/* --------------------------------------------------------------------------
+   Float Zoom Controls inside Pane (Light Theme)
+   -------------------------------------------------------------------------- */
+.comparador-zoom-controls {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(240, 249, 255, 0.94));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 4px 6px;
+  border-radius: 12px;
+  border: 1px solid #bae6fd;
+  box-shadow: 0 6px 20px rgba(15, 75, 105, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.comparador-zoom-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #0369a1;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.12s ease;
+}
+
+.comparador-zoom-btn:hover {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.comparador-zoom-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.comparador-zoom-level {
+  font-size: 0.74rem;
+  font-weight: 850;
+  color: #0369a1;
+  padding: 0 5px;
+  min-width: 36px;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   Empty / Select Plate State inside Pane (Light Medical Card)
+   -------------------------------------------------------------------------- */
+.comparador-empty-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  text-align: center;
+  background: radial-gradient(circle at 50% 50%, #ffffff 0%, #eaf4fa 100%);
+  color: #0f172a;
+}
+
+.comparador-empty-icon-card {
+  width: 76px;
+  height: 76px;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+  border: 1.5px solid #7dd3fc;
+  color: #0284c7;
+  margin-bottom: 16px;
+  box-shadow: 0 10px 28px rgba(2, 132, 199, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.comparador-empty-title {
+  font-size: 1.2rem;
+  font-weight: 850;
+  margin: 0 0 6px;
+  color: #0f172a;
+}
+
+.comparador-empty-desc {
+  margin: 0 0 18px;
+  font-size: 0.86rem;
+  color: #475569;
+  max-width: 320px;
+  line-height: 1.55;
+}
+
+/* --------------------------------------------------------------------------
+   Comment Overlay / Drawer (Light Theme)
+   -------------------------------------------------------------------------- */
+.comparador-comment-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 15;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(240, 249, 255, 0.98) 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid #bae6fd;
+  padding: 14px 18px;
+  color: #334155;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  max-height: 140px;
+  overflow-y: auto;
+  box-shadow: 0 -8px 28px rgba(15, 75, 105, 0.12);
+  animation: slideUp 0.18s ease-out;
+}
+
+.comparador-comment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.comparador-comment-title {
+  font-weight: 850;
+  color: #0369a1;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* --------------------------------------------------------------------------
+   Plate Picker Stepped Modal (Atlas Design)
+   -------------------------------------------------------------------------- */
+.plate-picker-backdrop,
+.plate-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(12, 56, 82, 0.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.plate-picker-dialog,
+.plate-picker-modal {
+  width: 100%;
+  max-width: 940px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 24px;
+  border: 1px solid rgba(186, 230, 253, 0.95);
+  box-shadow: 0 28px 72px rgba(12, 56, 82, 0.28);
+  overflow: hidden;
+  animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #0f172a;
+}
+
+.plate-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(186, 230, 253, 0.4);
+  background: linear-gradient(135deg, #0c3852 0%, #12516f 55%, #18688c 100%);
+  color: #ffffff;
+}
+
+.plate-picker-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.plate-picker-icon-badge {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  border: 1px solid rgba(186, 230, 253, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.plate-picker-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 850;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+}
+
+.plate-picker-close-btn,
+.plate-picker-close {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: all 0.15s ease;
+}
+
+.plate-picker-close-btn:hover,
+.plate-picker-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.05);
+}
+
+.plate-picker-breadcrumbs-bar,
+.plate-picker-breadcrumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.plate-picker-breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 750;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.plate-picker-breadcrumb-item.is-active {
+  background: #e0f2fe;
+  color: #0284c7;
+  border-color: #bae6fd;
+  font-weight: 850;
+}
+
+.plate-picker-breadcrumb-item.is-completed {
+  color: #0284c7;
+}
+
+.plate-picker-breadcrumb-item.is-completed:hover {
+  background: #f1f5f9;
+}
+
+.plate-picker-breadcrumb-item.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.plate-picker-breadcrumb-arrow {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.plate-picker-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.plate-picker-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 750;
+  font-family: inherit;
+  border-radius: 10px;
+  border: 1px solid #bae6fd;
+  background: linear-gradient(135deg, #ffffff, #f0f9ff);
+  color: #0369a1;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(15, 75, 105, 0.08);
+  transition: all 0.15s ease;
+}
+
+.plate-picker-back-btn:hover {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+  color: #0284c7;
+  transform: translateX(-2px);
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.16);
+}
+
+.plate-picker-step-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.plate-picker-step-heading {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 850;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+/* Parcial Cards */
+.plate-picker-parciales-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 14px;
+}
+
+.plate-picker-parcial-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1.5px solid #e2e8f0;
+  background: linear-gradient(145deg, #ffffff, #f8fafc);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  text-align: left;
+  font-family: inherit;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
+}
+
+.plate-picker-parcial-card:hover {
+  transform: translateY(-2px);
+  border-color: #0284c7;
+  background: linear-gradient(145deg, #ffffff, #f0f9ff);
+  box-shadow: 0 12px 28px rgba(2, 132, 199, 0.14);
+}
+
+.plate-picker-parcial-number {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #0284c7, #2563eb);
+  color: #ffffff;
+  font-size: 1.25rem;
+  font-weight: 900;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.28);
+}
+
+.plate-picker-parcial-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.plate-picker-parcial-title {
+  margin: 0 0 3px;
+  font-size: 0.98rem;
+  font-weight: 850;
+  color: #0f172a;
+}
+
+.plate-picker-parcial-desc {
+  margin: 0;
+  font-size: 0.76rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.plate-picker-card-arrow {
+  color: #94a3b8;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.plate-picker-parcial-card:hover .plate-picker-card-arrow,
+.plate-picker-list-item-btn:hover .plate-picker-card-arrow {
+  color: #0284c7;
+  transform: translateX(3px);
+}
+
+/* List Item Buttons (Temas / Subtemas) */
+.plate-picker-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.plate-picker-list-item-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1.5px solid #e2e8f0;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  text-align: left;
+  font-family: inherit;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.plate-picker-list-item-btn:hover {
+  border-color: #0284c7;
+  background: #f0f9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(2, 132, 199, 0.12);
+}
+
+.plate-picker-media-thumb {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #e0f2fe;
+  display: grid;
+  place-items: center;
+  border: 1px solid #bae6fd;
+  box-shadow: 0 2px 6px rgba(15, 75, 105, 0.08);
+}
+
+.plate-picker-media-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.25s ease;
+}
+
+.plate-picker-list-item-btn:hover .plate-picker-media-img {
+  transform: scale(1.08);
+}
+
+.plate-picker-list-icon {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #0284c7;
+}
+
+.plate-picker-media-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plate-picker-list-item-title {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.plate-picker-list-item-desc {
+  font-size: 0.74rem;
+  color: #64748b;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Plates Grid (Step 4) */
+.plate-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.plate-picker-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: 15px;
+  overflow: hidden;
+  border: 1.5px solid #e2e8f0;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.plate-picker-card:hover {
+  transform: translateY(-3px);
+  border-color: #0284c7;
+  box-shadow: 0 12px 28px rgba(2, 132, 199, 0.18);
+}
+
+.plate-picker-thumb-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.plate-picker-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.25s ease;
+}
+
+.plate-picker-card:hover .plate-picker-thumb {
+  transform: scale(1.04);
+}
+
+.plate-picker-card-body {
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plate-picker-subtema-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.plate-picker-badges-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.plate-picker-badge-aumento {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(12, 56, 82, 0.88);
+  backdrop-filter: blur(4px);
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.plate-picker-badge-tincion {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(4px);
+  color: #92400e;
+  font-size: 0.68rem;
+  font-weight: 800;
+  border: 1px solid rgba(248, 216, 140, 0.8);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* --------------------------------------------------------------------------
+   Herramientas Catalog - Versus Featured Card Enhancements
+   -------------------------------------------------------------------------- */
+.versus-featured-card {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease !important;
+}
+
+.versus-featured-card:hover {
+  transform: translateY(-4px) !important;
+  border-color: #0284c7 !important;
+  box-shadow: 0 24px 56px rgba(12, 56, 82, 0.14), 0 4px 12px rgba(2, 132, 199, 0.08) !important;
+}
+
+.versus-action-btn {
+  transition: all 0.18s ease !important;
+}
+
+.versus-action-btn:hover {
+  background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(2, 132, 199, 0.4) !important;
+}
+
+.versus-action-btn svg {
+  transition: transform 0.18s ease;
+}
+
+.versus-action-btn:hover svg {
+  transform: translateX(4px);
+}
+
+.upcoming-featured-card {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease !important;
+}
+
+.upcoming-featured-card:hover {
+  transform: translateY(-4px) !important;
+  border-color: #818cf8 !important;
+  box-shadow: 0 24px 56px rgba(99, 102, 241, 0.12), 0 4px 12px rgba(12, 56, 82, 0.05) !important;
+}

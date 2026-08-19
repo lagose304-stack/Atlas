@@ -15,6 +15,18 @@ const getSeoData = (pathname: string): SeoData => {
     title: 'Evaluaciones de Histología | Histolab UNAH',
     description: 'Evaluaciones educativas del Atlas de Histología del Laboratorio de Histología de la UNAH.',
   };
+  if (pathname === '/herramientas') return {
+    title: 'Herramientas de Histología | Histolab UNAH',
+    description: 'Herramientas interactivas y recursos de apoyo para el estudio de histología y microscopía médica.',
+  };
+  if (pathname === '/herramientas/comparador') return {
+    title: 'Versus de Placas Histológicas | Histolab UNAH',
+    description: 'Herramienta Versus de Placas para comparar preparados histológicos frente a frente en tiempo real con zoom sincronizado.',
+  };
+  if (pathname === '/creditos') return {
+    title: 'Créditos | Histolab UNAH',
+    description: 'Reconocimiento a los docentes, instructores y desarrolladores del Atlas de Histología de la UNAH.',
+  };
   if (pathname.startsWith('/subtemas/')) return {
     title: 'Subtemas de Histología | Histolab UNAH',
     description: 'Explora subtemas, contenidos y recursos educativos de histología del Laboratorio de Histología de la UNAH.',

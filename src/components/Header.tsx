@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BadgeInfo, BookOpen, ClipboardList, House, Search } from 'lucide-react';
+import { BadgeInfo, BookOpen, ClipboardList, House, Search, Wrench } from 'lucide-react';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail, OPEN_HEADER_SEARCH_EVENT } from '../constants/uiEvents';
 import { supabase } from '../services/supabase';
 
@@ -12,6 +12,7 @@ const MENU_ITEMS = [
   { key: 'inicio', label: 'Inicio', icon: House, path: '/' },
   { key: 'temario', label: 'Temario', icon: BookOpen, path: '/temario' },
   { key: 'evaluaciones', label: 'Evaluaciones', icon: ClipboardList, path: '/evaluaciones' },
+  { key: 'herramientas', label: 'Herramientas', icon: Wrench, path: '/herramientas' },
   { key: 'creditos', label: 'Créditos', icon: BadgeInfo, path: '/creditos' },
 ] as const;
 
@@ -217,6 +218,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
       return pathname === '/temario' || pathname.startsWith('/subtemas/') || pathname.startsWith('/ver-placas/');
     }
     if (key === 'evaluaciones') return pathname === '/evaluaciones' || pathname.startsWith('/evaluaciones/');
+    if (key === 'herramientas') return pathname === '/herramientas' || pathname.startsWith('/herramientas/');
     return pathname === '/creditos';
   }, [pathname]);
 
