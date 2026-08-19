@@ -15,6 +15,10 @@ CREATE TABLE IF NOT EXISTS public.pruebas (
   tema_id       INTEGER      REFERENCES public.temas(id) ON DELETE SET NULL,
   subtema_id    INTEGER      REFERENCES public.subtemas(id) ON DELETE SET NULL,
   estado        TEXT         NOT NULL DEFAULT 'borrador' CHECK (estado IN ('borrador', 'publicada', 'archivada')),
+  created_by_id INTEGER      REFERENCES public.usuarios(id) ON DELETE SET NULL,
+  created_by_name TEXT,
+  updated_by_id INTEGER      REFERENCES public.usuarios(id) ON DELETE SET NULL,
+  updated_by_name TEXT,
   created_by    UUID         REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -36,6 +40,15 @@ CREATE INDEX IF NOT EXISTS idx_pruebas_subtema_id
 
 CREATE INDEX IF NOT EXISTS idx_pruebas_estado_created_at
   ON public.pruebas (estado, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_pruebas_created_by_id
+  ON public.pruebas (created_by_id);
+
+CREATE INDEX IF NOT EXISTS idx_pruebas_updated_by_id
+  ON public.pruebas (updated_by_id);
+
+CREATE INDEX IF NOT EXISTS idx_pruebas_updated_at
+  ON public.pruebas (updated_at DESC);
 
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -180,12 +193,15 @@ CREATE POLICY "Permitir eliminacion de opciones de prueba"
 -- RPC atómico para guardar una prueba completa con preguntas y opciones.
 -- Reemplaza el contenido hijo de la prueba en una sola operación.
 DROP FUNCTION IF EXISTS public.guardar_prueba_completa(UUID, TEXT, TEXT, JSONB);
+DROP FUNCTION IF EXISTS public.guardar_prueba_completa(UUID, TEXT, TEXT, JSONB, INTEGER, TEXT);
 
 CREATE OR REPLACE FUNCTION public.guardar_prueba_completa(
   p_prueba_id UUID,
   p_nombre TEXT,
   p_instrucciones TEXT,
-  p_preguntas JSONB
+  p_preguntas JSONB,
+  p_updated_by_id INTEGER DEFAULT NULL,
+  p_updated_by_name TEXT DEFAULT NULL
 )
 RETURNS VOID
 LANGUAGE plpgsql
@@ -197,7 +213,10 @@ DECLARE
 BEGIN
   UPDATE public.pruebas
   SET nombre = p_nombre,
-      instrucciones = p_instrucciones
+      instrucciones = p_instrucciones,
+      updated_by_id = COALESCE(p_updated_by_id, updated_by_id),
+      updated_by_name = COALESCE(NULLIF(p_updated_by_name, ''), updated_by_name),
+      updated_at = NOW()
   WHERE id = p_prueba_id;
 
   IF NOT FOUND THEN
@@ -266,4 +285,4 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.guardar_prueba_completa(UUID, TEXT, TEXT, JSONB) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.guardar_prueba_completa(UUID, TEXT, TEXT, JSONB, INTEGER, TEXT) TO anon, authenticated;

@@ -12,6 +12,7 @@ import {
   isOwnedTestReferenceUrl,
 } from '../services/testReferenceImages';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
+import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
 
 type TestScope = 'parcial' | 'tema' | 'subtema';
@@ -182,6 +183,7 @@ interface ReferenceMarkerState {
 const EditorDePruebas: React.FC = () => {
   const location = useLocation();
   const { pruebaId } = useParams();
+  const { user } = useAuth();
   const [prueba, setPrueba] = useState<PruebaRow | null>(null);
   const [temaNombre, setTemaNombre] = useState('');
   const [subtemaNombre, setSubtemaNombre] = useState('');
@@ -473,12 +475,37 @@ const EditorDePruebas: React.FC = () => {
       })),
     }));
 
-    const { error: updateError } = await supabase.rpc('guardar_prueba_completa', {
+    const editorName = user?.nombre?.trim() || user?.username?.trim() || 'Administrador';
+
+    let updateError = (await supabase.rpc('guardar_prueba_completa', {
       p_prueba_id: prueba.id,
       p_nombre: nombre.trim(),
       p_instrucciones: instrucciones.trim(),
       p_preguntas: preguntasPayload,
-    });
+      p_updated_by_id: user?.id ?? null,
+      p_updated_by_name: editorName,
+    })).error;
+
+    if (updateError) {
+      const fallbackResult = await supabase.rpc('guardar_prueba_completa', {
+        p_prueba_id: prueba.id,
+        p_nombre: nombre.trim(),
+        p_instrucciones: instrucciones.trim(),
+        p_preguntas: preguntasPayload,
+      });
+
+      if (!fallbackResult.error) {
+        updateError = null;
+        await supabase
+          .from('pruebas')
+          .update({
+            updated_by_id: user?.id ?? null,
+            updated_by_name: editorName,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', prueba.id);
+      }
+    }
 
     if (updateError) {
       await deleteOwnedTestReferenceImages(newlyUploadedReferenceUrls, prueba.id);

@@ -5,6 +5,7 @@ import Footer from '../components/Footer';
 import Header from '../components/Header';
 import TestRichTextField from '../components/TestRichTextField';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
 
 type TestScope = 'parcial' | 'tema' | 'subtema';
@@ -56,6 +57,7 @@ const scopeOptions: Array<{
 const Pruebas: React.FC = () => {
   const handleGoBack = useSmartBackNavigation('/edicion');
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [nombre, setNombre] = useState('');
   const [instrucciones, setInstrucciones] = useState('');
@@ -181,6 +183,8 @@ const Pruebas: React.FC = () => {
     setIsCreatingTest(true);
     setCreateError('');
 
+    const creatorName = user?.nombre?.trim() || user?.username?.trim() || 'Administrador';
+
     const payload = {
       nombre: nombre.trim(),
       instrucciones: instrucciones.trim(),
@@ -188,13 +192,36 @@ const Pruebas: React.FC = () => {
       parcial_key: selectedParcial,
       tema_id: scope === 'tema' || scope === 'subtema' ? selectedTemaId : null,
       subtema_id: scope === 'subtema' ? selectedSubtemaId : null,
+      created_by_id: user?.id ?? null,
+      created_by_name: creatorName,
+      updated_by_id: user?.id ?? null,
+      updated_by_name: creatorName,
     };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('pruebas')
       .insert(payload)
       .select('id')
       .single();
+
+    // Fallback si aún no existen las columnas de auditoría en la BD de Supabase
+    if (error) {
+      const basePayload = {
+        nombre: nombre.trim(),
+        instrucciones: instrucciones.trim(),
+        scope,
+        parcial_key: selectedParcial,
+        tema_id: scope === 'tema' || scope === 'subtema' ? selectedTemaId : null,
+        subtema_id: scope === 'subtema' ? selectedSubtemaId : null,
+      };
+      const fallbackResult = await supabase
+        .from('pruebas')
+        .insert(basePayload)
+        .select('id')
+        .single();
+      data = fallbackResult.data;
+      error = fallbackResult.error;
+    }
 
     if (error || !data?.id) {
       setCreateError('No se pudo guardar la prueba. Intenta de nuevo.');

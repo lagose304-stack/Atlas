@@ -4,6 +4,7 @@ import BackButton from '../components/BackButton';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import { useAuth } from '../contexts/AuthContext';
 import { deleteFromCloudinary } from '../services/cloudinary';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { getRenderableBlocks } from '../services/contentPublication';
@@ -27,6 +28,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Trash2,
+  UserCheck,
   X,
 } from 'lucide-react';
 
@@ -55,6 +57,11 @@ export interface AdminPrueba {
   parcial_key: ParcialKey;
   estado: string;
   created_at: string;
+  updated_at?: string | null;
+  created_by_id?: number | null;
+  created_by_name?: string | null;
+  updated_by_id?: number | null;
+  updated_by_name?: string | null;
   image_url?: string | null;
   tema_id?: number | null;
   subtema_id?: number | null;
@@ -253,6 +260,31 @@ const AdminTestCard: React.FC<TestCardAdminProps> = ({
             <span>Borrar</span>
           </button>
         </div>
+
+        {/* Metadatos de auditoría: Creada por y Editada por */}
+        <div style={s.auditBox}>
+          <div style={s.auditRow}>
+            <span style={s.auditUserText} title={`Creada por: ${prueba.created_by_name || 'No registrado'}`}>
+              <UserCheck size={13} aria-hidden="true" style={{ color: '#0284c7', flexShrink: 0 }} />
+              <span><strong>Creada por:</strong> {prueba.created_by_name || 'No registrado'}</span>
+            </span>
+            <span style={s.auditDateText}>
+              <CalendarDays size={12} aria-hidden="true" style={{ flexShrink: 0 }} />
+              {new Date(prueba.created_at).toLocaleDateString('es-MX')}
+            </span>
+          </div>
+
+          <div style={s.auditRow}>
+            <span style={s.auditUserText} title={`Editada por: ${prueba.updated_by_name || prueba.created_by_name || 'No registrado'}`}>
+              <Pencil size={12} aria-hidden="true" style={{ color: '#7c3aed', flexShrink: 0 }} />
+              <span><strong>Editada por:</strong> {prueba.updated_by_name || prueba.created_by_name || 'No registrado'}</span>
+            </span>
+            <span style={s.auditDateText}>
+              <CalendarDays size={12} aria-hidden="true" style={{ flexShrink: 0 }} />
+              {new Date(prueba.updated_at || prueba.created_at).toLocaleDateString('es-MX')}
+            </span>
+          </div>
+        </div>
       </div>
     </article>
   );
@@ -261,6 +293,7 @@ const AdminTestCard: React.FC<TestCardAdminProps> = ({
 const GestionPruebas: React.FC = () => {
   const handleGoBack = useSmartBackNavigation('/edicion');
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [pruebas, setPruebas] = useState<AdminPrueba[]>([]);
   const [weeklyThemeIds, setWeeklyThemeIds] = useState<number[]>([]);
@@ -327,16 +360,33 @@ const GestionPruebas: React.FC = () => {
     setIsLoading(true);
     setError('');
 
-    const { data, error: queryError } = await supabase
+    let data: unknown[] | null = null;
+    let queryError: unknown = null;
+
+    const fullResult = await supabase
       .from('pruebas')
-      .select('id, nombre, instrucciones, scope, parcial_key, estado, created_at, image_url, tema_id, subtema_id, tema:temas(id, nombre), subtema:subtemas(id, nombre)')
+      .select('id, nombre, instrucciones, scope, parcial_key, estado, created_at, updated_at, created_by_id, created_by_name, updated_by_id, updated_by_name, image_url, tema_id, subtema_id, tema:temas(id, nombre), subtema:subtemas(id, nombre)')
       .order('created_at', { ascending: false });
 
-    if (queryError) {
+    if (fullResult.error) {
+      // Fallback: si las nuevas columnas aún no existen en la BD de Supabase, reintentar con la consulta base
+      const fallbackResult = await supabase
+        .from('pruebas')
+        .select('id, nombre, instrucciones, scope, parcial_key, estado, created_at, image_url, tema_id, subtema_id, tema:temas(id, nombre), subtema:subtemas(id, nombre)')
+        .order('created_at', { ascending: false });
+
+      data = (fallbackResult.data as unknown[]) ?? null;
+      queryError = fallbackResult.error;
+    } else {
+      data = (fullResult.data as unknown[]) ?? null;
+      queryError = fullResult.error;
+    }
+
+    if (queryError || !data) {
       setPruebas([]);
       setError('No se pudieron cargar las evaluaciones.');
     } else {
-      setPruebas((data ?? []) as unknown as AdminPrueba[]);
+      setPruebas(data as unknown as AdminPrueba[]);
     }
 
     setIsLoading(false);
@@ -444,12 +494,28 @@ const GestionPruebas: React.FC = () => {
     if (updatingTestId) return;
 
     const nextEstado = prueba.estado === 'publicada' ? 'borrador' : 'publicada';
+    const editorName = user?.nombre?.trim() || user?.username?.trim() || 'Administrador';
+    const nowIso = new Date().toISOString();
     setUpdatingTestId(prueba.id);
 
-    const { error: updateError } = await supabase
+    let { error: updateError } = await supabase
       .from('pruebas')
-      .update({ estado: nextEstado })
+      .update({
+        estado: nextEstado,
+        updated_by_id: user?.id ?? null,
+        updated_by_name: editorName,
+        updated_at: nowIso,
+      })
       .eq('id', prueba.id);
+
+    // Fallback si aún no existen las columnas de auditoría en la BD
+    if (updateError) {
+      const fallbackResult = await supabase
+        .from('pruebas')
+        .update({ estado: nextEstado })
+        .eq('id', prueba.id);
+      updateError = fallbackResult.error;
+    }
 
     if (updateError) {
       setError('No se pudo cambiar el estado de la prueba.');
@@ -458,7 +524,13 @@ const GestionPruebas: React.FC = () => {
     }
 
     setPruebas((prev) =>
-      prev.map((item) => (item.id === prueba.id ? { ...item, estado: nextEstado } : item))
+      prev.map((item) => (item.id === prueba.id ? {
+        ...item,
+        estado: nextEstado,
+        updated_by_id: user?.id ?? null,
+        updated_by_name: editorName,
+        updated_at: nowIso,
+      } : item))
     );
     setUpdatingTestId(null);
   };
@@ -538,17 +610,38 @@ const GestionPruebas: React.FC = () => {
     // Si el tema tiene un parcial asignado, asegurarse de sincronizar el parcial_key
     const finalParcial: ParcialKey = targetTema ? (targetTema.parcial as ParcialKey) : reclassifyParcial;
 
+    const editorName = user?.nombre?.trim() || user?.username?.trim() || 'Administrador';
+    const nowIso = new Date().toISOString();
+
     const payload = {
       scope: reclassifyScope,
       parcial_key: finalParcial,
       tema_id: reclassifyScope === 'parcial' ? null : reclassifyTemaId,
       subtema_id: reclassifyScope === 'subtema' ? reclassifySubtemaId : null,
+      updated_by_id: user?.id ?? null,
+      updated_by_name: editorName,
+      updated_at: nowIso,
     };
 
-    const { error: updateError } = await supabase
+    let { error: updateError } = await supabase
       .from('pruebas')
       .update(payload)
       .eq('id', reclassifyTarget.id);
+
+    // Fallback si aún no existen las columnas de auditoría en la BD
+    if (updateError) {
+      const basePayload = {
+        scope: reclassifyScope,
+        parcial_key: finalParcial,
+        tema_id: reclassifyScope === 'parcial' ? null : reclassifyTemaId,
+        subtema_id: reclassifyScope === 'subtema' ? reclassifySubtemaId : null,
+      };
+      const fallbackResult = await supabase
+        .from('pruebas')
+        .update(basePayload)
+        .eq('id', reclassifyTarget.id);
+      updateError = fallbackResult.error;
+    }
 
     if (updateError) {
       setReclassifyError('No se pudo guardar la reclasificación.');
@@ -570,6 +663,9 @@ const GestionPruebas: React.FC = () => {
               subtema_id: payload.subtema_id,
               tema: targetTema ? { id: targetTema.id, nombre: targetTema.nombre } : null,
               subtema: selectedSubtema ? { id: selectedSubtema.id, nombre: selectedSubtema.nombre } : null,
+              updated_by_id: user?.id ?? null,
+              updated_by_name: editorName,
+              updated_at: nowIso,
             }
           : item
       )
@@ -2053,6 +2149,43 @@ const s: { [key: string]: React.CSSProperties } = {
     marginTop: 'auto',
     paddingTop: '10px',
     borderTop: '1px solid rgba(226, 232, 240, 0.8)',
+  },
+  auditBox: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '5px',
+    paddingTop: '8px',
+    marginTop: '4px',
+    borderTop: '1px dashed #e2e8f0',
+    fontSize: '0.75rem',
+  },
+  auditRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  auditUserText: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
+    color: '#334155',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    minWidth: 0,
+    maxWidth: 'calc(100% - 95px)',
+  },
+  auditDateText: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    color: '#64748b',
+    fontWeight: 600,
+    fontSize: '0.72rem',
+    flexShrink: 0,
+    marginLeft: 'auto',
   },
   publishButton: {
     border: 'none',

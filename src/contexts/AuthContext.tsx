@@ -5,6 +5,7 @@ import type { UserRole } from '../security/permissions';
 interface AuthUser {
   id: number;
   username: string;
+  nombre?: string;
   rol?: UserRole;
   activo?: boolean;
   session_version?: number;
