@@ -1,9 +1,10 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import { logAuditEvent } from '../services/unifiedAuditService';
 
 type Rol = 'Instructor' | 'Microscopía' | 'Administrador';
 
@@ -174,6 +175,16 @@ const GestionUsuarios: React.FC = () => {
       showToast(error.code === '23505' ? 'Ya existe un usuario con ese correo.' : 'Error al crear usuario.', false);
     } else {
       showToast('Usuario creado correctamente.');
+      void logAuditEvent({
+        entityType: 'usuario',
+        actionType: 'create',
+        entityName: `Usuario: ${crearForm.nombre.trim()} (${crearForm.username.trim().toLowerCase()})`,
+        details: {
+          nombre: crearForm.nombre.trim(),
+          username: crearForm.username.trim().toLowerCase(),
+          rol: crearForm.rol,
+        },
+      });
       setCrearForm({ username: '', password: '', nombre: '', rol: '' });
       setShowCrearPassword(false);
     }
@@ -222,6 +233,19 @@ const GestionUsuarios: React.FC = () => {
       showToast('Error al actualizar usuario.', false);
     } else {
       showToast('Usuario actualizado correctamente.');
+      void logAuditEvent({
+        entityType: 'usuario',
+        actionType: editarForm.rol !== usuarioEditar.rol ? 'role_change' : 'update',
+        entityId: String(usuarioEditar.id),
+        entityName: `Usuario: ${editarForm.nombre.trim()} (${editarForm.username.trim().toLowerCase()})`,
+        details: {
+          nombre_anterior: usuarioEditar.nombre,
+          nombre_nuevo: editarForm.nombre.trim(),
+          rol_anterior: usuarioEditar.rol,
+          rol_nuevo: editarForm.rol,
+          cambio_password: Boolean(editarForm.password.trim()),
+        },
+      });
       setUsuarioEditar(null);
       setEditarForm({ username: '', password: '', nombre: '', rol: '' });
       setShowEditarPassword(false);
@@ -265,6 +289,16 @@ const GestionUsuarios: React.FC = () => {
           ? 'Usuario desactivado y sesiones revocadas correctamente.'
           : 'Usuario eliminado correctamente.',
       );
+      void logAuditEvent({
+        entityType: 'usuario',
+        actionType: 'delete',
+        entityId: String(usuarioBorrar.id),
+        entityName: `Usuario: ${usuarioBorrar.nombre} (${usuarioBorrar.username})`,
+        details: {
+          rol: usuarioBorrar.rol,
+          metodo: supportsSecurityColumns ? 'desactivacion' : 'eliminacion_fisica',
+        },
+      });
       setUsuarioBorrar(null);
       setBusquedaBorrar('');
       loadUsuarios();

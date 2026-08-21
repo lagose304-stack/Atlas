@@ -33,6 +33,7 @@ const EjecutarPrueba = lazy(() => import('./pages/EjecutarPrueba'));
 const Evaluaciones = lazy(() => import('./pages/Evaluaciones'));
 const AccesoDenegado = lazy(() => import('./pages/AccesoDenegado'));
 const Estadisticas = lazy(() => import('./pages/Estadisticas'));
+const HistorialAuditoria = lazy(() => import('./pages/HistorialAuditoria'));
 const Herramientas = lazy(() => import('./pages/Herramientas'));
 const ComparadorPlacas = lazy(() => import('./pages/ComparadorPlacas'));
 const Creditos = lazy(() => import('./pages/Creditos'));
@@ -246,6 +247,14 @@ const App: React.FC = () => {
             element={
               <PrivateRoute allowedRoles={[ROLE_ADMIN]}>
                 <Estadisticas />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/historial"
+            element={
+              <PrivateRoute requireProtectedUser={true} allowedRoles={[ROLE_ADMIN]}>
+                <HistorialAuditoria />
               </PrivateRoute>
             }
           />

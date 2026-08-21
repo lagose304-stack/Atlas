@@ -65,4 +65,52 @@ describe('PrivateRoute', () => {
     renderProtectedRoute(['Administrador', 'Microscopía']);
     expect(screen.getByText('Acceso denegado')).toBeInTheDocument();
   });
+
+  it('bloquea a usuarios sin is_protected cuando requireProtectedUser es true', () => {
+    authState.current = {
+      isAuthenticated: true,
+      isLoading: false,
+      user: { id: 3, username: 'otro_admin', rol: 'Administrador', is_protected: false } as any,
+    };
+    render(
+      <MemoryRouter initialEntries={['/historial']}>
+        <Routes>
+          <Route path="/acceso-denegado" element={<div>Acceso denegado</div>} />
+          <Route
+            path="/historial"
+            element={(
+              <PrivateRoute requireProtectedUser={true} allowedRoles={['Administrador']}>
+                <div>Historial Privado</div>
+              </PrivateRoute>
+            )}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Acceso denegado')).toBeInTheDocument();
+  });
+
+  it('permite el acceso cuando el usuario tiene is_protected = true', () => {
+    authState.current = {
+      isAuthenticated: true,
+      isLoading: false,
+      user: { id: 1, username: 'superadmin', rol: 'Administrador', is_protected: true } as any,
+    };
+    render(
+      <MemoryRouter initialEntries={['/historial']}>
+        <Routes>
+          <Route path="/acceso-denegado" element={<div>Acceso denegado</div>} />
+          <Route
+            path="/historial"
+            element={(
+              <PrivateRoute requireProtectedUser={true} allowedRoles={['Administrador']}>
+                <div>Historial Privado</div>
+              </PrivateRoute>
+            )}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Historial Privado')).toBeInTheDocument();
+  });
 });

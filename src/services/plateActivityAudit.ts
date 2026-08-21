@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { logAuditEvent, type AuditActionType } from './unifiedAuditService';
 
 export type PlateActivityActionType =
   | 'upload_classified'
@@ -11,6 +12,8 @@ export type PlateActivityActionType =
 interface ActorInfo {
   id?: number | null;
   username?: string | null;
+  name?: string | null;
+  role?: string | null;
 }
 
 interface PlateActivityPayload {
@@ -24,6 +27,23 @@ interface PlateActivityPayload {
 
 const FALLBACK_STORAGE_KEY = 'atlas_plate_activity_logs_fallback';
 let supportsAuditTable: boolean | null = null;
+
+const mapPlateActionToUnified = (action: PlateActivityActionType): AuditActionType => {
+  switch (action) {
+    case 'upload_classified':
+    case 'upload_unclassified':
+      return 'create';
+    case 'classify_waiting_plate':
+      return 'classify';
+    case 'edit_plate':
+      return 'update';
+    case 'delete_classified':
+    case 'delete_unclassified':
+      return 'delete';
+    default:
+      return 'update';
+  }
+};
 
 const writeFallback = (payload: PlateActivityPayload) => {
   try {
@@ -51,26 +71,51 @@ const writeFallback = (payload: PlateActivityPayload) => {
 };
 
 export const logPlateActivity = async (payload: PlateActivityPayload): Promise<void> => {
+  const plateId = payload.placaId ?? payload.waitingPlateId;
+  const plateName = payload.details?.nombre_placa
+    ? String(payload.details.nombre_placa)
+    : `Placa #${plateId ?? 'sin ID'}`;
+
+  // 1. Registrar siempre en el nuevo servicio unificado
+  void logAuditEvent({
+    entityType: 'placa',
+    actionType: mapPlateActionToUnified(payload.actionType),
+    entityId: plateId != null ? String(plateId) : null,
+    entityName: plateName,
+    actor: payload.actor,
+    details: {
+      ...payload.details,
+      target_table: payload.targetTable,
+      original_action: payload.actionType,
+    },
+  });
+
+  // 2. Mantener registro en placas_activity_logs para compatibilidad retroactiva
   if (supportsAuditTable === false) {
     writeFallback(payload);
     return;
   }
 
-  const { error } = await supabase.from('placas_activity_logs').insert({
-    action_type: payload.actionType,
-    target_table: payload.targetTable,
-    placa_id: payload.placaId ?? null,
-    waiting_plate_id: payload.waitingPlateId ?? null,
-    actor_user_id: payload.actor?.id ?? null,
-    actor_username: payload.actor?.username ?? null,
-    details: payload.details ?? {},
-  });
+  try {
+    const { error } = await supabase.from('placas_activity_logs').insert({
+      action_type: payload.actionType,
+      target_table: payload.targetTable,
+      placa_id: payload.placaId ?? null,
+      waiting_plate_id: payload.waitingPlateId ?? null,
+      actor_user_id: payload.actor?.id ?? null,
+      actor_username: payload.actor?.username ?? null,
+      details: payload.details ?? {},
+    });
 
-  if (error) {
+    if (error) {
+      supportsAuditTable = false;
+      writeFallback(payload);
+      return;
+    }
+
+    supportsAuditTable = true;
+  } catch {
     supportsAuditTable = false;
     writeFallback(payload);
-    return;
   }
-
-  supportsAuditTable = true;
 };

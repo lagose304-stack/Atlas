@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Footer from '../components/Footer';
@@ -256,11 +256,12 @@ const Edicion: React.FC = () => {
             </Link>
           </div>}
 
+          {/* Tarjeta: Estadísticas del sitio */}
           {canEstadisticas && <div style={{ ...s.card, gridColumn: 'span 2' }} className="edicion-card edicion-card-wide">
             <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #0f766e, #14b8a6)' }} />
             <div style={s.cardIcon}>📈</div>
             <div style={s.cardBody}>
-              <h2 style={s.cardTitle}>Estadisticas del sitio</h2>
+              <h2 style={s.cardTitle}>Estadísticas del sitio</h2>
               <p style={s.cardDesc}>
                 Visualiza visitas por periodo y consulta de temas, subtemas y placas.
               </p>
@@ -282,7 +283,38 @@ const Edicion: React.FC = () => {
                 (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(0)';
               }}
             >
-              Ver estadisticas →
+              Ver estadísticas →
+            </Link>
+          </div>}
+
+          {/* Tarjeta: Historial y Auditoría (Solo para el usuario administrador principal/protegido) */}
+          {user?.is_protected === true && <div style={{ ...s.card, gridColumn: 'span 2' }} className="edicion-card edicion-card-wide">
+            <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #0284c7, #0369a1)' }} />
+            <div style={s.cardIcon}>🛡️</div>
+            <div style={s.cardBody}>
+              <h2 style={s.cardTitle}>Historial y Auditoría</h2>
+              <p style={s.cardDesc}>
+                Monitorea quién crea, clasifica, edita o elimina placas, pruebas, páginas, temas y quién inicia sesión en el sitio con nombres reales.
+              </p>
+            </div>
+            <Link
+              to="/historial"
+              style={{ ...s.cardBtn, color: '#0284c7', background: '#f0f9ff', borderColor: '#bae6fd' }}
+              className="edicion-action-btn"
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, #0284c7, #0369a1)';
+                (e.currentTarget as HTMLAnchorElement).style.color = '#fff';
+                (e.currentTarget as HTMLAnchorElement).style.borderColor = 'transparent';
+                (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLAnchorElement).style.background = '#f0f9ff';
+                (e.currentTarget as HTMLAnchorElement).style.color = '#0284c7';
+                (e.currentTarget as HTMLAnchorElement).style.borderColor = '#bae6fd';
+                (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(0)';
+              }}
+            >
+              Ver historial de actividades →
             </Link>
           </div>}
 
@@ -550,9 +582,3 @@ const s: { [key: string]: React.CSSProperties } = {
 };
 
 export default Edicion;
-
-
-
-
-
-

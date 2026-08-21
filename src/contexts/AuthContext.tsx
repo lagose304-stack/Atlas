@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ATLAS_SESSION_TOKEN_KEY, supabase } from '../services/supabase';
 import type { UserRole } from '../security/permissions';
+import { logAuditEvent } from '../services/unifiedAuditService';
 
 interface AuthUser {
   id: number;
@@ -166,6 +167,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
       acceptSession(result.user, result.token);
+
+      void logAuditEvent({
+        entityType: 'sesion',
+        actionType: 'login',
+        entityName: `Inicio de sesión (${result.user.nombre || result.user.username})`,
+        actor: {
+          id: result.user.id,
+          username: result.user.username,
+          name: result.user.nombre,
+          role: result.user.rol,
+        },
+        details: {
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          timestamp: new Date().toISOString(),
+        },
+      });
+
       return { ok: true, status: 'success', message: 'Inicio de sesión exitoso.' };
     } catch {
       return { ok: false, status: 'login_exception', message: 'Error de conexión al iniciar sesión.' };
@@ -173,6 +191,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = () => {
+    if (user) {
+      void logAuditEvent({
+        entityType: 'sesion',
+        actionType: 'logout',
+        entityName: `Cierre de sesión (${user.nombre || user.username})`,
+        actor: {
+          id: user.id,
+          username: user.username,
+          name: user.nombre,
+          role: user.rol,
+        },
+      });
+    }
     void (async () => {
       try {
         await supabase.rpc('atlas_logout');

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageUploader from '../components/ImageUploader';
 import { supabase } from '../services/supabase';
@@ -495,10 +495,19 @@ const Placas: React.FC = () => {
         actor: {
           id: user?.id ?? null,
           username: user?.username ?? null,
+          name: user?.nombre ?? null,
+          role: user?.rol ?? null,
         },
         details: {
+          photo_url: uploadResult.secure_url,
+          nombre_placa: `Placa #${insertedPlaca?.id ?? ''} - ${subtemaObj?.nombre || 'Placa'}`,
           tema_id: Number(selectedTema),
+          tema_nombre: temaObj?.nombre || null,
           subtema_id: Number(selectedSubtema),
+          subtema_nombre: subtemaObj?.nombre || null,
+          aumento: selectedAumento || null,
+          tincion: tincion.trim() || null,
+          comentario: comentario.trim() || null,
           source: 'placas_form',
         },
       });
@@ -591,8 +600,12 @@ const Placas: React.FC = () => {
           actor: {
             id: user?.id ?? null,
             username: user?.username ?? null,
+            name: user?.nombre ?? null,
+            role: user?.rol ?? null,
           },
           details: {
+            photo_url: uploadResult.secure_url,
+            nombre_placa: `Placa en espera #${insertedWaiting?.id ?? ''}`,
             source: 'placas_form',
           },
         });

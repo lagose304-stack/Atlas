@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Shield } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
@@ -7,6 +8,7 @@ import TestRichTextField from '../components/TestRichTextField';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
+import { logAuditEvent } from '../services/unifiedAuditService';
 
 type TestScope = 'parcial' | 'tema' | 'subtema';
 
@@ -228,6 +230,19 @@ const Pruebas: React.FC = () => {
       setIsCreatingTest(false);
       return;
     }
+
+    void logAuditEvent({
+      entityType: 'prueba',
+      actionType: 'create',
+      entityId: data.id,
+      entityName: `Prueba: ${nombre.trim()}`,
+      actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+      details: {
+        nombre: nombre.trim(),
+        scope,
+        parcial_key: selectedParcial,
+      },
+    });
 
     navigate(`/pruebas/editor/${data.id}`, { state: { from: '/pruebas/crear' } });
   };
@@ -516,6 +531,33 @@ const Pruebas: React.FC = () => {
                 {createHelpText}
               </div>
             </div>
+
+            {user?.is_protected && (
+              <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => navigate('/historial?entity=prueba')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 20px',
+                    background: 'linear-gradient(135deg, #7c3aed, #5b21b6)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: '0.88em',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(124, 58, 237, 0.25)',
+                  }}
+                  title="Ver historial y auditoría de creación y edición de pruebas"
+                >
+                  <Shield size={16} />
+                  <span>Ver Historial y Auditoría de Pruebas</span>
+                </button>
+              </div>
+            )}
           </div>
 
         </section>

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
@@ -10,7 +10,8 @@ import { getRenderableBlocks } from '../services/contentPublication';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { logTemaView } from '../services/analytics';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
-import { ArrowLeft, ArrowRight, Layers3, Microscope } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Layers3, Microscope, Shield } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import MicroscopyTopicExperience from './MicroscopyTopicExperience';
 
 interface Tema {
@@ -40,6 +41,7 @@ const normalizeParcial = (parcial: string | null | undefined): string => {
 const StandardSubtemas: React.FC = () => {
   const { temaId } = useParams<{ temaId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [tema, setTema] = useState<Tema | null>(null);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [loading, setLoading] = useState(true);
@@ -365,6 +367,33 @@ const StandardSubtemas: React.FC = () => {
                   )}
                 </div>
               </section>
+            )}
+
+            {user?.is_protected && (
+              <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/historial?scope=tema&temaId=${temaId}&temaNombre=${encodeURIComponent(tema?.nombre || '')}`)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 20px',
+                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: '0.88em',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(2, 132, 199, 0.25)',
+                  }}
+                  title="Ver historial de cambios en el contenido de la página y edición de este tema (sin placas)"
+                >
+                  <Shield size={16} />
+                  <span>Ver Historial y Contenido de este Tema</span>
+                </button>
+              </div>
             )}
           </section>
         )}

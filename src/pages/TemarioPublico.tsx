@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   SUPABASE_ANON_KEY,
@@ -16,7 +16,8 @@ import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
-import { ArrowRight, GraduationCap, Microscope } from 'lucide-react';
+import { ArrowRight, GraduationCap, Microscope, Shield } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Tema {
   id: number;
@@ -195,7 +196,6 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
         ) : (
           <span style={styles.topicFallback}><Microscope size={30} /><span>Atlas histológico</span></span>
         )}
-        <span className="temario-topic-overlay"><span>Explorar tema</span><ArrowRight size={16} /></span>
       </div>
 
       <h4
@@ -208,7 +208,9 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
           justifyContent: 'space-between',
           gap: '10px',
           padding: '10px 13px',
-          background: 'linear-gradient(180deg, #ffffff 0%, #f4f9fc 100%)',
+          color: '#123b66',
+          fontSize: '0.94rem',
+          fontWeight: 800,
           lineHeight: 1.25,
         }}
       >
@@ -232,6 +234,7 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
 
 const TemarioPublico: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [temas, setTemas] = useState<Tema[]>([]);
   const [loading, setLoading] = useState(true);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
@@ -346,19 +349,34 @@ const TemarioPublico: React.FC = () => {
             <div style={styles.temarioSectionsContainer}>
               <nav className="temario-partial-nav" style={styles.partialNav} aria-label="Seleccionar parcial">
                 {PARCIALES.map(({ key, label, num }) => {
-                  const count = temas.filter((tema) => tema.parcial === key).length;
                   const isActive = selectedParcial === key;
+                  const count = temas.filter((tema) => tema.parcial === key).length;
                   return (
                     <button
                       key={key}
                       type="button"
-                      className={`temario-partial-tab${isActive ? ' is-active' : ''}`}
-                      style={styles.partialTab}
-                      aria-pressed={isActive}
+                      className={`temario-partial-tab ${isActive ? 'is-active' : ''}`}
+                      style={{
+                        ...styles.partialTab,
+                        ...(isActive ? styles.partialTabActive : {}),
+                      }}
                       onClick={() => setSelectedParcial(key)}
                     >
-                      <span style={styles.partialTabNumber}>{num}</span>
-                      <span style={styles.partialTabCopy}><strong>{label}</strong><small>{count} {count === 1 ? 'tema' : 'temas'}</small></span>
+                      <span
+                        style={{
+                          ...styles.partialTabNumber,
+                          background: isActive ? 'rgba(255, 255, 255, 0.25)' : '#e2e8f0',
+                          color: isActive ? '#ffffff' : '#1e3a5f',
+                        }}
+                      >
+                        {num}
+                      </span>
+                      <span style={styles.partialTabCopy}>
+                        <strong style={{ color: isActive ? '#ffffff' : '#123b66', fontWeight: 800 }}>{label}</strong>
+                        <small style={{ color: isActive ? 'rgba(255, 255, 255, 0.92)' : '#5c7897', fontWeight: 600 }}>
+                          {count} {count === 1 ? 'tema' : 'temas'}
+                        </small>
+                      </span>
                     </button>
                   );
                 })}
@@ -396,6 +414,33 @@ const TemarioPublico: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {user?.is_protected && (
+            <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => navigate('/historial?entity=tema')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 20px',
+                  background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '0.88em',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.25)',
+                }}
+                title="Ver historial y auditoría de creación y edición de temas"
+              >
+                <Shield size={16} />
+                <span>Ver Historial y Auditoría de Temas</span>
+              </button>
             </div>
           )}
         </section>
@@ -461,23 +506,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: 'transparent',
     pointerEvents: 'none',
   },
-  sectionHeader: {
-    position: 'relative',
-    zIndex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: 'clamp(14px, 2vw, 20px)',
-  },
-  temarioHeading: {
-    margin: 0,
-    textAlign: 'center',
-  },
-  temarioSubtitle: {
-    margin: '2px 0 0',
-    textAlign: 'center',
-  },
   temarioSectionsContainer: {
     position: 'relative',
     zIndex: 1,
@@ -519,39 +547,83 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: 'linear-gradient(145deg, #2386bb, #225d8f)',
     boxShadow: '0 8px 18px rgba(34,93,143,.2)',
   },
-  parcialIconEmoji: {
-    fontSize: '18px',
-    lineHeight: 1,
-    fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
+  parcialHeadingCopy: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '3px',
+    flex: 1,
+  },
+  parcialEyebrow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    color: '#2875a6',
+    fontSize: '.68rem',
+    fontWeight: 850,
+    letterSpacing: '.07em',
+    textTransform: 'uppercase',
   },
   parcialTitle: {
     margin: 0,
     color: '#123b66',
     fontSize: '1.1rem',
   },
+  parcialCount: {
+    borderRadius: '999px',
+    padding: '6px 10px',
+    background: '#e6f3fb',
+    color: '#176a9d',
+    fontSize: '.74rem',
+    fontWeight: 850,
+    whiteSpace: 'nowrap',
+  },
   partialNav: {
-    display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '11px',
-    padding: '10px', borderRadius: '22px', border: '1px solid rgba(195,216,232,.9)',
-    background: 'rgba(255,255,255,.72)', boxShadow: '0 10px 28px rgba(23,65,101,.06)',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    gap: '11px',
+    padding: '10px',
+    borderRadius: '22px',
+    border: '1px solid rgba(195,216,232,.9)',
+    background: 'rgba(255,255,255,.72)',
+    boxShadow: '0 10px 28px rgba(23,65,101,.06)',
   },
   partialTab: {
-    display: 'flex', alignItems: 'center', gap: '11px', minWidth: 0, padding: '11px 13px', borderRadius: '15px',
-    border: '1px solid transparent', background: 'transparent', color: '#315b82', cursor: 'pointer',
-    fontFamily: 'inherit', textAlign: 'left',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '11px',
+    minWidth: 0,
+    padding: '11px 13px',
+    borderRadius: '15px',
+    border: '1px solid transparent',
+    background: 'transparent',
+    color: '#315b82',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+  },
+  partialTabActive: {
+    background: 'linear-gradient(135deg, #2284b8, #185586)',
+    color: '#ffffff',
+    borderColor: '#195584',
+    boxShadow: '0 10px 24px rgba(24,85,134,.28)',
   },
   partialTabNumber: {
-    width: '36px', height: '36px', display: 'grid', placeItems: 'center', flexShrink: 0, borderRadius: '12px',
-    background: '#e5f2fa', color: '#176a9d', fontWeight: 950,
+    width: '32px',
+    height: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '10px',
+    background: 'rgba(255,255,255,.24)',
+    fontSize: '.86rem',
+    fontWeight: 900,
+    flexShrink: 0,
   },
-  partialTabCopy: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, fontSize: '.82rem' },
-  parcialHeadingCopy: { minWidth: 0, flex: 1 },
-  parcialEyebrow: {
-    display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '3px', color: '#64829b',
-    fontSize: '.68rem', fontWeight: 850, letterSpacing: '.07em', textTransform: 'uppercase',
-  },
-  parcialCount: {
-    borderRadius: '999px', padding: '6px 10px', background: '#e6f3fb', color: '#176a9d',
-    fontSize: '.74rem', fontWeight: 850, whiteSpace: 'nowrap',
+  partialTabCopy: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    minWidth: 0,
   },
   temasGrid: {
     display: 'grid',
@@ -560,8 +632,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'start',
   },
   topicFallback: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '7px', color: '#315b82',
-    fontSize: '.78rem', fontWeight: 800,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '7px',
+    color: '#315b82',
+    fontSize: '.78rem',
+    fontWeight: 800,
   },
   emptyState: {
     display: 'flex',
@@ -645,6 +722,3 @@ const styles: { [key: string]: React.CSSProperties } = {
 };
 
 export default TemarioPublico;
-
-
-

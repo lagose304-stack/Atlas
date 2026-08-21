@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { ContentBlock, PageEntityType } from '../types/contentBlocks';
 import { normalizeBlockContent } from '../components/blocks/blockRegistry';
+import { logAuditEvent } from './unifiedAuditService';
 
 export interface PageVersionRow {
   id: number;
@@ -257,6 +258,19 @@ export const savePageVersionBlocks = async (
       onConflict: 'entity_type,entity_id',
     });
   }
+
+  void logAuditEvent({
+    entityType: 'pagina',
+    actionType: 'update',
+    entityId: String(currentVersion.entity_id),
+    entityName: `Página: ${currentVersion.version_name || `${currentVersion.entity_type} #${currentVersion.entity_id}`}`,
+    actor: user ? { id: user.id ? Number(user.id) : null, username: user.username, name: user.nombre } : null,
+    details: {
+      version_id: versionId,
+      version_name: currentVersion.version_name,
+      blocks_count: blocksToStore.length,
+    },
+  });
 };
 
 export const publishPageVersion = async (
@@ -310,6 +324,19 @@ export const publishPageVersion = async (
   }, {
     onConflict: 'entity_type,entity_id',
   });
+
+  void logAuditEvent({
+    entityType: 'pagina',
+    actionType: 'publish',
+    entityId: String(version.entity_id),
+    entityName: `Página: ${version.version_name || `${version.entity_type} #${version.entity_id}`}`,
+    actor: user ? { id: user.id ? Number(user.id) : null, username: user.username, name: user.nombre } : null,
+    details: {
+      version_id: versionId,
+      version_name: version.version_name,
+      blocks_count: version.blocks.length,
+    },
+  });
 };
 
 export const deletePageVersion = async (versionId: number): Promise<void> => {
@@ -319,6 +346,16 @@ export const deletePageVersion = async (versionId: number): Promise<void> => {
     .eq('id', versionId);
 
   if (error) throw error;
+
+  void logAuditEvent({
+    entityType: 'pagina',
+    actionType: 'delete',
+    entityId: String(versionId),
+    entityName: `Versión de página #${versionId}`,
+    details: {
+      version_id: versionId,
+    },
+  });
 };
 
 export const ensurePageHasInitialVersion = async (

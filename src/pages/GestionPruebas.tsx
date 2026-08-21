@@ -11,6 +11,7 @@ import { getRenderableBlocks } from '../services/contentPublication';
 import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { supabase } from '../services/supabase';
 import { deleteOwnedTestReferenceImages } from '../services/testReferenceImages';
+import { logAuditEvent } from '../services/unifiedAuditService';
 import { collectWeeklyThemeIds, groupHistoricalTestsByPartial, orderTestsByWeeklyPriority } from './evaluacionesUtils';
 import {
   BookOpenCheck,
@@ -523,6 +524,20 @@ const GestionPruebas: React.FC = () => {
       return;
     }
 
+    void logAuditEvent({
+      entityType: 'prueba',
+      actionType: nextEstado === 'publicada' ? 'publish' : 'unpublish',
+      entityId: prueba.id,
+      entityName: `Prueba: ${prueba.nombre}`,
+      actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+      details: {
+        estado_anterior: prueba.estado,
+        nuevo_estado: nextEstado,
+        scope: prueba.scope,
+        parcial_key: prueba.parcial_key,
+      },
+    });
+
     setPruebas((prev) =>
       prev.map((item) => (item.id === prueba.id ? {
         ...item,
@@ -649,6 +664,21 @@ const GestionPruebas: React.FC = () => {
       return;
     }
 
+    void logAuditEvent({
+      entityType: 'prueba',
+      actionType: 'update',
+      entityId: reclassifyTarget.id,
+      entityName: `Prueba: ${reclassifyTarget.nombre}`,
+      actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+      details: {
+        action_detail: 'Reclasificación de prueba',
+        nuevo_scope: reclassifyScope,
+        nuevo_parcial: finalParcial,
+        tema_id: reclassifyScope === 'parcial' ? null : reclassifyTemaId,
+        subtema_id: reclassifyScope === 'subtema' ? reclassifySubtemaId : null,
+      },
+    });
+
     // Actualizar estado local
     const selectedSubtema = modalSubtemas.find((s) => s.id === reclassifySubtemaId);
 
@@ -727,6 +757,19 @@ const GestionPruebas: React.FC = () => {
     if (referenceCleanup.failed.length > 0) {
       setError(`La prueba se borró, pero no se pudieron eliminar ${referenceCleanup.failed.length} referencia(s) exclusiva(s).`);
     }
+
+    void logAuditEvent({
+      entityType: 'prueba',
+      actionType: 'delete',
+      entityId: prueba.id,
+      entityName: `Prueba: ${prueba.nombre}`,
+      actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+      details: {
+        scope: prueba.scope,
+        parcial_key: prueba.parcial_key,
+        tuvo_imagen_portada: Boolean(prueba.image_url),
+      },
+    });
 
     setPruebas((prev) => prev.filter((item) => item.id !== prueba.id));
     setDeleteTarget(null);

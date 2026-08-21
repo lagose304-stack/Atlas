@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { deleteFromCloudinary } from '../services/cloudinary';
 import BackButton from '../components/BackButton';
@@ -311,6 +311,9 @@ const ListaEspera: React.FC = () => {
       });
       if (error) throw error;
 
+      const temaObj = temas.find(t => t.id === temaId);
+      const subtemaObj = subtemas.find(s => s.id === subtemaId);
+
       await logPlateActivity({
         actionType: 'classify_waiting_plate',
         targetTable: 'placas',
@@ -319,11 +322,19 @@ const ListaEspera: React.FC = () => {
         actor: {
           id: user?.id ?? null,
           username: user?.username ?? null,
+          name: user?.nombre ?? null,
+          role: user?.rol ?? null,
         },
         details: {
+          photo_url: selected.photo_url,
+          nombre_placa: `Placa #${typeof createdPlacaId === 'number' ? createdPlacaId : selected.id} - ${subtemaObj?.nombre || 'Placa'}`,
           tema_id: temaId,
+          tema_nombre: temaObj?.nombre || null,
           subtema_id: subtemaId,
+          subtema_nombre: subtemaObj?.nombre || null,
           aumento: aumento || null,
+          tincion: tincion.trim() || null,
+          comentario: comentario.trim() || null,
           source: 'lista_espera',
         },
       });
@@ -372,8 +383,12 @@ const ListaEspera: React.FC = () => {
         actor: {
           id: user?.id ?? null,
           username: user?.username ?? null,
+          name: user?.nombre ?? null,
+          role: user?.rol ?? null,
         },
         details: {
+          photo_url: deleteTarget.photo_url,
+          nombre_placa: `Placa en espera #${deleteTargetId}`,
           source: 'lista_espera',
         },
       });

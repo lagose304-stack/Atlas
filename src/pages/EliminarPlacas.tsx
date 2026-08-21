@@ -342,6 +342,9 @@ const EliminarPlacas: React.FC = () => {
             }
           }
 
+          const selTemaObj = temas.find(t => t.id === selectedTemaId);
+          const selSubtemaObj = subtemas.find(s => s.id === selectedSubtemaId);
+
           await logPlateActivity({
             actionType: 'delete_classified',
             targetTable: 'placas',
@@ -349,13 +352,20 @@ const EliminarPlacas: React.FC = () => {
             actor: {
               id: user?.id ?? null,
               username: user?.username ?? null,
+              name: user?.nombre ?? null,
+              role: user?.rol ?? null,
             },
             details: {
+              photo_url: placa.photo_url,
+              nombre_placa: `Placa #${placa.id} - ${selSubtemaObj?.nombre || 'Placa'}`,
+              tema_id: placa.tema_id ?? selectedTemaId,
+              tema_nombre: selTemaObj?.nombre || null,
+              subtema_id: placa.subtema_id ?? selectedSubtemaId,
+              subtema_nombre: selSubtemaObj?.nombre || null,
+              aumento: placa.aumento || null,
               source: 'eliminar_placas',
               selected_tema_id: selectedTemaId,
               selected_subtema_id: selectedSubtemaId,
-              tema_id: placa.tema_id ?? selectedTemaId,
-              subtema_id: placa.subtema_id ?? selectedSubtemaId,
             },
           });
         })

@@ -8,9 +8,10 @@ import AtlasLoadingScreen from './AtlasLoadingScreen';
 interface PrivateRouteProps {
   children: React.ReactElement;
   allowedRoles?: UserRole[];
+  requireProtectedUser?: boolean;
 }
 
-const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles }) => {
+const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles, requireProtectedUser }) => {
   const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
 
@@ -22,6 +23,19 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles }) =
   // Si no está autenticado, redirigir a home
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;
+  }
+
+  // Si la ruta requiere ser el usuario protegido/propietario
+  if (requireProtectedUser && user?.is_protected !== true) {
+    void logSecurityEvent('route_denied', {
+      userId: user?.id ?? null,
+      username: user?.username ?? null,
+      details: {
+        path: location.pathname,
+        reason: 'requires_protected_user',
+      },
+    });
+    return <Navigate to="/acceso-denegado" replace state={{ from: location.pathname }} />;
   }
 
   if (allowedRoles && allowedRoles.length > 0) {
@@ -40,7 +54,7 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles }) =
     }
   }
 
-  // Si está autenticado, mostrar el contenido
+  // Si está autenticado y cumple los requisitos, mostrar el contenido
   return children;
 };
 

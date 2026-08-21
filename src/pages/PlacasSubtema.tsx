@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Eye, Images, MousePointerClick } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, Images, MousePointerClick, Shield } from 'lucide-react';
 import { supabase } from '../services/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -72,6 +73,7 @@ const normalizeAumentoLabel = (aumento: string): string => aumento.trim().replac
 
 const PlacasSubtema: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { subtemaId } = useParams<{ subtemaId: string }>();
   const [placas, setPlacas] = useState<Placa[]>([]);
   const [subtema, setSubtema] = useState<SubtemaInfo | null>(null);
@@ -428,6 +430,33 @@ const PlacasSubtema: React.FC = () => {
                 )}
               </div>
             </section>
+          )}
+
+          {user?.is_protected && subtemaId && (
+            <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => navigate(`/historial?scope=subtema&subtemaId=${subtemaId}&subtemaNombre=${encodeURIComponent(subtema?.nombre || '')}`)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 20px',
+                  background: 'linear-gradient(135deg, #4f46e5, #3730a3)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '0.88em',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(79, 70, 229, 0.25)',
+                }}
+                title="Ver historial de cambios en el contenido de la página y configuración de este subtema"
+              >
+                <Shield size={16} />
+                <span>Ver Historial y Contenido de este Subtema</span>
+              </button>
+            </div>
           )}
         </section>
       </main>

@@ -1,10 +1,11 @@
 import React, { useId, useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Pencil, X, Hand, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Pencil, X, Hand, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Shield } from 'lucide-react';
 import { renderBoldText } from './BoldField';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
 import { supabase } from '../services/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import type { InteractiveMapViewerSection } from './InteractiveMapViewerModal';
 import laboratoryLogo from '../assets/logos/laboratorio.png';
 
@@ -344,6 +345,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   platePosition,
   plateCount,
 }) => {
+  const { user } = useAuth();
   const resolvedInitialMarkerVisualMode: MarkerVisualMode = hideSidebar ? 'pointer' : initialMarkerVisualMode;
   const resolvedInitialMarkerIndex = hideSidebar && ((senaladosMeta?.length ?? senalados?.length ?? 0) > 0) ? 0 : null;
 
@@ -408,6 +410,12 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
   const isDesktop = windowWidth >= SIDEBAR_BREAKPOINT;
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [useZoomSource, setUseZoomSource] = useState(false);
   const [zoomSourceFailed, setZoomSourceFailed] = useState(false);
   const [isPlateImageLoading, setIsPlateImageLoading] = useState(false);
@@ -2080,7 +2088,7 @@ const panBy = (dx: number, dy: number) => {
     };
   }, [hasInfo, imageSize, isDesktop, position.x, position.y, zoomLevel]);
 
-  const showSidebar = !hideSidebar && hasInfo && (isDesktop || sidebarOpen);
+  const showSidebar = !hideSidebar && hasInfo && sidebarOpen;
   const isImagePointVisible = (x: number, y: number) => {
     const container = containerRef.current;
     if (!container || !imageSize) return true;
@@ -2262,26 +2270,50 @@ const panBy = (dx: number, dy: number) => {
           Cerrar
         </button>
 
-        {!hideSidebar && hasInfo && !isDesktop && (
+        {!hideSidebar && hasInfo && !showSidebar && (
           <button
-            onClick={() => setSidebarOpen(o => !o)}
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            title="Mostrar barra lateral"
+            aria-label="Mostrar barra lateral"
             style={{
-              position: 'absolute', top: '16px', right: '16px',
-              background: sidebarOpen
-                ? 'linear-gradient(135deg, #818cf8, #6366f1)'
-                : 'rgba(255,255,255,0.90)',
-              color: sidebarOpen ? '#fff' : '#6366f1',
-              border: sidebarOpen ? 'none' : '1.5px solid #c7d2fe',
-              borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', fontWeight: 700,
-              fontSize: '0.82em', zIndex: 25,
-              display: 'flex', alignItems: 'center', gap: '6px',
-              boxShadow: '0 2px 10px rgba(99,102,241,0.20)',
-              fontFamily: 'inherit',
+              position: 'absolute',
+              top: '16px',
+              right: '16px',
+              background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(239, 246, 255, 0.92) 100%)',
+              color: '#0284c7',
+              border: '1.5px solid rgba(186, 230, 253, 0.9)',
+              borderRadius: '10px',
+              width: '40px',
+              height: '40px',
+              minWidth: '40px',
+              minHeight: '40px',
+              cursor: 'pointer',
+              zIndex: 25,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backdropFilter: 'blur(12px) saturate(140%)',
+              boxShadow: '0 8px 24px rgba(15, 75, 105, 0.2), inset 0 1px 0 rgba(255,255,255,0.92)',
+              transition: 'all 0.18s ease, transform 0.12s ease',
               touchAction: 'manipulation',
               WebkitTapHighlightColor: 'transparent',
+              padding: 0,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'scale(1.06)';
+              e.currentTarget.style.borderColor = '#38bdf8';
+              e.currentTarget.style.color = '#0369a1';
+              e.currentTarget.style.boxShadow = '0 12px 28px rgba(14, 165, 233, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.borderColor = 'rgba(186, 230, 253, 0.9)';
+              e.currentTarget.style.color = '#0284c7';
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 75, 105, 0.2), inset 0 1px 0 rgba(255,255,255,0.92)';
             }}
           >
-            {sidebarOpen ? '◀ Ocultar info' : '▶ Ver info'}
+            <PanelRightOpen size={19} strokeWidth={2.4} />
           </button>
         )}
 
@@ -3691,11 +3723,43 @@ const panBy = (dx: number, dy: number) => {
                 >
                   {isFullscreen ? <Minimize2 size={13} strokeWidth={2.4} /> : <Maximize2 size={13} strokeWidth={2.4} />}
                 </button>
+                {/* Botón Ocultar Barra Lateral (solo ícono) */}
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(false)}
+                  title="Ocultar barra lateral"
+                  aria-label="Ocultar barra lateral"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '22px',
+                    height: '22px',
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    border: '1px solid rgba(255, 255, 255, 0.28)',
+                    color: '#ffffff',
+                    borderRadius: '6px',
+                    padding: 0,
+                    cursor: 'pointer',
+                    marginLeft: '3px',
+                    transition: 'all 0.15s ease',
+                    flexShrink: 0,
+                    touchAction: 'manipulation',
+                    WebkitTapHighlightColor: 'transparent',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.28)';
+                    e.currentTarget.style.color = '#ffffff';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+                    e.currentTarget.style.color = '#ffffff';
+                  }}
+                >
+                  <PanelRightClose size={13} strokeWidth={2.4} />
+                </button>
               </div>
             </div>
-            {!isDesktop && (
-              <button onClick={() => setSidebarOpen(false)} style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b', cursor: 'pointer', borderRadius: '8px', padding: '6px 11px', fontSize: '0.77em', fontFamily: 'inherit', fontWeight: 700, boxShadow: '0 2px 6px rgba(15,23,42,0.06)', touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}>✕ Cerrar</button>
-            )}
           </div>
           {/* Contenido */}
           <div style={{ padding: '14px 12px 18px', display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
@@ -4317,6 +4381,35 @@ const panBy = (dx: number, dy: number) => {
                   </button>
                 </div>
               </nav>
+            )}
+            {user?.is_protected && placaId && (
+              <div style={{ ...sidebarSectionStyle, order: 6, background: 'linear-gradient(135deg, #f0f9ff, #e0f2fe)', borderColor: '#7dd3fc', marginTop: '8px' }}>
+                <a
+                  href={`/historial?scope=placa&placaId=${encodeURIComponent(String(placaId))}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '7px',
+                    width: '100%',
+                    padding: '8px 12px',
+                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                    color: '#ffffff',
+                    borderRadius: '10px',
+                    fontSize: '0.78em',
+                    fontWeight: 750,
+                    textDecoration: 'none',
+                    boxShadow: '0 2px 6px rgba(2, 132, 199, 0.25)',
+                    boxSizing: 'border-box',
+                  }}
+                  title="Ver historial de cambios, clasificaciones y ediciones de esta placa en una nueva pestaña"
+                >
+                  <Shield size={14} />
+                  <span>Ver Historial de esta Placa (#{placaId})</span>
+                </a>
+              </div>
             )}
           </div>
         </div>

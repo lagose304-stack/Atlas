@@ -2444,23 +2444,49 @@ body {
 }
 
 .temario-partial-tab {
-  transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease, color 180ms ease;
+  color: #1e3a5f;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(195, 216, 232, 0.9);
 }
 
-.temario-partial-tab:hover {
-  background: #f2f8fc !important;
+.temario-partial-tab:not(.is-active):hover {
+  background: #f0f7fc !important;
+  color: #123b66 !important;
   transform: translateY(-2px);
 }
 
 .temario-partial-tab.is-active {
-  border-color: rgba(35, 134, 187, 0.42) !important;
-  background: linear-gradient(145deg, #f5fbff, #dff2fc) !important;
-  box-shadow: 0 8px 20px rgba(35, 134, 187, 0.13);
+  border-color: #195584 !important;
+  background: linear-gradient(135deg, #2284b8, #185586) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px rgba(24, 85, 134, 0.28) !important;
+}
+
+.temario-partial-tab.is-active strong {
+  color: #ffffff !important;
+}
+
+.temario-partial-tab.is-active small {
+  color: rgba(255, 255, 255, 0.92) !important;
 }
 
 .temario-partial-tab.is-active > span:first-child {
-  background: linear-gradient(145deg, #2386bb, #225d8f) !important;
-  color: #fff !important;
+  background: rgba(255, 255, 255, 0.24) !important;
+  color: #ffffff !important;
+}
+
+.temario-partial-tab:not(.is-active) strong {
+  color: #1e3a5f !important;
+}
+
+.temario-partial-tab:not(.is-active) small {
+  color: #64748b !important;
+}
+
+.temario-partial-tab:not(.is-active) > span:first-child {
+  background: #e2e8f0 !important;
+  color: #334155 !important;
 }
 
 @keyframes temarioSectionEnter {

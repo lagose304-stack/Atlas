@@ -1,4 +1,6 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Shield } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import LoadingToast, { LoadingToastType } from '../components/LoadingToast';
 import Footer from '../components/Footer';
@@ -12,6 +14,8 @@ import DeleteTemaForm from '../components/temario/DeleteTemaForm';
 import DeleteSubtemaForm from '../components/temario/DeleteSubtemaForm';
 import { uploadToCloudinary, deleteFromCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import { useAuth } from '../contexts/AuthContext';
+import { logAuditEvent } from '../services/unifiedAuditService';
 
 // --- Interfaces ---
 interface Tema {
@@ -122,7 +126,9 @@ function extractBlockImageUrls(blocks: { block_type: string; content: Record<str
 }
 
 const Temario: React.FC = () => {
-  // ... (todos los estados permanecen igual)
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const handleGoBack = useSmartBackNavigation('/edicion');
   const [isCreatingTema, setIsCreatingTema] = useState(false);
   const [isCreatingSubtema, setIsCreatingSubtema] = useState(false);
   const [temaNombre, setTemaNombre] = useState('');
@@ -327,6 +333,19 @@ const Temario: React.FC = () => {
         const { error: subtemaError } = await supabase.from('subtemas').insert(subtemasConLogo);
         if (subtemaError) return alert(`Error al crear subtemas: ${subtemaError.message}`);
       }
+      void logAuditEvent({
+        entityType: 'tema',
+        actionType: 'create',
+        entityId: temaId,
+        entityName: `Tema: ${temaNombre}`,
+        actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+        details: {
+          nombre: temaNombre,
+          parcial: temaParcial,
+          subtemas_count: subtemasValidos.length,
+        },
+      });
+
       alert('Tema y subtemas creados con éxito.');
       fetchTemas();
       resetAllForms();
@@ -368,6 +387,17 @@ const Temario: React.FC = () => {
       );
       const { error } = await supabase.from('subtemas').insert(subtemasConLogo);
       if (error) return alert(`Error al crear subtemas: ${error.message}`);
+      void logAuditEvent({
+        entityType: 'subtema',
+        actionType: 'create',
+        entityName: `Subtemas agregados (${subtemasValidos.length})`,
+        actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+        details: {
+          tema_id: selectedTemaId,
+          subtemas: subtemasValidos.map((s) => s.nombre),
+        },
+      });
+
       alert('Subtemas agregados con éxito.');
       resetAllForms();
     } catch (err: any) {
@@ -398,6 +428,17 @@ const Temario: React.FC = () => {
       }
       const { error } = await supabase.from('temas').update(updateData).match({ id: editingTemaId });
       if (error) return alert(`Error al actualizar el tema: ${error.message}`);
+      void logAuditEvent({
+        entityType: 'tema',
+        actionType: 'update',
+        entityId: editingTemaId,
+        entityName: `Tema: ${editingTemaNombre}`,
+        actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+        details: {
+          nombre_nuevo: editingTemaNombre,
+        },
+      });
+
       alert('Tema actualizado con éxito.');
       fetchTemas();
       resetAllForms();
@@ -428,6 +469,17 @@ const Temario: React.FC = () => {
       }
       const { error } = await supabase.from('subtemas').update(updateData).match({ id: editingSubtemaId });
       if (error) return alert(`Error al actualizar el subtema: ${error.message}`);
+      void logAuditEvent({
+        entityType: 'subtema',
+        actionType: 'update',
+        entityId: editingSubtemaId,
+        entityName: `Subtema: ${editingSubtemaNombre}`,
+        actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+        details: {
+          nombre_nuevo: editingSubtemaNombre,
+        },
+      });
+
       alert('Subtema actualizado con éxito.');
       resetAllForms();
     } catch (err: any) {
@@ -549,6 +601,17 @@ const Temario: React.FC = () => {
       }
       await Promise.allSettled(deletePromises);
 
+      void logAuditEvent({
+        entityType: 'tema',
+        actionType: 'delete',
+        entityId: temaIdNum,
+        entityName: `Tema #${temaIdNum}`,
+        actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+        details: {
+          action_detail: 'Eliminación de tema completo y contenido asociado',
+        },
+      });
+
       alert('Tema y todo su contenido borrado con éxito.');
       fetchTemas();
       resetAllForms();
@@ -630,6 +693,17 @@ const Temario: React.FC = () => {
       const { error } = await supabase.from('subtemas').delete().match({ id: subtemaIdNum });
       if (error) return alert(`Error al borrar el subtema: ${error.message}`);
 
+      void logAuditEvent({
+        entityType: 'subtema',
+        actionType: 'delete',
+        entityId: subtemaIdNum,
+        entityName: `Subtema #${subtemaIdNum} (${subtemaABorrar?.nombre || ''})`,
+        actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+        details: {
+          nombre: subtemaABorrar?.nombre,
+        },
+      });
+
       // 9. Borrar imágenes en Cloudinary
       const deletePromises: Promise<any>[] = [];
       if (subtemaABorrar?.logo_url) {
@@ -689,7 +763,6 @@ const Temario: React.FC = () => {
   const openDeleteSubtema = () => { resetAllForms(); setIsDeletingSubtema(true); };
 
   const anyFormOpen = isCreatingTema || isCreatingSubtema || isEditingTema || isEditingSubtema || isDeletingTema || isDeletingSubtema;
-  const handleGoBack = useSmartBackNavigation('/edicion');
 
   return (
     <div style={t.page}>
@@ -946,6 +1019,33 @@ const Temario: React.FC = () => {
                   onCancel={resetAllForms}
                 />
               )}
+            </div>
+          )}
+
+          {user?.is_protected && (
+            <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => navigate('/historial?entity=tema')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 20px',
+                  background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '0.88em',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.25)',
+                }}
+                title="Ver historial y auditoría de creación y edición de temas"
+              >
+                <Shield size={16} />
+                <span>Ver Historial y Auditoría de Temas</span>
+              </button>
             </div>
           )}
 

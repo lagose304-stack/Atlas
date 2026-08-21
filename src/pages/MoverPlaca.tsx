@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MousePointerClick } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
@@ -531,6 +531,9 @@ const MoverPlaca: React.FC = () => {
         tincion:    editTincion.trim() || null,
       };
 
+      const toTemaObj = editTemas.find(t => t.id === editTemaId);
+      const toSubtemaObj = editSubtemas.find(s => s.id === editSubtemaId);
+
       await logPlateActivity({
         actionType: 'edit_plate',
         targetTable: 'placas',
@@ -538,13 +541,24 @@ const MoverPlaca: React.FC = () => {
         actor: {
           id: user?.id ?? null,
           username: user?.username ?? null,
+          name: user?.nombre ?? null,
+          role: user?.rol ?? null,
         },
         details: {
-          source: 'mover_placa',
+          photo_url: selectedPlaca.photo_url,
+          nombre_placa: `Placa #${selectedPlaca.id} - ${toSubtemaObj?.nombre || 'Placa'}`,
+          tema_id: editTemaId,
+          tema_nombre: toTemaObj?.nombre || null,
+          subtema_id: editSubtemaId,
+          subtema_nombre: toSubtemaObj?.nombre || null,
+          aumento: editAumento || null,
+          tincion: editTincion.trim() || null,
+          comentario: editComentario.trim() || null,
           from_tema_id: selectedPlaca.tema_id,
           from_subtema_id: selectedPlaca.subtema_id,
           to_tema_id: editTemaId,
           to_subtema_id: editSubtemaId,
+          source: 'mover_placa',
           changed_fields: updatedFields,
         },
       });

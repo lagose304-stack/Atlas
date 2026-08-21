@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams, useNavigate } from 'react-router-dom';
-import { CheckCircle2, ClipboardCheck, ListChecks, XCircle, ZoomIn } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, ListChecks, XCircle, ZoomIn, Shield } from 'lucide-react';
 import BackButton from '../components/BackButton';
+import { useAuth } from '../contexts/AuthContext';
 import ImageViewerModal from '../components/ImageViewerModal';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
@@ -166,8 +167,10 @@ const parciales: Array<{ key: ParcialKey; label: string }> = [
 ];
 
 const EjecutarPrueba: React.FC = () => {
+  const { pruebaId } = useParams<{ pruebaId: string }>();
+  const navigate = useNavigate();
   const location = useLocation();
-  const { pruebaId } = useParams();
+  const { user } = useAuth();
   const [prueba, setPrueba] = useState<PruebaRow | null>(null);
   const [questions, setQuestions] = useState<QuestionDraft[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<SelectedAnswersState>({});
@@ -183,7 +186,6 @@ const EjecutarPrueba: React.FC = () => {
   const [reviewedQuestions, setReviewedQuestions] = useState<Record<string, boolean>>({});
   const [gradingQuestionId, setGradingQuestionId] = useState<string | null>(null);
   const [usesLocalGrading, setUsesLocalGrading] = useState(false);
-  const navigate = useNavigate();
 
   useEffect(() => {
     const loadPrueba = async () => {
@@ -723,6 +725,32 @@ const EjecutarPrueba: React.FC = () => {
                   startY: currentQuestion.referenceSenaladoLocation.startY ?? null,
                 }] : null}
               />
+            )}
+
+            {user?.is_protected && prueba && (
+              <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/historial?scope=prueba&pruebaId=${encodeURIComponent(String(prueba.id))}&pruebaNombre=${encodeURIComponent(prueba.nombre || '')}`)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 16px',
+                    background: '#f5f3ff',
+                    border: '1.5px solid #ddd6fe',
+                    color: '#6d28d9',
+                    borderRadius: '10px',
+                    fontSize: '0.84em',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                  title="Ver historial exclusivo de creación y cambios de esta evaluación"
+                >
+                  <Shield size={15} />
+                  <span>Ver Historial de esta Evaluación</span>
+                </button>
+              </div>
             )}
           </>
         )}

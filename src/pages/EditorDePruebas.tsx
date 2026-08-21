@@ -6,6 +6,7 @@ import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
 import TestRichTextField from '../components/TestRichTextField';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { uploadToCloudinary, deleteFromCloudinary } from '../services/cloudinary';
+import { logAuditEvent } from '../services/unifiedAuditService';
 import {
   deleteOwnedTestReferenceImages,
   getTestReferenceFolder,
@@ -595,6 +596,21 @@ const EditorDePruebas: React.FC = () => {
     setMessage(saveSource === 'auto' ? 'Guardado automático.' : (cleanupWarning || 'Cambios guardados correctamente.'));
     setSaveToast(saveSource === 'auto' ? 'Guardado automático.' : (cleanupWarning || 'Cambios guardados.'));
     setIsSaving(false);
+
+    if (saveSource === 'manual') {
+      void logAuditEvent({
+        entityType: 'prueba',
+        actionType: 'update',
+        entityId: prueba.id,
+        entityName: `Prueba: ${nombre.trim() || prueba.nombre}`,
+        actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+        details: {
+          action_detail: 'Edición y guardado de preguntas',
+          preguntas_count: savedQuestions.length,
+          nombre: nombre.trim(),
+        },
+      });
+    }
   };
 
   const handleSave = async () => {

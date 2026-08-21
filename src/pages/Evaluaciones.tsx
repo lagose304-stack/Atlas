@@ -1,13 +1,14 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { supabase } from '../services/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { collectWeeklyThemeIds, groupHistoricalTestsByPartial, orderTestsByWeeklyPriority } from './evaluacionesUtils';
-import { ArrowRight, BookOpenCheck, CalendarDays, ClipboardCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, BookOpenCheck, CalendarDays, ClipboardCheck, Sparkles, Shield } from 'lucide-react';
 
 interface PruebaPublica {
   id: string;
@@ -59,6 +60,7 @@ const TestCard: React.FC<{
   badge: string;
   badges?: string[];
 }> = ({ prueba, badge, badges = [] }) => {
+  const { user } = useAuth();
   const [logoFailed, setLogoFailed] = React.useState(false);
   const plainName = toPlainText(prueba.nombre) || 'Prueba';
   const logoSrc = prueba.image_url ? getCloudinaryImageUrl(prueba.image_url, 'cardWide') : '';
@@ -125,7 +127,33 @@ const TestCard: React.FC<{
           {badges.map((b) => (
             <span key={b} style={s.scopeTag}>{b}</span>
           ))}
-          <Link to={`/evaluaciones/ejecutar/${prueba.id}`} state={{ from: '/evaluaciones' }} style={s.startButton}>Iniciar prueba <ArrowRight size={15} aria-hidden="true" /></Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', flexWrap: 'wrap' }}>
+            {user?.is_protected && (
+              <Link
+                to={`/historial?scope=prueba&pruebaId=${encodeURIComponent(String(prueba.id))}&pruebaNombre=${encodeURIComponent(plainName)}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '7px 11px',
+                  background: '#faf5ff',
+                  border: '1px solid #d8b4fe',
+                  borderRadius: '10px',
+                  color: '#7e22ce',
+                  fontSize: '0.78rem',
+                  fontWeight: 750,
+                  textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 5px rgba(126, 34, 206, 0.1)',
+                }}
+                title="Ver historial exclusivo de cambios para esta evaluación"
+              >
+                <Shield size={13} />
+                <span>Historial</span>
+              </Link>
+            )}
+            <Link to={`/evaluaciones/ejecutar/${prueba.id}`} state={{ from: '/evaluaciones' }} style={s.startButton}>Iniciar prueba <ArrowRight size={15} aria-hidden="true" /></Link>
+          </div>
         </div>
       </div>
     </article>
@@ -133,6 +161,8 @@ const TestCard: React.FC<{
 };
 
 const Evaluaciones: React.FC = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [pruebas, setPruebas] = React.useState<PruebaPublica[]>([]);
   const [weeklyThemeIds, setWeeklyThemeIds] = React.useState<number[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -521,6 +551,33 @@ const Evaluaciones: React.FC = () => {
               })}
               </div>
             </>
+          )}
+
+          {user?.is_protected && (
+            <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => navigate('/historial?entity=prueba')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 20px',
+                  background: 'linear-gradient(135deg, #7c3aed, #5b21b6)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '0.88em',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(124, 58, 237, 0.25)',
+                }}
+                title="Ver historial y auditoría de creación y edición de pruebas"
+              >
+                <Shield size={16} />
+                <span>Ver Historial y Auditoría de Pruebas</span>
+              </button>
+            </div>
           )}
         </section>
       </main>
