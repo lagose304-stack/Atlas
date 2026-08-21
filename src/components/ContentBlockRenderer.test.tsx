@@ -526,4 +526,130 @@ describe('ContentBlockRenderer', () => {
     const row = screen.getByText('Galería izquierda').closest('.cb-double-carousel');
     expect(row).toHaveStyle({ gap: '22px', borderRadius: '24px' });
   });
+
+  it('renderiza correctamente los 5 bloques de fundamentos histologicos desde la base de datos', () => {
+    const histologyBlocks: ContentBlock[] = [
+      {
+        id: 'hist-gen-1',
+        entity_type: 'placas_page',
+        entity_id: 156,
+        block_type: 'histology_generalities',
+        sort_order: 0,
+        content: {
+          title: 'Generalidades del Epitelio Cúbico Simple',
+          badge_text: 'Fundamentos Especializados',
+          intro_text: 'Células en forma de cubo con núcleos centrales.',
+          points_count: '2',
+          point_1_title: 'Morfología Isodiamétrica',
+          point_1_desc: 'Misma altura y anchura.',
+          point_2_title: 'Secreción y Absorción',
+          point_2_desc: 'Actividad metabólica moderada.',
+          lab_tip: 'Observar túbulos renales.',
+        },
+      },
+      {
+        id: 'hist-fun-1',
+        entity_type: 'placas_page',
+        entity_id: 156,
+        block_type: 'histology_function',
+        sort_order: 1,
+        content: {
+          title: 'Función Secretora Renal',
+          badge_text: 'Fisiología Tisular',
+          description: 'Transporte activo de iones.',
+          feats_count: '2',
+          feat_1_title: 'Reabsorción Tubular',
+          feat_1_desc: 'Recuperación de glucosa.',
+          feat_2_title: 'Secreción Activa',
+          feat_2_desc: 'Eliminación de metabolitos.',
+          clinical_note: 'Afectado en necrosis tubular.',
+        },
+      },
+      {
+        id: 'hist-morf-1',
+        entity_type: 'placas_page',
+        entity_id: 156,
+        block_type: 'histology_morphology',
+        sort_order: 2,
+        content: {
+          title: 'Criterios de Identificación Cúbica',
+          badge_text: 'Microscopía Óptica',
+          intro_text: 'Pautas para reconocer epitelio cúbico.',
+          items_count: '2',
+          item_1_title: 'Núcleo Esférico Central',
+          item_1_desc: 'Ubicado exactamente en el centro.',
+          item_2_title: 'Límites Celulares Claros',
+          item_2_desc: 'Bordes laterales definidos.',
+          exam_tip: 'Clave en folículos tiroideos.',
+        },
+      },
+      {
+        id: 'hist-loc-1',
+        entity_type: 'placas_page',
+        entity_id: 156,
+        block_type: 'histology_locations',
+        sort_order: 3,
+        content: {
+          title: 'Ubicaciones del Epitelio Cúbico',
+          badge_text: 'Atlas Anatómico',
+          intro_text: 'Órganos principales.',
+          items_count: '2',
+          item_1_organ: 'Túbulos Renales',
+          item_1_system: 'Sistema Urinario',
+          item_1_desc: 'Túbulo contorneado proximal y distal.',
+          item_2_organ: 'Folículos Tiroideos',
+          item_2_system: 'Sistema Endocrino',
+          item_2_desc: 'Rodean el coloide tiroideo.',
+          mnemotic_tip: 'Recordar Tiroides y Riñón.',
+        },
+      },
+      {
+        id: 'hist-stain-1',
+        entity_type: 'placas_page',
+        entity_id: 156,
+        block_type: 'histology_stains',
+        sort_order: 4,
+        content: {
+          title: 'Tinciones para Epitelio Cúbico',
+          badge_text: 'Colorimetría Tisular',
+          intro_text: 'Métodos ópticos para destacar la membrana.',
+          items_count: '2',
+          item_1_name: 'Hematoxilina y Eosina',
+          item_1_cat: 'Rutinaria',
+          item_1_result: 'Núcleos morados basófilos, citoplasma rosa.',
+          item_2_name: 'Ácido Periódico de Schiff (PAS)',
+          item_2_cat: 'Histoquímica',
+          item_2_result: 'Membrana basal magenta brillante.',
+          color_tip: 'PAS resalta el ribete en cepillo.',
+        },
+      },
+    ];
+
+    render(<ContentBlockRenderer blocks={histologyBlocks} />);
+
+    // Generalidades
+    expect(screen.getByText('Generalidades del Epitelio Cúbico Simple')).toBeInTheDocument();
+    expect(screen.getByText('Morfología Isodiamétrica')).toBeInTheDocument();
+    expect(screen.getByText('Misma altura y anchura.')).toBeInTheDocument();
+
+    // Función
+    expect(screen.getByText('Función Secretora Renal')).toBeInTheDocument();
+    expect(screen.getByText('Reabsorción Tubular')).toBeInTheDocument();
+    expect(screen.getByText('Recuperación de glucosa.')).toBeInTheDocument();
+
+    // Morfología
+    expect(screen.getByText('Criterios de Identificación Cúbica')).toBeInTheDocument();
+    expect(screen.getByText('Núcleo Esférico Central')).toBeInTheDocument();
+    expect(screen.getByText('Ubicado exactamente en el centro.')).toBeInTheDocument();
+
+    // Ubicaciones
+    expect(screen.getByText('Ubicaciones del Epitelio Cúbico')).toBeInTheDocument();
+    expect(screen.getByText('Túbulos Renales')).toBeInTheDocument();
+    expect(screen.getByText('Sistema Urinario')).toBeInTheDocument();
+
+    // Tinciones
+    expect(screen.getByText('Tinciones para Epitelio Cúbico')).toBeInTheDocument();
+    expect(screen.getByText('Ácido Periódico de Schiff (PAS)')).toBeInTheDocument();
+    expect(screen.getByText('Membrana basal magenta brillante.')).toBeInTheDocument();
+  });
 });

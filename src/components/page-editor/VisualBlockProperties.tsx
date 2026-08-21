@@ -355,6 +355,267 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
         <SelectField label="Tiempo entre imágenes" value={content.interval || '4'} options={[2, 3, 4, 5, 8].map(seconds => ({ value: String(seconds), label: `${seconds} segundos` }))} onChange={interval => onChange({ interval })} />
       </>;
     }
+    if (block.block_type === 'histology_generalities') {
+      const pointsCount = Math.max(1, Number(content.points_count) || (content.point_4_title || content.point_4_desc ? 4 : content.point_3_title || content.point_3_desc ? 3 : content.point_2_title || content.point_2_desc ? 2 : 4));
+      const indices = Array.from({ length: pointsCount }, (_, i) => i + 1);
+
+      const handleAddPoint = () => {
+        const next = pointsCount + 1;
+        onChange({ points_count: String(next), [`point_${next}_title`]: '', [`point_${next}_desc`]: '' });
+      };
+
+      const handleRemovePoint = (delIdx: number) => {
+        if (pointsCount <= 1) return;
+        const updates: Record<string, string> = { points_count: String(pointsCount - 1) };
+        for (let i = delIdx; i < pointsCount; i++) {
+          updates[`point_${i}_title`] = content[`point_${i + 1}_title`] ?? '';
+          updates[`point_${i}_desc`] = content[`point_${i + 1}_desc`] ?? '';
+        }
+        updates[`point_${pointsCount}_title`] = '';
+        updates[`point_${pointsCount}_desc`] = '';
+        onChange(updates);
+      };
+
+      return (
+        <>
+          <TextAreaField label="Título de la sección" value={content.title ?? ''} onChange={title => onChange({ title })} />
+          <TextAreaField label="Etiqueta superior" value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
+          <TextAreaField label="Párrafo introductorio" value={content.intro_text ?? ''} onChange={intro_text => onChange({ intro_text })} />
+          <ImageField url={content.image_url ?? ''} onPick={() => onPickImage('image_url')} onClear={() => onChange({ image_url: '' })} />
+          <label className="visual-properties-field"><span>Etiqueta de la imagen</span><input value={content.image_badge || ''} onChange={event => onChange({ image_badge: event.target.value })} placeholder="Ej: 🔬 Micrografía de Referencia" /></label>
+          <label className="visual-properties-field"><span>Título de la subsección de pilares</span><input value={content.points_title || ''} onChange={event => onChange({ points_title: event.target.value })} placeholder="Ej: Pilares Teóricos y Embriología del Tejido" /></label>
+          <strong className="visual-properties-group-title">Pilares clave ({pointsCount})</strong>
+          {indices.map(num => (
+            <div key={num} style={{ marginTop: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '10px', background: '#f8fafc' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <strong style={{ fontSize: '0.85em', color: '#4f46e5' }}>Pilar {num}</strong>
+                {pointsCount > 1 && (
+                  <button type="button" onClick={() => handleRemovePoint(num)} style={{ background: '#fee2e2', border: 'none', borderRadius: '4px', color: '#dc2626', fontSize: '0.75em', padding: '2px 6px', cursor: 'pointer' }}>
+                    ✕ Quitar
+                  </button>
+                )}
+              </div>
+              <label className="visual-properties-field"><span>Título del pilar</span><input value={content[`point_${num}_title`] || ''} onChange={event => onChange({ [`point_${num}_title`]: event.target.value })} /></label>
+              <TextAreaField label="Descripción" value={content[`point_${num}_desc`] || ''} onChange={val => onChange({ [`point_${num}_desc`]: val })} />
+            </div>
+          ))}
+          <button type="button" onClick={handleAddPoint} style={{ marginTop: '8px', width: '100%', padding: '7px', borderRadius: '8px', background: '#eff6ff', border: '1px dashed #93c5fd', color: '#1d4ed8', fontWeight: 700, fontSize: '0.82em', cursor: 'pointer' }}>
+            + Añadir otro Pilar
+          </button>
+          <TextAreaField label="Tip de laboratorio (Callout)" value={content.lab_tip ?? ''} onChange={lab_tip => onChange({ lab_tip })} />
+        </>
+      );
+    }
+    if (block.block_type === 'histology_function') {
+      const featsCount = Math.max(1, Number(content.feats_count) || (content.feat_4_title || content.feat_4_desc ? 4 : content.feat_3_title || content.feat_3_desc ? 3 : content.feat_2_title || content.feat_2_desc ? 2 : 4));
+      const indices = Array.from({ length: featsCount }, (_, i) => i + 1);
+
+      const handleAddFeat = () => {
+        const next = featsCount + 1;
+        onChange({ feats_count: String(next), [`feat_${next}_title`]: '', [`feat_${next}_desc`]: '' });
+      };
+
+      const handleRemoveFeat = (delIdx: number) => {
+        if (featsCount <= 1) return;
+        const updates: Record<string, string> = { feats_count: String(featsCount - 1) };
+        for (let i = delIdx; i < featsCount; i++) {
+          updates[`feat_${i}_title`] = content[`feat_${i + 1}_title`] ?? '';
+          updates[`feat_${i}_desc`] = content[`feat_${i + 1}_desc`] ?? '';
+        }
+        updates[`feat_${featsCount}_title`] = '';
+        updates[`feat_${featsCount}_desc`] = '';
+        onChange(updates);
+      };
+
+      return (
+        <>
+          <TextAreaField label="Título de la sección" value={content.title ?? ''} onChange={title => onChange({ title })} />
+          <TextAreaField label="Etiqueta superior" value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
+          <TextAreaField label="Descripción de la función" value={content.description ?? ''} onChange={description => onChange({ description })} />
+          <ImageField url={content.image_url ?? ''} onPick={() => onPickImage('image_url')} onClear={() => onChange({ image_url: '' })} />
+          <label className="visual-properties-field"><span>Etiqueta de la imagen</span><input value={content.image_badge || ''} onChange={event => onChange({ image_badge: event.target.value })} placeholder="Ej: ⚡ Esquema Funcional" /></label>
+          <label className="visual-properties-field"><span>Título de la subsección de mecanismos</span><input value={content.feats_title || ''} onChange={event => onChange({ feats_title: event.target.value })} placeholder="Ej: Mecanismos Clave del Intercambio y Transporte" /></label>
+          <strong className="visual-properties-group-title">Mecanismos fisiológicos ({featsCount})</strong>
+          {indices.map(num => (
+            <div key={num} style={{ marginTop: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '10px', background: '#f8fafc' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <strong style={{ fontSize: '0.85em', color: '#0284c7' }}>Mecanismo {num}</strong>
+                {featsCount > 1 && (
+                  <button type="button" onClick={() => handleRemoveFeat(num)} style={{ background: '#fee2e2', border: 'none', borderRadius: '4px', color: '#dc2626', fontSize: '0.75em', padding: '2px 6px', cursor: 'pointer' }}>
+                    ✕ Quitar
+                  </button>
+                )}
+              </div>
+              <label className="visual-properties-field"><span>Título</span><input value={content[`feat_${num}_title`] || ''} onChange={event => onChange({ [`feat_${num}_title`]: event.target.value })} /></label>
+              <TextAreaField label="Descripción" value={content[`feat_${num}_desc`] || ''} onChange={val => onChange({ [`feat_${num}_desc`]: val })} />
+            </div>
+          ))}
+          <button type="button" onClick={handleAddFeat} style={{ marginTop: '8px', width: '100%', padding: '7px', borderRadius: '8px', background: '#eff6ff', border: '1px dashed #93c5fd', color: '#1d4ed8', fontWeight: 700, fontSize: '0.82em', cursor: 'pointer' }}>
+            + Añadir otro Mecanismo
+          </button>
+          <TextAreaField label="Relevancia fisiológica / Nota clínica" value={content.clinical_note ?? ''} onChange={clinical_note => onChange({ clinical_note })} />
+        </>
+      );
+    }
+    if (block.block_type === 'histology_morphology') {
+      const itemsCount = Math.max(1, Number(content.items_count) || (content.item_5_title || content.item_5_desc ? 5 : content.item_4_title || content.item_4_desc ? 4 : content.item_3_title || content.item_3_desc ? 3 : 5));
+      const indices = Array.from({ length: itemsCount }, (_, i) => i + 1);
+
+      const handleAddItem = () => {
+        const next = itemsCount + 1;
+        onChange({ items_count: String(next), [`item_${next}_title`]: '', [`item_${next}_desc`]: '' });
+      };
+
+      const handleRemoveItem = (delIdx: number) => {
+        if (itemsCount <= 1) return;
+        const updates: Record<string, string> = { items_count: String(itemsCount - 1) };
+        for (let i = delIdx; i < itemsCount; i++) {
+          updates[`item_${i}_title`] = content[`item_${i + 1}_title`] ?? '';
+          updates[`item_${i}_desc`] = content[`item_${i + 1}_desc`] ?? '';
+        }
+        updates[`item_${itemsCount}_title`] = '';
+        updates[`item_${itemsCount}_desc`] = '';
+        onChange(updates);
+      };
+
+      return (
+        <>
+          <TextAreaField label="Título de la sección" value={content.title ?? ''} onChange={title => onChange({ title })} />
+          <TextAreaField label="Etiqueta superior" value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
+          <TextAreaField label="Introducción diagnóstica" value={content.intro_text ?? ''} onChange={intro_text => onChange({ intro_text })} />
+          <ImageField url={content.image_url ?? ''} onPick={() => onPickImage('image_url')} onClear={() => onChange({ image_url: '' })} />
+          <label className="visual-properties-field"><span>Etiqueta de la imagen</span><input value={content.image_badge || ''} onChange={event => onChange({ image_badge: event.target.value })} placeholder="Ej: 🔬 Micrografía Morfológica" /></label>
+          <label className="visual-properties-field"><span>Título de la subsección de criterios</span><input value={content.criteria_title || ''} onChange={event => onChange({ criteria_title: event.target.value })} placeholder="Ej: Criterios Diagnósticos al Microscopio" /></label>
+          <strong className="visual-properties-group-title">Criterios diagnósticos ({itemsCount})</strong>
+          {indices.map(num => (
+            <div key={num} style={{ marginTop: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '10px', background: '#f8fafc' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <strong style={{ fontSize: '0.85em', color: '#0f766e' }}>Criterio {num}</strong>
+                {itemsCount > 1 && (
+                  <button type="button" onClick={() => handleRemoveItem(num)} style={{ background: '#fee2e2', border: 'none', borderRadius: '4px', color: '#dc2626', fontSize: '0.75em', padding: '2px 6px', cursor: 'pointer' }}>
+                    ✕ Quitar
+                  </button>
+                )}
+              </div>
+              <label className="visual-properties-field"><span>Título del criterio</span><input value={content[`item_${num}_title`] || ''} onChange={event => onChange({ [`item_${num}_title`]: event.target.value })} /></label>
+              <TextAreaField label="Descripción" value={content[`item_${num}_desc`] || ''} onChange={val => onChange({ [`item_${num}_desc`]: val })} />
+            </div>
+          ))}
+          <button type="button" onClick={handleAddItem} style={{ marginTop: '8px', width: '100%', padding: '7px', borderRadius: '8px', background: '#eff6ff', border: '1px dashed #93c5fd', color: '#1d4ed8', fontWeight: 700, fontSize: '0.82em', cursor: 'pointer' }}>
+            + Añadir otro Criterio
+          </button>
+          <TextAreaField label="Tip de examen práctico" value={content.exam_tip ?? ''} onChange={exam_tip => onChange({ exam_tip })} />
+        </>
+      );
+    }
+    if (block.block_type === 'histology_locations') {
+      const itemsCount = Math.max(1, Number(content.items_count) || (content.item_5_organ || content.item_5_desc ? 5 : content.item_4_organ || content.item_4_desc ? 4 : content.item_3_organ || content.item_3_desc ? 3 : 5));
+      const indices = Array.from({ length: itemsCount }, (_, i) => i + 1);
+
+      const handleAddItem = () => {
+        const next = itemsCount + 1;
+        onChange({ items_count: String(next), [`item_${next}_organ`]: '', [`item_${next}_system`]: '', [`item_${next}_desc`]: '' });
+      };
+
+      const handleRemoveItem = (delIdx: number) => {
+        if (itemsCount <= 1) return;
+        const updates: Record<string, string> = { items_count: String(itemsCount - 1) };
+        for (let i = delIdx; i < itemsCount; i++) {
+          updates[`item_${i}_organ`] = content[`item_${i + 1}_organ`] ?? '';
+          updates[`item_${i}_system`] = content[`item_${i + 1}_system`] ?? '';
+          updates[`item_${i}_desc`] = content[`item_${i + 1}_desc`] ?? '';
+        }
+        updates[`item_${itemsCount}_organ`] = '';
+        updates[`item_${itemsCount}_system`] = '';
+        updates[`item_${itemsCount}_desc`] = '';
+        onChange(updates);
+      };
+
+      return (
+        <>
+          <TextAreaField label="Título de la sección" value={content.title ?? ''} onChange={title => onChange({ title })} />
+          <TextAreaField label="Etiqueta superior" value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
+          <TextAreaField label="Introducción anatómica" value={content.intro_text ?? ''} onChange={intro_text => onChange({ intro_text })} />
+          <ImageField url={content.image_url ?? ''} onPick={() => onPickImage('image_url')} onClear={() => onChange({ image_url: '' })} />
+          <label className="visual-properties-field"><span>Etiqueta de la imagen</span><input value={content.image_badge || ''} onChange={event => onChange({ image_badge: event.target.value })} placeholder="Ej: 📍 Esquema Anatómico" /></label>
+          <label className="visual-properties-field"><span>Título de la subsección de ubicaciones</span><input value={content.locations_title || ''} onChange={event => onChange({ locations_title: event.target.value })} placeholder="Ej: Localizaciones Anatómicas Fundamentales" /></label>
+          <strong className="visual-properties-group-title">Ubicaciones anatómicas ({itemsCount})</strong>
+          {indices.map(num => (
+            <div key={num} style={{ marginTop: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '10px', background: '#f8fafc' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <strong style={{ fontSize: '0.85em', color: '#0369a1' }}>Ubicación {num}</strong>
+                {itemsCount > 1 && (
+                  <button type="button" onClick={() => handleRemoveItem(num)} style={{ background: '#fee2e2', border: 'none', borderRadius: '4px', color: '#dc2626', fontSize: '0.75em', padding: '2px 6px', cursor: 'pointer' }}>
+                    ✕ Quitar
+                  </button>
+                )}
+              </div>
+              <label className="visual-properties-field"><span>Órgano / Estructura</span><input value={content[`item_${num}_organ`] || ''} onChange={event => onChange({ [`item_${num}_organ`]: event.target.value })} /></label>
+              <label className="visual-properties-field"><span>Sistema</span><input value={content[`item_${num}_system`] || ''} onChange={event => onChange({ [`item_${num}_system`]: event.target.value })} /></label>
+              <TextAreaField label="Detalle anatómico" value={content[`item_${num}_desc`] || ''} onChange={val => onChange({ [`item_${num}_desc`]: val })} />
+            </div>
+          ))}
+          <button type="button" onClick={handleAddItem} style={{ marginTop: '8px', width: '100%', padding: '7px', borderRadius: '8px', background: '#eff6ff', border: '1px dashed #93c5fd', color: '#1d4ed8', fontWeight: 700, fontSize: '0.82em', cursor: 'pointer' }}>
+            + Añadir otra Ubicación
+          </button>
+          <TextAreaField label="Regla mnemotécnica (Callout)" value={content.mnemotic_tip ?? ''} onChange={mnemotic_tip => onChange({ mnemotic_tip })} />
+        </>
+      );
+    }
+    if (block.block_type === 'histology_stains') {
+      const itemsCount = Math.max(1, Number(content.items_count) || (content.item_5_name || content.item_5_result ? 5 : content.item_4_name || content.item_4_result ? 4 : content.item_3_name || content.item_3_result ? 3 : 5));
+      const indices = Array.from({ length: itemsCount }, (_, i) => i + 1);
+
+      const handleAddItem = () => {
+        const next = itemsCount + 1;
+        onChange({ items_count: String(next), [`item_${next}_name`]: '', [`item_${next}_cat`]: '', [`item_${next}_result`]: '' });
+      };
+
+      const handleRemoveItem = (delIdx: number) => {
+        if (itemsCount <= 1) return;
+        const updates: Record<string, string> = { items_count: String(itemsCount - 1) };
+        for (let i = delIdx; i < itemsCount; i++) {
+          updates[`item_${i}_name`] = content[`item_${i + 1}_name`] ?? '';
+          updates[`item_${i}_cat`] = content[`item_${i + 1}_cat`] ?? '';
+          updates[`item_${i}_result`] = content[`item_${i + 1}_result`] ?? '';
+        }
+        updates[`item_${itemsCount}_name`] = '';
+        updates[`item_${itemsCount}_cat`] = '';
+        updates[`item_${itemsCount}_result`] = '';
+        onChange(updates);
+      };
+
+      return (
+        <>
+          <TextAreaField label="Título de la sección" value={content.title ?? ''} onChange={title => onChange({ title })} />
+          <TextAreaField label="Etiqueta superior" value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
+          <TextAreaField label="Introducción de colorimetría" value={content.intro_text ?? ''} onChange={intro_text => onChange({ intro_text })} />
+          <ImageField url={content.image_url ?? ''} onPick={() => onPickImage('image_url')} onClear={() => onChange({ image_url: '' })} />
+          <label className="visual-properties-field"><span>Etiqueta de la imagen</span><input value={content.image_badge || ''} onChange={event => onChange({ image_badge: event.target.value })} placeholder="Ej: 🎨 Muestra de Tinción" /></label>
+          <label className="visual-properties-field"><span>Título de la subsección de tinciones</span><input value={content.stains_title || ''} onChange={event => onChange({ stains_title: event.target.value })} placeholder="Ej: Tinciones de Referencia en el Laboratorio Histológico" /></label>
+          <strong className="visual-properties-group-title">Tinciones histológicas ({itemsCount})</strong>
+          {indices.map(num => (
+            <div key={num} style={{ marginTop: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '10px', background: '#f8fafc' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <strong style={{ fontSize: '0.85em', color: '#9333ea' }}>Tinción {num}</strong>
+                {itemsCount > 1 && (
+                  <button type="button" onClick={() => handleRemoveItem(num)} style={{ background: '#fee2e2', border: 'none', borderRadius: '4px', color: '#dc2626', fontSize: '0.75em', padding: '2px 6px', cursor: 'pointer' }}>
+                    ✕ Quitar
+                  </button>
+                )}
+              </div>
+              <label className="visual-properties-field"><span>Nombre de la tinción</span><input value={content[`item_${num}_name`] || ''} onChange={event => onChange({ [`item_${num}_name`]: event.target.value })} /></label>
+              <label className="visual-properties-field"><span>Categoría</span><input value={content[`item_${num}_cat`] || ''} onChange={event => onChange({ [`item_${num}_cat`]: event.target.value })} /></label>
+              <TextAreaField label="Resultado cromático" value={content[`item_${num}_result`] || ''} onChange={val => onChange({ [`item_${num}_result`]: val })} />
+            </div>
+          ))}
+          <button type="button" onClick={handleAddItem} style={{ marginTop: '8px', width: '100%', padding: '7px', borderRadius: '8px', background: '#eff6ff', border: '1px dashed #93c5fd', color: '#1d4ed8', fontWeight: 700, fontSize: '0.82em', cursor: 'pointer' }}>
+            + Añadir otra Tinción
+          </button>
+          <TextAreaField label="Clave de laboratorio (Callout)" value={content.color_tip ?? ''} onChange={color_tip => onChange({ color_tip })} />
+        </>
+      );
+    }
     return <p className="visual-properties-hint">Este bloque no contiene texto ni imágenes editables.</p>;
   };
 

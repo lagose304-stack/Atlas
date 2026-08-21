@@ -4,9 +4,17 @@ import type { ContentBlock, BlockType } from '../types/contentBlocks';
 import ImageViewerModal from './ImageViewerModal';
 import { renderBoldText } from './BoldField';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { getCloudinaryPublicId } from '../services/cloudinary';
 import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { normalizeBlockContent } from './blocks/blockRegistry';
 import { supabase } from '../services/supabase';
+import {
+  HistologyGeneralitiesBlock,
+  HistologyFunctionBlock,
+  HistologyMorphologyBlock,
+  HistologyLocationsBlock,
+  HistologyStainsBlock,
+} from './histology-blocks';
 
 const RichTextValue: React.FC<{ value: string; className?: string; style?: React.CSSProperties }> = ({ value, className, style }) => {
   if (!value) return null;
@@ -222,10 +230,21 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
   } | null>(null);
 
   const handleZoom = async (url: string, placaId?: string) => {
+    if (!url && !placaId) return;
     let resolvedPlacaId = placaId;
-    if (!resolvedPlacaId) {
-      const { data } = await supabase.from('placas').select('id').eq('photo_url', url).limit(1).maybeSingle();
-      resolvedPlacaId = data?.id ? String(data.id) : undefined;
+    if (!resolvedPlacaId && url) {
+      const { data: exactMatch } = await supabase.from('placas').select('id').eq('photo_url', url).limit(1).maybeSingle();
+      if (exactMatch?.id) {
+        resolvedPlacaId = String(exactMatch.id);
+      } else {
+        const publicId = getCloudinaryPublicId(url);
+        if (publicId) {
+          const { data: byPid } = await supabase.from('placas').select('id').ilike('photo_url', `%${publicId}%`).limit(1).maybeSingle();
+          if (byPid?.id) {
+            resolvedPlacaId = String(byPid.id);
+          }
+        }
+      }
     }
 
     let details: Record<string, unknown> = {};
@@ -237,19 +256,29 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
         .maybeSingle();
       if (placa) {
         const [{ data: tema }, { data: subtema }] = await Promise.all([
-          supabase.from('temas').select('nombre').eq('id', placa.tema_id).maybeSingle(),
-          supabase.from('subtemas').select('nombre').eq('id', placa.subtema_id).maybeSingle(),
+          placa.tema_id ? supabase.from('temas').select('nombre').eq('id', placa.tema_id).maybeSingle() : Promise.resolve({ data: null }),
+          placa.subtema_id ? supabase.from('subtemas').select('nombre').eq('id', placa.subtema_id).maybeSingle() : Promise.resolve({ data: null }),
         ]);
         details = {
-          temaNombre: tema?.nombre,
-          subtemaNombre: subtema?.nombre,
-          aumento: placa.aumento,
-          senalados: placa.senalados,
-          senaladosMeta: placa.senalados_meta,
-          comentario: placa.comentario,
-          tincion: placa.tincion,
+          temaNombre: tema?.nombre || 'Atlas de Histología',
+          subtemaNombre: subtema?.nombre || 'Estructura Histológica',
+          aumento: placa.aumento || '40x / 100x',
+          senalados: placa.senalados || [],
+          senaladosMeta: placa.senalados_meta || [],
+          comentario: placa.comentario || '',
+          tincion: placa.tincion || 'Hematoxilina y Eosina (H&E)',
         };
       }
+    } else {
+      details = {
+        temaNombre: 'Atlas de Histología',
+        subtemaNombre: 'Micrografía de Referencia',
+        aumento: 'Referencia Histológica',
+        senalados: [],
+        senaladosMeta: [],
+        comentario: 'Micrografía de referencia para el estudio histológico.',
+        tincion: 'Tinción Histológica',
+      };
     }
 
     setSelectedImage({
@@ -1486,6 +1515,152 @@ const BlockItem: React.FC<{
             </div>
           )}
         </div>
+      );
+    }
+
+    case 'histology_generalities': {
+      const count = Number(c.points_count) || (c.point_4_title || c.point_4_desc ? 4 : c.point_3_title || c.point_3_desc ? 3 : c.point_2_title || c.point_2_desc ? 2 : 4);
+      const keyPoints = [];
+      for (let i = 1; i <= Math.max(1, count); i++) {
+        const label = c[`point_${i}_title`];
+        const content = c[`point_${i}_desc`];
+        if ((label && label.trim() !== '') || (content && content.trim() !== '')) {
+          keyPoints.push({ label: label || '', content: content || '' });
+        }
+      }
+
+      return (
+        <HistologyGeneralitiesBlock
+          title={c.title !== undefined ? c.title : 'Generalidades del Tejido'}
+          badgeText={c.badge_text !== undefined ? c.badge_text : 'Generalidades'}
+          introText={c.intro_text || ''}
+          pointsTitle={c.points_title !== undefined ? c.points_title : undefined}
+          keyPoints={keyPoints.length > 0 ? keyPoints : undefined}
+          labTip={c.lab_tip || undefined}
+          imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
+          imageBadge={c.image_badge !== undefined ? c.image_badge : '🔬 Micrografía de Referencia'}
+          onOpenImageViewer={() => onZoom(c.image_url, c.placa_id || c.weekly_placa_id)}
+        />
+      );
+    }
+
+    case 'histology_function': {
+      const count = Number(c.feats_count) || (c.feat_4_title || c.feat_4_desc ? 4 : c.feat_3_title || c.feat_3_desc ? 3 : c.feat_2_title || c.feat_2_desc ? 2 : 4);
+      const features = [];
+      for (let i = 1; i <= Math.max(1, count); i++) {
+        const title = c[`feat_${i}_title`];
+        const detail = c[`feat_${i}_desc`];
+        if ((title && title.trim() !== '') || (detail && detail.trim() !== '')) {
+          features.push({ title: title || '', detail: detail || '' });
+        }
+      }
+
+      return (
+        <HistologyFunctionBlock
+          title={c.title !== undefined ? c.title : 'Función Principal del Tejido'}
+          badgeText={c.badge_text !== undefined ? c.badge_text : 'Función Principal del Tejido'}
+          description={c.description || ''}
+          featsTitle={c.feats_title !== undefined ? c.feats_title : undefined}
+          features={features.length > 0 ? features : undefined}
+          clinicalNote={c.clinical_note || undefined}
+          imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
+          imageBadge={c.image_badge !== undefined ? c.image_badge : '⚡ Esquema Funcional'}
+          onOpenImageViewer={() => onZoom(c.image_url, c.placa_id || c.weekly_placa_id)}
+        />
+      );
+    }
+
+    case 'histology_morphology': {
+      const count = Number(c.items_count) || (c.item_5_title || c.item_5_desc ? 5 : c.item_4_title || c.item_4_desc ? 4 : c.item_3_title || c.item_3_desc ? 3 : 5);
+      const items = [];
+      for (let i = 1; i <= Math.max(1, count); i++) {
+        const title = c[`item_${i}_title`];
+        const description = c[`item_${i}_desc`];
+        if ((title && title.trim() !== '') || (description && description.trim() !== '')) {
+          items.push({
+            number: String(i).padStart(2, '0'),
+            title: title || '',
+            description: description || '',
+          });
+        }
+      }
+
+      return (
+        <HistologyMorphologyBlock
+          title={c.title !== undefined ? c.title : 'Criterios Morfológicos de Identificación'}
+          badgeText={c.badge_text !== undefined ? c.badge_text : 'Reconocimiento Microscópico'}
+          introText={c.intro_text || ''}
+          criteriaTitle={c.criteria_title !== undefined ? c.criteria_title : undefined}
+          items={items.length > 0 ? items : undefined}
+          examTip={c.exam_tip || undefined}
+          imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
+          imageBadge={c.image_badge !== undefined ? c.image_badge : '🔬 Micrografía Morfológica'}
+          onOpenImageViewer={() => onZoom(c.image_url, c.placa_id || c.weekly_placa_id)}
+        />
+      );
+    }
+
+    case 'histology_locations': {
+      const count = Number(c.items_count) || (c.item_5_organ || c.item_5_desc ? 5 : c.item_4_organ || c.item_4_desc ? 4 : c.item_3_organ || c.item_3_desc ? 3 : 5);
+      const items = [];
+      for (let i = 1; i <= Math.max(1, count); i++) {
+        const organ = c[`item_${i}_organ`];
+        const system = c[`item_${i}_system`];
+        const detail = c[`item_${i}_desc`];
+        if ((organ && organ.trim() !== '') || (detail && detail.trim() !== '') || (system && system.trim() !== '')) {
+          items.push({
+            number: String(i).padStart(2, '0'),
+            organ: organ || '',
+            system: system || '',
+            detail: detail || '',
+          });
+        }
+      }
+
+      return (
+        <HistologyLocationsBlock
+          title={c.title !== undefined ? c.title : 'Ubicaciones Anatómicas Clave'}
+          badgeText={c.badge_text !== undefined ? c.badge_text : 'Atlas Anatómico'}
+          introText={c.intro_text || ''}
+          locationsTitle={c.locations_title !== undefined ? c.locations_title : undefined}
+          items={items.length > 0 ? items : undefined}
+          mnemoticTip={c.mnemotic_tip || undefined}
+          imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
+          imageBadge={c.image_badge !== undefined ? c.image_badge : '📍 Esquema Anatómico'}
+          onOpenImageViewer={() => onZoom(c.image_url, c.placa_id || c.weekly_placa_id)}
+        />
+      );
+    }
+
+    case 'histology_stains': {
+      const count = Number(c.items_count) || (c.item_5_name || c.item_5_result ? 5 : c.item_4_name || c.item_4_result ? 4 : c.item_3_name || c.item_3_result ? 3 : 5);
+      const items = [];
+      for (let i = 1; i <= Math.max(1, count); i++) {
+        const name = c[`item_${i}_name`];
+        const category = c[`item_${i}_cat`];
+        const result = c[`item_${i}_result`];
+        if ((name && name.trim() !== '') || (result && result.trim() !== '') || (category && category.trim() !== '')) {
+          items.push({
+            number: String(i).padStart(2, '0'),
+            name: name || '',
+            category: category || '',
+            result: result || '',
+          });
+        }
+      }
+
+      return (
+        <HistologyStainsBlock
+          title={c.title !== undefined ? c.title : 'Tinciones Histológicas y Colorimetría'}
+          badgeText={c.badge_text !== undefined ? c.badge_text : 'Colorimetría & Laboratorio'}
+          introText={c.intro_text || ''}
+          stainsTitle={c.stains_title !== undefined ? c.stains_title : undefined}
+          items={items.length > 0 ? items : undefined}
+          colorKeyTip={c.color_tip || undefined}
+          imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
+          imageBadge={c.image_badge !== undefined ? c.image_badge : '🎨 Muestra de Tinción'}
+          onOpenImageViewer={() => onZoom(c.image_url, c.placa_id || c.weekly_placa_id)}
+        />
       );
     }
 

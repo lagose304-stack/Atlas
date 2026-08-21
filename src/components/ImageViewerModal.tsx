@@ -1,6 +1,6 @@
 import React, { useId, useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ZoomIn, ZoomOut, RotateCcw, Pencil, X } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Pencil, X, Hand, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import { renderBoldText } from './BoldField';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
@@ -414,8 +414,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const [zoomLevel, setZoomLevel]   = useState(1);
   const [position, setPosition]     = useState({ x: 0, y: 0 });
+  const [rotation, setRotation]     = useState(0);
   const [isAnnotationMode, setIsAnnotationMode] = useState(false);
-  const [annotationTool, setAnnotationTool] = useState<'laser' | null>(null);
+  const [annotationTool, setAnnotationTool] = useState<'laser' | 'hand' | null>(null);
   const laserCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const laserTrailRef = useRef<Array<{ x: number; y: number; time: number }>>([]);
   const laserCurrentPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -427,7 +428,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     midY: number;
     startPos: { x: number; y: number };
   } | null>(null);
+  const isSpacePressedRef = useRef(false);
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
   const laserAnimFrameRef = useRef<number | null>(null);
+  const minimapRef = useRef<HTMLDivElement | null>(null);
+  const isMinimapDraggingRef = useRef(false);
   const [activeMarkerIndex, setActiveMarkerIndex] = useState<number | null>(resolvedInitialMarkerIndex);
   const [markerRecenterRequest, setMarkerRecenterRequest] = useState(0);
   const [showCommentHint, setShowCommentHint] = useState(false);
@@ -451,6 +456,60 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [mapFocusRequest, setMapFocusRequest] = useState(0);
   const [interactiveMapError, setInteractiveMapError] = useState<string | null>(null);
   const [interactiveMapReloadTick, setInteractiveMapReloadTick] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        } else if ((document.documentElement as any).webkitRequestFullscreen) {
+          await (document.documentElement as any).webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.warn('Error al alternar pantalla completa:', err);
+    }
+  };
+
+  const exitFullscreenSafely = () => {
+    try {
+      if (document.fullscreenElement) {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        } else if ((document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen().catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.warn('Error al salir de pantalla completa:', err);
+    }
+  };
+
+  const handleCloseViewer = () => {
+    exitFullscreenSafely();
+    onClose();
+  };
+
+  useEffect(() => {
+    return () => {
+      exitFullscreenSafely();
+    };
+  }, []);
   const [viewerMode, setViewerMode] = useState<ViewerMode>(() => initialMarkerVisualMode);
   const [announcement, setAnnouncement] = useState('');
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
@@ -1049,20 +1108,160 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     };
   };
 
-  const handleLaserMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isAnnotationMode || annotationTool !== 'laser') return;
-    const { x, y } = getCanvasCoords(e);
-    addLaserPoint(x, y);
+    const clampPositionToViewport = (
+    nextPos: { x: number; y: number },
+    zoom: number,
+    displayedSize: { width: number; height: number } | null,
+    containerSize: { width: number; height: number }
+  ) => {
+    if (!displayedSize || zoom <= 1.001) {
+      return { x: 0, y: 0 };
+    }
+
+    const scaledWidth = displayedSize.width * zoom;
+    const scaledHeight = displayedSize.height * zoom;
+    const maxOffsetX = Math.max(0, (scaledWidth - containerSize.width) / 2);
+    const maxOffsetY = Math.max(0, (scaledHeight - containerSize.height) / 2);
+
+    return {
+      x: clamp(nextPos.x, -maxOffsetX, maxOffsetX),
+      y: clamp(nextPos.y, -maxOffsetY, maxOffsetY),
+    };
   };
 
-  const handleLaserMouseEnter = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isAnnotationMode || annotationTool !== 'laser') return;
-    const { x, y } = getCanvasCoords(e);
-    laserStabilizedPosRef.current = { x, y };
-    laserCurrentPosRef.current = { x, y };
+const panBy = (dx: number, dy: number) => {
+    const containerEl = containerRef.current;
+    const containerSize = containerEl ? { width: containerEl.clientWidth, height: containerEl.clientHeight } : { width: 800, height: 600 };
+    const targetPos = {
+      x: stateRef.current.pos.x + dx,
+      y: stateRef.current.pos.y + dy,
+    };
+    const clamped = clampPositionToViewport(targetPos, stateRef.current.zoom, imageSize, containerSize);
+    stateRef.current.zoom = stateRef.current.zoom;
+    stateRef.current.pos = clamped;
+    setPosition(clamped);
   };
 
-  const handleLaserMouseLeave = () => {
+  const panToMinimapCoord = (clientX: number, clientY: number) => {
+    const miniEl = minimapRef.current;
+    const frame = containerRef.current;
+    if (!miniEl || !imageSize || stateRef.current.zoom <= 1.02) return;
+
+    const rect = miniEl.getBoundingClientRect();
+    const mx = clamp(clientX - rect.left, 0, rect.width);
+    const my = clamp(clientY - rect.top, 0, rect.height);
+
+    const targetImgX = (mx / rect.width) * imageSize.width;
+    const targetImgY = (my / rect.height) * imageSize.height;
+
+    const targetPos = {
+      x: (imageSize.width / 2 - targetImgX) * stateRef.current.zoom,
+      y: (imageSize.height / 2 - targetImgY) * stateRef.current.zoom,
+    };
+
+    const containerSize = frame
+      ? { width: frame.clientWidth, height: frame.clientHeight }
+      : { width: 800, height: 600 };
+
+    const clamped = clampPositionToViewport(targetPos, stateRef.current.zoom, imageSize, containerSize);
+    stateRef.current.pos = clamped;
+    setPosition(clamped);
+  };
+
+  const handleMinimapMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isMinimapDraggingRef.current = true;
+    isDraggingRef.current = true;
+    setIsDragging(true);
+    panToMinimapCoord(e.clientX, e.clientY);
+  };
+
+  const handleMinimapTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    isMinimapDraggingRef.current = true;
+    isDraggingRef.current = true;
+    setIsDragging(true);
+    panToMinimapCoord(e.touches[0].clientX, e.touches[0].clientY);
+  };
+
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isAnnotationMode) return;
+
+    // Clic derecho (button === 2), clic de rueda central (button === 1), modo mano activo con clic izquierdo o barra espaciadora
+    const isHandLeftClick = annotationTool === 'hand' && e.button === 0;
+    const shouldPan = e.button === 2 || e.button === 1 || isHandLeftClick || isSpacePressedRef.current;
+
+    if (shouldPan) {
+      if (stateRef.current.zoom > 1) {
+        isDraggingRef.current = true;
+        setIsDragging(true);
+        dragStartRef.current = {
+          x: e.clientX - stateRef.current.pos.x,
+          y: e.clientY - stateRef.current.pos.y,
+        };
+      }
+      laserCurrentPosRef.current = null;
+      return;
+    }
+
+    if (annotationTool === 'laser' && e.button === 0) {
+      const { x, y } = getCanvasCoords(e);
+      laserStabilizedPosRef.current = { x, y };
+      addLaserPoint(x, y);
+    }
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isAnnotationMode) return;
+
+    // Si no hay ningún botón de ratón presionado, asegurar que se desactive el arrastre
+    if (e.buttons === 0 && isDraggingRef.current) {
+      isDraggingRef.current = false;
+      setIsDragging(false);
+    }
+
+    // Arrastre con ratón para mover la placa (clic derecho, rueda, mano o espacio)
+    if (isDraggingRef.current && stateRef.current.zoom > 1) {
+      if (e.buttons === 0) {
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        return;
+      }
+
+      const newPos = {
+        x: e.clientX - dragStartRef.current.x,
+        y: e.clientY - dragStartRef.current.y,
+      };
+      stateRef.current.pos = newPos;
+      setPosition(newPos);
+      laserCurrentPosRef.current = null;
+      return;
+    }
+
+    if (annotationTool === 'laser' && !isSpacePressedRef.current) {
+      const { x, y } = getCanvasCoords(e);
+      addLaserPoint(x, y);
+    }
+  };
+
+  const handleCanvasMouseUp = () => {
+    isDraggingRef.current = false;
+    setIsDragging(false);
+  };
+
+  const handleCanvasMouseEnter = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isAnnotationMode) return;
+    if (annotationTool === 'laser' && !isSpacePressedRef.current) {
+      const { x, y } = getCanvasCoords(e);
+      laserStabilizedPosRef.current = { x, y };
+      laserCurrentPosRef.current = { x, y };
+    }
+  };
+
+  const handleCanvasMouseLeave = () => {
     laserCurrentPosRef.current = null;
     laserStabilizedPosRef.current = null;
   };
@@ -1074,24 +1273,40 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   };
 
   const handleLaserTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isAnnotationMode || annotationTool !== 'laser' || e.touches.length === 0) return;
+    if (!isAnnotationMode || !annotationTool || e.touches.length === 0) return;
     e.preventDefault();
 
     if (e.touches.length === 1) {
       laserPinchRef.current = null;
       const touch = e.touches[0];
-      const { x, y } = getTouchCoords(touch);
-      laserStabilizedPosRef.current = { x, y };
-      addLaserPoint(x, y);
+
+      if (annotationTool === 'laser') {
+        const { x, y } = getTouchCoords(touch);
+        laserStabilizedPosRef.current = { x, y };
+        addLaserPoint(x, y);
+      } else if (annotationTool === 'hand') {
+        if (stateRef.current.zoom > 1) {
+          isDraggingRef.current = true;
+          setIsDragging(true);
+          dragStartRef.current = {
+            x: touch.clientX - stateRef.current.pos.x,
+            y: touch.clientY - stateRef.current.pos.y,
+          };
+        }
+      }
     } else if (e.touches.length >= 2) {
-      // 2 dedos en tablet: Zoom & Navegación / Pan
+      // 2 dedos en tablet: Zoom & Navegación / Pan ultra-fluido
       laserCurrentPosRef.current = null;
       laserStabilizedPosRef.current = null;
+      isDraggingRef.current = false;
+      setIsDragging(false);
+
       const t0 = e.touches[0];
       const t1 = e.touches[1];
       const dist = getTouchDistance(t0, t1);
       const midX = (t0.clientX + t1.clientX) / 2;
       const midY = (t0.clientY + t1.clientY) / 2;
+
       laserPinchRef.current = {
         dist,
         startZoom: stateRef.current.zoom,
@@ -1103,13 +1318,25 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   };
 
   const handleLaserTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isAnnotationMode || annotationTool !== 'laser' || e.touches.length === 0) return;
+    if (!isAnnotationMode || !annotationTool || e.touches.length === 0) return;
     e.preventDefault();
+
+    const containerEl = containerRef.current;
+    const containerSize = containerEl ? { width: containerEl.clientWidth, height: containerEl.clientHeight } : { width: 800, height: 600 };
 
     if (e.touches.length === 1 && !laserPinchRef.current) {
       const touch = e.touches[0];
-      const { x, y } = getTouchCoords(touch);
-      addLaserPoint(x, y);
+      if (annotationTool === 'laser') {
+        const { x, y } = getTouchCoords(touch);
+        addLaserPoint(x, y);
+      } else if (annotationTool === 'hand' && isDraggingRef.current && stateRef.current.zoom > 1) {
+        const newPos = {
+          x: touch.clientX - dragStartRef.current.x,
+          y: touch.clientY - dragStartRef.current.y,
+        };
+        stateRef.current.pos = newPos;
+        setPosition(newPos);
+      }
     } else if (e.touches.length >= 2 && laserPinchRef.current) {
       laserCurrentPosRef.current = null;
       laserStabilizedPosRef.current = null;
@@ -1121,8 +1348,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       if (pinchData.dist > 0) {
         const scale = newDist / pinchData.dist;
         const targetZoom = clamp(pinchData.startZoom * scale, ZOOM_MIN, effectiveMaxZoom);
-        stateRef.current.zoom = targetZoom;
-        setZoomLevel(targetZoom);
 
         // Desplazamiento / Navegación con 2 dedos en la placa
         const currentMidX = (t0.clientX + t1.clientX) / 2;
@@ -1130,17 +1355,20 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         const deltaX = currentMidX - pinchData.midX;
         const deltaY = currentMidY - pinchData.midY;
 
-        if (targetZoom > 1) {
-          const newPos = {
+        const newPos = clampPositionToViewport(
+          {
             x: pinchData.startPos.x + deltaX,
             y: pinchData.startPos.y + deltaY,
-          };
-          stateRef.current.pos = newPos;
-          setPosition(newPos);
-        } else {
-          stateRef.current.pos = { x: 0, y: 0 };
-          setPosition({ x: 0, y: 0 });
-        }
+          },
+          targetZoom,
+          imageSize,
+          containerSize
+        );
+
+        stateRef.current.zoom = targetZoom;
+        stateRef.current.pos = newPos;
+        setZoomLevel(targetZoom);
+        setPosition(newPos);
       }
     }
   };
@@ -1152,17 +1380,104 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     if (e.touches.length === 0) {
       laserCurrentPosRef.current = null;
       laserStabilizedPosRef.current = null;
+      isDraggingRef.current = false;
+      setIsDragging(false);
     }
   };
 
   useEffect(() => {
+    const handleGlobalRelease = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        setIsDragging(false);
+      }
+      if (isMinimapDraggingRef.current) {
+        isMinimapDraggingRef.current = false;
+      }
+    };
+    window.addEventListener('mouseup', handleGlobalRelease);
+    window.addEventListener('pointerup', handleGlobalRelease);
+    window.addEventListener('blur', handleGlobalRelease);
+    window.addEventListener('contextmenu', handleGlobalRelease);
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalRelease);
+      window.removeEventListener('pointerup', handleGlobalRelease);
+      window.removeEventListener('blur', handleGlobalRelease);
+      window.removeEventListener('contextmenu', handleGlobalRelease);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalMinimapMove = (e: MouseEvent) => {
+      if (isMinimapDraggingRef.current) {
+        panToMinimapCoord(e.clientX, e.clientY);
+      }
+    };
+    const handleGlobalMinimapTouchMove = (e: TouchEvent) => {
+      if (isMinimapDraggingRef.current && e.touches.length > 0) {
+        panToMinimapCoord(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+    const handleGlobalMinimapUp = () => {
+      if (isMinimapDraggingRef.current) {
+        isMinimapDraggingRef.current = false;
+        isDraggingRef.current = false;
+        setIsDragging(false);
+      }
+    };
+
+    window.addEventListener('mousemove', handleGlobalMinimapMove);
+    window.addEventListener('touchmove', handleGlobalMinimapTouchMove, { passive: false });
+    window.addEventListener('mouseup', handleGlobalMinimapUp);
+    window.addEventListener('touchend', handleGlobalMinimapUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMinimapMove);
+      window.removeEventListener('touchmove', handleGlobalMinimapTouchMove);
+      window.removeEventListener('mouseup', handleGlobalMinimapUp);
+      window.removeEventListener('touchend', handleGlobalMinimapUp);
+    };
+  }, [imageSize]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        isSpacePressedRef.current = true;
+        setIsSpacePressed(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        isSpacePressedRef.current = false;
+        setIsSpacePressed(false);
+        if (isDraggingRef.current) {
+          isDraggingRef.current = false;
+          setIsDragging(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S' || e.key === 'c' || e.key === 'C')) {
+        if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+          e.preventDefault();
+        }
+      }
       if (e.key === 'Escape') {
         if (isAnnotationMode) {
           setIsAnnotationMode(false);
           setAnnotationTool(null);
         } else {
-          onClose();
+          handleCloseViewer();
         }
       }
     };
@@ -1344,17 +1659,45 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     vibrateSelection();
   };
 
-  const applyZoom = (newZoom: number, newPos?: { x: number; y: number }) => {
+    const applyZoom = (newZoom: number, newPos?: { x: number; y: number }, focalPoint?: { clientX: number; clientY: number }) => {
+    const oldZoom = stateRef.current.zoom;
     const z = clamp(newZoom, ZOOM_MIN, effectiveMaxZoom);
     stateRef.current.zoom = z;
     setZoomLevel(z);
-    if (z <= 1) {
+
+    const frame = containerRef.current;
+    const containerSize = frame ? { width: frame.clientWidth, height: frame.clientHeight } : { width: 800, height: 600 };
+
+    if (z <= 1.001) {
       stateRef.current.pos = { x: 0, y: 0 };
       setPosition({ x: 0, y: 0 });
-    } else if (newPos) {
-      stateRef.current.pos = newPos;
-      setPosition(newPos);
+      return;
     }
+
+    let rawNextPos: { x: number; y: number };
+
+    if (newPos) {
+      rawNextPos = newPos;
+    } else if (focalPoint && frame) {
+      const rect = frame.getBoundingClientRect();
+      const cursorX = focalPoint.clientX - (rect.left + rect.width / 2);
+      const cursorY = focalPoint.clientY - (rect.top + rect.height / 2);
+      const scaleFactor = oldZoom > 0 ? z / oldZoom : 1;
+      rawNextPos = {
+        x: cursorX - (cursorX - stateRef.current.pos.x) * scaleFactor,
+        y: cursorY - (cursorY - stateRef.current.pos.y) * scaleFactor,
+      };
+    } else {
+      const scaleFactor = oldZoom > 0 ? z / oldZoom : 1;
+      rawNextPos = {
+        x: stateRef.current.pos.x * scaleFactor,
+        y: stateRef.current.pos.y * scaleFactor,
+      };
+    }
+
+    const clampedPos = clampPositionToViewport(rawNextPos, z, imageSize, containerSize);
+    stateRef.current.pos = clampedPos;
+    setPosition(clampedPos);
   };
 
   useEffect(() => {
@@ -1395,12 +1738,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         const scale   = newDist / pinchRef.current.dist;
         pinchRef.current.dist = newDist;
         const newZoom = clamp(stateRef.current.zoom * scale, ZOOM_MIN, effectiveMaxZoom);
-        stateRef.current.zoom = newZoom;
-        setZoomLevel(newZoom);
-        if (newZoom <= 1) {
-          stateRef.current.pos = { x: 0, y: 0 };
-          setPosition({ x: 0, y: 0 });
-        }
+        applyZoom(newZoom);
       } else if (e.touches.length === 1 && isDraggingRef.current && stateRef.current.zoom > 1) {
         const newPos = {
           x: e.touches[0].clientX - dragStartRef.current.x,
@@ -1453,16 +1791,19 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const handleZoomIn  = () => applyZoom(stateRef.current.zoom + 0.25);
   const handleZoomOut = () => applyZoom(stateRef.current.zoom - 0.25);
+  const handleRotateCw = () => setRotation(r => (r + 90) % 360);
+  const handleRotateCcw = () => setRotation(r => (r - 90 + 360) % 360);
   const handleResetViewport = () => {
     stateRef.current.zoom = 1;
     stateRef.current.pos = { x: 0, y: 0 };
     setZoomLevel(1);
     setPosition({ x: 0, y: 0 });
+    setRotation(0);
   };
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    applyZoom(stateRef.current.zoom + (e.deltaY < 0 ? 0.1 : -0.1));
+    applyZoom(stateRef.current.zoom + (e.deltaY < 0 ? 0.15 : -0.15), undefined, { clientX: e.clientX, clientY: e.clientY });
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -1477,6 +1818,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (e.buttons === 0 && isDraggingRef.current) {
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      return;
+    }
     if (isDraggingRef.current && stateRef.current.zoom > 1) {
       const newPos = {
         x: e.clientX - dragStartRef.current.x,
@@ -1488,27 +1834,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   };
 
   const handleMouseUp = () => { isDraggingRef.current = false; setIsDragging(false); };
-
-  const clampPositionToViewport = (
-    nextPos: { x: number; y: number },
-    zoom: number,
-    displayedSize: { width: number; height: number } | null,
-    containerSize: { width: number; height: number }
-  ) => {
-    if (!displayedSize || zoom <= 1) {
-      return { x: 0, y: 0 };
-    }
-
-    const scaledWidth = displayedSize.width * zoom;
-    const scaledHeight = displayedSize.height * zoom;
-    const maxOffsetX = Math.max(0, (scaledWidth - containerSize.width) / 2);
-    const maxOffsetY = Math.max(0, (scaledHeight - containerSize.height) / 2);
-
-    return {
-      x: clamp(nextPos.x, -maxOffsetX, maxOffsetX),
-      y: clamp(nextPos.y, -maxOffsetY, maxOffsetY),
-    };
-  };
 
   useEffect(() => {
     if (activeMapSectionIndex === null || !mapGeometry || !imageSize) return;
@@ -1660,6 +1985,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   return createPortal(
     <div
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
       style={{
         position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
         zIndex: 1000, display: 'flex', flexDirection: 'row',
@@ -1671,7 +1998,19 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         {announcement}
       </div>
       <style>
-        {`@keyframes senaladoCardIn {
+        {`img, svg, canvas {
+          -webkit-user-drag: none !important;
+          -khtml-user-drag: none !important;
+          -moz-user-drag: none !important;
+          -o-user-drag: none !important;
+          user-drag: none !important;
+          -webkit-touch-callout: none !important;
+          -webkit-user-select: none !important;
+          -moz-user-select: none !important;
+          -ms-user-select: none !important;
+          user-select: none !important;
+        }
+        @keyframes senaladoCardIn {
           0% { opacity: 0; transform: translateY(6px) scale(0.985); }
           100% { opacity: 1; transform: translateY(0) scale(1); }
         }
@@ -1742,7 +2081,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         flex: 1, position: 'relative', background: 'radial-gradient(ellipse at top, #334155 0%, #0f172a 58%, #020617 100%)',
         overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {/* Canvas de estela de luz / Puntero Láser */}
+        {/* Canvas de estela de luz / Puntero Láser y Paneo */}
         <canvas
           ref={laserCanvasRef}
           style={{
@@ -1750,22 +2089,27 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             inset: 0,
             width: '100%',
             height: '100%',
-            pointerEvents: isAnnotationMode && annotationTool === 'laser' ? 'auto' : 'none',
+            pointerEvents: isAnnotationMode ? 'auto' : 'none',
             zIndex: 12,
-            cursor: isAnnotationMode && annotationTool === 'laser' ? 'none' : 'default',
+            cursor: isSpacePressed || isDragging
+              ? (isDragging ? 'grabbing' : 'grab')
+              : (annotationTool === 'hand' ? (isDragging ? 'grabbing' : 'grab') : (annotationTool === 'laser' ? 'none' : 'default')),
             touchAction: 'none',
           }}
-          onMouseMove={handleLaserMouseMove}
-          onMouseEnter={handleLaserMouseEnter}
-          onMouseLeave={handleLaserMouseLeave}
+          onMouseDown={handleCanvasMouseDown}
+          onMouseMove={handleCanvasMouseMove}
+          onMouseUp={handleCanvasMouseUp}
+          onMouseEnter={handleCanvasMouseEnter}
+          onMouseLeave={handleCanvasMouseLeave}
           onTouchStart={handleLaserTouchStart}
           onTouchMove={handleLaserTouchMove}
           onTouchEnd={handleLaserTouchEnd}
+          onContextMenu={(e) => e.preventDefault()}
           onWheel={handleWheel}
         />
 
         <button
-          onClick={onClose}
+          onClick={handleCloseViewer}
           title="Cerrar visor"
           aria-label="Cerrar visor"
           style={{
@@ -1888,6 +2232,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
         <div
           ref={containerRef}
+          onContextMenu={(e) => e.preventDefault()}
+          onDragStart={(e) => e.preventDefault()}
           style={{
             width: '100%', height: '100%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1903,7 +2249,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             style={{
               position: 'relative',
               display: 'inline-block',
-              transform: `translate(${position.x}px, ${position.y}px) scale(${zoomLevel})`,
+              transform: `translate(${position.x}px, ${position.y}px) scale(${zoomLevel}) rotate(${rotation}deg)`,
               cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
               transition: (isDragging || isPinching || prefersReducedMotion) ? 'none' : 'transform 0.3s ease',
             }}
@@ -1913,6 +2259,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               src={useZoomSource && srcZoom ? srcZoom : src}
               alt="Vista ampliada"
               draggable={false}
+              onDragStart={(e) => e.preventDefault()}
+              onContextMenu={(e) => e.preventDefault()}
               onLoad={() => {
                 updateImageSize();
                 setIsPlateImageLoading(false);
@@ -1927,9 +2275,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               style={{
                 maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
                 objectPosition: 'center center',
-                userSelect: 'none', display: 'block',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                WebkitUserDrag: 'none',
+                WebkitTouchCallout: 'none',
+                pointerEvents: 'none',
+                display: 'block',
                 filter: imageFilterStyle,
-              }}
+              } as React.CSSProperties}
             />
 
             {grainOpacity > 0 && (
@@ -2383,18 +2736,79 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
         {zoomLevel > 1.05 && imageSize && (() => {
           const frame = containerRef.current;
-          const miniWidth = isDesktop ? 132 : 104;
-          const miniHeight = Math.max(58, Math.min(104, miniWidth * imageSize.height / imageSize.width));
+          const miniWidth = isDesktop ? 136 : 108;
+          const miniHeight = Math.max(58, Math.min(108, (miniWidth * imageSize.height) / imageSize.width));
           const frameWidth = frame?.clientWidth ?? imageSize.width;
           const frameHeight = frame?.clientHeight ?? imageSize.height;
           const visibleWidth = Math.min(imageSize.width, frameWidth / zoomLevel);
           const visibleHeight = Math.min(imageSize.height, frameHeight / zoomLevel);
           const visibleLeft = clamp(imageSize.width / 2 + (-frameWidth / 2 - position.x) / zoomLevel, 0, Math.max(0, imageSize.width - visibleWidth));
           const visibleTop = clamp(imageSize.height / 2 + (-frameHeight / 2 - position.y) / zoomLevel, 0, Math.max(0, imageSize.height - visibleHeight));
+
           return (
-            <div aria-label="Minimapa de navegación" style={{ position: 'absolute', left: '16px', bottom: '18px', width: `${miniWidth}px`, height: `${miniHeight}px`, borderRadius: '10px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.88)', background: '#0f172a', boxShadow: '0 8px 24px rgba(2,6,23,0.35)', zIndex: 6, pointerEvents: 'none' }}>
-              <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'fill', opacity: 0.82 }} />
-              <span style={{ position: 'absolute', left: `${visibleLeft / imageSize.width * miniWidth}px`, top: `${visibleTop / imageSize.height * miniHeight}px`, width: `${visibleWidth / imageSize.width * miniWidth}px`, height: `${visibleHeight / imageSize.height * miniHeight}px`, border: '2px solid #38bdf8', background: 'rgba(56,189,248,0.14)', boxSizing: 'border-box', borderRadius: '3px' }} />
+            <div
+              ref={minimapRef}
+              role="region"
+              aria-label="Minimapa de navegación interactivo"
+              title="Clic o arrastra para moverte rápidamente por la placa"
+              onMouseDown={handleMinimapMouseDown}
+              onTouchStart={handleMinimapTouchStart}
+              style={{
+                position: 'absolute',
+                left: '16px',
+                bottom: '18px',
+                width: `${miniWidth}px`,
+                height: `${miniHeight}px`,
+                borderRadius: '10px',
+                overflow: 'hidden',
+                border: '2px solid rgba(255, 255, 255, 0.92)',
+                background: '#0f172a',
+                boxShadow: '0 8px 24px rgba(2, 6, 23, 0.4), 0 0 12px rgba(56, 189, 248, 0.25)',
+                zIndex: 14,
+                cursor: 'crosshair',
+                touchAction: 'none',
+                userSelect: 'none',
+                transition: 'transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#38bdf8';
+                e.currentTarget.style.boxShadow = '0 12px 28px rgba(2, 6, 23, 0.5), 0 0 16px rgba(56, 189, 248, 0.45)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.92)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(2, 6, 23, 0.4), 0 0 12px rgba(56, 189, 248, 0.25)';
+              }}
+            >
+              <img
+                src={src}
+                alt="Minimapa de la placa"
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
+                onContextMenu={(e) => e.preventDefault()}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'fill',
+                  opacity: 0.82,
+                  pointerEvents: 'none',
+                  display: 'block',
+                }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  left: `${(visibleLeft / imageSize.width) * miniWidth}px`,
+                  top: `${(visibleTop / imageSize.height) * miniHeight}px`,
+                  width: `${(visibleWidth / imageSize.width) * miniWidth}px`,
+                  height: `${(visibleHeight / imageSize.height) * miniHeight}px`,
+                  border: '2px solid #38bdf8',
+                  background: 'rgba(56, 189, 248, 0.22)',
+                  boxSizing: 'border-box',
+                  borderRadius: '3px',
+                  boxShadow: '0 0 8px rgba(56, 189, 248, 0.6), inset 0 0 4px rgba(56, 189, 248, 0.3)',
+                  pointerEvents: 'none',
+                }}
+              />
             </div>
           );
         })()}
@@ -2563,12 +2977,84 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
             <div style={{ width: '26px', height: '1px', background: 'rgba(186, 230, 253, 0.85)', margin: '2px 0', flexShrink: 0 }} />
 
+            {/* Botón Rotar 90° Horario */}
+            <button
+              type="button"
+              onClick={handleRotateCw}
+              title={`Rotar 90° a la derecha (actual: ${rotation}°)`}
+              aria-label="Rotar 90° a la derecha"
+              style={{
+                border: rotation !== 0 ? '1px solid #38bdf8' : '1px solid #bae6fd',
+                background: rotation !== 0 ? '#f0f9ff' : '#ffffff',
+                color: rotation !== 0 ? '#0284c7' : '#0369a1',
+                borderRadius: '50%',
+                width: '34px',
+                height: '34px',
+                minWidth: '34px',
+                minHeight: '34px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 2px 4px rgba(15, 75, 105, 0.08)',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.08)';
+                e.currentTarget.style.borderColor = '#38bdf8';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.borderColor = rotation !== 0 ? '#38bdf8' : '#bae6fd';
+              }}
+            >
+              <RotateCw size={15} strokeWidth={2.4} />
+            </button>
+
+            {/* Botón Rotar 90° Antihorario */}
+            <button
+              type="button"
+              onClick={handleRotateCcw}
+              title={`Rotar 90° a la izquierda (actual: ${rotation}°)`}
+              aria-label="Rotar 90° a la izquierda"
+              style={{
+                border: rotation !== 0 ? '1px solid #38bdf8' : '1px solid #bae6fd',
+                background: rotation !== 0 ? '#f0f9ff' : '#ffffff',
+                color: rotation !== 0 ? '#0284c7' : '#0369a1',
+                borderRadius: '50%',
+                width: '34px',
+                height: '34px',
+                minWidth: '34px',
+                minHeight: '34px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 2px 4px rgba(15, 75, 105, 0.08)',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.08)';
+                e.currentTarget.style.borderColor = '#38bdf8';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.borderColor = rotation !== 0 ? '#38bdf8' : '#bae6fd';
+              }}
+            >
+              <RotateCcw size={15} strokeWidth={2.4} />
+            </button>
+
+            <div style={{ width: '26px', height: '1px', background: 'rgba(186, 230, 253, 0.85)', margin: '2px 0', flexShrink: 0 }} />
+
             {/* Botón Recentrar */}
             <button
               type="button"
               onClick={handleResetViewport}
-              disabled={zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5}
-              title="Recentrar vista"
+              disabled={zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 && rotation === 0}
+              title="Recentrar vista y orientación"
               aria-label="Recentrar vista"
               style={{
                 border: '1px solid #bae6fd',
@@ -2579,8 +3065,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 height: '34px',
                 minWidth: '34px',
                 minHeight: '34px',
-                cursor: zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 ? 'not-allowed' : 'pointer',
-                opacity: zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 ? 0.5 : 1,
+                cursor: zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 && rotation === 0 ? 'not-allowed' : 'pointer',
+                opacity: zoomLevel <= 1 && Math.abs(position.x) < 0.5 && Math.abs(position.y) < 0.5 && rotation === 0 ? 0.5 : 1,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -2648,17 +3134,19 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               transform: 'translateX(-50%)',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              background: 'rgba(15, 23, 42, 0.92)',
-              backdropFilter: 'blur(16px) saturate(160%)',
-              padding: '6px 10px 6px 14px',
+              gap: '6px',
+              background: 'rgba(15, 23, 42, 0.94)',
+              backdropFilter: 'blur(20px) saturate(160%)',
+              padding: '6px 12px',
               borderRadius: '999px',
-              boxShadow: '0 14px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(239, 68, 68, 0.35)',
+              boxShadow: '0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.1)',
               zIndex: 20,
-              border: '1px solid rgba(239, 68, 68, 0.45)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
               color: '#ffffff',
               animation: prefersReducedMotion ? 'none' : 'specialBarIn 260ms cubic-bezier(0.22, 1, 0.36, 1) both',
               userSelect: 'none',
+              maxWidth: '94vw',
+              overflowX: 'auto',
             }}
           >
             {/* Opción 1: Puntero Láser Rojo */}
@@ -2670,13 +3158,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '7px',
                 background: annotationTool === 'laser'
                   ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.38), rgba(185, 28, 28, 0.55))'
                   : 'rgba(30, 41, 59, 0.75)',
                 border: annotationTool === 'laser' ? '1.5px solid #ef4444' : '1px solid rgba(148, 163, 184, 0.3)',
                 borderRadius: '999px',
-                padding: '6px 14px',
+                padding: '6px 13px',
                 color: annotationTool === 'laser' ? '#ffffff' : '#cbd5e1',
                 cursor: 'pointer',
                 fontWeight: 750,
@@ -2684,6 +3172,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 fontFamily: 'inherit',
                 boxShadow: annotationTool === 'laser' ? '0 0 16px rgba(239, 68, 68, 0.48)' : 'none',
                 transition: 'all 0.18s ease',
+                flexShrink: 0,
               }}
             >
               <span
@@ -2696,11 +3185,241 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                   display: 'inline-block',
                 }}
               />
-              <span>Puntero Láser</span>
+              <span>Láser</span>
+            </button>
+
+            {/* Opción 2: Mover Placa (Herramienta Mano) */}
+            <button
+              type="button"
+              onClick={() => setAnnotationTool(annotationTool === 'hand' ? null : 'hand')}
+              title="Mover Placa (arrastrar con clic izquierdo para navegar la imagen)"
+              aria-label="Mover Placa"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
+                background: annotationTool === 'hand'
+                  ? 'linear-gradient(135deg, rgba(14, 165, 233, 0.38), rgba(2, 132, 199, 0.55))'
+                  : 'rgba(30, 41, 59, 0.75)',
+                border: annotationTool === 'hand' ? '1.5px solid #38bdf8' : '1px solid rgba(148, 163, 184, 0.3)',
+                borderRadius: '999px',
+                padding: '6px 13px',
+                color: annotationTool === 'hand' ? '#ffffff' : '#cbd5e1',
+                cursor: 'pointer',
+                fontWeight: 750,
+                fontSize: '0.82em',
+                fontFamily: 'inherit',
+                boxShadow: annotationTool === 'hand' ? '0 0 16px rgba(56, 189, 248, 0.48)' : 'none',
+                transition: 'all 0.18s ease',
+                flexShrink: 0,
+              }}
+            >
+              <Hand size={15} strokeWidth={2.4} color={annotationTool === 'hand' ? '#38bdf8' : '#94a3b8'} />
+              <span>Mover</span>
             </button>
 
             {/* Separador */}
-            <div style={{ width: '1px', height: '22px', background: 'rgba(148, 163, 184, 0.35)', margin: '0 2px' }} />
+            <div style={{ width: '1px', height: '20px', background: 'rgba(148, 163, 184, 0.35)', margin: '0 2px', flexShrink: 0 }} />
+
+            {/* Controles de Navegación Direccional (◄ ▲ ▼ ►) */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+                background: 'rgba(30, 41, 59, 0.65)',
+                padding: '2px 4px',
+                borderRadius: '999px',
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                flexShrink: 0,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => panBy(120, 0)}
+                title="Mover vista a la izquierda"
+                aria-label="Mover a la izquierda"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#cbd5e1',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: 0,
+                  transition: 'all 0.12s ease',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
+              >
+                <ChevronLeft size={16} strokeWidth={2.4} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => panBy(0, 120)}
+                title="Mover vista hacia arriba"
+                aria-label="Mover hacia arriba"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#cbd5e1',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: 0,
+                  transition: 'all 0.12s ease',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
+              >
+                <ChevronUp size={16} strokeWidth={2.4} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => panBy(0, -120)}
+                title="Mover vista hacia abajo"
+                aria-label="Mover hacia abajo"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#cbd5e1',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: 0,
+                  transition: 'all 0.12s ease',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
+              >
+                <ChevronDown size={16} strokeWidth={2.4} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => panBy(-120, 0)}
+                title="Mover vista a la derecha"
+                aria-label="Mover a la derecha"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#cbd5e1',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: 0,
+                  transition: 'all 0.12s ease',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
+              >
+                <ChevronRight size={16} strokeWidth={2.4} />
+              </button>
+            </div>
+
+            {/* Controles de Zoom rápidos */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+                background: 'rgba(30, 41, 59, 0.65)',
+                padding: '2px 4px',
+                borderRadius: '999px',
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                flexShrink: 0,
+              }}
+            >
+              <button
+                type="button"
+                onClick={handleZoomOut}
+                title="Alejar imagen (-)"
+                aria-label="Alejar imagen"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#cbd5e1',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: 0,
+                  transition: 'all 0.12s ease',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
+              >
+                <ZoomOut size={14} strokeWidth={2.4} />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetViewport}
+                title="Clic para volver al 100%"
+                aria-label="Volver al 100%"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  fontSize: '0.74em',
+                  fontWeight: 800,
+                  padding: '0 3px',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {Math.round(zoomLevel * 100)}%
+              </button>
+
+              <button
+                type="button"
+                onClick={handleZoomIn}
+                title="Acercar imagen (+)"
+                aria-label="Acercar imagen"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#cbd5e1',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: 0,
+                  transition: 'all 0.12s ease',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
+              >
+                <ZoomIn size={14} strokeWidth={2.4} />
+              </button>
+            </div>
+
+            {/* Separador */}
+            <div style={{ width: '1px', height: '20px', background: 'rgba(148, 163, 184, 0.35)', margin: '0 2px', flexShrink: 0 }} />
 
             {/* Botón Salir / Volver */}
             <button
@@ -2725,6 +3444,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 fontSize: '0.78em',
                 fontFamily: 'inherit',
                 transition: 'all 0.15s ease',
+                flexShrink: 0,
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)';
@@ -2773,13 +3493,47 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ width: '4px', height: '26px', borderRadius: '999px', background: 'linear-gradient(180deg, #b8ecfa, #e8fbff)', boxShadow: '0 0 12px rgba(186, 230, 253, 0.58)' }} />
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '7px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
                 <span style={{ color: '#ffffff', fontSize: '0.71em', fontWeight: 850, letterSpacing: '0.11em', textTransform: 'uppercase' }}>Info de la placa</span>
                 {placaId != null && (
                   <span style={{ color: 'rgba(232, 251, 255, 0.82)', fontSize: '0.63em', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                     - ID {placaId}
                   </span>
                 )}
+                {/* Botón Pantalla Completa a un lado del ID (solo ícono) */}
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  title={isFullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'}
+                  aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '22px',
+                    height: '22px',
+                    background: isFullscreen ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.15)',
+                    border: isFullscreen ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.28)',
+                    color: isFullscreen ? '#bae6fd' : '#ffffff',
+                    borderRadius: '6px',
+                    padding: 0,
+                    cursor: 'pointer',
+                    marginLeft: '4px',
+                    transition: 'all 0.15s ease',
+                    boxShadow: isFullscreen ? '0 0 8px rgba(56, 189, 248, 0.35)' : 'none',
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = isFullscreen ? 'rgba(56, 189, 248, 0.35)' : 'rgba(255, 255, 255, 0.28)';
+                    e.currentTarget.style.color = '#ffffff';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = isFullscreen ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.15)';
+                    e.currentTarget.style.color = isFullscreen ? '#bae6fd' : '#ffffff';
+                  }}
+                >
+                  {isFullscreen ? <Minimize2 size={13} strokeWidth={2.4} /> : <Maximize2 size={13} strokeWidth={2.4} />}
+                </button>
               </div>
             </div>
             {!isDesktop && (

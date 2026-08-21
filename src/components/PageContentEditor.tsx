@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Search, X, Layers, ChevronDown, ChevronUp, Pencil, Check, Eye, Copy, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { Extension, type Editor } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -12,12 +13,19 @@ import { supabase } from '../services/supabase';
 import { deleteFromCloudinary, getCloudinaryPublicId, uploadToCloudinary } from '../services/cloudinary';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { BLOCK_TYPES, createDefaultBlockContent, getBlockMeta, normalizeBlockContent } from './blocks/blockRegistry';
-import { getPublicationInfo, publishBlocksSnapshot, setPublicationDraft } from '../services/contentPublication';
-import { createContentVersion, listContentVersions, restoreContentVersion, type ContentBlockVersionRow } from '../services/contentVersioning';
+import { getPublicationInfo, setPublicationDraft } from '../services/contentPublication';
+import { savePageVersionBlocks, type PageVersionRow } from '../services/pageVersionsService';
 import LoadingToast from './LoadingToast';
 import ContentBlockRenderer from './ContentBlockRenderer';
 import VisualBlockProperties from './page-editor/VisualBlockProperties';
 import SpanishEditorShortcuts from './page-editor/SpanishEditorShortcuts';
+import {
+  HistologyGeneralitiesInlineEditor,
+  HistologyFunctionInlineEditor,
+  HistologyMorphologyInlineEditor,
+  HistologyLocationsInlineEditor,
+  HistologyStainsInlineEditor,
+} from './page-editor/HistologyBlockEditors';
 import type { BlockType, ContentBlock } from '../types/contentBlocks';
 
 const FontSize = Extension.create({
@@ -173,20 +181,6 @@ interface SectionTemplate {
   blocks: SectionTemplateBlock[];
 }
 
-const sanitizeImportedContent = (raw: unknown): Record<string, string> => {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-  return Object.entries(raw as Record<string, unknown>).reduce<Record<string, string>>((acc, [key, value]) => {
-    if (typeof value === 'string') {
-      acc[key] = value;
-      return acc;
-    }
-    if (typeof value === 'number' || typeof value === 'boolean') {
-      acc[key] = String(value);
-    }
-    return acc;
-  }, {});
-};
-
 const pickStyleContent = (content: Record<string, string>): Record<string, string> => {
   return STYLE_CONTENT_KEYS.reduce<Record<string, string>>((acc, key) => {
     acc[key] = content[key] ?? '';
@@ -211,8 +205,11 @@ const getAtlasContentPublicIdsFromBlock = (block: Pick<ContentBlock, 'content'>)
 interface PageContentEditorProps {
   entityType: 'subtemas_page' | 'placas_page' | 'home_page';
   entityId: number;
+  activeVersion?: PageVersionRow | null;
   onBlocksChange?: (blocks: ContentBlock[]) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onVersionSaved?: () => void;
+  onManualSaveRequest?: () => Promise<void> | void;
   experienceMode?: 'simple' | 'advanced';
   autoSave?: boolean;
 }
@@ -224,6 +221,7 @@ export interface PageContentEditorHandle {
   openImagePicker: (blockId: string, fieldKey: string) => void;
   undo: () => void;
   redo: () => void;
+  saveChanges: () => Promise<boolean>;
 }
 
 const BLOCK_TOOLBAR_GROUPS: Array<{ title: string; types: BlockType[] }> = [
@@ -239,9 +237,20 @@ const BLOCK_TOOLBAR_GROUPS: Array<{ title: string; types: BlockType[] }> = [
     title: 'Estructura',
     types: ['section', 'columns_2', 'divider'],
   },
+  {
+    title: 'Fundamentos Histológicos',
+    types: [
+      'histology_generalities',
+      'histology_function',
+      'histology_morphology',
+      'histology_locations',
+      'histology_stains',
+    ],
+  },
 ];
 
 const BLOCK_GROUP_META: Record<string, { icon: string; accent: string }> = {
+  'Fundamentos Histológicos': { icon: '🔬', accent: '#4f46e5' },
   Texto: { icon: 'Aa', accent: '#0ea5e9' },
   'Imagenes y galerias': { icon: 'IMG', accent: '#8b5cf6' },
   Estructura: { icon: 'LAY', accent: '#14b8a6' },
@@ -266,14 +275,22 @@ const BLOCK_TYPE_VISUAL_ICON: Record<BlockType, string> = {
   section: 'SEC',
   section_end: 'FIN',
   columns_2: 'COL',
+  histology_generalities: 'GEN',
+  histology_function: 'FUN',
+  histology_morphology: 'MORF',
+  histology_locations: 'UBI',
+  histology_stains: 'TINC',
 };
 
 // ── Componente principal ─────────────────────────────────────────────────────
 const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentEditorProps>(({
   entityType,
   entityId,
+  activeVersion,
   onBlocksChange,
   onDirtyChange,
+  onVersionSaved,
+  onManualSaveRequest,
   experienceMode = 'advanced',
   autoSave = true,
 }, ref) => {
@@ -288,16 +305,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
   const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
   const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
   const [sectionTemplates, setSectionTemplates] = useState<SectionTemplate[]>([]);
-  const [selectedSectionTemplateId, setSelectedSectionTemplateId] = useState<string>('');
   const [publicationStatus, setPublicationStatus] = useState<'draft' | 'published'>('draft');
-  const [publishedAt, setPublishedAt] = useState<string | null>(null);
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [isSwitchingToDraft, setIsSwitchingToDraft] = useState(false);
-  const [versions, setVersions] = useState<ContentBlockVersionRow[]>([]);
-  const [selectedVersionId, setSelectedVersionId] = useState<string>('');
-  const [isLoadingVersions, setIsLoadingVersions] = useState(false);
-  const [isCreatingVersion, setIsCreatingVersion] = useState(false);
-  const [isRestoringVersion, setIsRestoringVersion] = useState(false);
   const [collapsedToolbarGroups, setCollapsedToolbarGroups] = useState<Set<string>>(new Set());
   const [compactToolbar, setCompactToolbar] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -313,7 +321,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
   const [loadingPlacas, setLoadingPlacas] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const templateFileInputRef = useRef<HTMLInputElement>(null);
 
   // Estados para "Todas las placas"
   const [allTemas, setAllTemas] = useState<AllTema[]>([]);
@@ -352,6 +359,8 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     onDirtyChange?.(hasPendingChangesFor(blocks) || hasChanges);
   }, [blocks, hasChanges, hasPendingChangesFor, onDirtyChange]);
 
+  const [componentSearch, setComponentSearch] = useState('');
+
   const toggleToolbarGroup = (groupTitle: string) => {
     setCollapsedToolbarGroups(prev => {
       const next = new Set(prev);
@@ -360,6 +369,47 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       return next;
     });
   };
+
+  const toggleAllToolbarGroups = useCallback(() => {
+    if (collapsedToolbarGroups.size === 0) {
+      const allTitles = BLOCK_TOOLBAR_GROUPS.map(g => g.title);
+      setCollapsedToolbarGroups(new Set(allTitles));
+    } else {
+      setCollapsedToolbarGroups(new Set());
+    }
+  }, [collapsedToolbarGroups]);
+
+  const activeToolbarGroups = useMemo(() => {
+    const rawSearch = componentSearch.trim().toLowerCase();
+    const availableGroups = BLOCK_TOOLBAR_GROUPS.filter(group =>
+      group.title === 'Fundamentos Histológicos' ? entityType === 'placas_page' : true
+    );
+
+    if (!rawSearch) {
+      return availableGroups.map(g => ({
+        ...g,
+        matchingTypes: g.types,
+      }));
+    }
+
+    return availableGroups
+      .map(group => {
+        const matching = group.types.filter(type => {
+          const meta = getBlockMeta(type);
+          return (
+            type.toLowerCase().includes(rawSearch) ||
+            meta.label.toLowerCase().includes(rawSearch) ||
+            meta.description.toLowerCase().includes(rawSearch) ||
+            group.title.toLowerCase().includes(rawSearch)
+          );
+        });
+        return {
+          ...group,
+          matchingTypes: matching,
+        };
+      })
+      .filter(g => g.matchingTypes.length > 0);
+  }, [componentSearch, entityType]);
 
   // ── Carga de bloques ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -373,21 +423,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       console.warn('No se pudieron cargar presets de estilo.', error);
     }
   }, []);
-
-  const refreshVersions = useCallback(async () => {
-    setIsLoadingVersions(true);
-    try {
-      const rows = await listContentVersions(entityType, entityId, 30);
-      setVersions(rows);
-      setSelectedVersionId(prev => (prev && rows.some(r => String(r.id) === prev) ? prev : ''));
-    } catch (error) {
-      console.warn('No se pudo cargar historial de versiones.', error);
-      setVersions([]);
-      setSelectedVersionId('');
-    } finally {
-      setIsLoadingVersions(false);
-    }
-  }, [entityId, entityType]);
 
   useEffect(() => {
     try {
@@ -469,22 +504,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     setSectionTemplates(prev => [template, ...prev].slice(0, 30));
   }, [blocks, getSectionRangeById]);
 
-  const renameSectionTemplate = useCallback((templateId: string) => {
-    const template = sectionTemplates.find(t => t.id === templateId);
-    if (!template) return;
-    const nextName = window.prompt('Nuevo nombre de la plantilla:', template.name);
-    if (!nextName || !nextName.trim()) return;
-    setSectionTemplates(prev => prev.map(t => (t.id === templateId ? { ...t, name: nextName.trim() } : t)));
-  }, [sectionTemplates]);
-
-  const deleteSectionTemplate = useCallback((templateId: string) => {
-    const template = sectionTemplates.find(t => t.id === templateId);
-    if (!template) return;
-    if (!window.confirm(`Eliminar plantilla "${template.name}"?`)) return;
-    setSectionTemplates(prev => prev.filter(t => t.id !== templateId));
-    setSelectedSectionTemplateId(prev => (prev === templateId ? '' : prev));
-  }, [sectionTemplates]);
-
   const applySectionTemplate = useCallback((sectionId: string, templateId: string) => {
     const template = sectionTemplates.find(t => t.id === templateId);
     if (!template || template.blocks.length === 0) return;
@@ -510,25 +529,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     setHasChanges(true);
   }, [getSectionRangeById, sectionTemplates]);
 
-  const insertSectionTemplateAtEnd = useCallback((templateId: string) => {
-    const template = sectionTemplates.find(t => t.id === templateId);
-    if (!template || template.blocks.length === 0) return;
-    setBlocks(prev => {
-      const inserted: EditorBlock[] = template.blocks.map((tb, idx) => ({
-        id: crypto.randomUUID(),
-        entity_type: entityType,
-        entity_id: entityId,
-        block_type: tb.block_type,
-        sort_order: prev.length + idx,
-        content: normalizeBlockContent(tb.block_type, tb.content),
-        _isNew: true,
-      }));
-      const next = [...prev, ...inserted];
-      return next.map((b, i) => ({ ...b, sort_order: i }));
-    });
-    setHasChanges(true);
-  }, [entityId, entityType, sectionTemplates]);
-
   const insertSectionTemplateBelow = useCallback((sectionId: string, templateId: string) => {
     const template = sectionTemplates.find(t => t.id === templateId);
     if (!template || template.blocks.length === 0) return;
@@ -553,111 +553,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     });
     setHasChanges(true);
   }, [getSectionRangeById, sectionTemplates]);
-
-  const exportSectionTemplates = useCallback(() => {
-    if (sectionTemplates.length === 0) {
-      window.alert('No hay plantillas para exportar.');
-      return;
-    }
-
-    const payload = {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      templates: sectionTemplates,
-    };
-
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'atlas-section-templates.json';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }, [sectionTemplates]);
-
-  const handleImportSectionTemplates = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text) as unknown;
-      const sourceTemplates =
-        Array.isArray(parsed)
-          ? parsed
-          : (parsed as { templates?: unknown })?.templates;
-
-      if (!Array.isArray(sourceTemplates)) {
-        throw new Error('Formato invalido de archivo');
-      }
-
-      const validTemplates: SectionTemplate[] = [];
-      let invalidSectionRootCount = 0;
-      sourceTemplates.forEach((rawTemplate, index) => {
-        if (!rawTemplate || typeof rawTemplate !== 'object') return;
-        const candidate = rawTemplate as { name?: unknown; blocks?: unknown };
-        const name = typeof candidate.name === 'string' && candidate.name.trim()
-          ? candidate.name.trim()
-          : `Plantilla importada ${index + 1}`;
-        if (!Array.isArray(candidate.blocks)) return;
-
-        const blocks = candidate.blocks
-          .map(rawBlock => {
-            if (!rawBlock || typeof rawBlock !== 'object') return null;
-            const block = rawBlock as { block_type?: unknown; content?: unknown };
-            if (typeof block.block_type !== 'string') return null;
-            if (!(BLOCK_TYPES as ReadonlyArray<string>).includes(block.block_type)) return null;
-            const safeContent = sanitizeImportedContent(block.content);
-            return {
-              block_type: block.block_type as BlockType,
-              content: normalizeBlockContent(block.block_type as BlockType, safeContent),
-            };
-          })
-          .filter((b): b is SectionTemplateBlock => Boolean(b));
-
-        if (blocks.length === 0) return;
-        if (blocks[0].block_type !== 'section') {
-          invalidSectionRootCount += 1;
-          return;
-        }
-        validTemplates.push({
-          id: crypto.randomUUID(),
-          name,
-          blocks,
-        });
-      });
-
-      if (validTemplates.length === 0) {
-        const reason = invalidSectionRootCount > 0
-          ? ' Todas deben iniciar con un bloque de tipo Seccion.'
-          : '';
-        window.alert(`No se encontraron plantillas validas en el archivo.${reason}`);
-      } else {
-        const maxTemplates = 30;
-        const currentCount = sectionTemplates.length;
-        const droppedByCap = Math.max(0, currentCount + validTemplates.length - maxTemplates);
-        if (droppedByCap > 0) {
-          const proceed = window.confirm(
-            `Se importaran ${validTemplates.length} plantillas y se descartaran ${droppedByCap} antiguas por el limite de ${maxTemplates}. Continuar?`
-          );
-          if (!proceed) return;
-        }
-        setSectionTemplates(prev => [...validTemplates, ...prev].slice(0, maxTemplates));
-
-        const extraMsg = invalidSectionRootCount > 0
-          ? ` ${invalidSectionRootCount} plantillas fueron omitidas por no iniciar con Seccion.`
-          : '';
-        window.alert(`Se importaron ${validTemplates.length} plantillas.${extraMsg}`);
-      }
-    } catch (error) {
-      console.error('Error al importar plantillas de seccion:', error);
-      window.alert('No se pudo importar el archivo JSON de plantillas.');
-    } finally {
-      e.currentTarget.value = '';
-    }
-  }, [sectionTemplates]);
 
   const moveBlockToAdjacentSection = useCallback((blockId: string, direction: 'prev' | 'next') => {
     setBlocks(prev => {
@@ -721,7 +616,29 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       setSaveSuccess(false);
       setSaveError(null);
 
-      const [{ data, error }, publication, versionRows] = await Promise.all([
+      if (activeVersion) {
+        const loaded: EditorBlock[] = (activeVersion.blocks ?? []).map((b: ContentBlock) => ({
+          ...b,
+          content: normalizeBlockContent(b.block_type, b.content),
+          _isNew: false,
+        }));
+        persistedBlocksFingerprintRef.current = getBlocksFingerprint(loaded);
+        blocksRef.current = loaded;
+        historyPastRef.current = [];
+        historyFutureRef.current = [];
+        historyCurrentRef.current = cloneEditorBlocks(loaded);
+        historyFingerprintRef.current = getBlocksFingerprint(loaded);
+        setHistoryRevision(value => value + 1);
+        setBlocks(loaded);
+        setSavedIds(new Set(loaded.map(b => b.id)));
+        setSelectedBlockIds(new Set());
+        setCollapsedBlockIds(new Set(loaded.map(b => b.id)));
+        setPublicationStatus(activeVersion.is_published ? 'published' : 'draft');
+        setLoading(false);
+        return;
+      }
+
+      const [{ data, error }, publication] = await Promise.all([
         supabase
           .from('content_blocks')
           .select('*')
@@ -729,7 +646,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
           .eq('entity_id', entityId)
           .order('sort_order', { ascending: true }),
         getPublicationInfo(entityType, entityId).catch(() => null),
-        listContentVersions(entityType, entityId, 30).catch(() => []),
       ]);
 
       if (reqId !== reqIdRef.current) return;
@@ -752,14 +668,11 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       setSelectedBlockIds(new Set());
       setCollapsedBlockIds(new Set(loaded.map(b => b.id)));
       setPublicationStatus(publication?.status === 'published' ? 'published' : 'draft');
-      setPublishedAt(publication?.published_at ?? null);
-      setVersions(versionRows);
-      setSelectedVersionId('');
       setLoading(false);
     };
 
     load();
-  }, [entityType, entityId]);
+  }, [entityType, entityId, activeVersion]);
 
   useEffect(() => {
     blocksRef.current = blocks;
@@ -1214,15 +1127,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       .then(({ data }) => setAllSubtemas(data ?? []));
   }, [entityId, entityType]);
 
-  React.useImperativeHandle(ref, () => ({
-    updateBlock: updateBlockContent,
-    duplicateBlock,
-    requestDeleteBlock,
-    openImagePicker: openImageModal,
-    undo: undoBlocks,
-    redo: redoBlocks,
-  }), [duplicateBlock, openImageModal, redoBlocks, requestDeleteBlock, undoBlocks, updateBlockContent]);
-
   // Cargar placas cuando cambia el filtro de la pestaña "Todas"
   const handleAllFilterTema = (temaId: string) => {
     setAllFilterTema(temaId);
@@ -1291,18 +1195,22 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     const isWeeklyImage = imageModal.fieldKey === 'image_url' && blocksRef.current.find(block => block.id === imageModal.blockId)?.block_type === 'weekly_publication';
     updateBlockContent(imageModal.blockId, {
       [imageModal.fieldKey]: placa.photo_url,
+      placa_id: String(placa.id),
       ...(isWeeklyImage ? { weekly_image_source: 'existing', weekly_placa_id: String(placa.id) } : {}),
     });
     closeImageModal();
   };
 
   // ── Guardar ──────────────────────────────────────────────────────────────
-  const handleSave = async () => {
-    if (isSaving) return;
+  const handleSave = async (): Promise<boolean> => {
+    if (isSaving) return false;
     const blocksToSave = blocksRef.current;
     if (!hasPendingChangesFor(blocksToSave)) {
       setHasChanges(false);
-      return;
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3500);
+      onVersionSaved?.();
+      return true;
     }
 
     setIsSaving(true);
@@ -1371,19 +1279,41 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       setBlocks(persistedBlocks);
       pendingAssetDeleteIdsRef.current.clear();
       setHasChanges(false);
-      // Asegura que incluso una pagina nueva tenga una fila de publicacion vacia.
-      // Asi el borrador recien guardado nunca se usa como contenido publico.
-      await setPublicationDraft(entityType, entityId);
-      setPublicationStatus('draft');
+
+      if (activeVersion) {
+        await savePageVersionBlocks(activeVersion.id, persistedBlocks);
+        onVersionSaved?.();
+      } else {
+        // Asegura que incluso una pagina nueva tenga una fila de publicacion vacia.
+        // Asi el borrador recien guardado nunca se usa como contenido publico.
+        await setPublicationDraft(entityType, entityId);
+        setPublicationStatus('draft');
+      }
+
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
+      return true;
     } catch (err) {
       console.error('Error al guardar bloques:', err);
       setSaveError('Error al guardar. Por favor, intenta de nuevo.');
+      return false;
     } finally {
       setIsSaving(false);
     }
   };
+
+  React.useImperativeHandle(ref, () => ({
+    updateBlock: updateBlockContent,
+    duplicateBlock,
+    requestDeleteBlock,
+    openImagePicker: openImageModal,
+    undo: undoBlocks,
+    redo: redoBlocks,
+    saveChanges: async () => {
+      const ok = await handleSave();
+      return ok;
+    },
+  }), [duplicateBlock, openImageModal, redoBlocks, requestDeleteBlock, undoBlocks, updateBlockContent]);
 
   useEffect(() => {
     if (!autoSave || loading || isSaving || !hasPendingChangesFor(blocks) && !hasChanges) return;
@@ -1392,133 +1322,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     }, AUTO_SAVE_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [autoSave, blocks, hasChanges, isSaving, loading]);
-
-  const handlePublish = async () => {
-    if (hasPendingChangesFor(blocksRef.current)) {
-      setSaveError('Guarda primero los cambios antes de publicar.');
-      return;
-    }
-
-    setIsPublishing(true);
-    setSaveError(null);
-    try {
-      try {
-        await createContentVersion(entityType, entityId, 'Pre-publicacion automatica', 'Auto pre-publicacion');
-      } catch (versionError) {
-        console.warn('No se pudo crear snapshot previo a publicar.', versionError);
-      }
-
-      const currentBlocks = blocksRef.current;
-      const payload = currentBlocks.map((b, idx) => ({
-        id: b.id,
-        entity_type: entityType,
-        entity_id: entityId,
-        block_type: b.block_type,
-        sort_order: idx,
-        content: normalizeBlockContent(b.block_type, b.content),
-      }));
-
-      const publishedIso = await publishBlocksSnapshot(entityType, entityId, payload);
-      setPublicationStatus('published');
-      setPublishedAt(publishedIso);
-      await refreshVersions();
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3500);
-    } catch (err) {
-      console.error('Error al publicar bloques:', err);
-      setSaveError('No se pudo publicar. Verifica el script de publicaciones en Supabase.');
-    } finally {
-      setIsPublishing(false);
-    }
-  };
-
-  const handleCreateVersion = async () => {
-    setIsCreatingVersion(true);
-    setSaveError(null);
-    try {
-      const name = window.prompt('Nombre opcional de la version:', 'Snapshot manual') ?? '';
-      const reason = window.prompt('Motivo opcional de la version:', 'Respaldo manual antes de cambios') ?? '';
-      await createContentVersion(entityType, entityId, reason.trim() || undefined, name.trim() || undefined);
-      await refreshVersions();
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2500);
-    } catch (err) {
-      console.error('Error al crear version:', err);
-      setSaveError('No se pudo crear la version. Verifica el script setup_content_block_versions.sql en Supabase.');
-    } finally {
-      setIsCreatingVersion(false);
-    }
-  };
-
-  const handleRestoreVersion = async () => {
-    if (!selectedVersionId) return;
-    if (hasPendingChangesFor(blocksRef.current)) {
-      const proceed = window.confirm('Tienes cambios sin guardar. Restaurar version los sobrescribira. Continuar?');
-      if (!proceed) return;
-    }
-
-    const versionNum = Number(selectedVersionId);
-    if (!Number.isFinite(versionNum)) return;
-
-    const proceed = window.confirm('Se restaurara la version seleccionada y se reemplazara el contenido actual. La pagina quedara en borrador. Deseas continuar?');
-    if (!proceed) return;
-
-    setIsRestoringVersion(true);
-    setSaveError(null);
-    try {
-      await restoreContentVersion(versionNum, true);
-
-      const { data, error } = await supabase
-        .from('content_blocks')
-        .select('*')
-        .eq('entity_type', entityType)
-        .eq('entity_id', entityId)
-        .order('sort_order', { ascending: true });
-      if (error) throw error;
-
-      const loaded: EditorBlock[] = (data ?? []).map((b: ContentBlock) => ({
-        ...b,
-        content: normalizeBlockContent(b.block_type, b.content),
-        _isNew: false,
-      }));
-
-      persistedBlocksFingerprintRef.current = getBlocksFingerprint(loaded);
-      setBlocks(loaded);
-      setSavedIds(new Set(loaded.map(b => b.id)));
-      setSelectedBlockIds(new Set());
-      setCollapsedBlockIds(new Set(loaded.map(b => b.id)));
-      setHasChanges(false);
-
-      const publication = await getPublicationInfo(entityType, entityId).catch(() => null);
-      setPublicationStatus(publication?.status === 'published' ? 'published' : 'draft');
-      setPublishedAt(publication?.published_at ?? null);
-
-      await refreshVersions();
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err) {
-      console.error('Error al restaurar version:', err);
-      setSaveError('No se pudo restaurar la version seleccionada.');
-    } finally {
-      setIsRestoringVersion(false);
-    }
-  };
-
-  const handleSwitchToDraft = async () => {
-    setIsSwitchingToDraft(true);
-    setSaveError(null);
-    try {
-      await setPublicationDraft(entityType, entityId);
-      setPublicationStatus('draft');
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3500);
-    } catch (err) {
-      console.error('Error al pasar a borrador:', err);
-      setSaveError('No se pudo cambiar a borrador. Verifica el script de publicaciones en Supabase.');
-    } finally {
-      setIsSwitchingToDraft(false);
-    }
-  };
 
   // ── Render ───────────────────────────────────────────────────────────────
   if (loading) {
@@ -1553,7 +1356,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     return null;
   };
 
-  const selectedTemplate = sectionTemplates.find(t => t.id === selectedSectionTemplateId) ?? null;
   const activeEditingBlock = blocks.find(block => !collapsedBlockIds.has(block.id)) ?? null;
 
   return (
@@ -1589,183 +1391,180 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
             onDuplicate={() => duplicateBlock(activeEditingBlock.id)}
             onDelete={() => requestDeleteBlock(activeEditingBlock.id)}
             onPickImage={fieldKey => openImageModal(activeEditingBlock.id, fieldKey)}
-            onClose={() => toggleBlockCollapsed(activeEditingBlock.id)}
+            onClose={() => {
+              toggleBlockCollapsed(activeEditingBlock.id);
+              if (onManualSaveRequest) {
+                void onManualSaveRequest();
+              } else {
+                void handleSave();
+              }
+            }}
           />
-        ) : <>
-        <div style={es.toolbarTopRow}>
-          <span style={es.toolbarLabel}>Componentes</span>
-          {experienceMode === 'advanced' && <button
-            type="button"
-            style={{ ...es.toolbarModeToggle, ...(compactToolbar ? es.toolbarModeToggleActive : {}) }}
-            onClick={() => setCompactToolbar(v => !v)}
-            title={compactToolbar ? 'Cambiar a vista expandida' : 'Cambiar a vista compacta'}
-            aria-pressed={compactToolbar}
-          >
-            {compactToolbar ? 'Vista compacta: activada' : 'Vista compacta: desactivada'}
-          </button>}
-        </div>
-        <div style={es.toolbarGroupsWrap}>
-          {BLOCK_TOOLBAR_GROUPS.map(group => (
-            <div key={group.title} style={es.toolbarGroup}>
-              <button
-                type="button"
-                style={{
-                  ...es.toolbarGroupHeader,
-                  borderColor: BLOCK_GROUP_META[group.title]?.accent ?? '#dbeafe',
-                }}
-                onClick={() => toggleToolbarGroup(group.title)}
-                aria-expanded={!collapsedToolbarGroups.has(group.title)}
-                title={`Mostrar u ocultar grupo ${group.title}`}
-              >
-                <span style={es.toolbarGroupHeaderLeft}>
-                  <span
-                    style={{
-                      ...es.toolbarGroupIcon,
-                      background: BLOCK_GROUP_META[group.title]?.accent ?? '#334155',
-                    }}
-                  >
-                    {BLOCK_GROUP_META[group.title]?.icon ?? 'GR'}
-                  </span>
-                  <span style={es.toolbarGroupTitle}>{group.title}</span>
-                  <span style={es.toolbarGroupCount}>{group.types.length} tipos</span>
-                </span>
-                <span style={es.toolbarGroupChevron}>{collapsedToolbarGroups.has(group.title) ? '+' : '-'}</span>
-              </button>
-
-              {!collapsedToolbarGroups.has(group.title) && (
-                <div style={es.toolbarGroupButtons}>
-                  {group.types.map(type => {
-                    const meta = getBlockMeta(type);
-                    return (
-                      <button
-                        key={type}
-                        draggable
-                        style={{ ...es.toolbarBtn, ...(compactToolbar ? es.toolbarBtnCompact : {}) }}
-                        onClick={() => addBlock(type)}
-                        onDragStart={e => {
-                          e.dataTransfer.effectAllowed = 'copy';
-                          e.dataTransfer.setData('application/x-atlas-block-type', type);
-                          const ghost = document.createElement('div');
-                          ghost.style.position = 'fixed';
-                          ghost.style.top = '-9999px';
-                          document.body.appendChild(ghost);
-                          e.dataTransfer.setDragImage(ghost, 0, 0);
-                          setTimeout(() => document.body.removeChild(ghost), 0);
-                        }}
-                        onMouseEnter={e => {
-                          const el = e.currentTarget as HTMLButtonElement;
-                          el.style.background = meta.color;
-                          el.style.color = '#fff';
-                          el.style.borderColor = meta.color;
-                          el.style.transform = 'translateY(-2px)';
-                          el.style.boxShadow = '0 8px 18px rgba(15,23,42,0.16)';
-                        }}
-                        onMouseLeave={e => {
-                          const el = e.currentTarget as HTMLButtonElement;
-                          el.style.background = '#f8fafc';
-                          el.style.color = '#475569';
-                          el.style.borderColor = '#e2e8f0';
-                          el.style.transform = 'translateY(0)';
-                          el.style.boxShadow = 'none';
-                        }}
-                        title={`Añadir ${meta.label}. ${meta.description}`}
-                        aria-label={`Añadir ${meta.label}. ${meta.description}`}
-                      >
-                        <span style={es.toolbarBtnTopRow}>
-                          <span style={es.toolbarBtnIconPill}>{BLOCK_TYPE_VISUAL_ICON[type]}</span>
-                          <span>{meta.label}</span>
-                        </span>
-                        {!compactToolbar && <span style={es.toolbarBtnDescription}>{meta.description}</span>}
-                      </button>
-                    );
-                  })}
+        ) : (
+          <>
+            <div style={es.toolbarHeaderBox}>
+              <div style={es.toolbarTopRow}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={es.toolbarIconBadge}>
+                    <Layers size={15} color="#0284c7" />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={es.toolbarLabel}>Componentes</span>
+                    <small style={es.toolbarSubLabel}>Biblioteca de bloques</small>
+                  </div>
                 </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    style={es.toolbarGhostBtn}
+                    onClick={toggleAllToolbarGroups}
+                    title={collapsedToolbarGroups.size === 0 ? 'Colapsar todas las categorías' : 'Expandir todas las categorías'}
+                  >
+                    {collapsedToolbarGroups.size === 0 ? 'Colapsar' : 'Expandir'}
+                  </button>
+
+                  {experienceMode === 'advanced' && (
+                    <button
+                      type="button"
+                      style={{ ...es.toolbarModeToggle, ...(compactToolbar ? es.toolbarModeToggleActive : {}) }}
+                      onClick={() => setCompactToolbar(v => !v)}
+                      title={compactToolbar ? 'Cambiar a vista expandida' : 'Cambiar a vista compacta'}
+                      aria-pressed={compactToolbar}
+                    >
+                      {compactToolbar ? 'Compacto' : 'Extendido'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Buscador de Componentes */}
+              <div style={es.toolbarSearchWrapper}>
+                <Search size={14} style={{ color: '#64748b', flexShrink: 0 }} />
+                <input
+                  type="text"
+                  placeholder="Buscar componente..."
+                  value={componentSearch}
+                  onChange={e => setComponentSearch(e.target.value)}
+                  style={es.toolbarSearchInput}
+                />
+                {componentSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setComponentSearch('')}
+                    style={es.toolbarSearchClear}
+                    title="Limpiar búsqueda"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div style={es.toolbarGroupsWrap}>
+              {activeToolbarGroups.length === 0 ? (
+                <div style={es.toolbarEmptySearch}>
+                  <p style={{ margin: 0, fontWeight: 800, color: '#334155', fontSize: '0.84rem' }}>No se encontraron componentes</p>
+                  <small style={{ color: '#64748b', fontSize: '0.72rem' }}>Prueba con otro término de búsqueda</small>
+                </div>
+              ) : (
+                activeToolbarGroups.map(group => {
+                  const isCollapsed = !componentSearch && collapsedToolbarGroups.has(group.title);
+                  return (
+                    <div key={group.title} style={es.toolbarGroup}>
+                      <button
+                        type="button"
+                        style={{
+                          ...es.toolbarGroupHeader,
+                          borderColor: isCollapsed ? '#e2e8f0' : (BLOCK_GROUP_META[group.title]?.accent ?? '#dbeafe'),
+                        }}
+                        onClick={() => toggleToolbarGroup(group.title)}
+                        aria-expanded={!isCollapsed}
+                        title={`Mostrar u ocultar grupo ${group.title}`}
+                      >
+                        <span style={es.toolbarGroupHeaderLeft}>
+                          <span
+                            style={{
+                              ...es.toolbarGroupIcon,
+                              background: BLOCK_GROUP_META[group.title]?.accent ?? '#334155',
+                            }}
+                          >
+                            {BLOCK_GROUP_META[group.title]?.icon ?? 'GR'}
+                          </span>
+                          <span style={es.toolbarGroupTitle}>{group.title}</span>
+                          <span style={es.toolbarGroupCount}>{group.matchingTypes.length}</span>
+                        </span>
+                        <span style={es.toolbarGroupChevron}>
+                          {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                        </span>
+                      </button>
+
+                      {!isCollapsed && (
+                        <div style={es.toolbarGroupButtons}>
+                          {group.matchingTypes.map(type => {
+                            const meta = getBlockMeta(type);
+                            return (
+                              <button
+                                key={type}
+                                draggable
+                                style={{ ...es.toolbarBtn, ...(compactToolbar ? es.toolbarBtnCompact : {}) }}
+                                onClick={() => addBlock(type)}
+                                onDragStart={e => {
+                                  e.dataTransfer.effectAllowed = 'copy';
+                                  e.dataTransfer.setData('application/x-atlas-block-type', type);
+                                  const ghost = document.createElement('div');
+                                  ghost.style.position = 'fixed';
+                                  ghost.style.top = '-9999px';
+                                  document.body.appendChild(ghost);
+                                  e.dataTransfer.setDragImage(ghost, 0, 0);
+                                  setTimeout(() => document.body.removeChild(ghost), 0);
+                                }}
+                                onMouseEnter={e => {
+                                  const el = e.currentTarget as HTMLButtonElement;
+                                  el.style.background = '#ffffff';
+                                  el.style.borderColor = meta.color;
+                                  el.style.transform = 'translateY(-2px)';
+                                  el.style.boxShadow = `0 6px 16px ${meta.color}25`;
+                                }}
+                                onMouseLeave={e => {
+                                  const el = e.currentTarget as HTMLButtonElement;
+                                  el.style.background = 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)';
+                                  el.style.borderColor = '#e2e8f0';
+                                  el.style.transform = 'translateY(0)';
+                                  el.style.boxShadow = 'none';
+                                }}
+                                title={`Añadir ${meta.label}. ${meta.description}`}
+                                aria-label={`Añadir ${meta.label}. ${meta.description}`}
+                              >
+                                <span style={es.toolbarBtnTopRow}>
+                                  <span
+                                    style={{
+                                      ...es.toolbarBtnIconPill,
+                                      borderColor: `${meta.color}40`,
+                                      background: `${meta.color}15`,
+                                      color: meta.color,
+                                    }}
+                                  >
+                                    {BLOCK_TYPE_VISUAL_ICON[type] ?? 'BLK'}
+                                  </span>
+                                  <span style={{ fontWeight: 800, color: '#1e293b' }}>{meta.label}</span>
+                                </span>
+                                {!compactToolbar && <span style={es.toolbarBtnDescription}>{meta.description}</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
-          ))}
-        </div>
 
-        <p style={es.toolbarHint}>Arrastra un componente al área de edición o haz clic para añadirlo al final.</p>
-
-        {experienceMode === 'advanced' && <div style={es.templateManagerRow} className="block-editor-template-manager">
-          <select
-            style={es.styleSelect}
-            value={selectedSectionTemplateId}
-            onChange={e => setSelectedSectionTemplateId(e.target.value)}
-          >
-            <option value="">Plantilla de seccion...</option>
-            {sectionTemplates.map(template => (
-              <option key={template.id} value={template.id}>
-                {template.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            style={selectedSectionTemplateId ? es.selectionBtn : es.saveBtnDisabled}
-            disabled={!selectedSectionTemplateId}
-            onClick={() => insertSectionTemplateAtEnd(selectedSectionTemplateId)}
-            title="Inserta al final una seccion completa desde plantilla"
-          >
-            Insertar plantilla
-          </button>
-          <button
-            type="button"
-            style={selectedSectionTemplateId ? es.selectionBtn : es.saveBtnDisabled}
-            disabled={!selectedSectionTemplateId}
-            onClick={() => renameSectionTemplate(selectedSectionTemplateId)}
-            title="Renombrar plantilla seleccionada"
-          >
-            Renombrar
-          </button>
-          <button
-            type="button"
-            style={selectedSectionTemplateId ? es.templateDeleteBtn : es.saveBtnDisabled}
-            disabled={!selectedSectionTemplateId}
-            onClick={() => deleteSectionTemplate(selectedSectionTemplateId)}
-            title="Eliminar plantilla seleccionada"
-          >
-            Eliminar
-          </button>
-          <button
-            type="button"
-            style={sectionTemplates.length > 0 ? es.selectionBtn : es.saveBtnDisabled}
-            disabled={sectionTemplates.length === 0}
-            onClick={exportSectionTemplates}
-            title="Exportar plantillas a archivo JSON"
-          >
-            Exportar JSON
-          </button>
-          <button
-            type="button"
-            style={es.selectionBtn}
-            onClick={() => templateFileInputRef.current?.click()}
-            title="Importar plantillas desde archivo JSON"
-          >
-            Importar JSON
-          </button>
-        </div>}
-
-        {experienceMode === 'advanced' && selectedTemplate && (
-          <div style={es.templatePreviewPanel}>
-            <div style={es.templatePreviewTitleRow}>
-              <strong style={es.templatePreviewTitle}>Vista previa</strong>
-              <span style={es.templatePreviewMeta}>{selectedTemplate.blocks.length} bloques</span>
-            </div>
-            <div style={es.templatePreviewChips}>
-              {selectedTemplate.blocks.slice(0, 10).map((tb, index) => (
-                <span key={`${selectedTemplate.id}-${index}`} style={es.templatePreviewChip}>
-                  {getBlockMeta(tb.block_type).label}
-                </span>
-              ))}
-              {selectedTemplate.blocks.length > 10 && (
-                <span style={es.templatePreviewMore}>+{selectedTemplate.blocks.length - 10}</span>
-              )}
-            </div>
-          </div>
+            <p style={es.toolbarHint}>Arrastra un componente al área de edición o haz clic para añadirlo al final.</p>
+          </>
         )}
-        </>}
-        </aside>
+      </aside>
 
         <div style={es.builderMain} className="block-editor-main">
           {experienceMode === 'advanced' && blocks.length > 0 && (
@@ -1845,7 +1644,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
                             checked={selectedBlockIds.has(block.id)}
                             onChange={e => toggleBlockSelection(block.id, e.target.checked)}
                           />
-                          Sel
+                          <span>Sel</span>
                         </label>
                         <span
                           draggable
@@ -1860,56 +1659,106 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
                           {meta.icon}
                         </span>
                         <span style={es.typeLabel}>{meta.label}</span>
-                        {columnParent && <span style={es.previewStateBadge}>Dentro de {getBlockMeta(columnParent.block_type).label} · Columna {block.content.layout_column || '1'}</span>}
+                        {columnParent && <span style={es.previewStateBadge}>Dentro de {getBlockMeta(columnParent.block_type).label} · Col {block.content.layout_column || '1'}</span>}
                         {owningSection && !columnParent && <span style={es.previewStateBadge}>Dentro de: {owningSection.content.title || 'Sección sin título'}</span>}
                       </div>
-                      <div className="block-editor-header-actions" style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                        {isCollapsed && <span style={es.previewStateBadge}>Vista previa</span>}
-                        {block.block_type !== 'section_end' && <button
-                          type="button"
-                          style={es.collapseBtn}
-                          onClick={() => toggleBlockCollapsed(block.id)}
-                          title={isCollapsed ? 'Expandir bloque' : 'Contraer bloque'}
-                        >
-                          {isCollapsed ? 'Editar' : 'Listo'}
-                        </button>}
-                        {block.block_type === 'section' && <button type="button" style={es.sectionMoveBtn} onClick={() => closeSectionAtCurrentEnd(block.id)} title="Insertar un cierre al final de los componentes actuales">Cerrar sección</button>}
-                        {owningSection && !columnParent && <button type="button" style={es.sectionMoveBtn} onClick={() => insertSectionEnd(block.id)} title="La sección terminará después de este componente">Terminar aquí</button>}
+                      <div className="block-editor-header-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {isCollapsed && (
+                          <span style={es.previewStateBadge}>
+                            <Eye size={13} color="#1d4ed8" />
+                            <span>Vista previa</span>
+                          </span>
+                        )}
+                        {block.block_type !== 'section_end' && (
+                          <button
+                            type="button"
+                            style={isCollapsed ? es.collapseBtnEdit : es.collapseBtnDone}
+                            onClick={() => {
+                              toggleBlockCollapsed(block.id);
+                              if (onManualSaveRequest) {
+                                void onManualSaveRequest();
+                              } else {
+                                void handleSave();
+                              }
+                            }}
+                            title={isCollapsed ? 'Abrir formulario para editar este componente' : 'Cerrar formulario y guardar borrador'}
+                          >
+                            {isCollapsed ? (
+                              <>
+                                <Pencil size={13} />
+                                <span>Editar</span>
+                              </>
+                            ) : (
+                              <>
+                                <Check size={14} />
+                                <span>Listo</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                        {block.block_type === 'section' && (
+                          <button type="button" style={es.sectionMoveBtn} onClick={() => closeSectionAtCurrentEnd(block.id)} title="Insertar un cierre al final de los componentes actuales">
+                            Cerrar sección
+                          </button>
+                        )}
+                        {owningSection && !columnParent && (
+                          <button type="button" style={es.sectionMoveBtn} onClick={() => insertSectionEnd(block.id)} title="La sección terminará después de este componente">
+                            Terminar aquí
+                          </button>
+                        )}
                         <button
                           type="button"
                           style={canMoveToPrevSection ? es.sectionMoveBtn : es.sectionMoveBtnDisabled}
                           onClick={() => moveBlockToAdjacentSection(block.id, 'prev')}
-                          title="Mover a la seccion anterior"
+                          title="Mover a la sección anterior"
                           disabled={!canMoveToPrevSection}
                         >
-                          ↑ Sec
+                          <ArrowUp size={12} />
+                          <span>Sec</span>
                         </button>
                         <button
                           type="button"
                           style={canMoveToNextSection ? es.sectionMoveBtn : es.sectionMoveBtnDisabled}
                           onClick={() => moveBlockToAdjacentSection(block.id, 'next')}
-                          title="Mover a la seccion siguiente"
+                          title="Mover a la sección siguiente"
                           disabled={!canMoveToNextSection}
                         >
-                          ↓ Sec
+                          <ArrowDown size={12} />
+                          <span>Sec</span>
                         </button>
                         <button
                           style={es.duplicateBtn}
                           onClick={() => duplicateBlock(block.id)}
-                          title="Duplicar bloque"
-                          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#e0f2fe')}
-                          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
+                          title="Duplicar componente"
+                          onMouseEnter={e => {
+                            const el = e.currentTarget as HTMLButtonElement;
+                            el.style.background = '#e0f2fe';
+                            el.style.borderColor = '#38bdf8';
+                          }}
+                          onMouseLeave={e => {
+                            const el = e.currentTarget as HTMLButtonElement;
+                            el.style.background = '#f0f9ff';
+                            el.style.borderColor = '#bae6fd';
+                          }}
                         >
-                          ⧉
+                          <Copy size={14} />
                         </button>
                         <button
                           style={es.deleteBtn}
                           onClick={() => requestDeleteBlock(block.id)}
-                          title="Eliminar bloque"
-                          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#fee2e2')}
-                          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'transparent')}
+                          title="Eliminar componente"
+                          onMouseEnter={e => {
+                            const el = e.currentTarget as HTMLButtonElement;
+                            el.style.background = '#fee2e2';
+                            el.style.borderColor = '#f87171';
+                          }}
+                          onMouseLeave={e => {
+                            const el = e.currentTarget as HTMLButtonElement;
+                            el.style.background = '#fff5f5';
+                            el.style.borderColor = '#fecaca';
+                          }}
                         >
-                          ✕
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
@@ -2010,88 +1859,40 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
         </div>
       </div>
 
-      {experienceMode === 'advanced' && <div style={es.versionPanel}>
-        <div style={es.versionPanelHeader}>
-          <strong style={es.versionPanelTitle}>Versiones de contenido</strong>
-          <span style={es.versionPanelMeta}>{versions.length} registradas</span>
-        </div>
-        <div style={es.versionPanelActions} className="block-editor-version-actions">
-          <button
-            type="button"
-            style={!isCreatingVersion ? es.selectionBtn : es.saveBtnDisabled}
-            disabled={isCreatingVersion}
-            onClick={handleCreateVersion}
-          >
-            {isCreatingVersion ? 'Creando version...' : 'Crear version'}
-          </button>
-          <button
-            type="button"
-            style={!isLoadingVersions ? es.selectionBtn : es.saveBtnDisabled}
-            disabled={isLoadingVersions}
-            onClick={refreshVersions}
-          >
-            {isLoadingVersions ? 'Actualizando...' : 'Refrescar historial'}
-          </button>
-          <select
-            style={es.versionSelect}
-            value={selectedVersionId}
-            onChange={e => setSelectedVersionId(e.target.value)}
-          >
-            <option value="">Selecciona una version...</option>
-            {versions.map(v => (
-              <option key={v.id} value={String(v.id)}>
-                #{v.id} · {new Date(v.created_at).toLocaleString()} · {v.blocks_count} bloques
-                {v.snapshot_name ? ` · ${v.snapshot_name}` : ''}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            style={selectedVersionId && !isRestoringVersion ? es.templateDeleteBtn : es.saveBtnDisabled}
-            disabled={!selectedVersionId || isRestoringVersion}
-            onClick={handleRestoreVersion}
-          >
-            {isRestoringVersion ? 'Restaurando...' : 'Restaurar version'}
-          </button>
-        </div>
-      </div>}
-
-      {/* Barra de guardado */}
+      {/* Barra de guardado de la versión */}
       <div style={es.saveBar}>
         <div style={es.saveBarLeft}>
           {saveError && <p style={es.saveError}>⚠️ {saveError}</p>}
-          {saveSuccess && <p style={es.saveSuccess}>✅ Contenido guardado correctamente</p>}
+          {saveSuccess && <p style={es.saveSuccess}>✅ Cambios guardados correctamente</p>}
           {hasPendingChanges && !saveError && !saveSuccess && (
-            <p style={es.pendingMsg}>• Cambios pendientes de guardar</p>
+            <p style={es.pendingMsg}>• Cambios pendientes de guardar en esta versión</p>
           )}
           {!hasPendingChanges && !saveError && !saveSuccess && (
             <p style={es.publicationMsg}>
-              Estado: {publicationStatus === 'published' ? 'Publicado' : 'Borrador'}
-              {publishedAt ? ` • Ultima publicacion: ${new Date(publishedAt).toLocaleString()}` : ''}
+              {activeVersion ? (
+                <>
+                  Editando: <strong>{activeVersion.version_name}</strong> {activeVersion.is_published ? '(🟢 Publicada)' : '(⚪ Borrador)'}
+                </>
+              ) : (
+                <>Estado: {publicationStatus === 'published' ? 'Publicado' : 'Borrador'}</>
+              )}
             </p>
           )}
         </div>
         <div style={es.saveBarActions} className="block-editor-save-actions">
           <button
-            style={hasPendingChanges && !isSaving ? es.saveBtn : es.saveBtnDisabled}
-            onClick={handleSave}
-            disabled={!hasPendingChanges || isSaving}
+            type="button"
+            style={!isSaving ? es.saveBtn : es.saveBtnDisabled}
+            onClick={() => {
+              if (onManualSaveRequest) {
+                void onManualSaveRequest();
+              } else {
+                void handleSave();
+              }
+            }}
+            disabled={isSaving}
           >
-            {isSaving ? 'Guardando borrador...' : hasPendingChanges ? 'Guardar ahora' : autoSave ? 'Borrador guardado' : 'Sin cambios'}
-          </button>
-          <button
-            style={!hasPendingChanges && !isPublishing && !isSaving ? es.publishBtn : es.saveBtnDisabled}
-            onClick={handlePublish}
-            disabled={hasPendingChanges || isPublishing || isSaving}
-          >
-            {isPublishing ? 'Publicando...' : 'Publicar'}
-          </button>
-          <button
-            style={publicationStatus === 'published' && !isSwitchingToDraft ? es.draftBtn : es.saveBtnDisabled}
-            onClick={handleSwitchToDraft}
-            disabled={publicationStatus !== 'published' || isSwitchingToDraft}
-          >
-            {isSwitchingToDraft ? 'Cambiando...' : 'Pasar a borrador'}
+            {isSaving ? 'Guardando cambios...' : '💾 Guardar Cambios'}
           </button>
         </div>
       </div>
@@ -2103,13 +1904,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
         accept="image/*,.heic,.heif,.tif,.tiff,.bmp,.avif,.webp"
         style={{ display: 'none' }}
         onChange={handleFileUpload}
-      />
-      <input
-        ref={templateFileInputRef}
-        type="file"
-        accept="application/json,.json"
-        style={{ display: 'none' }}
-        onChange={handleImportSectionTemplates}
       />
 
       {/* Modal selector de imagen */}
@@ -2492,6 +2286,46 @@ const MemoBlockContentEditor = React.memo(({
         <DoubleCarouselBlockEditor
           content={block.content as Record<string, unknown>}
           onContentChange={changes => onUpdateBlockContent(block.id, changes as Record<string, string>)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'histology_generalities' && (
+        <HistologyGeneralitiesInlineEditor
+          content={block.content}
+          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'histology_function' && (
+        <HistologyFunctionInlineEditor
+          content={block.content}
+          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'histology_morphology' && (
+        <HistologyMorphologyInlineEditor
+          content={block.content}
+          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'histology_locations' && (
+        <HistologyLocationsInlineEditor
+          content={block.content}
+          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'histology_stains' && (
+        <HistologyStainsInlineEditor
+          content={block.content}
+          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
           onPickImage={field => onOpenImageModal(block.id, field)}
         />
       )}
@@ -4596,123 +4430,162 @@ const es: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
-    rowGap: '8px',
-    columnGap: '10px',
-    padding: '10px 14px',
-    background: 'linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%)',
-    borderBottom: '1px solid #dbeafe',
+    rowGap: '10px',
+    columnGap: '12px',
+    padding: '10px 16px',
+    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+    borderBottom: '1px solid #e2e8f0',
   },
   blockHeaderLeft: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '10px',
     flexWrap: 'wrap',
     minWidth: 0,
   },
   selectBlockLabel: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '4px',
-    fontSize: '0.7em',
+    gap: '6px',
+    fontSize: '0.74em',
     fontWeight: 700,
-    color: '#64748b',
-    padding: '2px 6px',
-    borderRadius: '999px',
-    border: '1px solid #dbeafe',
-    background: '#f8fbff',
+    color: '#475569',
+    padding: '4px 9px',
+    borderRadius: '7px',
+    border: '1px solid #cbd5e1',
+    background: '#ffffff',
     userSelect: 'none',
+    cursor: 'pointer',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
   },
   dragHandle: {
-    fontSize: '1.15em',
-    color: '#94a3b8',
+    fontSize: '1.2em',
+    color: '#64748b',
     cursor: 'grab',
-    padding: '2px 6px',
-    borderRadius: '5px',
+    padding: '3px 7px',
+    borderRadius: '6px',
     lineHeight: 1,
+    background: '#f1f5f9',
+    border: '1px solid #e2e8f0',
     userSelect: 'none',
   },
   typeBadge: {
-    fontSize: '0.65em',
+    fontSize: '0.70em',
     fontWeight: 800,
     color: '#fff',
-    padding: '3px 8px',
-    borderRadius: '6px',
-    letterSpacing: '0.06em',
+    padding: '4px 10px',
+    borderRadius: '7px',
+    letterSpacing: '0.04em',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
   },
   typeLabel: {
-    fontSize: '0.82em',
-    fontWeight: 600,
-    color: '#475569',
+    fontSize: '0.90em',
+    fontWeight: 700,
+    color: '#0f172a',
   },
   deleteBtn: {
-    background: 'transparent',
-    border: 'none',
+    background: '#fff5f5',
+    border: '1px solid #fecaca',
     cursor: 'pointer',
-    color: '#ef4444',
+    color: '#dc2626',
     fontSize: '0.85em',
     fontWeight: 700,
-    padding: '4px 9px',
-    borderRadius: '6px',
+    padding: '6px 9px',
+    borderRadius: '7px',
     fontFamily: 'inherit',
     lineHeight: 1,
-    transition: 'background 0.15s',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.15s ease',
   },
   duplicateBtn: {
-    background: 'transparent',
+    background: '#f0f9ff',
+    border: '1px solid #bae6fd',
+    cursor: 'pointer',
+    color: '#0284c7',
+    fontSize: '0.85em',
+    padding: '6px 9px',
+    borderRadius: '7px',
+    lineHeight: 1,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.15s ease',
+  },
+  collapseBtnEdit: {
+    background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
     border: 'none',
     cursor: 'pointer',
-    color: '#0ea5e9',
-    fontSize: '1em',
-    padding: '4px 8px',
-    borderRadius: '6px',
+    color: '#ffffff',
+    fontSize: '0.82em',
+    fontWeight: 800,
+    padding: '6px 14px',
+    borderRadius: '8px',
     lineHeight: 1,
-    transition: 'background 0.15s',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    boxShadow: '0 3px 10px rgba(37, 99, 235, 0.3)',
+    transition: 'all 0.15s ease',
   },
-  collapseBtn: {
-    background: '#f8fafc',
-    border: '1px solid #dbeafe',
+  collapseBtnDone: {
+    background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+    border: 'none',
     cursor: 'pointer',
-    color: '#0f172a',
-    fontSize: '0.78em',
-    fontWeight: 700,
-    padding: '4px 7px',
-    borderRadius: '6px',
+    color: '#ffffff',
+    fontSize: '0.82em',
+    fontWeight: 800,
+    padding: '6px 14px',
+    borderRadius: '8px',
     lineHeight: 1,
-    transition: 'background 0.15s',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    boxShadow: '0 3px 10px rgba(16, 185, 129, 0.3)',
+    transition: 'all 0.15s ease',
   },
   previewStateBadge: {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: '3px 8px',
+    gap: '5px',
+    padding: '4px 10px',
     borderRadius: '999px',
     border: '1px solid #bfdbfe',
     background: '#eff6ff',
     color: '#1d4ed8',
-    fontSize: '0.72em',
+    fontSize: '0.74em',
     fontWeight: 700,
     lineHeight: 1,
   },
   sectionMoveBtn: {
     border: '1px solid #cbd5e1',
-    background: '#f8fafc',
+    background: '#ffffff',
     color: '#334155',
-    borderRadius: '6px',
-    fontSize: '0.72em',
+    borderRadius: '7px',
+    fontSize: '0.75em',
     fontWeight: 700,
-    padding: '4px 8px',
+    padding: '5px 10px',
     cursor: 'pointer',
-    transition: 'background 0.15s',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    transition: 'all 0.15s ease',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
   },
   sectionMoveBtnDisabled: {
     border: '1px solid #e2e8f0',
     background: '#f8fafc',
     color: '#94a3b8',
-    borderRadius: '6px',
-    fontSize: '0.72em',
+    borderRadius: '7px',
+    fontSize: '0.75em',
     fontWeight: 700,
-    padding: '4px 8px',
+    padding: '5px 10px',
     cursor: 'not-allowed',
-    opacity: 0.8,
+    opacity: 0.7,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
   },
   blockContent: {
     padding: '14px 16px',
@@ -5128,8 +5001,8 @@ const es: Record<string, React.CSSProperties> = {
 
   builderLayout: {
     display: 'grid',
-    gridTemplateColumns: 'clamp(220px, 22vw, 290px) minmax(0, 1fr)',
-    gap: '10px',
+    gridTemplateColumns: 'clamp(235px, 22vw, 295px) minmax(0, 1fr)',
+    gap: '16px',
     alignItems: 'start',
     marginBottom: '14px',
     width: '100%',
@@ -5143,47 +5016,125 @@ const es: Record<string, React.CSSProperties> = {
   toolbar: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
+    gap: '12px',
     alignItems: 'stretch',
-    padding: '12px 10px',
+    padding: '14px 12px',
     border: '1.5px solid #dbeafe',
-    borderRadius: '14px',
-    background: 'linear-gradient(135deg, rgba(239,246,255,0.65) 0%, rgba(248,250,252,0.88) 100%)',
+    borderRadius: '18px',
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)',
+    boxShadow: '0 8px 26px rgba(15, 42, 74, 0.07), inset 0 1px 0 #ffffff',
+    backdropFilter: 'blur(16px)',
     position: 'sticky',
-    top: '10px',
-    maxHeight: '78vh',
+    top: '74px',
+    maxHeight: 'calc(100vh - 92px)',
     overflowY: 'auto',
+    overflowX: 'hidden',
+    zIndex: 15,
+  },
+  toolbarHeaderBox: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    paddingBottom: '10px',
+    borderBottom: '1px solid #e2e8f0',
+  },
+  toolbarIconBadge: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '10px',
+    background: '#e0f2fe',
+    display: 'grid',
+    placeItems: 'center',
+    flexShrink: 0,
+    border: '1px solid #bae6fd',
+  },
+  toolbarLabel: {
+    display: 'block',
+    fontSize: '0.86em',
+    fontWeight: 850,
+    color: '#0f2a43',
+    letterSpacing: '-0.01em',
+    lineHeight: 1.2,
+  },
+  toolbarSubLabel: {
+    display: 'block',
+    fontSize: '0.70em',
+    color: '#64748b',
+    fontWeight: 600,
+    lineHeight: 1.1,
+  },
+  toolbarGhostBtn: {
+    border: '1px solid #e2e8f0',
+    background: '#f8fafc',
+    color: '#475569',
+    borderRadius: '8px',
+    padding: '4px 8px',
+    fontSize: '0.70em',
+    fontWeight: 750,
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  toolbarSearchWrapper: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '7px 10px',
+    borderRadius: '10px',
+    background: '#f8fafc',
+    border: '1px solid #cbd5e1',
+    transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+  },
+  toolbarSearchInput: {
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
+    width: '100%',
+    fontSize: '0.78em',
+    fontFamily: 'inherit',
+    color: '#1e293b',
+  },
+  toolbarSearchClear: {
+    border: 'none',
+    background: 'transparent',
+    padding: '2px',
+    cursor: 'pointer',
+    color: '#94a3b8',
+    display: 'grid',
+    placeItems: 'center',
+    borderRadius: '4px',
+  },
+  toolbarEmptySearch: {
+    padding: '24px 12px',
+    textAlign: 'center',
+    background: '#f8fafc',
+    borderRadius: '12px',
+    border: '1px dashed #cbd5e1',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
   },
   toolbarHint: {
     margin: '0',
-    fontSize: '0.75em',
-    color: '#475569',
-    lineHeight: 1.35,
-  },
-  toolbarLabel: {
-    fontSize: '0.78em',
-    fontWeight: 700,
+    fontSize: '0.74em',
     color: '#64748b',
-    letterSpacing: '0.04em',
-    textTransform: 'uppercase',
-    marginRight: '4px',
+    lineHeight: 1.35,
   },
   toolbarTopRow: {
     width: '100%',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: '10px',
+    gap: '8px',
     flexWrap: 'wrap',
   },
   toolbarModeToggle: {
     border: '1px solid #bfdbfe',
     background: '#eff6ff',
     color: '#1e3a8a',
-    borderRadius: '999px',
-    padding: '5px 11px',
-    fontSize: '0.74em',
-    fontWeight: 700,
+    borderRadius: '8px',
+    padding: '4px 8px',
+    fontSize: '0.70em',
+    fontWeight: 750,
     cursor: 'pointer',
   },
   toolbarModeToggleActive: {
@@ -5195,16 +5146,17 @@ const es: Record<string, React.CSSProperties> = {
     width: '100%',
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '10px',
   },
   toolbarGroup: {
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
     padding: '10px',
-    border: '1px solid #dbeafe',
-    borderRadius: '12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '14px',
     background: '#ffffff',
+    boxShadow: '0 2px 8px rgba(15, 42, 74, 0.03)',
   },
   toolbarGroupHeader: {
     width: '100%',
@@ -5213,10 +5165,11 @@ const es: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '10px',
     padding: '8px 10px',
-    border: '1px solid #dbeafe',
+    border: '1px solid #e2e8f0',
     borderRadius: '10px',
     background: '#f8fbff',
     cursor: 'pointer',
+    transition: 'all 0.15s ease',
   },
   toolbarGroupHeaderLeft: {
     display: 'inline-flex',
@@ -5228,7 +5181,7 @@ const es: Record<string, React.CSSProperties> = {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: '34px',
+    minWidth: '32px',
     height: '22px',
     padding: '0 6px',
     borderRadius: '999px',
@@ -5239,33 +5192,31 @@ const es: Record<string, React.CSSProperties> = {
   },
   toolbarGroupTitle: {
     margin: 0,
-    color: '#334155',
-    fontSize: '0.8em',
+    color: '#1e293b',
+    fontSize: '0.80em',
     fontWeight: 800,
-    letterSpacing: '0.03em',
-    textTransform: 'uppercase',
+    letterSpacing: '0.01em',
   },
   toolbarGroupCount: {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: '2px 7px',
+    padding: '1px 6px',
     borderRadius: '999px',
     border: '1px solid #dbeafe',
     background: '#eff6ff',
     color: '#1e3a8a',
-    fontSize: '0.7em',
-    fontWeight: 700,
+    fontSize: '0.68em',
+    fontWeight: 800,
   },
   toolbarGroupChevron: {
-    fontSize: '1.1em',
-    color: '#1e3a8a',
-    fontWeight: 800,
-    lineHeight: 1,
+    display: 'grid',
+    placeItems: 'center',
+    color: '#64748b',
   },
   toolbarGroupButtons: {
     display: 'flex',
-    flexWrap: 'wrap',
-    gap: '8px',
+    flexDirection: 'column',
+    gap: '6px',
     alignItems: 'stretch',
   },
   toolbarBtn: {
@@ -5273,20 +5224,20 @@ const es: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'flex-start',
     gap: '4px',
-    padding: '8px 12px',
-    minWidth: '182px',
-    border: '1.5px solid #dbeafe',
-    borderRadius: '8px',
+    padding: '9px 12px',
+    width: '100%',
+    boxSizing: 'border-box',
+    border: '1.5px solid #e2e8f0',
+    borderRadius: '10px',
     cursor: 'pointer',
     background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
     color: '#475569',
-    fontSize: '0.85em',
+    fontSize: '0.84em',
     fontWeight: 600,
     fontFamily: 'inherit',
-    transition: 'all 0.15s',
+    transition: 'all 0.18s ease',
   },
   toolbarBtnCompact: {
-    minWidth: '132px',
     padding: '7px 10px',
     gap: '2px',
     fontSize: '0.8em',
@@ -5299,27 +5250,29 @@ const es: Record<string, React.CSSProperties> = {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: '38px',
-    height: '22px',
+    minWidth: '36px',
+    height: '20px',
     borderRadius: '999px',
     border: '1px solid rgba(148,163,184,0.4)',
     background: 'rgba(255,255,255,0.55)',
     color: 'inherit',
-    fontSize: '0.66em',
-    fontWeight: 800,
+    fontSize: '0.65em',
+    fontWeight: 850,
     letterSpacing: '0.03em',
   },
   toolbarBtnTopRow: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '6px',
+    gap: '8px',
+    width: '100%',
   },
   toolbarBtnDescription: {
     fontSize: '0.72em',
     fontWeight: 500,
-    lineHeight: 1.2,
-    opacity: 0.9,
+    lineHeight: 1.25,
+    color: '#64748b',
     textAlign: 'left',
+    paddingLeft: '44px',
   },
   templateManagerRow: {
     display: 'flex',
