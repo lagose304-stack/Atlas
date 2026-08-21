@@ -128,7 +128,7 @@ const TestCard: React.FC<{
             <span key={b} style={s.scopeTag}>{b}</span>
           ))}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', flexWrap: 'wrap' }}>
-            {user?.is_protected && (
+            {user?.rol === 'Administrador' && (
               <Link
                 to={`/historial?scope=prueba&pruebaId=${encodeURIComponent(String(prueba.id))}&pruebaNombre=${encodeURIComponent(plainName)}`}
                 style={{
@@ -553,7 +553,7 @@ const Evaluaciones: React.FC = () => {
             </>
           )}
 
-          {user?.is_protected && (
+          {user?.rol === 'Administrador' && (
             <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'center' }}>
               <button
                 type="button"

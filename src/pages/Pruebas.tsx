@@ -532,7 +532,7 @@ const Pruebas: React.FC = () => {
               </div>
             </div>
 
-            {user?.is_protected && (
+            {user?.rol === 'Administrador' && (
               <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'center' }}>
                 <button
                   type="button"

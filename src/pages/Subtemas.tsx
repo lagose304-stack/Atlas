@@ -369,7 +369,7 @@ const StandardSubtemas: React.FC = () => {
               </section>
             )}
 
-            {user?.is_protected && (
+            {user?.rol === 'Administrador' && (
               <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'center' }}>
                 <button
                   type="button"

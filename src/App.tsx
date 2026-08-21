@@ -253,7 +253,7 @@ const App: React.FC = () => {
           <Route
             path="/historial"
             element={
-              <PrivateRoute requireProtectedUser={true} allowedRoles={[ROLE_ADMIN]}>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN]}>
                 <HistorialAuditoria />
               </PrivateRoute>
             }

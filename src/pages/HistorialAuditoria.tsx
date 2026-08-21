@@ -171,7 +171,7 @@ const HistorialAuditoria: React.FC = () => {
   const goBack = useSmartBackNavigation('/edicion');
   const { user } = useAuth();
 
-  if (user?.is_protected !== true) {
+  if (user?.rol !== 'Administrador') {
     return <Navigate to="/acceso-denegado" replace />;
   }
 

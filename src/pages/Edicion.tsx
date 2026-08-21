@@ -16,6 +16,7 @@ const Edicion: React.FC = () => {
   const canEditarPaginas = hasPermission(user?.rol, 'editar_paginas');
   const canGestionUsuarios = hasPermission(user?.rol, 'gestion_usuarios');
   const canEstadisticas = hasPermission(user?.rol, 'estadisticas');
+  const canAuditoria = hasPermission(user?.rol, 'auditoria');
 
   const handleLogout = () => {
     logout();
@@ -287,8 +288,8 @@ const Edicion: React.FC = () => {
             </Link>
           </div>}
 
-          {/* Tarjeta: Historial y Auditoría (Solo para el usuario administrador principal/protegido) */}
-          {user?.is_protected === true && <div style={{ ...s.card, gridColumn: 'span 2' }} className="edicion-card edicion-card-wide">
+          {/* Tarjeta: Historial y Auditoría (Solo para rol Administrador) */}
+          {canAuditoria && <div style={{ ...s.card, gridColumn: 'span 2' }} className="edicion-card edicion-card-wide">
             <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #0284c7, #0369a1)' }} />
             <div style={s.cardIcon}>🛡️</div>
             <div style={s.cardBody}>

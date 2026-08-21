@@ -5,12 +5,13 @@ export type PermissionKey =
   | 'placas'
   | 'editar_paginas'
   | 'gestion_usuarios'
-  | 'estadisticas';
+  | 'estadisticas'
+  | 'auditoria';
 
 const ROLE_PERMISSIONS: Record<UserRole, PermissionKey[]> = {
   Instructor: [],
   'Microscopía': ['temario', 'placas', 'editar_paginas'],
-  Administrador: ['temario', 'placas', 'editar_paginas', 'gestion_usuarios', 'estadisticas'],
+  Administrador: ['temario', 'placas', 'editar_paginas', 'gestion_usuarios', 'estadisticas', 'auditoria'],
 };
 
 export const hasPermission = (role: UserRole | undefined, permission: PermissionKey): boolean => {

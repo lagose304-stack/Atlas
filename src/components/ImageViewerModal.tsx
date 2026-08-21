@@ -4382,7 +4382,7 @@ const panBy = (dx: number, dy: number) => {
                 </div>
               </nav>
             )}
-            {user?.is_protected && placaId && (
+            {user?.rol === 'Administrador' && placaId && (
               <div style={{ ...sidebarSectionStyle, order: 6, background: 'linear-gradient(135deg, #f0f9ff, #e0f2fe)', borderColor: '#7dd3fc', marginTop: '8px' }}>
                 <a
                   href={`/historial?scope=placa&placaId=${encodeURIComponent(String(placaId))}`}

@@ -432,7 +432,7 @@ const PlacasSubtema: React.FC = () => {
             </section>
           )}
 
-          {user?.is_protected && subtemaId && (
+          {user?.rol === 'Administrador' && subtemaId && (
             <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'center' }}>
               <button
                 type="button"

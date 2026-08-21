@@ -727,7 +727,7 @@ const EjecutarPrueba: React.FC = () => {
               />
             )}
 
-            {user?.is_protected && prueba && (
+            {user?.rol === 'Administrador' && prueba && (
               <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
                 <button
                   type="button"

@@ -1022,7 +1022,7 @@ const Temario: React.FC = () => {
             </div>
           )}
 
-          {user?.is_protected && (
+          {user?.rol === 'Administrador' && (
             <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'center' }}>
               <button
                 type="button"
