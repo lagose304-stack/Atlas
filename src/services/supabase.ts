@@ -46,13 +46,13 @@ export type ClientRuntimeContext = {
 	saveData: boolean | null;
 };
 
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string) || 'https://placeholder.supabase.co';
+export const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || 'placeholder-anon-key';
 
 export const ATLAS_SESSION_TOKEN_KEY = 'atlas_session_token';
 
 export const getAtlasSessionToken = (): string => {
-	if (typeof localStorage === 'undefined') return '';
+	if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') return '';
 	return localStorage.getItem(ATLAS_SESSION_TOKEN_KEY) || '';
 };
 
@@ -100,14 +100,14 @@ export const getClientRuntimeContext = (): ClientRuntimeContext => {
 
 	return {
 		timestampIso: new Date().toISOString(),
-		online: typeof navigator !== 'undefined' ? navigator.onLine : null,
-		visibilityState: doc?.visibilityState ?? 'unknown',
+		online: typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean' ? navigator.onLine : null,
+		visibilityState: doc?.visibilityState || 'unknown',
 		hasFocus: doc && typeof doc.hasFocus === 'function' ? doc.hasFocus() : null,
-		userAgent: nav?.userAgent ?? 'unknown',
-		language: nav?.language ?? 'unknown',
-		platform: nav?.platform ?? 'unknown',
-		connectionType: connection?.type ?? null,
-		effectiveType: connection?.effectiveType ?? null,
+		userAgent: nav?.userAgent || 'unknown',
+		language: nav?.language || 'unknown',
+		platform: nav?.platform || 'unknown',
+		connectionType: connection?.type || null,
+		effectiveType: connection?.effectiveType || null,
 		rttMs: typeof connection?.rtt === 'number' ? connection.rtt : null,
 		downlinkMbps: typeof connection?.downlink === 'number' ? connection.downlink : null,
 		saveData: typeof connection?.saveData === 'boolean' ? connection.saveData : null,
@@ -138,35 +138,27 @@ export const formatClientRuntimeContext = (context: ClientRuntimeContext): strin
 	].join(' | ');
 };
 
-const isRetryableHttpStatus = (status: number): boolean => {
-	return status === 408 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
-};
-
-const getMethod = (input: RequestInfo | URL, init?: RequestInit): string => {
-	if (init?.method) {
-		return init.method.toUpperCase();
-	}
-	if (input instanceof Request) {
-		return input.method.toUpperCase();
-	}
-	return 'GET';
-};
+const isRetryableHttpStatus = (status: number): boolean =>
+	status === 408 || status === 429 || (status >= 500 && status <= 599);
 
 const fetchWithRetry: typeof fetch = async (input, init) => {
-	const atlasToken = getAtlasSessionToken();
-	const headers = new Headers(input instanceof Request ? input.headers : undefined);
-	new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
-	if (atlasToken) headers.set('X-Atlas-Session', atlasToken);
-	const requestInit: RequestInit = { ...init, headers };
-	const method = getMethod(input, init);
-	const canRetry = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
-	const maxAttempts = canRetry ? 3 : 1;
-	const { signal: requestSignal, ...initWithoutSignal } = requestInit;
+	const maxAttempts = 3;
+	let lastError: unknown = null;
 
-	let lastError: unknown;
-
-	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
+			const requestInit = { ...(init || {}) };
+			const headers = new Headers(requestInit.headers || {});
+			const sessionToken = getAtlasSessionToken();
+			if (sessionToken && !headers.has('X-Atlas-Session')) {
+				headers.set('X-Atlas-Session', sessionToken);
+			}
+			requestInit.headers = headers;
+
+			const canRetry = attempt < maxAttempts;
+			const requestSignal = requestInit.signal;
+			const { signal: _unusedSignal, ...initWithoutSignal } = requestInit;
+
 			const nextInit = canRetry && attempt > 1 && requestSignal ? initWithoutSignal : requestInit;
 			const response = await fetch(input, nextInit);
 			if (canRetry && attempt < maxAttempts && isRetryableHttpStatus(response.status)) {
