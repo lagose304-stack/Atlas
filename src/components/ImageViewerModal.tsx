@@ -428,6 +428,15 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     midY: number;
     startPos: { x: number; y: number };
   } | null>(null);
+  const normalPinchRef = useRef<{
+    dist: number;
+    startZoom: number;
+    midX: number;
+    midY: number;
+    startPos: { x: number; y: number };
+  } | null>(null);
+  const lastPinchEndedAtRef = useRef(0);
+  const pinchTouchStartAtRef = useRef(0);
   const isSpacePressedRef = useRef(false);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const laserAnimFrameRef = useRef<number | null>(null);
@@ -529,6 +538,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           ? '0 7px 15px rgba(15, 105, 135, 0.2)'
           : '0 3px 9px rgba(15, 105, 135, 0.1)',
       transform: isPressed ? 'translateY(0) scale(0.96)' : isHovered ? 'translateY(-2px)' : 'none',
+      touchAction: 'manipulation',
+      WebkitTapHighlightColor: 'transparent',
     };
   };
 
@@ -648,7 +659,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const stateRef       = useRef({ zoom: 1, pos: { x: 0, y: 0 } });
   const dragStartRef   = useRef({ x: 0, y: 0 });
   const isDraggingRef  = useRef(false);
-  const pinchRef       = useRef<{ dist: number } | null>(null);
   const touchGestureRef = useRef<{ x: number; y: number; startedAt: number } | null>(null);
   const lastTapAtRef = useRef(0);
   const commentHintTimeoutRef = useRef<number | null>(null);
@@ -1266,10 +1276,63 @@ const panBy = (dx: number, dy: number) => {
     laserStabilizedPosRef.current = null;
   };
 
-  const getTouchDistance = (t0: React.Touch, t1: React.Touch) => {
+  const getTouchDistance = (t0: { clientX: number; clientY: number }, t1: { clientX: number; clientY: number }) => {
     const dx = t0.clientX - t1.clientX;
     const dy = t0.clientY - t1.clientY;
     return Math.hypot(dx, dy);
+  };
+
+  const calculatePinchTransform = (
+    t0: { clientX: number; clientY: number },
+    t1: { clientX: number; clientY: number },
+    pinchData: {
+      dist: number;
+      startZoom: number;
+      midX: number;
+      midY: number;
+      startPos: { x: number; y: number };
+    },
+    containerEl: HTMLElement | null,
+    displayedImageSize: { width: number; height: number } | null,
+    maxZoom: number
+  ) => {
+    const newDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+    if (pinchData.dist <= 0 || newDist <= 0) return null;
+
+    const scale = newDist / pinchData.dist;
+    const targetZoom = clamp(pinchData.startZoom * scale, ZOOM_MIN, maxZoom);
+
+    const currentMidX = (t0.clientX + t1.clientX) / 2;
+    const currentMidY = (t0.clientY + t1.clientY) / 2;
+
+    const containerRect = containerEl?.getBoundingClientRect();
+    const containerWidth = containerEl?.clientWidth ?? 800;
+    const containerHeight = containerEl?.clientHeight ?? 600;
+    const containerLeft = containerRect?.left ?? 0;
+    const containerTop = containerRect?.top ?? 0;
+
+    const containerCenterX = containerLeft + containerWidth / 2;
+    const containerCenterY = containerTop + containerHeight / 2;
+
+    const pRel0X = pinchData.midX - containerCenterX;
+    const pRel0Y = pinchData.midY - containerCenterY;
+
+    const pRelCurrX = currentMidX - containerCenterX;
+    const pRelCurrY = currentMidY - containerCenterY;
+
+    const zoomRatio = pinchData.startZoom > 0 ? targetZoom / pinchData.startZoom : 1;
+
+    const rawX = pRelCurrX - (pRel0X - pinchData.startPos.x) * zoomRatio;
+    const rawY = pRelCurrY - (pRel0Y - pinchData.startPos.y) * zoomRatio;
+
+    const clampedPos = clampPositionToViewport(
+      { x: rawX, y: rawY },
+      targetZoom,
+      displayedImageSize,
+      { width: containerWidth, height: containerHeight }
+    );
+
+    return { targetZoom, clampedPos };
   };
 
   const handleLaserTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -1278,8 +1341,14 @@ const panBy = (dx: number, dy: number) => {
 
     if (e.touches.length === 1) {
       laserPinchRef.current = null;
-      const touch = e.touches[0];
+      setIsPinching(false);
+      pinchTouchStartAtRef.current = Date.now();
 
+      if (Date.now() - lastPinchEndedAtRef.current < 160) {
+        return;
+      }
+
+      const touch = e.touches[0];
       if (annotationTool === 'laser') {
         const { x, y } = getTouchCoords(touch);
         laserStabilizedPosRef.current = { x, y };
@@ -1295,11 +1364,17 @@ const panBy = (dx: number, dy: number) => {
         }
       }
     } else if (e.touches.length >= 2) {
-      // 2 dedos en tablet: Zoom & Navegación / Pan ultra-fluido
+      // 2 dedos en tablet: Zoom & Navegación / Pan ultra-fluido sin tirones CSS
       laserCurrentPosRef.current = null;
       laserStabilizedPosRef.current = null;
       isDraggingRef.current = false;
       setIsDragging(false);
+      setIsPinching(true);
+
+      // Si el primer dedo dejó un punto accidental en los últimos 120ms antes de que cayera el 2do dedo, limpiarlo
+      if (Date.now() - pinchTouchStartAtRef.current < 120 && laserTrailRef.current.length > 0) {
+        laserTrailRef.current = laserTrailRef.current.slice(0, -1);
+      }
 
       const t0 = e.touches[0];
       const t1 = e.touches[1];
@@ -1321,67 +1396,63 @@ const panBy = (dx: number, dy: number) => {
     if (!isAnnotationMode || !annotationTool || e.touches.length === 0) return;
     e.preventDefault();
 
-    const containerEl = containerRef.current;
-    const containerSize = containerEl ? { width: containerEl.clientWidth, height: containerEl.clientHeight } : { width: 800, height: 600 };
-
     if (e.touches.length === 1 && !laserPinchRef.current) {
+      if (Date.now() - lastPinchEndedAtRef.current < 160) {
+        return;
+      }
+
       const touch = e.touches[0];
       if (annotationTool === 'laser') {
         const { x, y } = getTouchCoords(touch);
         addLaserPoint(x, y);
       } else if (annotationTool === 'hand' && isDraggingRef.current && stateRef.current.zoom > 1) {
-        const newPos = {
+        const containerEl = containerRef.current;
+        const containerSize = containerEl ? { width: containerEl.clientWidth, height: containerEl.clientHeight } : { width: 800, height: 600 };
+        const rawNextPos = {
           x: touch.clientX - dragStartRef.current.x,
           y: touch.clientY - dragStartRef.current.y,
         };
-        stateRef.current.pos = newPos;
-        setPosition(newPos);
+        const clampedPos = clampPositionToViewport(rawNextPos, stateRef.current.zoom, imageSize, containerSize);
+        stateRef.current.pos = clampedPos;
+        setPosition(clampedPos);
       }
     } else if (e.touches.length >= 2 && laserPinchRef.current) {
       laserCurrentPosRef.current = null;
       laserStabilizedPosRef.current = null;
       const t0 = e.touches[0];
       const t1 = e.touches[1];
-      const newDist = getTouchDistance(t0, t1);
-      const pinchData = laserPinchRef.current;
+      const pinchResult = calculatePinchTransform(
+        t0,
+        t1,
+        laserPinchRef.current,
+        containerRef.current,
+        imageSize,
+        effectiveMaxZoom
+      );
 
-      if (pinchData.dist > 0) {
-        const scale = newDist / pinchData.dist;
-        const targetZoom = clamp(pinchData.startZoom * scale, ZOOM_MIN, effectiveMaxZoom);
-
-        // Desplazamiento / Navegación con 2 dedos en la placa
-        const currentMidX = (t0.clientX + t1.clientX) / 2;
-        const currentMidY = (t0.clientY + t1.clientY) / 2;
-        const deltaX = currentMidX - pinchData.midX;
-        const deltaY = currentMidY - pinchData.midY;
-
-        const newPos = clampPositionToViewport(
-          {
-            x: pinchData.startPos.x + deltaX,
-            y: pinchData.startPos.y + deltaY,
-          },
-          targetZoom,
-          imageSize,
-          containerSize
-        );
-
-        stateRef.current.zoom = targetZoom;
-        stateRef.current.pos = newPos;
-        setZoomLevel(targetZoom);
-        setPosition(newPos);
+      if (pinchResult) {
+        stateRef.current.zoom = pinchResult.targetZoom;
+        stateRef.current.pos = pinchResult.clampedPos;
+        setZoomLevel(pinchResult.targetZoom);
+        setPosition(pinchResult.clampedPos);
       }
     }
   };
 
   const handleLaserTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length < 2) {
+      if (laserPinchRef.current) {
+        lastPinchEndedAtRef.current = Date.now();
+      }
       laserPinchRef.current = null;
+      setIsPinching(false);
     }
     if (e.touches.length === 0) {
       laserCurrentPosRef.current = null;
       laserStabilizedPosRef.current = null;
       isDraggingRef.current = false;
       setIsDragging(false);
+      setIsPinching(false);
     }
   };
 
@@ -1704,21 +1775,33 @@ const panBy = (dx: number, dy: number) => {
     const el = containerRef.current;
     if (!el) return;
 
-    const getPinchDist = (touches: TouchList) => {
-      const dx = touches[0].clientX - touches[1].clientX;
-      const dy = touches[0].clientY - touches[1].clientY;
-      return Math.hypot(dx, dy);
-    };
-
     const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
+      const target = e.target as HTMLElement | null;
+      const isInteractive = target?.closest('button, a, input, textarea, select, [role="button"]');
+      if (!isInteractive) {
+        e.preventDefault();
+      }
+
       if (e.touches.length === 2) {
-        pinchRef.current = { dist: getPinchDist(e.touches) };
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+        const midX = (t0.clientX + t1.clientX) / 2;
+        const midY = (t0.clientY + t1.clientY) / 2;
+
+        normalPinchRef.current = {
+          dist,
+          startZoom: stateRef.current.zoom,
+          midX,
+          midY,
+          startPos: { ...stateRef.current.pos },
+        };
         isDraggingRef.current = false;
         setIsDragging(false);
         setIsPinching(true);
       } else if (e.touches.length === 1) {
-        pinchRef.current = null;
+        normalPinchRef.current = null;
+        setIsPinching(false);
         touchGestureRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, startedAt: Date.now() };
         if (stateRef.current.zoom > 1) {
           isDraggingRef.current = true;
@@ -1732,33 +1815,61 @@ const panBy = (dx: number, dy: number) => {
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      if (e.touches.length === 2 && pinchRef.current) {
-        const newDist = getPinchDist(e.touches);
-        const scale   = newDist / pinchRef.current.dist;
-        pinchRef.current.dist = newDist;
-        const newZoom = clamp(stateRef.current.zoom * scale, ZOOM_MIN, effectiveMaxZoom);
-        applyZoom(newZoom);
+      const target = e.target as HTMLElement | null;
+      const isInteractive = target?.closest('button, a, input, textarea, select, [role="button"]');
+      if (!isInteractive) {
+        e.preventDefault();
+      }
+
+      if (e.touches.length === 2 && normalPinchRef.current) {
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const pinchResult = calculatePinchTransform(
+          t0,
+          t1,
+          normalPinchRef.current,
+          containerRef.current,
+          imageSize,
+          effectiveMaxZoom
+        );
+
+        if (pinchResult) {
+          stateRef.current.zoom = pinchResult.targetZoom;
+          stateRef.current.pos = pinchResult.clampedPos;
+          setZoomLevel(pinchResult.targetZoom);
+          setPosition(pinchResult.clampedPos);
+        }
       } else if (e.touches.length === 1 && isDraggingRef.current && stateRef.current.zoom > 1) {
-        const newPos = {
+        const containerEl = containerRef.current;
+        const containerSize = containerEl ? { width: containerEl.clientWidth, height: containerEl.clientHeight } : { width: 800, height: 600 };
+        const rawNextPos = {
           x: e.touches[0].clientX - dragStartRef.current.x,
           y: e.touches[0].clientY - dragStartRef.current.y,
         };
-        stateRef.current.pos = newPos;
-        setPosition(newPos);
+        const clampedPos = clampPositionToViewport(rawNextPos, stateRef.current.zoom, imageSize, containerSize);
+        stateRef.current.pos = clampedPos;
+        setPosition(clampedPos);
       }
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      e.preventDefault();
-      if (e.touches.length < 2) { pinchRef.current = null; setIsPinching(false); }
+      if (e.touches.length < 2) {
+        if (normalPinchRef.current) {
+          lastPinchEndedAtRef.current = Date.now();
+        }
+        normalPinchRef.current = null;
+        setIsPinching(false);
+      }
       if (e.touches.length === 0) {
         isDraggingRef.current = false;
         setIsDragging(false);
+        setIsPinching(false);
         const gesture = touchGestureRef.current;
         const changedTouch = e.changedTouches[0];
         touchGestureRef.current = null;
         if (!gesture || !changedTouch) return;
+        if (Date.now() - lastPinchEndedAtRef.current < 200) return;
+
         const deltaX = changedTouch.clientX - gesture.x;
         const deltaY = changedTouch.clientY - gesture.y;
         const elapsed = Date.now() - gesture.startedAt;
@@ -1787,7 +1898,7 @@ const panBy = (dx: number, dy: number) => {
       el.removeEventListener('touchmove',  onTouchMove);
       el.removeEventListener('touchend',   onTouchEnd);
     };
-  }, [effectiveMaxZoom, viewerMode, interactiveMapData, activeMapSectionIndex, activeMarkerIndex, groupedSenaladosItems]);
+  }, [effectiveMaxZoom, viewerMode, interactiveMapData, activeMapSectionIndex, activeMarkerIndex, groupedSenaladosItems, imageSize]);
 
   const handleZoomIn  = () => applyZoom(stateRef.current.zoom + 0.25);
   const handleZoomOut = () => applyZoom(stateRef.current.zoom - 0.25);
@@ -2090,7 +2201,7 @@ const panBy = (dx: number, dy: number) => {
             width: '100%',
             height: '100%',
             pointerEvents: isAnnotationMode ? 'auto' : 'none',
-            zIndex: 12,
+            zIndex: 10,
             cursor: isSpacePressed || isDragging
               ? (isDragging ? 'grabbing' : 'grab')
               : (annotationTool === 'hand' ? (isDragging ? 'grabbing' : 'grab') : (annotationTool === 'laser' ? 'none' : 'default')),
@@ -2118,13 +2229,15 @@ const panBy = (dx: number, dy: number) => {
             color: '#991b1b', border: '1.5px solid rgba(248,113,113,0.8)',
             borderRadius: '10px', height: '40px', padding: '0 13px 0 10px', minWidth: '100px',
             fontSize: '0.79em', letterSpacing: '0.03em', textTransform: 'uppercase',
-            cursor: 'pointer', fontWeight: 800, zIndex: 11,
+            cursor: 'pointer', fontWeight: 800, zIndex: 25,
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             backdropFilter: 'blur(7px) saturate(120%)',
             boxShadow: '0 7px 18px rgba(220,38,38,0.26), inset 0 1px 0 rgba(255,255,255,0.86)',
             fontFamily: 'inherit',
             transition: 'all 0.18s ease',
             gap: '8px',
+            touchAction: 'manipulation',
+            WebkitTapHighlightColor: 'transparent',
           }}
         >
           <span
@@ -2160,10 +2273,12 @@ const panBy = (dx: number, dy: number) => {
               color: sidebarOpen ? '#fff' : '#6366f1',
               border: sidebarOpen ? 'none' : '1.5px solid #c7d2fe',
               borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', fontWeight: 700,
-              fontSize: '0.82em', zIndex: 10,
+              fontSize: '0.82em', zIndex: 25,
               display: 'flex', alignItems: 'center', gap: '6px',
               boxShadow: '0 2px 10px rgba(99,102,241,0.20)',
               fontFamily: 'inherit',
+              touchAction: 'manipulation',
+              WebkitTapHighlightColor: 'transparent',
             }}
           >
             {sidebarOpen ? '◀ Ocultar info' : '▶ Ver info'}
@@ -2834,11 +2949,12 @@ const panBy = (dx: number, dy: number) => {
               borderRadius: '24px',
               boxShadow: '0 8px 26px rgba(15, 75, 105, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)',
               border: '1px solid rgba(186, 230, 253, 0.85)',
-              zIndex: 15,
+              zIndex: 20,
               userSelect: 'none',
               width: '46px',
               boxSizing: 'border-box',
               flexShrink: 0,
+              touchAction: 'manipulation',
             }}
           >
             {/* Botón Zoom In */}
@@ -2863,6 +2979,8 @@ const panBy = (dx: number, dy: number) => {
                 boxShadow: '0 2px 6px rgba(14, 165, 233, 0.3)',
                 transition: 'transform 0.12s ease, box-shadow 0.12s ease',
                 flexShrink: 0,
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
             >
               <ZoomIn size={16} strokeWidth={2.4} />
@@ -2887,6 +3005,8 @@ const panBy = (dx: number, dy: number) => {
                 lineHeight: 1.1,
                 width: '36px',
                 flexShrink: 0,
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
             >
               {Math.round(zoomLevel * 100)}%
@@ -2914,6 +3034,8 @@ const panBy = (dx: number, dy: number) => {
                 boxShadow: '0 2px 6px rgba(14, 165, 233, 0.3)',
                 transition: 'transform 0.12s ease, box-shadow 0.12s ease',
                 flexShrink: 0,
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
             >
               <ZoomOut size={16} strokeWidth={2.4} />
@@ -2944,6 +3066,8 @@ const panBy = (dx: number, dy: number) => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
             >
               1x
@@ -2970,6 +3094,8 @@ const panBy = (dx: number, dy: number) => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
             >
               2x
@@ -2999,6 +3125,8 @@ const panBy = (dx: number, dy: number) => {
                 transition: 'all 0.15s ease',
                 boxShadow: '0 2px 4px rgba(15, 75, 105, 0.08)',
                 flexShrink: 0,
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'scale(1.08)';
@@ -3034,6 +3162,8 @@ const panBy = (dx: number, dy: number) => {
                 transition: 'all 0.15s ease',
                 boxShadow: '0 2px 4px rgba(15, 75, 105, 0.08)',
                 flexShrink: 0,
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'scale(1.08)';
@@ -3073,6 +3203,8 @@ const panBy = (dx: number, dy: number) => {
                 transition: 'all 0.15s ease',
                 boxShadow: '0 2px 4px rgba(15, 75, 105, 0.08)',
                 flexShrink: 0,
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
             >
               <RotateCcw size={15} strokeWidth={2.4} />
@@ -3105,6 +3237,8 @@ const panBy = (dx: number, dy: number) => {
                 transition: 'all 0.15s ease, transform 0.12s ease',
                 boxShadow: '0 2px 4px rgba(15, 75, 105, 0.08)',
                 flexShrink: 0,
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'scale(1.08)';
@@ -3140,13 +3274,14 @@ const panBy = (dx: number, dy: number) => {
               padding: '6px 12px',
               borderRadius: '999px',
               boxShadow: '0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.1)',
-              zIndex: 20,
+              zIndex: 25,
               border: '1px solid rgba(255, 255, 255, 0.12)',
               color: '#ffffff',
               animation: prefersReducedMotion ? 'none' : 'specialBarIn 260ms cubic-bezier(0.22, 1, 0.36, 1) both',
               userSelect: 'none',
               maxWidth: '94vw',
               overflowX: 'auto',
+              touchAction: 'manipulation',
             }}
           >
             {/* Opción 1: Puntero Láser Rojo */}
@@ -3173,6 +3308,8 @@ const panBy = (dx: number, dy: number) => {
                 boxShadow: annotationTool === 'laser' ? '0 0 16px rgba(239, 68, 68, 0.48)' : 'none',
                 transition: 'all 0.18s ease',
                 flexShrink: 0,
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
             >
               <span
@@ -3212,6 +3349,8 @@ const panBy = (dx: number, dy: number) => {
                 boxShadow: annotationTool === 'hand' ? '0 0 16px rgba(56, 189, 248, 0.48)' : 'none',
                 transition: 'all 0.18s ease',
                 flexShrink: 0,
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
             >
               <Hand size={15} strokeWidth={2.4} color={annotationTool === 'hand' ? '#38bdf8' : '#94a3b8'} />
@@ -3252,6 +3391,8 @@ const panBy = (dx: number, dy: number) => {
                   cursor: 'pointer',
                   padding: 0,
                   transition: 'all 0.12s ease',
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
@@ -3277,6 +3418,8 @@ const panBy = (dx: number, dy: number) => {
                   cursor: 'pointer',
                   padding: 0,
                   transition: 'all 0.12s ease',
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
@@ -3302,6 +3445,8 @@ const panBy = (dx: number, dy: number) => {
                   cursor: 'pointer',
                   padding: 0,
                   transition: 'all 0.12s ease',
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
@@ -3327,6 +3472,8 @@ const panBy = (dx: number, dy: number) => {
                   cursor: 'pointer',
                   padding: 0,
                   transition: 'all 0.12s ease',
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
@@ -3366,6 +3513,8 @@ const panBy = (dx: number, dy: number) => {
                   cursor: 'pointer',
                   padding: 0,
                   transition: 'all 0.12s ease',
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
@@ -3387,6 +3536,8 @@ const panBy = (dx: number, dy: number) => {
                   padding: '0 3px',
                   cursor: 'pointer',
                   fontFamily: 'inherit',
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
               >
                 {Math.round(zoomLevel * 100)}%
@@ -3410,6 +3561,8 @@ const panBy = (dx: number, dy: number) => {
                   cursor: 'pointer',
                   padding: 0,
                   transition: 'all 0.12s ease',
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
@@ -3445,6 +3598,8 @@ const panBy = (dx: number, dy: number) => {
                 fontFamily: 'inherit',
                 transition: 'all 0.15s ease',
                 flexShrink: 0,
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)';
@@ -3471,7 +3626,7 @@ const panBy = (dx: number, dy: number) => {
           backdropFilter: isDesktop ? 'none' : 'blur(6px) saturate(112%)',
           borderLeft: '1px solid #b9dbe8',
           overflowY: 'auto', display: 'flex', flexDirection: 'column',
-          zIndex: isDesktop ? 1 : 20,
+          zIndex: isDesktop ? 1 : 30,
           fontFamily: "'Montserrat', 'Segoe UI', sans-serif",
           boxShadow: isDesktop
             ? '-14px 0 34px rgba(15, 75, 105, 0.17), inset 1px 0 0 rgba(255,255,255,0.82)'
@@ -3522,6 +3677,8 @@ const panBy = (dx: number, dy: number) => {
                     transition: 'all 0.15s ease',
                     boxShadow: isFullscreen ? '0 0 8px rgba(56, 189, 248, 0.35)' : 'none',
                     flexShrink: 0,
+                    touchAction: 'manipulation',
+                    WebkitTapHighlightColor: 'transparent',
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = isFullscreen ? 'rgba(56, 189, 248, 0.35)' : 'rgba(255, 255, 255, 0.28)';
@@ -3537,7 +3694,7 @@ const panBy = (dx: number, dy: number) => {
               </div>
             </div>
             {!isDesktop && (
-              <button onClick={() => setSidebarOpen(false)} style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b', cursor: 'pointer', borderRadius: '8px', padding: '6px 11px', fontSize: '0.77em', fontFamily: 'inherit', fontWeight: 700, boxShadow: '0 2px 6px rgba(15,23,42,0.06)' }}>✕ Cerrar</button>
+              <button onClick={() => setSidebarOpen(false)} style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b', cursor: 'pointer', borderRadius: '8px', padding: '6px 11px', fontSize: '0.77em', fontFamily: 'inherit', fontWeight: 700, boxShadow: '0 2px 6px rgba(15,23,42,0.06)', touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}>✕ Cerrar</button>
             )}
           </div>
           {/* Contenido */}
@@ -3674,6 +3831,8 @@ const panBy = (dx: number, dy: number) => {
                             outline: 'none',
                             transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease',
                             transform: isActiveColor ? 'scale(1.08)' : 'scale(1)',
+                            touchAction: 'manipulation',
+                            WebkitTapHighlightColor: 'transparent',
                           }}
                         />
                       );
@@ -3698,6 +3857,8 @@ const panBy = (dx: number, dy: number) => {
                       fontSize: '0.7em',
                       boxShadow: viewerMode === 'arrow' ? '0 4px 12px rgba(37,99,235,0.14)' : 'none',
                       transition: 'all 0.18s ease',
+                      touchAction: 'manipulation',
+                      WebkitTapHighlightColor: 'transparent',
                     }}
                   >
                     Flechas
@@ -3720,6 +3881,8 @@ const panBy = (dx: number, dy: number) => {
                       fontSize: '0.7em',
                       boxShadow: viewerMode === 'pointer' ? '0 4px 12px rgba(37,99,235,0.14)' : 'none',
                       transition: 'all 0.18s ease',
+                      touchAction: 'manipulation',
+                      WebkitTapHighlightColor: 'transparent',
                     }}
                   >
                     Señalador
@@ -3744,6 +3907,8 @@ const panBy = (dx: number, dy: number) => {
                       boxShadow: viewerMode === 'map' && interactiveMapData ? '0 4px 12px rgba(22,163,74,0.13)' : 'none',
                       opacity: interactiveMapData ? 1 : 0.72,
                       transition: 'all 0.18s ease',
+                      touchAction: 'manipulation',
+                      WebkitTapHighlightColor: 'transparent',
                     }}
                   >
                     {!interactiveMapData ? 'Cargando...' : 'Mapa'}
@@ -3846,6 +4011,8 @@ const panBy = (dx: number, dy: number) => {
                           transform: hasMarker && isHovered && !isActive ? 'translateY(-1px)' : 'none',
                           outline: isFocused ? '2px solid #4ab8d8' : 'none',
                           outlineOffset: '1px',
+                          touchAction: 'manipulation',
+                          WebkitTapHighlightColor: 'transparent',
                         }}
                       >
                         <span style={{ flex: 1, minWidth: 0, letterSpacing: '0.01em', textAlign: 'center' }}>
@@ -3933,6 +4100,8 @@ const panBy = (dx: number, dy: number) => {
                     fontSize: '0.77em',
                     boxShadow: '0 2px 10px rgba(14,165,233,0.12)',
                     transition: 'all 0.18s ease',
+                    touchAction: 'manipulation',
+                    WebkitTapHighlightColor: 'transparent',
                   }}
                 >
                   Ocultar señalador
@@ -4021,6 +4190,8 @@ const panBy = (dx: number, dy: number) => {
                                 outline: isFocused ? `2px solid ${section.color}55` : 'none',
                                 outlineOffset: '1px',
                                 transition: 'all 0.18s ease',
+                                touchAction: 'manipulation',
+                                WebkitTapHighlightColor: 'transparent',
                               }}
                             >
                               <span style={{ flex: 1, minWidth: 0, textAlign: 'center', letterSpacing: '0.01em' }}>
@@ -4053,8 +4224,8 @@ const panBy = (dx: number, dy: number) => {
                               <div style={{ gridColumn: '2', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
                                 <span style={{ fontSize: '0.68em', color: '#64748b', fontWeight: 700 }}>Zona {sectionIndex + 1} · <span style={{ color: section.color }}>●</span> {section.color}</span>
                                 <div style={{ display: 'flex', gap: '6px' }}>
-                                  <button type="button" onClick={() => setMapFocusRequest(value => value + 1)} style={{ border: '1px solid #bae6fd', background: '#fff', color: '#0369a1', borderRadius: '7px', padding: '4px 7px', fontSize: '0.68em', fontWeight: 750, cursor: 'pointer' }}>Centrar</button>
-                                  <button type="button" onClick={() => setActiveMapSectionIndex(null)} style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#475569', borderRadius: '7px', padding: '4px 7px', fontSize: '0.68em', fontWeight: 750, cursor: 'pointer' }}>Ver todas</button>
+                                  <button type="button" onClick={() => setMapFocusRequest(value => value + 1)} style={{ border: '1px solid #bae6fd', background: '#fff', color: '#0369a1', borderRadius: '7px', padding: '4px 7px', fontSize: '0.68em', fontWeight: 750, cursor: 'pointer', touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}>Centrar</button>
+                                  <button type="button" onClick={() => setActiveMapSectionIndex(null)} style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#475569', borderRadius: '7px', padding: '4px 7px', fontSize: '0.68em', fontWeight: 750, cursor: 'pointer', touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}>Ver todas</button>
                                 </div>
                               </div>
                             )}
@@ -4205,6 +4376,8 @@ const compactNavigationButtonStyle: React.CSSProperties = {
   boxShadow: '0 3px 9px rgba(15, 105, 135, 0.1)',
   transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
   willChange: 'transform',
+  touchAction: 'manipulation',
+  WebkitTapHighlightColor: 'transparent',
 };
 
 const compactNavigationIconStyle: React.CSSProperties = {
