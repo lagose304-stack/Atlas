@@ -11,7 +11,7 @@ export const collectWeeklyThemeIds = (blocks: Array<{ block_type?: string; conte
     if (block.block_type !== 'weekly_publication') return;
 
     const content = block.content ?? {};
-    const topicIds = [content.topic_1_id, content.topic_2_id];
+    const topicIds = [content.topic_1_id, content.topic_2_id, content.topic_3_id];
 
     topicIds.forEach((rawId) => {
       const numericId = Number(rawId);

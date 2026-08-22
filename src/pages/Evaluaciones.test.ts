@@ -9,13 +9,15 @@ describe('evaluaciones weekly filters', () => {
         content: {
           topic_1_id: '12',
           topic_2_id: '9',
+          topic_3_id: '15',
           topic_1: 'Epitelio',
           topic_2: 'Tejido conjuntivo',
+          topic_3: 'Tejido muscular',
         },
       },
     ];
 
-    expect(collectWeeklyThemeIds(blocks as any)).toEqual([12, 9]);
+    expect(collectWeeklyThemeIds(blocks as any)).toEqual([12, 9, 15]);
   });
 
   it('ordena primero las pruebas del tema de la semana y deja el historial después', () => {
@@ -23,11 +25,13 @@ describe('evaluaciones weekly filters', () => {
       { id: 'old', tema_id: 3, created_at: '2024-08-10T00:00:00Z' },
       { id: 'week', tema_id: 9, created_at: '2026-08-10T00:00:00Z' },
       { id: 'week-2', tema_id: 12, created_at: '2026-08-11T00:00:00Z' },
+      { id: 'week-3', tema_id: 15, created_at: '2026-08-12T00:00:00Z' },
     ];
 
-    expect(orderTestsByWeeklyPriority(tests as any, [12, 9])).toMatchObject([
+    expect(orderTestsByWeeklyPriority(tests as any, [12, 9, 15])).toMatchObject([
       { id: 'week-2' },
       { id: 'week' },
+      { id: 'week-3' },
       { id: 'old' },
     ]);
   });

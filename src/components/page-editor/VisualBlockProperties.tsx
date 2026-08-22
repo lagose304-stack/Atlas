@@ -257,6 +257,7 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
         <TextAreaField label="Título principal" value={content.title ?? ''} onChange={title => onChange({ title })} />
         <TextAreaField label="Primer tema de la semana" value={content.topic_1 ?? ''} onChange={topic_1 => onChange({ topic_1 })} />
         <TextAreaField label="Segundo tema (opcional)" value={content.topic_2 ?? ''} onChange={topic_2 => onChange({ topic_2 })} />
+        <TextAreaField label="Tercer tema (opcional)" value={content.topic_3 ?? ''} onChange={topic_3 => onChange({ topic_3 })} />
         <ImageField url={content.image_url ?? ''} onPick={() => onPickImage('image_url')} onClear={() => onChange({ image_url: '', weekly_image_source: '', weekly_placa_id: '' })} />
         <TextAreaField label="Nombre de la placa semanal" value={content.image_caption ?? ''} onChange={image_caption => onChange({ image_caption })} />
       </>;

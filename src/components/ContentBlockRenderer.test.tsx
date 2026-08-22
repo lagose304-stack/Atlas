@@ -652,4 +652,45 @@ describe('ContentBlockRenderer', () => {
     expect(screen.getByText('Ácido Periódico de Schiff (PAS)')).toBeInTheDocument();
     expect(screen.getByText('Membrana basal magenta brillante.')).toBeInTheDocument();
   });
+
+  it('renderiza la publicación semanal con hasta 3 temas y sus enlaces', () => {
+    const weeklyWithThreeTopics: ContentBlock = {
+      id: 'block-weekly-3-topics',
+      entity_type: 'home_page',
+      entity_id: 0,
+      block_type: 'weekly_publication',
+      sort_order: 0,
+      content: {
+        title: 'Prácticas de la semana',
+        eyebrow: '13–17 de julio de 2026',
+        topic_1_id: '10',
+        topic_1: 'Tejido epitelial',
+        topic_2_id: '11',
+        topic_2: 'Tejido conjuntivo',
+        topic_3_id: '12',
+        topic_3: 'Tejido muscular',
+        image_url: 'https://example.com/placa-semanal.jpg',
+        image_caption: 'Placa destacada de la semana',
+      },
+    };
+
+    render(<ContentBlockRenderer blocks={[weeklyWithThreeTopics]} />);
+
+    expect(screen.getByText('Prácticas de la semana')).toBeInTheDocument();
+    expect(screen.getByText('13–17 de julio de 2026')).toBeInTheDocument();
+    expect(screen.getByText('Tema 01')).toBeInTheDocument();
+    expect(screen.getByText('Tejido epitelial')).toBeInTheDocument();
+    expect(screen.getByText('Tema 02')).toBeInTheDocument();
+    expect(screen.getByText('Tejido conjuntivo')).toBeInTheDocument();
+    expect(screen.getByText('Tema 03')).toBeInTheDocument();
+    expect(screen.getByText('Tejido muscular')).toBeInTheDocument();
+
+    const topic1Link = screen.getByText('Tejido epitelial').closest('a');
+    const topic2Link = screen.getByText('Tejido conjuntivo').closest('a');
+    const topic3Link = screen.getByText('Tejido muscular').closest('a');
+
+    expect(topic1Link).toHaveAttribute('href', '/subtemas/10');
+    expect(topic2Link).toHaveAttribute('href', '/subtemas/11');
+    expect(topic3Link).toHaveAttribute('href', '/subtemas/12');
+  });
 });

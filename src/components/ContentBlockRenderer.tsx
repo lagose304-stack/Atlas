@@ -955,6 +955,7 @@ const BlockItem: React.FC<{
       const topics = [
         { id: c.topic_1_id, name: c.topic_1, logo: c.topic_1_logo },
         { id: c.topic_2_id, name: c.topic_2, logo: c.topic_2_logo },
+        { id: c.topic_3_id, name: c.topic_3, logo: c.topic_3_logo },
       ].filter(topic => topic.name);
       return (
         <article
