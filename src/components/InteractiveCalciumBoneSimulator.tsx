@@ -1,27 +1,9 @@
 import React from 'react';
-import { Microscope, Sparkles } from 'lucide-react';
 import '../styles/calcium-simulator.css';
 
 export const InteractiveCalciumBoneSimulator: React.FC = () => {
   return (
     <div className="bone-diagram-container" role="figure" aria-label="Esquema molecular básico y grande del eje RANKL y OPG con borde festoneado animado">
-      {/* Encabezado */}
-      <div className="bone-diagram-header">
-        <div className="bone-diagram-title">
-          <span className="bone-diagram-icon" aria-hidden="true">
-            <Microscope size={18} />
-          </span>
-          <div>
-            <strong>Eje Molecular Básico: RANKL & OPG</strong>
-            <small>Regulación fundamental entre Osteoblastos y Osteoclastos</small>
-          </div>
-        </div>
-        <div className="bone-diagram-badge">
-          <Sparkles size={14} />
-          <span>Fisiología Ósea</span>
-        </div>
-      </div>
-
       {/* Lienzo SVG con cajas amplias, tipografía grande y borde festoneado rotatorio/ondulante limpio */}
       <div className="bone-diagram-canvas-box">
         <svg
