@@ -1,0 +1,219 @@
+/* ==========================================================================
+   DIAGRAMA HISTOLÓGICO DEL TEJIDO ÓSEO Y REGULACIÓN DEL CALCIO
+   ========================================================================== */
+
+.bone-diagram-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 8px;
+  background: #ffffff;
+  border: 1.2px solid rgba(186, 230, 253, 0.85);
+  border-radius: 16px;
+  padding: clamp(12px, 1.4vw, 15px);
+  box-shadow: 0 4px 18px rgba(12, 69, 104, 0.05), inset 0 1px 0 #ffffff;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.bone-diagram-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.bone-diagram-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bone-diagram-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #f0f9ff;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
+
+.bone-diagram-title strong {
+  display: block;
+  font-size: 0.84rem;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.bone-diagram-title small {
+  display: block;
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.bone-diagram-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #0284c7;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+}
+
+.bone-diagram-canvas-box {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 210px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  overflow: hidden;
+  box-shadow: inset 0 1px 4px rgba(15, 23, 42, 0.02);
+}
+
+.bone-diagram-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ANIMACIÓN DE BORDE FESTONEADO GIRATORIO / ONDULANTE & VÓRTICE ÓSEO
+   ══════════════════════════════════════════════════════════════════ */
+@keyframes rollingFestoons {
+  0% {
+    transform: translateX(0px);
+  }
+  100% {
+    transform: translateX(-36px);
+  }
+}
+
+@keyframes microvilliChurn {
+  0%, 100% {
+    transform: scaleY(1) skewX(0deg);
+  }
+  30% {
+    transform: scaleY(1.15) skewX(2deg);
+  }
+  70% {
+    transform: scaleY(0.92) skewX(-2deg);
+  }
+}
+
+@keyframes vortexOrbitCW {
+  0% {
+    transform: rotate(0deg) translateX(30px) rotate(0deg);
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 0.95;
+  }
+  80% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: rotate(360deg) translateX(30px) rotate(-360deg);
+    opacity: 0.2;
+  }
+}
+
+@keyframes vortexOrbitCCW {
+  0% {
+    transform: rotate(0deg) translateX(20px) rotate(0deg);
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: rotate(-360deg) translateX(20px) rotate(360deg);
+    opacity: 0.3;
+  }
+}
+
+@keyframes boneDustRising {
+  0% {
+    transform: translateY(0px) scale(0.6);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.9;
+  }
+  70% {
+    transform: translateY(-16px) scale(1.1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(-26px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+@keyframes howshipAcidPulse {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(1.06);
+  }
+}
+
+.festoon-roller {
+  animation: rollingFestoons 1.6s linear infinite;
+}
+
+.festoon-churn-group {
+  animation: microvilliChurn 2s ease-in-out infinite;
+  transform-origin: 0px 52px;
+}
+
+.howship-vortex-center {
+  transform-origin: 635px 270px;
+}
+
+.vortex-dust-cw-1 { animation: vortexOrbitCW 2.4s linear infinite; }
+.vortex-dust-cw-2 { animation: vortexOrbitCW 2.4s linear infinite; animation-delay: -0.8s; }
+.vortex-dust-cw-3 { animation: vortexOrbitCW 2.4s linear infinite; animation-delay: -1.6s; }
+
+.vortex-dust-ccw-1 { animation: vortexOrbitCCW 1.9s linear infinite; }
+.vortex-dust-ccw-2 { animation: vortexOrbitCCW 1.9s linear infinite; animation-delay: -0.65s; }
+.vortex-dust-ccw-3 { animation: vortexOrbitCCW 1.9s linear infinite; animation-delay: -1.3s; }
+
+.bone-resorption-dust {
+  transform-origin: center bottom;
+  animation: boneDustRising 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.bone-dust-1 { animation-delay: 0s; }
+.bone-dust-2 { animation-delay: 0.35s; }
+.bone-dust-3 { animation-delay: 0.7s; }
+.bone-dust-4 { animation-delay: 1.05s; }
+.bone-dust-5 { animation-delay: 1.4s; }
+.bone-dust-6 { animation-delay: 1.75s; }
+.bone-dust-7 { animation-delay: 2.1s; }
+.bone-dust-8 { animation-delay: 2.45s; }
+
+.howship-acid-glow {
+  animation: howshipAcidPulse 2.8s ease-in-out infinite;
+  transform-origin: 635px 270px;
+}

@@ -35,3 +35,6 @@ lerna-debug.log*
 
 # Archivos temporales con secretos
 TEMP_*_PRIVATE.txt
+
+# Screenshots locales de inspección
+*_screenshot.png

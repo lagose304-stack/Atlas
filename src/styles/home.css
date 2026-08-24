@@ -552,31 +552,123 @@
   box-shadow: inset 0 1px 0 #ffffff;
 }
 
+
+
 /* Cuerpo */
 .home-histology-fact-body {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
-@media (min-width: 900px) {
-  .home-histology-fact-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
-    align-items: stretch;
-    gap: clamp(14px, 1.8vw, 24px);
+.home-fact-wrap-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Fila Superior: Intro a un lado + Diagrama al otro lado */
+.home-fact-top-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(380px, 1.1fr);
+  gap: clamp(14px, 1.8vw, 22px);
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .home-fact-top-row {
+    grid-template-columns: 1fr;
   }
 }
 
-.home-histology-fact-copy {
+.home-fact-intro-side {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  height: 100%;
 }
 
-.home-histology-fact-quote-card {
+.home-fact-intro-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 10px;
+  height: 100%;
+  padding: clamp(12px, 1.4vw, 15px);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(219, 234, 254, 0.9);
+  border-left: 3.5px solid #0284c7;
+}
+
+.home-fact-hormone-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: auto;
+}
+
+.home-fact-hormone-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  border: 1px solid transparent;
+}
+
+.home-fact-hormone-item.hormone-pth {
+  background: linear-gradient(135deg, #fff7ed, #ffedd5);
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
+.home-fact-hormone-item.hormone-calcitonin {
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.hormone-title {
+  font-weight: 800;
+  font-size: 0.78rem;
+}
+
+.hormone-desc {
+  font-size: 0.72rem;
+  opacity: 0.9;
+  line-height: 1.35;
+}
+
+.home-fact-diagram-side {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Fila Inferior: Las 3 tarjetas abajo del diagrama abarcando todo el ancho */
+.home-fact-bottom-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.home-fact-steps-horizontal {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  margin: 0 !important;
+}
+
+@media (max-width: 880px) {
+  .home-fact-steps-horizontal {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+}
   position: relative;
   height: 100%;
   display: flex;
@@ -601,8 +693,8 @@
 .home-histology-fact-quote-card p {
   margin: 0;
   color: #1e293b;
-  font-size: clamp(.86rem, .98vw, .95rem);
-  line-height: 1.65;
+  font-size: clamp(.84rem, .94vw, .92rem);
+  line-height: 1.6;
   font-weight: 450;
   text-align: left;
 }
@@ -610,6 +702,162 @@
 .home-histology-fact-quote-card strong {
   color: #0284c7;
   font-weight: 750;
+}
+
+/* Tarjetas individuales de cada fase */
+.home-fact-flow-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(241, 245, 249, 0.95), rgba(255, 255, 255, 0.95));
+  border: 1px dashed rgba(148, 163, 184, 0.6);
+  font-size: clamp(0.74rem, 0.84vw, 0.82rem);
+  color: #334155;
+  margin: 4px 0;
+  text-align: left;
+}
+
+.home-fact-flow-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.home-fact-flow-node {
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.node-blast { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+.node-rankl { background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
+.node-rank { background: #ede9fe; color: #6b21a8; border: 1px solid #c4b5fd; }
+.node-clast { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+.node-opg { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+
+.home-fact-flow-brake {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 12px;
+  font-size: 0.73rem;
+  color: #0369a1;
+  font-weight: 650;
+  border-left: 2px solid #38bdf8;
+  margin-top: 2px;
+}
+
+.home-fact-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.home-fact-step-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 12px;
+  border-radius: 11px;
+  background: rgba(248, 250, 252, 0.85);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  transition: all 0.22s ease;
+  text-align: left;
+}
+
+.home-fact-step-item:hover {
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(12, 69, 104, 0.07);
+  transform: translateY(-1px);
+}
+
+.home-fact-step-triad {
+  border-left: 3.5px solid #8b5cf6;
+  background: linear-gradient(135deg, rgba(245, 243, 255, 0.8), rgba(255, 255, 255, 0.95));
+}
+
+.home-fact-step-pth {
+  border-left: 3.5px solid #f97316;
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.75), rgba(255, 255, 255, 0.95));
+}
+
+.home-fact-step-calcitonin {
+  border-left: 3.5px solid #10b981;
+  background: linear-gradient(135deg, rgba(236, 253, 245, 0.75), rgba(255, 255, 255, 0.95));
+}
+
+.home-fact-step-osteocyte {
+  border-left: 3.5px solid #0284c7;
+  background: linear-gradient(135deg, rgba(240, 249, 255, 0.75), rgba(255, 255, 255, 0.95));
+}
+
+.home-fact-step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.home-fact-step-title {
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.home-fact-step-triad .home-fact-step-title { color: #6b21a8; }
+.home-fact-step-pth .home-fact-step-title { color: #9a3412; }
+.home-fact-step-calcitonin .home-fact-step-title { color: #065f46; }
+.home-fact-step-osteocyte .home-fact-step-title { color: #0369a1; }
+
+.home-fact-step-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+
+.home-fact-step-triad .home-fact-step-badge {
+  color: #6b21a8;
+  background: #ede9fe;
+  border: 1px solid #c4b5fd;
+}
+
+.home-fact-step-pth .home-fact-step-badge {
+  color: #c2410c;
+  background: #ffedd5;
+  border: 1px solid #fed7aa;
+}
+
+.home-fact-step-calcitonin .home-fact-step-badge {
+  color: #047857;
+  background: #d1fae5;
+  border: 1px solid #a7f3d0;
+}
+
+.home-fact-step-osteocyte .home-fact-step-badge {
+  color: #0284c7;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+}
+
+.home-fact-step-text {
+  margin: 0;
+  font-size: clamp(0.78rem, 0.88vw, 0.85rem) !important;
+  line-height: 1.5 !important;
+  color: #334155 !important;
 }
 
 .home-histology-fact-pills {
@@ -642,12 +890,14 @@
   transform: translateY(-1px);
 }
 
-/* Wrapper del tejido */
+/* Wrapper del simulador interactivo */
 .home-histology-tissue-wrapper {
   position: relative;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: stretch;
+  height: 100%;
 }
 
 

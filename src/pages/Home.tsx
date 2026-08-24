@@ -26,6 +26,7 @@ import { OPEN_HEADER_SEARCH_EVENT } from '../constants/uiEvents';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks } from '../services/contentPublication';
 import bombillaIcon from '../assets/icons/bombilla.ico';
+import InteractiveCalciumBoneSimulator from '../components/InteractiveCalciumBoneSimulator';
 import '../styles/home.css';
 
 const Home: React.FC = () => {
@@ -192,93 +193,80 @@ const Home: React.FC = () => {
             </div>
 
             <div className="home-histology-fact-badges">
-              <span className="home-histology-fact-chip">Glándulas</span>
+              <span className="home-histology-fact-chip">Tejido Óseo</span>
             </div>
           </div>
 
-          <div className="home-histology-fact-body">
-            <div className="home-histology-fact-copy">
-              <div className="home-histology-fact-quote-card">
-                <p id="home-histology-fact-title">
-                  Las <strong>células de Leydig</strong> del testículo se consideran glándulas endocrinas en acúmulos. Estos pequeños agrupamientos celulares en el tejido intersticial funcionan como estructuras glandulares que secretan <strong>testosterona</strong> directamente en el torrente sanguíneo, sin conductos de excreción.
-                </p>
-                <div className="home-histology-fact-pills" aria-hidden="true">
-                  <span>🧬 Secreción endocrina</span>
-                  <span>🩸 Hacia capilares</span>
+          <div className="home-histology-fact-body home-fact-wrap-body">
+            {/* 1. SECCIÓN SUPERIOR: Texto introductorio a un lado + Diagrama al otro lado */}
+            <div className="home-fact-top-row">
+              <div className="home-fact-intro-side">
+                <div className="home-fact-quote-card home-fact-intro-card">
+                  <p id="home-histology-fact-title">
+                    El <strong>tejido óseo</strong> funciona como el gran <strong>reservorio de calcio del cuerpo (alberga el 99%)</strong>. El equilibrio de la calcemia en sangre depende de la acción coordinada de sus <strong>tres células protagonistas</strong>, reguladas por el <strong>eje hormonal</strong>:
+                  </p>
+
+                  <div className="home-fact-hormone-pills">
+                    <div className="home-fact-hormone-item hormone-pth">
+                      <span className="hormone-title">⚡ PTH (Paratiroides)</span>
+                      <span className="hormone-desc">Se libera ante calcio bajo para estimular a los osteoblastos a expresar RANKL y activar la resorción ósea.</span>
+                    </div>
+                    <div className="home-fact-hormone-item hormone-calcitonin">
+                      <span className="hormone-title">🛡️ Calcitonina (Tiroides)</span>
+                      <span className="hormone-desc">Se libera ante calcio alto para inhibir directamente a los osteoclastos y favorecer el depósito óseo.</span>
+                    </div>
+                  </div>
                 </div>
+              </div>
+
+              <div className="home-histology-tissue-wrapper home-fact-diagram-side">
+                <InteractiveCalciumBoneSimulator />
               </div>
             </div>
 
-            <div className="home-histology-tissue-wrapper">
-              <svg className="home-histology-tissue" viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Esquema de células de Leydig en el intersticio testicular">
-                <title>Esquema simplificado de las células de Leydig en el intersticio testicular</title>
-                <desc>Dos túbulos seminíferos con un acúmulo de células de Leydig entre ellos, que secretan testosterona directamente hacia un vaso sanguíneo cercano.</desc>
-                <defs>
-                  <marker id="fact-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                    <path d="M2 1L8 5L2 9" fill="none" stroke="#0284c7" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                  </marker>
-                  <radialGradient id="tubuleGrad" cx="50%" cy="40%" r="60%">
-                    <stop offset="0%" stopColor="#f0f9ff" />
-                    <stop offset="100%" stopColor="#e0f2fe" />
-                  </radialGradient>
-                  <filter id="labelShadow" x="-10%" y="-15%" width="120%" height="140%">
-                    <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#0c4568" floodOpacity="0.08" />
-                  </filter>
-                </defs>
+            {/* 2. SECCIÓN INFERIOR: Las 3 tarjetas de células van ABAJO del diagrama ocupando todo el ancho */}
+            <div className="home-fact-bottom-row">
+              <div className="home-fact-steps home-fact-steps-horizontal" aria-label="Las tres células protagonistas en la regulación del calcio">
+                {/* Célula 1: Osteoclastos */}
+                <div className="home-fact-step-item home-fact-step-pth">
+                  <div className="home-fact-step-header">
+                    <span className="home-fact-step-title">🟣 1. Osteoclastos · Liberación (Resorción)</span>
+                    <span className="home-fact-step-badge">Sacan Ca²⁺ a la sangre</span>
+                  </div>
+                  <p className="home-fact-step-text">
+                    Células gigantes multinucleadas estimuladas por la <strong>PTH</strong> vía <strong>RANKL</strong> y frenadas directamente por la <strong>Calcitonina</strong>. En la <em>laguna de Howship</em>, disuelven la matriz ósea con ácido (H⁺) y <em>catepsina K</em> para <strong>liberar calcio a la circulación</strong>.
+                  </p>
+                </div>
 
-                {/* Retículas de enfoque microscópico */}
-                <path d="M 12 18 L 12 12 L 18 12" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
-                <path d="M 628 18 L 628 12 L 622 12" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
-                <path d="M 12 212 L 12 218 L 18 218" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
-                <path d="M 628 212 L 628 218 L 622 218" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
+                {/* Célula 2: Osteoblastos */}
+                <div className="home-fact-step-item home-fact-step-calcitonin">
+                  <div className="home-fact-step-header">
+                    <span className="home-fact-step-title">🟢 2. Osteoblastos · Depósito (Formación)</span>
+                    <span className="home-fact-step-badge">Guardan Ca²⁺ en el hueso</span>
+                  </div>
+                  <p className="home-fact-step-text">
+                    Sintetizan la matriz orgánica (<em>osteoide</em>) y mediante la enzima <em>fosfatasa alcalina</em> <strong>mineralizan y fijan calcio</strong> en el hueso, respondiendo a las demandas hormonales del organismo.
+                  </p>
+                </div>
 
-                {/* Túbulos seminíferos con membrana basal */}
-                <circle cx="150" cy="115" r="77" fill="none" stroke="#bae6fd" strokeWidth="1" strokeDasharray="3,3"/>
-                <circle cx="150" cy="115" r="72" fill="url(#tubuleGrad)" stroke="#38bdf8" strokeWidth="1.4"/>
-                <circle cx="490" cy="115" r="77" fill="none" stroke="#bae6fd" strokeWidth="1" strokeDasharray="3,3"/>
-                <circle cx="490" cy="115" r="72" fill="url(#tubuleGrad)" stroke="#38bdf8" strokeWidth="1.4"/>
+                {/* Célula 3: Osteocitos */}
+                <div className="home-fact-step-item home-fact-step-osteocyte">
+                  <div className="home-fact-step-header">
+                    <span className="home-fact-step-title">🔵 3. Osteocitos · Mantenimiento y Nutrición</span>
+                    <span className="home-fact-step-badge">Mantenimiento de matriz</span>
+                  </div>
+                  <p className="home-fact-step-text">
+                    Osteoblastos maduros alojados en <em>osteoplastos</em>. Con su red 3D de <em>canalículos</em> se encargan del <strong>mantenimiento y la nutrición de la matriz ósea</strong>, detectando fuerzas mecánicas e intercambiando iones con los fluidos corporales.
+                  </p>
+                </div>
+              </div>
 
-                <text x="150" y="108" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="15" fontWeight="750" fill="#0369a1">Túbulo</text>
-                <text x="150" y="128" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="13.5" fontWeight="600" fill="#0284c7">seminífero</text>
-                <text x="490" y="108" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="15" fontWeight="750" fill="#0369a1">Túbulo</text>
-                <text x="490" y="128" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="13.5" fontWeight="600" fill="#0284c7">seminífero</text>
-
-                {/* Vaso sanguíneo (Capilar) */}
-                <path d="M 80 178 Q 320 156, 560 178" fill="none" stroke="#ef4444" strokeWidth="4.5" strokeLinecap="round"/>
-                <circle cx="210" cy="172" r="3" fill="#fca5a5" />
-                <circle cx="280" cy="166" r="3" fill="#fca5a5" />
-                <circle cx="360" cy="166" r="3" fill="#fca5a5" />
-                <circle cx="430" cy="172" r="3" fill="#fca5a5" />
-
-                {/* Células de Leydig con núcleo visible */}
-                <circle cx="300" cy="108" r="12.5" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="1.3"/>
-                <circle cx="300" cy="108" r="4" fill="#a78bfa"/>
-                <circle cx="338" cy="108" r="12.5" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="1.3"/>
-                <circle cx="338" cy="108" r="4" fill="#a78bfa"/>
-                <circle cx="319" cy="128" r="12.5" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="1.3"/>
-                <circle cx="319" cy="128" r="4" fill="#a78bfa"/>
-                <circle cx="292" cy="130" r="11" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="1.3"/>
-                <circle cx="292" cy="130" r="3.5" fill="#a78bfa"/>
-                <circle cx="346" cy="130" r="11" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="1.3"/>
-                <circle cx="346" cy="130" r="3.5" fill="#a78bfa"/>
-
-                {/* Flecha de secreción hacia el vaso */}
-                <line x1="319" y1="143" x2="319" y2="160" stroke="#0284c7" strokeWidth="1.8" markerEnd="url(#fact-arrow)"/>
-                <rect x="330" y="142" width="94" height="19" rx="4" fill="#f0f9ff" stroke="#bae6fd" strokeWidth="0.8" filter="url(#labelShadow)"/>
-                <text x="377" y="156" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="11" fontWeight="800" fill="#0284c7">Testosterona</text>
-
-                {/* Etiqueta superior Células de Leydig */}
-                <line x1="319" y1="94" x2="319" y2="42" stroke="#94a3b8" strokeWidth="1" strokeDasharray="2,2"/>
-                <circle cx="319" cy="94" r="3" fill="#8b5cf6"/>
-                <rect x="224" y="14" width="190" height="28" rx="7" fill="#f5f3ff" stroke="#c7d2fe" strokeWidth="1.3" filter="url(#labelShadow)"/>
-                <text x="319" y="33" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="13.5" fontWeight="750" fill="#5b21b6">Células de Leydig</text>
-
-                {/* Etiqueta inferior Vaso sanguíneo */}
-                <line x1="319" y1="168" x2="319" y2="190" stroke="#94a3b8" strokeWidth="1" strokeDasharray="2,2"/>
-                <circle cx="319" cy="168" r="3" fill="#ef4444"/>
-                <rect x="234" y="190" width="170" height="28" rx="7" fill="#fef2f2" stroke="#fecaca" strokeWidth="1.3" filter="url(#labelShadow)"/>
-                <text x="319" y="209" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontSize="13.5" fontWeight="750" fill="#991b1b">Vaso sanguíneo</text>
-              </svg>
+              <div className="home-histology-fact-pills" aria-hidden="true">
+                <span>🩸 Control hormonal: PTH (estimula salida) vs Calcitonina (favorece depósito)</span>
+                <span>🟣 Osteoclastos: Resorción ósea</span>
+                <span>🟢 Osteoblastos: Formación y mineralización</span>
+                <span>🔵 Osteocitos: Red canalicular de intercambio</span>
+              </div>
             </div>
           </div>
         </section>
