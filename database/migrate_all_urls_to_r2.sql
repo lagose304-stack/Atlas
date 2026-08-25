@@ -52,14 +52,17 @@ WHERE content::text LIKE '%res.cloudinary.com%';
 -- 6. Actualizar versiones de páginas (content_page_versions) si existe
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'content_page_versions') THEN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'content_page_versions' AND column_name = 'blocks'
+  ) THEN
     UPDATE public.content_page_versions
-    SET blocks_snapshot = regexp_replace(
-      blocks_snapshot::text,
+    SET blocks = regexp_replace(
+      blocks::text,
       'https://res\.cloudinary\.com/[^/]+/image/upload/(v[0-9]+/)?',
       'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/',
       'g'
     )::jsonb
-    WHERE blocks_snapshot::text LIKE '%res.cloudinary.com%';
+    WHERE blocks::text LIKE '%res.cloudinary.com%';
   END IF;
 END $$;
