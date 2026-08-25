@@ -10,6 +10,7 @@ import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
 import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
 import PlateEditorPanel from '../components/PlateEditorPanel';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
@@ -25,6 +26,7 @@ interface Subtema {
   id: number;
   nombre: string;
   tema_id: number;
+  logo_url?: string | null;
 }
 
 interface Placa {
@@ -743,11 +745,9 @@ const MoverPlaca: React.FC = () => {
         )}
 
         <div style={s.imgWrap}>
-          <img
-            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+          <ResilientPlacaThumb
+            photoUrl={placa.photo_url}
             alt={`Placa ${globalPosition}`}
-            style={s.img}
-            loading="lazy"
             draggable={false}
           />
         </div>

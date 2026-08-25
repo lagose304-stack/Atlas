@@ -8,7 +8,7 @@ import AtlasLoadingScreen from './AtlasLoadingScreen';
 import laboratoryLogo from '../assets/logos/laboratorio.png';
 
 const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   const location = useLocation();
   const [status, setStatus] = useState<SiteMaintenanceStatus | null>(null);
   const [showLogin, setShowLogin] = useState(false);
@@ -27,7 +27,9 @@ const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
     return <AtlasLoadingScreen fullScreen label="Preparando el sitio…" />;
   }
 
-  if (!status.enabled || isAuthenticated) {
+  const isSuperAdmin = isAuthenticated && (user?.rol === 'Administrador' || Boolean(user?.is_protected));
+
+  if (!status.enabled || isSuperAdmin) {
     const disabled = !isAuthenticated && (
       (status.disabledFeatures.includes('evaluations') && location.pathname.startsWith('/evaluaciones'))
       || (status.disabledFeatures.includes('public_catalog') && ['/temario', '/subtemas/', '/ver-placas/'].some((path) => location.pathname === path || location.pathname.startsWith(path)))
@@ -46,7 +48,7 @@ const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
         <p className="site-maintenance-eyebrow">Histolab UNAH</p>
         <h1>Sitio en mantenimiento</h1>
         <p className="site-maintenance-visible-message">Estamos preparando mejoras para brindarte una mejor experiencia. Volveremos muy pronto.</p>
-        <span className="site-maintenance-status"><i /> Trabajando en el atlas</span>
+        <span className="site-maintenance-status"><i /> Modo de mantenimiento activado</span>
         <button type="button" className="site-maintenance-login" onClick={() => setShowLogin(true)}>
           Acceso administrativo
         </button>

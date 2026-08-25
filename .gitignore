@@ -1,6 +1,8 @@
 # Ignore environment variables file
 .env
+.env.*
 backend/.env
+recovered_images/
 
 # Dependencies
 node_modules/

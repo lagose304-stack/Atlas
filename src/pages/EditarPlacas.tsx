@@ -7,8 +7,8 @@ import Footer from '../components/Footer';
 import { useDraggableList } from '../hooks/useDraggableList';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import LoadingToast from '../components/LoadingToast';
-import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import EditorParcialAccordionPicker from '../components/editor/EditorParcialAccordionPicker';
+import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
 
 interface Tema {
   id: number;
@@ -21,6 +21,7 @@ interface Subtema {
   id: number;
   nombre: string;
   tema_id: number;
+  logo_url?: string | null;
 }
 
 interface Placa {
@@ -114,7 +115,7 @@ const EditarPlacas: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('subtemas')
-        .select('id, nombre, tema_id')
+        .select('id, nombre, tema_id, logo_url')
         .eq('tema_id', temaId)
         .order('sort_order', { ascending: true });
 
@@ -351,11 +352,10 @@ const EditarPlacas: React.FC = () => {
         )}
 
         <div style={s.imgWrap}>
-          <img
-            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+          <ResilientPlacaThumb
+            photoUrl={placa.photo_url}
             alt={`Placa ${globalPosition}`}
-            style={s.img}
-            loading="lazy"
+            subtemaLogo={selectedSubtema?.logo_url}
             draggable={false}
           />
         </div>

@@ -1,8 +1,8 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MousePointerClick } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { deleteFromCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
-import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -22,6 +22,7 @@ interface Subtema {
   id: number;
   nombre: string;
   tema_id: number;
+  logo_url?: string | null;
 }
 
 interface Placa {
@@ -152,7 +153,7 @@ const EliminarPlacas: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('subtemas')
-        .select('id, nombre, tema_id')
+        .select('id, nombre, tema_id, logo_url')
         .eq('tema_id', temaId)
         .order('sort_order', { ascending: true });
 
@@ -494,14 +495,11 @@ const EliminarPlacas: React.FC = () => {
         )}
 
         <div style={s.imgWrap}>
-          <img
-            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+          <ResilientPlacaThumb
+            photoUrl={placa.photo_url}
             alt={`Placa ${index + 1}`}
-            style={{
-              ...s.img,
-              ...(isSelected ? { filter: 'brightness(0.55) saturate(0.5)' } : {}),
-            }}
-            loading="lazy"
+            style={isSelected ? { filter: 'brightness(0.55) saturate(0.5)' } : {}}
+            subtemaLogo={selectedSubtema?.logo_url}
             draggable={false}
           />
         </div>
