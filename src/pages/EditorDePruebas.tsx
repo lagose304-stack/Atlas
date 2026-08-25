@@ -1536,20 +1536,44 @@ const EditorDePruebas: React.FC = () => {
 
                     {referencePicker.step === 'tema' && (
                       <div style={s.referenceAccordionBody}>
-                          <div style={s.referenceList}>
-                            {temasDisponibles.length > 0
-                              ? temasDisponibles.map(tema => (
-                                  <button
-                                    key={tema.id}
-                                    type="button"
-                                    style={selectedReferenceTema?.id === tema.id ? s.referenceListItemActive : s.referenceListItem}
-                                    onClick={() => handleSelectTema(tema)}
-                                  >
-                                    {tema.nombre}
-                                  </button>
-                                ))
-                              : <div style={s.referenceStateBox}>No hay temas disponibles en este filtro.</div>}
+                        {temasDisponibles.length === 0 ? (
+                          <div style={s.referenceStateBox}>No hay temas disponibles en este filtro.</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {PARCIALES.filter(p => referencePicker.partialKey === 'all' || referencePicker.partialKey === p.key).map(parcial => {
+                              const parcialTemas = temasDisponibles
+                                .filter(t => (t.parcial?.toLowerCase().trim() || 'primer') === parcial.key)
+                                .sort((a, b) => (a.sort_order ?? a.id) - (b.sort_order ?? b.id));
+
+                              if (parcialTemas.length === 0) return null;
+
+                              return (
+                                <div key={parcial.key} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 4px' }}>
+                                    <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                      {parcial.label}
+                                    </span>
+                                    <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: 999, background: '#e0f2fe', color: '#0284c7', fontWeight: 700 }}>
+                                      {parcialTemas.length}
+                                    </span>
+                                  </div>
+                                  <div style={s.referenceList}>
+                                    {parcialTemas.map(tema => (
+                                      <button
+                                        key={tema.id}
+                                        type="button"
+                                        style={selectedReferenceTema?.id === tema.id ? s.referenceListItemActive : s.referenceListItem}
+                                        onClick={() => handleSelectTema(tema)}
+                                      >
+                                        {tema.nombre}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
+                        )}
                       </div>
                     )}
                 </div>

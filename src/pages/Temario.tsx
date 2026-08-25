@@ -167,7 +167,11 @@ const Temario: React.FC = () => {
   // ... (toda la lógica de useEffect y los handlers permanece igual)
   const fetchTemas = useCallback(async (): Promise<boolean> => {
     setTemasLoadError(null);
-    const { data, error } = await supabase.from('temas').select('*').order('nombre', { ascending: true });
+    const { data, error } = await supabase
+      .from('temas')
+      .select('*')
+      .order('parcial', { ascending: true })
+      .order('sort_order', { ascending: true });
 
     if (error) {
       console.error('Error fetching temas:', error);
@@ -199,7 +203,11 @@ const Temario: React.FC = () => {
       const temaId = isEditingSubtema ? selectedTemaId : (isDeletingSubtema ? deletingTemaId : null);
       if (temaId) {
         setSubtemasLoadError(null);
-        const { data, error } = await supabase.from('subtemas').select('*').eq('tema_id', temaId).order('nombre', { ascending: true });
+        const { data, error } = await supabase
+          .from('subtemas')
+          .select('*')
+          .eq('tema_id', temaId)
+          .order('sort_order', { ascending: true });
 
         if (error) {
           console.error('Error fetching subtemas:', error);

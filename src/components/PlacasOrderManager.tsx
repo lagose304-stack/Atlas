@@ -4,8 +4,10 @@ import { useDraggableList } from '../hooks/useDraggableList';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import LoadingToast from './LoadingToast';
 
+import EditorParcialAccordionPicker from './editor/EditorParcialAccordionPicker';
+
 interface Tema { id: number; nombre: string; parcial: string; sort_order: number }
-interface Subtema { id: number; nombre: string; sort_order: number }
+interface Subtema { id: number; nombre: string; tema_id: number; sort_order: number }
 interface Placa { id: number; photo_url: string; aumento: string | null; sort_order: number }
 interface MapRow { placa_id: number; sections: unknown[] | null }
 interface Group { key: string; title: string; sortValue: number; items: Placa[] }
@@ -23,29 +25,33 @@ const PlacasOrderManager: React.FC = () => {
   const [mapIds, setMapIds] = useState<Set<number>>(new Set());
   const [temaId, setTemaId] = useState<number | null>(null);
   const [subtemaId, setSubtemaId] = useState<number | null>(null);
+  const [loadingTemas, setLoadingTemas] = useState(true);
+  const [loadingSubtemas, setLoadingSubtemas] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [changed, setChanged] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    setLoadingTemas(true);
     void supabase.from('temas').select('id, nombre, parcial, sort_order')
       .order('parcial').order('sort_order', { ascending: true })
       .then(({ data, error }) => {
         if (error) setMessage('No se pudieron cargar los temas.');
         setTemas((data ?? []) as Tema[]);
+        setLoadingTemas(false);
       });
   }, []);
 
   useEffect(() => {
     setSubtemaId(null); setPlacas([]); setMapIds(new Set()); setChanged(false); drag.resetDrag();
     if (!temaId) { setSubtemas([]); return; }
-    setLoading(true);
-    void supabase.from('subtemas').select('id, nombre, sort_order').eq('tema_id', temaId)
+    setLoadingSubtemas(true);
+    void supabase.from('subtemas').select('id, nombre, tema_id, sort_order').eq('tema_id', temaId)
       .order('sort_order', { ascending: true }).then(({ data, error }) => {
         setSubtemas((data ?? []) as Subtema[]);
         if (error) setMessage('No se pudieron cargar los subtemas.');
-        setLoading(false);
+        setLoadingSubtemas(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [temaId]);
@@ -112,9 +118,21 @@ const PlacasOrderManager: React.FC = () => {
 
   return <div style={s.card}>
     <div style={s.header}><h2 style={s.title}>Placas</h2><p style={s.subtitle}>Selecciona tema y subtema; luego arrastra cada placa dentro de su propia sección.</p><div style={s.divider} /></div>
-    <div style={s.filters}>
-      <label style={s.label}>Tema<select style={s.select} value={temaId ?? ''} onChange={e => setTemaId(e.target.value ? Number(e.target.value) : null)}><option value="">Elige un tema</option>{temas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select></label>
-      <label style={s.label}>Subtema<select style={s.select} value={subtemaId ?? ''} disabled={!temaId || loading} onChange={e => setSubtemaId(e.target.value ? Number(e.target.value) : null)}><option value="">Elige un subtema</option>{subtemas.map(st => <option key={st.id} value={st.id}>{st.nombre}</option>)}</select></label>
+    
+    <div style={{ marginBottom: '24px' }}>
+      <EditorParcialAccordionPicker
+        temas={temas}
+        subtemas={subtemas}
+        selectedTemaId={temaId}
+        selectedSubtemaId={subtemaId}
+        onSelectTema={(id) => setTemaId(id)}
+        onSelectSubtema={(id) => setSubtemaId(id)}
+        loadingTemas={loadingTemas}
+        loadingSubtemas={loadingSubtemas}
+        mode="tema-and-subtema"
+        title="Selecciona tema y subtema"
+        subtitle="Elige el tema y subtema cuyas placas deseas reordenar"
+      />
     </div>
     {message && <div style={message.includes('correctamente') ? s.success : s.notice}>{message}</div>}
     {loading ? <div style={s.empty}>Cargando contenido...</div> : subtemaId && groups.length === 0 ? <div style={s.empty}>Este subtema no tiene placas.</div> : groups.map(group => {

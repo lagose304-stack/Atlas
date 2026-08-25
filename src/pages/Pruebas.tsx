@@ -144,7 +144,9 @@ const Pruebas: React.FC = () => {
 
   const temasByParcial = useMemo(() => {
     return PARCIALES.reduce<Record<ParcialKey, Tema[]>>((acc, parcial) => {
-      acc[parcial.key] = temas.filter(tema => tema.parcial === parcial.key);
+      acc[parcial.key] = temas
+        .filter(tema => tema.parcial === parcial.key)
+        .sort((a, b) => (a.sort_order ?? a.id) - (b.sort_order ?? b.id));
       return acc;
     }, { primer: [], segundo: [], tercer: [] });
   }, [temas]);

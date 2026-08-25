@@ -3,6 +3,7 @@ import { supabase } from '../services/supabase';
 import { useDraggableList } from '../hooks/useDraggableList';
 import LoadingToast from './LoadingToast';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import EditorParcialAccordionPicker from './editor/EditorParcialAccordionPicker';
 
 interface Tema {
   id: number;
@@ -20,14 +21,6 @@ interface Subtema {
   sort_order: number;
 }
 
-type ParcialKey = 'primer' | 'segundo' | 'tercer';
-
-const PARCIALES: { key: ParcialKey; label: string }[] = [
-  { key: 'primer', label: 'Primer parcial' },
-  { key: 'segundo', label: 'Segundo parcial' },
-  { key: 'tercer', label: 'Tercer parcial' },
-];
-
 interface SubtemasOrderManagerProps {
   title: string;
   subtitle: string;
@@ -44,7 +37,6 @@ const SubtemasOrderManager: React.FC<SubtemasOrderManagerProps> = ({ title, subt
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
   const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
   const [subtemasLoadError, setSubtemasLoadError] = useState<string | null>(null);
-  const [temasReloadTick, setTemasReloadTick] = useState(0);
   const [subtemasReloadTick, setSubtemasReloadTick] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -74,7 +66,7 @@ const SubtemasOrderManager: React.FC<SubtemasOrderManagerProps> = ({ title, subt
     };
 
     void fetchTemas();
-  }, [temasReloadTick]);
+  }, []);
 
   useEffect(() => {
     if (!selectedTemaId) {
@@ -111,14 +103,6 @@ const SubtemasOrderManager: React.FC<SubtemasOrderManagerProps> = ({ title, subt
   }, [selectedTemaId, subtemasReloadTick]);
 
   const selectedTema = useMemo(() => temas.find(t => t.id === selectedTemaId) ?? null, [selectedTemaId, temas]);
-
-  const temasByParcial = useMemo<Record<ParcialKey, Tema[]>>(() => {
-    const grouped: Record<ParcialKey, Tema[]> = { primer: [], segundo: [], tercer: [] };
-    temas.forEach(tema => {
-      if (grouped[tema.parcial as ParcialKey]) grouped[tema.parcial as ParcialKey].push(tema);
-    });
-    return grouped;
-  }, [temas]);
 
   const handleDrop = (e: React.DragEvent) => {
     const next = drag.applyDrop(e, LIST_KEY, subtemas);
@@ -159,49 +143,15 @@ const SubtemasOrderManager: React.FC<SubtemasOrderManagerProps> = ({ title, subt
         <div style={s.divider} />
       </div>
 
-      <div style={s.innerCard}>
-        <div style={s.cardHeader}>
-          <h3 style={{ ...s.cardTitle, fontSize: '1.35em' }}>Selecciona un tema</h3>
-          <p style={s.cardSubtitle}>Escoge el tema cuyos subtemas deseas reordenar</p>
-        </div>
-
-        {temasLoadError && (
-          <div style={s.errorState}>
-            <p style={s.errorText}>⚠️ {temasLoadError}</p>
-            <button type="button" style={s.retryButton} onClick={() => setTemasReloadTick(prev => prev + 1)}>
-              Reintentar carga de temas
-            </button>
-          </div>
-        )}
-
-        {loadingTemas ? (
-          <div style={s.loadingWrap}>
-            <div style={s.spinner} />
-          </div>
-        ) : (
-          <select
-            style={s.select}
-            value={selectedTemaId ?? ''}
-            onChange={e => {
-              const val = e.target.value;
-              setSelectedTemaId(val ? Number(val) : null);
-            }}
-          >
-            <option value="">Elige un tema</option>
-            {PARCIALES.map(({ key, label }) =>
-              temasByParcial[key].length > 0 ? (
-                <optgroup key={key} label={label}>
-                  {temasByParcial[key].map(tema => (
-                    <option key={tema.id} value={tema.id}>
-                      {tema.nombre}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : null
-            )}
-          </select>
-        )}
-      </div>
+      <EditorParcialAccordionPicker
+        temas={temas}
+        selectedTemaId={selectedTemaId}
+        onSelectTema={(id) => setSelectedTemaId(id)}
+        loadingTemas={loadingTemas}
+        temasError={temasLoadError}
+        title="Selecciona un tema"
+        subtitle="Escoge el tema cuyos subtemas deseas reordenar"
+      />
 
       {selectedTema && (
         <div style={s.innerCard}>

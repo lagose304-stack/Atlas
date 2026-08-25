@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MousePointerClick } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
@@ -8,6 +8,7 @@ import { useDraggableList } from '../hooks/useDraggableList';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import LoadingToast from '../components/LoadingToast';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import EditorParcialAccordionPicker from '../components/editor/EditorParcialAccordionPicker';
 
 interface Tema {
   id: number;
@@ -40,14 +41,6 @@ interface PlacaGroupByAumento {
   sortValue: number;
   items: Placa[];
 }
-
-type ParcialKey = 'primer' | 'segundo' | 'tercer';
-
-const PARCIALES: { key: ParcialKey; label: string }[] = [
-  { key: 'primer',  label: 'Primer parcial'  },
-  { key: 'segundo', label: 'Segundo parcial' },
-  { key: 'tercer',  label: 'Tercer parcial'  },
-];
 
 const INTERACTIVE_LIST_KEY = 'placas_interactivas';
 
@@ -303,14 +296,6 @@ const EditarPlacas: React.FC = () => {
       setIsSaving(false);
     }
   }, [selectedSubtemaId, placas]);
-
-  const temasByParcial: Record<ParcialKey, Tema[]> = { primer: [], segundo: [], tercer: [] };
-  temas.forEach(t => {
-    if (temasByParcial[t.parcial as ParcialKey]) {
-      temasByParcial[t.parcial as ParcialKey].push(t);
-    }
-  });
-
   const selectedTema = temas.find(t => t.id === selectedTemaId) ?? null;
   const selectedSubtema = subtemas.find(s => s.id === selectedSubtemaId) ?? null;
   const placaPositionById = useMemo(() => {
@@ -437,82 +422,26 @@ const EditarPlacas: React.FC = () => {
         </div>
 
         {/* Selección de tema y subtema */}
-        <div style={s.card}>
-          <div style={s.cardHeader}>
-            <h2 style={s.cardTitle}>Selecciona tema y subtema</h2>
-            <p style={s.cardSubtitle}>Elige el subtema cuyas placas deseas reordenar</p>
-            <div style={s.divider} />
-          </div>
-
-          <div style={s.selectsRow}>
-            {/* Selector de Tema */}
-            <div style={s.selectGroup}>
-              <label style={s.selectLabel}>Tema</label>
-              {loadingTemas ? (
-                <div style={s.inlineLoading}>
-                  <div style={s.spinnerSm} /> Cargando...
-                </div>
-              ) : (
-                <select
-                  style={s.select}
-                  value={selectedTemaId ?? ''}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setSelectedTemaId(val ? Number(val) : null);
-                  }}
-                >
-                  <option value="">— Elige un tema —</option>
-                  {PARCIALES.map(({ key, label }) =>
-                    temasByParcial[key].length > 0 ? (
-                      <optgroup key={key} label={label}>
-                        {temasByParcial[key].map(t => (
-                          <option key={t.id} value={t.id}>
-                            {t.nombre}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ) : null
-                  )}
-                </select>
-              )}
-            </div>
-
-            {/* Selector de Subtema */}
-            <div style={s.selectGroup}>
-              <label style={s.selectLabel}>Subtema</label>
-              {loadingSubtemas ? (
-                <div style={s.inlineLoading}>
-                  <div style={s.spinnerSm} /> Cargando...
-                </div>
-              ) : (
-                <select
-                  style={{
-                    ...s.select,
-                    ...(!selectedTemaId ? s.selectDisabled : {}),
-                  }}
-                  value={selectedSubtemaId ?? ''}
-                  disabled={!selectedTemaId || subtemas.length === 0}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setSelectedSubtemaId(val ? Number(val) : null);
-                  }}
-                >
-                  <option value="">
-                    {!selectedTemaId
-                      ? '— Primero elige un tema —'
-                      : subtemas.length === 0
-                      ? '— Sin subtemas —'
-                      : '— Elige un subtema —'}
-                  </option>
-                  {subtemas.map(sub => (
-                    <option key={sub.id} value={sub.id}>
-                      {sub.nombre}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          </div>
+        <div style={{ marginBottom: '24px' }}>
+          <EditorParcialAccordionPicker
+            temas={temas}
+            subtemas={subtemas}
+            selectedTemaId={selectedTemaId}
+            selectedSubtemaId={selectedSubtemaId}
+            onSelectTema={(id) => {
+              setSelectedTemaId(id);
+              setSelectedSubtemaId(null);
+            }}
+            onSelectSubtema={(id) => setSelectedSubtemaId(id)}
+            loadingTemas={loadingTemas}
+            loadingSubtemas={loadingSubtemas}
+            temasError={temasLoadError}
+            subtemasError={subtemasLoadError}
+            mode="tema-and-subtema"
+            title="Selecciona tema y subtema"
+            subtitle="Elige el tema y subtema cuyas placas deseas administrar"
+          />
+        </div>
 
           {(temasLoadError || subtemasLoadError) && (
             <div style={s.loadErrorBox}>
@@ -545,7 +474,6 @@ const EditarPlacas: React.FC = () => {
               )}
             </div>
           )}
-        </div>
 
         {/* Grid de placas */}
         {selectedSubtema && (

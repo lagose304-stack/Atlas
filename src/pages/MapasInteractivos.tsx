@@ -8,6 +8,7 @@ import BackButton from '../components/BackButton';
 import { supabase } from '../services/supabase';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import EditorParcialAccordionPicker from '../components/editor/EditorParcialAccordionPicker';
 
 interface Tema {
   id: number;
@@ -3169,38 +3170,17 @@ const MapasInteractivos: React.FC = () => {
               <h1 style={s.pageTitle}>Editar mapas interactivos</h1>
               <span style={s.manageModePill}>Modo edicion de mapas</span>
               <p style={s.pageSubtitle}>Selecciona un tema para ver y administrar sus mapas agrupados por subtema.</p>
-              <div style={s.accentLine} />
-            </div>
-
-            <div style={s.card}>
-              <div style={s.cardHeader}>
-                <h2 style={s.cardTitle}>Selecciona tema</h2>
-                <p style={s.cardSubtitle}>Solo necesitas elegir el tema para listar todos sus mapas.</p>
-                <div style={s.divider} />
-              </div>
-
-              <div style={s.selectGroup}>
-                <label style={s.selectLabel}>Tema</label>
-                {loadingTemas ? (
-                  <div style={s.inlineLoading}><div style={s.spinnerSm} /> Cargando...</div>
-                ) : (
-                  <select
-                    style={s.select}
-                    value={selectedTemaId ?? ''}
-                    onChange={e => setSelectedTemaId(e.target.value ? Number(e.target.value) : null)}
-                  >
-                    <option value="">— Elige un tema —</option>
-                    {PARCIALES.map(({ key, label }) =>
-                      temasByParcial[key].length > 0 ? (
-                        <optgroup key={key} label={label}>
-                          {temasByParcial[key].map(t => (
-                            <option key={t.id} value={t.id}>{t.nombre}</option>
-                          ))}
-                        </optgroup>
-                      ) : null
-                    )}
-                  </select>
-                )}
+              <div style={{ marginBottom: '24px' }}>
+                <EditorParcialAccordionPicker
+                  temas={temas}
+                  selectedTemaId={selectedTemaId}
+                  onSelectTema={(id) => setSelectedTemaId(id)}
+                  loadingTemas={loadingTemas}
+                  temasError={temaMapsError}
+                  mode="tema-only"
+                  title="Selecciona tema"
+                  subtitle="Elige un tema para listar y administrar todos sus mapas interactivos"
+                />
               </div>
             </div>
 
