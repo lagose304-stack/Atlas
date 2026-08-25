@@ -124,13 +124,28 @@ const AdminTestCard: React.FC<TestCardAdminProps> = ({
   onEditTest,
   onDeleteTest,
 }) => {
+  const candidateImages = useMemo(() => {
+    return [
+      prueba.image_url,
+      prueba.subtema?.logo_url,
+      prueba.tema?.logo_url,
+    ].filter((url): url is string => Boolean(url && typeof url === 'string' && url.trim().length > 0));
+  }, [prueba.image_url, prueba.subtema?.logo_url, prueba.tema?.logo_url]);
+
+  const [imageIndex, setImageIndex] = useState(0);
   const [logoFailed, setLogoFailed] = useState(false);
+
   const plainName = toPlainText(prueba.nombre) || 'Prueba';
-  const rawImage = prueba.image_url || prueba.subtema?.logo_url || prueba.tema?.logo_url || '';
-  const logoSrc = rawImage ? getCloudinaryImageUrl(rawImage, 'cardWide') : '';
-  const logoSrcSet = rawImage
-    ? `${getCloudinaryImageUrl(rawImage, 'cardWideSmall')} 640w, ${getCloudinaryImageUrl(rawImage, 'cardWide')} 960w`
-    : undefined;
+  const currentUrl = candidateImages[imageIndex] || '';
+  const logoSrc = currentUrl ? getCloudinaryImageUrl(currentUrl, 'cardWide') : '';
+
+  const handleImageError = () => {
+    if (imageIndex + 1 < candidateImages.length) {
+      setImageIndex((prev) => prev + 1);
+    } else {
+      setLogoFailed(true);
+    }
+  };
 
   const isPublished = prueba.estado === 'publicada';
   const badgeStyle = badge === 'Tema' ? s.badgeTema : badge === 'Subtema' ? s.badgeSubtema : s.badge;
@@ -155,18 +170,16 @@ const AdminTestCard: React.FC<TestCardAdminProps> = ({
         {logoSrc && !logoFailed ? (
           <img
             src={logoSrc}
-            srcSet={logoSrcSet}
-            sizes="(max-width: 760px) 50vw, (max-width: 1100px) 33vw, 420px"
             alt={plainName}
             style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center' }}
             loading="lazy"
             decoding="async"
-            onError={() => setLogoFailed(true)}
+            onError={handleImageError}
           />
         ) : (
-          <span style={s.imageFallback}>
+          <span style={isPublished ? s.imageFallback : s.imageFallbackDraft}>
             <BookOpenCheck size={28} aria-hidden="true" />
-            <strong style={{ fontSize: '0.8rem', lineHeight: 1.25 }}>{plainName}</strong>
+            <strong>{plainName}</strong>
           </span>
         )}
       </div>

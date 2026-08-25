@@ -61,13 +61,28 @@ const TestCard: React.FC<{
   badges?: string[];
 }> = ({ prueba, badge, badges = [] }) => {
   const { user } = useAuth();
+  const candidateImages = React.useMemo(() => {
+    return [
+      prueba.image_url,
+      prueba.subtema?.logo_url,
+      prueba.tema?.logo_url,
+    ].filter((url): url is string => Boolean(url && typeof url === 'string' && url.trim().length > 0));
+  }, [prueba.image_url, prueba.subtema?.logo_url, prueba.tema?.logo_url]);
+
+  const [imageIndex, setImageIndex] = React.useState(0);
   const [logoFailed, setLogoFailed] = React.useState(false);
+
   const plainName = toPlainText(prueba.nombre) || 'Prueba';
-  const rawImage = prueba.image_url || prueba.subtema?.logo_url || prueba.tema?.logo_url || '';
-  const logoSrc = rawImage ? getCloudinaryImageUrl(rawImage, 'cardWide') : '';
-  const logoSrcSet = rawImage
-    ? `${getCloudinaryImageUrl(rawImage, 'cardWideSmall')} 640w, ${getCloudinaryImageUrl(rawImage, 'cardWide')} 960w`
-    : undefined;
+  const currentUrl = candidateImages[imageIndex] || '';
+  const logoSrc = currentUrl ? getCloudinaryImageUrl(currentUrl, 'cardWide') : '';
+
+  const handleImageError = () => {
+    if (imageIndex + 1 < candidateImages.length) {
+      setImageIndex((prev) => prev + 1);
+    } else {
+      setLogoFailed(true);
+    }
+  };
 
   const baseStyle: React.CSSProperties = {
     borderRadius: '18px',
@@ -102,13 +117,11 @@ const TestCard: React.FC<{
         {logoSrc && !logoFailed ? (
           <img
             src={logoSrc}
-            srcSet={logoSrcSet}
-            sizes="(max-width: 760px) 50vw, (max-width: 1100px) 33vw, 420px"
             alt={plainName}
             style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center' }}
             loading="lazy"
             decoding="async"
-            onError={() => setLogoFailed(true)}
+            onError={handleImageError}
           />
         ) : (
           <span style={s.imageFallback}><BookOpenCheck size={28} aria-hidden="true" /><strong>{plainName}</strong></span>
