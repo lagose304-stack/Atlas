@@ -1,4 +1,4 @@
-import { callCloudinary, corsHeaders, json } from './_cloudinary';
+import { corsHeaders, json } from './_cloudinary';
 import { authorizeEditor } from './_auth';
 
 export async function onRequest(context: { request: Request; env: Record<string, any> }) {
@@ -28,7 +28,6 @@ export async function onRequest(context: { request: Request; env: Record<string,
     const r2Bucket = env.R2_BUCKET;
     const r2PublicDomain = (env.R2_PUBLIC_DOMAIN || 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev').replace(/\/+$/, '');
 
-    // 1. Intento R2
     if (r2Bucket && typeof r2Bucket.get === 'function' && typeof r2Bucket.put === 'function') {
       const sourceObj = await r2Bucket.get(fromPublicId);
       if (sourceObj) {
@@ -44,30 +43,10 @@ export async function onRequest(context: { request: Request; env: Record<string,
       }
     }
 
-    // 2. Fallback Cloudinary
-    if (env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) {
-      const { ok, data } = await callCloudinary(
-        'rename',
-        {
-          from_public_id: fromPublicId,
-          to_public_id: toPublicId,
-          overwrite: 'true',
-        },
-        env
-      );
-
-      if (ok && data?.secure_url) {
-        return json(200, {
-          secure_url: data.secure_url,
-          public_id: data.public_id,
-        });
-      }
-    }
-
-    return json(404, { message: 'Image could not be moved or found.' });
+    return json(404, { message: 'Image could not be found in Cloudflare R2.' });
   } catch (error) {
     return json(500, {
-      message: 'Error moving image',
+      message: 'Error moving image in R2',
       error: error instanceof Error ? error.message : 'Unknown error',
     });
   }

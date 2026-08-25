@@ -74,7 +74,7 @@ describe('unifiedAuditService', () => {
         role: 'Administrador',
       },
       details: {
-        photo_url: 'https://res.cloudinary.com/test/image/upload/v1/sample.jpg',
+        photo_url: 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/sample.jpg',
         subtema_id: 10,
         subtema_nombre: 'Tejido Epitelial Cúbico',
         tema_id: 2,

@@ -31,21 +31,6 @@ if (r2AccountId && r2AccessKeyId && r2SecretAccessKey) {
   console.warn('⚠️ Faltan credenciales de Cloudflare R2 en backend/.env');
 }
 
-// --- Configuración opcional de Cloudinary (Fallback retrocompatible) ---
-let cloudinary = null;
-const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-const apiKey = process.env.CLOUDINARY_API_KEY;
-const apiSecret = process.env.CLOUDINARY_API_SECRET;
-if (cloudName && apiKey && apiSecret) {
-  cloudinary = require('cloudinary').v2;
-  cloudinary.config({
-    cloud_name: cloudName,
-    api_key: apiKey,
-    api_secret: apiSecret,
-  });
-  console.log('ℹ️ Cloudinary configurado como fallback.');
-}
-
 const app = express();
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -108,7 +93,7 @@ const authorizeEditor = async (req, res, next) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    storage: r2Client ? 'cloudflare_r2' : (cloudinary ? 'cloudinary' : 'none'),
+    storage: r2Client ? 'cloudflare_r2' : 'none',
     r2Bucket: r2BucketName,
     publicDomain: r2PublicDomain,
   });
@@ -167,7 +152,7 @@ app.post('/api/images/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// 2. Ruta para ELIMINAR imagen de R2 (con fallback a Cloudinary si es necesario)
+// 2. Ruta para ELIMINAR imagen de R2
 const handleDeleteImage = async (req, res) => {
   const rawKey = req.query.publicId || req.path.replace(/^\/api\/images\/?/, '') || '';
   const key = decodeURIComponent(rawKey).replace(/^\/+/, '');
@@ -176,9 +161,7 @@ const handleDeleteImage = async (req, res) => {
     return res.status(400).json({ message: 'Falta especificar el public_id o key de la imagen' });
   }
 
-  console.log(`[Delete] Intentando eliminar: ${key}`);
-
-  let deleted = false;
+  console.log(`[Delete] Intentando eliminar de R2: ${key}`);
 
   if (r2Client) {
     try {
@@ -186,26 +169,12 @@ const handleDeleteImage = async (req, res) => {
         Bucket: r2BucketName,
         Key: key,
       }));
-      deleted = true;
       console.log(`[R2 Delete] Objeto eliminado de R2: ${key}`);
+      return res.status(200).json({ message: 'Operación de eliminación procesada con éxito.' });
     } catch (r2Error) {
       console.warn(`[R2 Delete Warning] No se pudo borrar en R2 (${key}):`, r2Error.message);
+      return res.status(500).json({ message: 'Error al eliminar en R2', error: r2Error.message });
     }
-  }
-
-  if (cloudinary) {
-    try {
-      const cldResult = await cloudinary.uploader.destroy(key);
-      if (cldResult.result === 'ok' || cldResult.result === 'not found') {
-        deleted = true;
-      }
-    } catch (cldError) {
-      console.warn(`[Cloudinary Delete Warning] (${key}):`, cldError.message);
-    }
-  }
-
-  if (deleted) {
-    return res.status(200).json({ message: 'Operación de eliminación procesada con éxito.' });
   }
 
   res.status(200).json({ message: 'Operación de eliminación completada.' });

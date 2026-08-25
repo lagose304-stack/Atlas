@@ -2,12 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { getCloudinaryImageUrl } from './cloudinaryImages';
 
 describe('getCloudinaryImageUrl', () => {
-  it('inserta la transformación correspondiente sin alterar el public id', () => {
-    const source = 'https://res.cloudinary.com/demo/image/upload/v123/atlas/placa.jpg';
+  it('devuelve directamente la URL de Cloudflare R2 sin alteraciones', () => {
+    const source = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/epitelio/placa.jpg';
     const result = getCloudinaryImageUrl(source, 'thumb');
 
-    expect(result).toContain('/image/upload/c_fill,g_auto,w_720,h_720,f_auto,q_auto:best,dpr_auto/');
-    expect(result.endsWith('v123/atlas/placa.jpg')).toBe(true);
+    expect(result).toBe(source);
   });
 
   it('conserva URLs externas y valores vacíos', () => {

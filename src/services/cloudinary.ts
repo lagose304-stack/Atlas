@@ -1,9 +1,6 @@
 import axios from 'axios';
 import { getAtlasSessionToken } from './supabase';
 
-const cloudinaryCloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const cloudinaryUploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
-
 const resolveBackendBaseUrl = () => {
   const configured = (import.meta.env.VITE_BACKEND_BASE_URL || '').trim();
   const hostname = window.location.hostname;
@@ -18,7 +15,6 @@ const resolveBackendBaseUrl = () => {
     const normalized = configured.replace(/\/+$/, '');
     const configuredIsLocalhost = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalized);
 
-    // En producción ignoramos localhost para evitar dependencia de una PC encendida.
     if (!isLocal && configuredIsLocalhost) {
       return '';
     }
@@ -26,8 +22,6 @@ const resolveBackendBaseUrl = () => {
     return normalized;
   }
 
-  // En desarrollo local usamos backend local; en producción usamos rutas relativas
-  // para ejecutar Cloudflare Functions en el mismo dominio del frontend.
   return isLocal ? 'http://localhost:3001' : '';
 };
 
@@ -98,53 +92,10 @@ const canvasToBlobWithType = (
 
 const hasAlphaPixels = (ctx: CanvasRenderingContext2D, width: number, height: number): boolean => {
   const { data } = ctx.getImageData(0, 0, width, height);
-  for (let i = 3; i < data.length; i += 16) {
-    if (data[i] < 255) {
-      return true;
-    }
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] < 255) return true;
   }
   return false;
-};
-
-const extensionForMimeType = (mimeType: string): string => {
-  if (mimeType === 'image/png') return 'png';
-  if (mimeType === 'image/webp') return 'webp';
-  return 'jpg';
-};
-
-const optimizeImageFile = async (file: File): Promise<File> => {
-  const dataUrl = await fileToDataUrl(file);
-  const image = await dataUrlToImage(dataUrl);
-
-  const scale = Math.min(1, IMAGE_MAX_DIMENSION / Math.max(image.naturalWidth, image.naturalHeight));
-  const targetWidth = Math.max(1, Math.round(image.naturalWidth * scale));
-  const targetHeight = Math.max(1, Math.round(image.naturalHeight * scale));
-
-  const canvas = document.createElement('canvas');
-  canvas.width = targetWidth;
-  canvas.height = targetHeight;
-
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return file;
-
-  ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
-
-  const keepsAlpha = file.type === 'image/png' && hasAlphaPixels(ctx, targetWidth, targetHeight);
-  const targetMimeType: 'image/png' | 'image/webp' = keepsAlpha ? 'image/png' : 'image/webp';
-  const quality = targetMimeType === 'image/webp' ? IMAGE_WEBP_QUALITY : undefined;
-
-  const optimizedBlob = await canvasToBlobWithType(canvas, targetMimeType, quality);
-
-  if (optimizedBlob.size >= file.size * 0.98) {
-    return file;
-  }
-
-  const baseName = file.name.replace(/\.[^.]+$/, '');
-  const extension = extensionForMimeType(targetMimeType);
-  return new File([optimizedBlob], `${baseName}.${extension}`, {
-    type: targetMimeType,
-    lastModified: Date.now(),
-  });
 };
 
 const optimizePlaqueFile = async (file: File): Promise<File> => {
@@ -152,20 +103,77 @@ const optimizePlaqueFile = async (file: File): Promise<File> => {
   const image = await dataUrlToImage(dataUrl);
 
   const canvas = document.createElement('canvas');
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return file;
+
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  const containsAlpha = file.type.includes('png') ? hasAlphaPixels(ctx, canvas.width, canvas.height) : false;
+
+  let mimeType = 'image/jpeg';
+  let quality: number | undefined = PLAQUE_JPEG_QUALITY;
+  let extension = 'jpg';
+
+  if (containsAlpha) {
+    mimeType = 'image/webp';
+    quality = IMAGE_WEBP_QUALITY;
+    extension = 'webp';
+  }
+
+  let optimizedBlob: Blob;
+  try {
+    optimizedBlob = await canvasToBlobWithType(canvas, mimeType, quality);
+  } catch {
+    optimizedBlob = await canvasToBlobWithType(canvas, 'image/jpeg', PLAQUE_JPEG_QUALITY);
+    extension = 'jpg';
+  }
+
+  if (optimizedBlob.size >= file.size) return file;
+
+  const baseName = file.name.replace(/\.[^.]+$/, '');
+  return new File([optimizedBlob], `${baseName}.${extension}`, {
+    type: optimizedBlob.type || (extension === 'webp' ? 'image/webp' : 'image/jpeg'),
+    lastModified: Date.now(),
+  });
+};
+
+const optimizeImageFile = async (file: File): Promise<File> => {
+  const dataUrl = await fileToDataUrl(file);
+  const image = await dataUrlToImage(dataUrl);
+
+  let width = image.naturalWidth || image.width;
+  let height = image.naturalHeight || image.height;
+
+  if (width > IMAGE_MAX_DIMENSION || height > IMAGE_MAX_DIMENSION) {
+    if (width >= height) {
+      height = Math.round((height * IMAGE_MAX_DIMENSION) / width);
+      width = IMAGE_MAX_DIMENSION;
+    } else {
+      width = Math.round((width * IMAGE_MAX_DIMENSION) / height);
+      height = IMAGE_MAX_DIMENSION;
+    }
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
 
   const ctx = canvas.getContext('2d');
   if (!ctx) return file;
 
-  // Convertimos a WebP manteniendo resolución original para alta fidelidad y peso mínimo
-  ctx.drawImage(image, 0, 0);
+  ctx.drawImage(image, 0, 0, width, height);
 
-  const optimizedBlob = await canvasToBlobWithType(canvas, 'image/webp', PLAQUE_JPEG_QUALITY);
-
-  if (optimizedBlob.size >= file.size * 0.98) {
+  let optimizedBlob: Blob;
+  try {
+    optimizedBlob = await canvasToBlobWithType(canvas, 'image/webp', IMAGE_WEBP_QUALITY);
+  } catch {
     return file;
   }
+
+  if (optimizedBlob.size >= file.size) return file;
 
   const baseName = file.name.replace(/\.[^.]+$/, '');
   return new File([optimizedBlob], `${baseName}.webp`, {
@@ -175,7 +183,7 @@ const optimizePlaqueFile = async (file: File): Promise<File> => {
 };
 
 /**
- * Subida universal compatible con Cloudflare R2 (vía Backend/Edge) y Cloudinary (fallback)
+ * Subida universal a Cloudflare R2 (vía Backend o Cloudflare Pages Function)
  */
 export const uploadToCloudinary = async (file: File, options?: UploadOptions) => {
   let fileToUpload = file;
@@ -200,50 +208,19 @@ export const uploadToCloudinary = async (file: File, options?: UploadOptions) =>
     formData.append('folder', options.folder);
   }
 
-  // 1. Intento principal: Subir a Cloudflare R2 a través del endpoint de backend / edge function
-  try {
-    const uploadUrl = isUsingEdgeFunctions
-      ? '/api/images-upload'
-      : backendUrl('/api/images/upload');
+  const uploadUrl = isUsingEdgeFunctions
+    ? '/api/images-upload'
+    : backendUrl('/api/images/upload');
 
-    const { data } = await axios.post(uploadUrl, formData, {
-      headers: {
-        ...authHeaders(),
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+  const { data } = await axios.post(uploadUrl, formData, {
+    headers: {
+      ...authHeaders(),
+      'Content-Type': 'multipart/form-data',
+    },
+  });
 
-    if (data?.secure_url) {
-      return data;
-    }
-  } catch (r2UploadError) {
-    console.warn('Subida a R2 no disponible o fallida, intentando fallback...', r2UploadError);
-  }
-
-  // 2. Fallback: Cloudinary directo si está configurado
-  if (cloudinaryCloudName && cloudinaryUploadPreset) {
-    const cldFormData = new FormData();
-    cldFormData.append('file', fileToUpload);
-    cldFormData.append('upload_preset', cloudinaryUploadPreset);
-    if (options?.folder) {
-      cldFormData.append('folder', options.folder);
-    }
-
-    try {
-      const { data } = await axios.post(
-        `https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`,
-        cldFormData
-      );
-      return data;
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        const cloudinaryMessage =
-          (error.response?.data as { error?: { message?: string } } | undefined)?.error?.message ||
-          error.response?.data?.message ||
-          error.message;
-        throw new Error(`Error en subida: ${cloudinaryMessage}`);
-      }
-    }
+  if (data?.secure_url) {
+    return data;
   }
 
   throw new Error('No se pudo subir la imagen al almacenamiento.');
@@ -303,7 +280,7 @@ export const moveCloudinaryImage = async (fromPublicId: string, toPublicId: stri
 };
 
 /**
- * Extrae el ID / Key tanto de URLs de Cloudinary como de Cloudflare R2
+ * Extrae el Key / Identificador de la imagen en Cloudflare R2
  */
 export const getCloudinaryPublicId = (url: string): string => {
   if (!url || typeof url !== 'string') return '';
@@ -312,7 +289,6 @@ export const getCloudinaryPublicId = (url: string): string => {
     const parsed = new URL(url);
     const pathname = decodeURIComponent(parsed.pathname).replace(/^\/+/, '');
 
-    // Caso 1: URL de Cloudinary (/upload/...)
     const uploadToken = 'upload/';
     const uploadIndex = pathname.indexOf(uploadToken);
     if (uploadIndex !== -1) {
@@ -337,7 +313,6 @@ export const getCloudinaryPublicId = (url: string): string => {
       return segments.join('/');
     }
 
-    // Caso 2: URL de Cloudflare R2 o subdominio directo (ej. pub-xxxx.r2.dev/placas/...)
     return pathname;
   } catch {
     return url.replace(/^\/+/, '');

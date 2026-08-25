@@ -1,4 +1,4 @@
-import { callCloudinary, corsHeaders, json } from './_cloudinary';
+import { corsHeaders, json } from './_cloudinary';
 import { authorizeEditor } from './_auth';
 
 export async function onRequest(context: { request: Request; env: Record<string, any> }) {
@@ -25,35 +25,16 @@ export async function onRequest(context: { request: Request; env: Record<string,
       return json(400, { message: 'Missing publicId parameter' });
     }
 
-    let deleted = false;
-
-    // 1. Intento R2
     const r2Bucket = env.R2_BUCKET;
     if (r2Bucket && typeof r2Bucket.delete === 'function') {
-      try {
-        await r2Bucket.delete(publicId);
-        deleted = true;
-      } catch (err) {
-        console.warn('R2 delete warning:', err);
-      }
+      await r2Bucket.delete(publicId);
+      return json(200, { message: 'Image deleted successfully from Cloudflare R2.', success: true });
     }
 
-    // 2. Fallback Cloudinary si aplica
-    if (env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) {
-      try {
-        const { ok, data } = await callCloudinary('destroy', { public_id: publicId }, env);
-        if (ok && (data.result === 'ok' || data.result === 'not found')) {
-          deleted = true;
-        }
-      } catch (cldErr) {
-        console.warn('Cloudinary delete warning:', cldErr);
-      }
-    }
-
-    return json(200, { message: 'Delete operation completed.', success: true });
+    return json(500, { message: 'Cloudflare R2 bucket binding not configured' });
   } catch (error) {
     return json(500, {
-      message: 'Error deleting image',
+      message: 'Error deleting image from R2',
       error: error instanceof Error ? error.message : 'Unknown error',
     });
   }

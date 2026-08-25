@@ -13,7 +13,6 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "migrate:r2": "node scripts/migrate-cloudinary-to-r2.mjs",
     "publish:github": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"git add -A; git diff --cached --quiet; if ($LASTEXITCODE -eq 0) { Write-Host 'No hay cambios para publicar.'; exit 0 }; $msg = 'chore: publish ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'); git commit -m $msg; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git push origin main\""
   },
   "dependencies": {
@@ -29,7 +28,6 @@
     "@tiptap/starter-kit": "^3.20.4",
     "@xyflow/react": "^12.11.3",
     "axios": "^1.13.4",
-    "cloudinary": "^2.9.0",
     "dompurify": "^3.3.3",
     "embla-carousel-react": "^8.6.0",
     "konva": "^9.3.18",

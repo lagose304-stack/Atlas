@@ -3,11 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('./cloudinary', () => ({
   deleteFromCloudinary: vi.fn(),
   getCloudinaryPublicId: (url: string) => {
-    const pathname = new URL(url).pathname;
-    const afterUpload = pathname.split('/image/upload/')[1] ?? '';
-    return afterUpload
-      .replace(/^v\d+\//, '')
-      .replace(/\.[^.]+$/, '');
+    const pathname = new URL(url).pathname.replace(/^\/+/, '');
+    return pathname;
   },
 }));
 
@@ -19,9 +16,9 @@ describe('testReferenceImages', () => {
   });
 
   it('reconoce únicamente referencias que pertenecen a la prueba indicada', () => {
-    const ownUrl = 'https://res.cloudinary.com/demo/image/upload/v123/pruebas/referencias/prueba-123/referencia.jpg';
-    const anotherTestUrl = 'https://res.cloudinary.com/demo/image/upload/v123/pruebas/referencias/prueba-999/referencia.jpg';
-    const atlasPlateUrl = 'https://res.cloudinary.com/demo/image/upload/v123/placas/epitelio/placa.jpg';
+    const ownUrl = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/pruebas/referencias/prueba-123/referencia.webp';
+    const anotherTestUrl = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/pruebas/referencias/prueba-999/referencia.webp';
+    const atlasPlateUrl = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/epitelio/placa.jpg';
 
     expect(isOwnedTestReferenceUrl(ownUrl, 'prueba-123')).toBe(true);
     expect(isOwnedTestReferenceUrl(anotherTestUrl, 'prueba-123')).toBe(false);
