@@ -168,21 +168,21 @@ async function migratePruebasPreguntas() {
 }
 
 async function migrateContentBlocks() {
-  console.log('\n--- 3. Migrando bloques de contenido (`content_blocks` y borradores) ---');
+  console.log('\n--- 3. Migrando bloques de contenido (`content_blocks`) ---');
   try {
-    const { data: blocks, error } = await supabase.from('content_blocks').select('id, block_type, data');
+    const { data: blocks, error } = await supabase.from('content_blocks').select('id, block_type, content');
     if (error) {
       console.log('Nota al leer content_blocks:', error.message);
       return;
     }
 
+    let updatedCount = 0;
     for (const block of blocks || []) {
-      const strData = JSON.stringify(block.data || {});
-      if (isCloudinaryUrl(strData)) {
+      const strContent = JSON.stringify(block.content || {});
+      if (isCloudinaryUrl(strContent)) {
         console.log(`Bloque ${block.id} (${block.block_type}) contiene imágenes de Cloudinary.`);
-        // Reemplazar URLs dentro del JSON
-        const urls = strData.match(/https:\/\/res\.cloudinary\.com\/[^\s"'\\]+/g) || [];
-        let updatedStr = strData;
+        const urls = strContent.match(/https:\/\/res\.cloudinary\.com\/[^\s"'\\]+/g) || [];
+        let updatedStr = strContent;
         for (const cldUrl of urls) {
           try {
             const { newUrl } = await transferImageToR2(cldUrl);
@@ -192,15 +192,17 @@ async function migrateContentBlocks() {
           }
         }
 
-        if (updatedStr !== strData) {
+        if (updatedStr !== strContent) {
           await supabase
             .from('content_blocks')
-            .update({ data: JSON.parse(updatedStr) })
+            .update({ content: JSON.parse(updatedStr) })
             .eq('id', block.id);
+          updatedCount++;
           console.log(`✅ Bloque ${block.id} actualizado.`);
         }
       }
     }
+    console.log(`Bloques de contenido actualizados: ${updatedCount}`);
   } catch (err) {
     console.log('Omitiendo content_blocks:', err.message);
   }
