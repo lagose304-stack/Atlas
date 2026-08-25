@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Layers, Sparkles, Check, Search, X } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { ChevronDown, ChevronRight, Layers, Check, Search, X, RefreshCw, FolderTree, Sparkles } from 'lucide-react';
 import { getCloudinaryImageUrl } from '../../services/cloudinaryImages';
 
 export interface EditorTema {
@@ -23,16 +23,53 @@ export type ParcialKey = 'primer' | 'segundo' | 'tercer';
 export interface ParcialConfig {
   key: ParcialKey;
   label: string;
+  shortLabel: string;
   number: number;
   accent: string;
+  gradient: string;
+  glow: string;
   soft: string;
   border: string;
+  badgeBg: string;
 }
 
 export const PARCIALES_CONFIG: ParcialConfig[] = [
-  { key: 'primer', label: 'Primer parcial', number: 1, accent: '#0ea5e9', soft: '#f0f9ff', border: '#bae6fd' },
-  { key: 'segundo', label: 'Segundo parcial', number: 2, accent: '#6366f1', soft: '#eef2ff', border: '#c7d2fe' },
-  { key: 'tercer', label: 'Tercer parcial', number: 3, accent: '#8b5cf6', soft: '#f5f3ff', border: '#ddd6fe' },
+  {
+    key: 'primer',
+    label: 'Primer Parcial',
+    shortLabel: '1er Parcial',
+    number: 1,
+    accent: '#0284c7',
+    gradient: 'linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)',
+    glow: 'rgba(2, 132, 199, 0.18)',
+    soft: '#f0f9ff',
+    border: '#bae6fd',
+    badgeBg: 'linear-gradient(135deg, #0284c7, #0ea5e9)',
+  },
+  {
+    key: 'segundo',
+    label: 'Segundo Parcial',
+    shortLabel: '2do Parcial',
+    number: 2,
+    accent: '#4f46e5',
+    gradient: 'linear-gradient(135deg, #4f46e5 0%, #818cf8 100%)',
+    glow: 'rgba(79, 70, 229, 0.18)',
+    soft: '#eef2ff',
+    border: '#c7d2fe',
+    badgeBg: 'linear-gradient(135deg, #4f46e5, #6366f1)',
+  },
+  {
+    key: 'tercer',
+    label: 'Tercer Parcial',
+    shortLabel: '3er Parcial',
+    number: 3,
+    accent: '#7c3aed',
+    gradient: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
+    glow: 'rgba(124, 58, 237, 0.18)',
+    soft: '#f5f3ff',
+    border: '#ddd6fe',
+    badgeBg: 'linear-gradient(135deg, #7c3aed, #8b5cf6)',
+  },
 ];
 
 export interface EditorParcialAccordionPickerProps {
@@ -64,18 +101,37 @@ export const EditorParcialAccordionPicker: React.FC<EditorParcialAccordionPicker
   temasError = null,
   subtemasError = null,
   mode = 'tema-only',
-  title = 'Selecciona tema',
-  subtitle = 'Elige un parcial para desplegar sus temas en orden',
+  title = 'Selecciona un tema',
+  subtitle = 'Explora los temas organizados por parcial académico',
   showSearch = true,
 }) => {
   const [search, setSearch] = useState('');
-  const [openParciales, setOpenParciales] = useState<Record<ParcialKey, boolean>>({
-    primer: true,
-    segundo: true,
-    tercer: true,
+  const [isTemasPickerExpanded, setIsTemasPickerExpanded] = useState(!selectedTemaId);
+  const [activeParcialFilter, setActiveParcialFilter] = useState<ParcialKey | 'all'>('all');
+
+  const selectedTema = useMemo(() => temas.find((t) => t.id === selectedTemaId) ?? null, [selectedTemaId, temas]);
+
+  useEffect(() => {
+    if (!selectedTemaId) {
+      setIsTemasPickerExpanded(true);
+    }
+  }, [selectedTemaId]);
+
+  const selectedParcialConfig = useMemo(() => {
+    if (!selectedTema?.parcial) return PARCIALES_CONFIG[0];
+    const pKey = selectedTema.parcial.toLowerCase().trim() as ParcialKey;
+    return PARCIALES_CONFIG.find((p) => p.key === pKey) || PARCIALES_CONFIG[0];
+  }, [selectedTema]);
+
+  const [openParciales, setOpenParciales] = useState<Record<ParcialKey, boolean>>(() => {
+    if (selectedTema?.parcial) {
+      const pKey = selectedTema.parcial.toLowerCase().trim() as ParcialKey;
+      return { primer: pKey === 'primer', segundo: pKey === 'segundo', tercer: pKey === 'tercer' };
+    }
+    return { primer: true, segundo: false, tercer: false };
   });
 
-  // Agrupación y ordenamiento estricto por parcial y sort_order
+  // Agrupación y ordenamiento estricto
   const temasByParcial = useMemo(() => {
     const map: Record<ParcialKey, EditorTema[]> = { primer: [], segundo: [], tercer: [] };
     const query = search.trim().toLowerCase();
@@ -89,7 +145,6 @@ export const EditorParcialAccordionPicker: React.FC<EditorParcialAccordionPicker
       }
     });
 
-    // Ordenar ascendentemente por sort_order
     Object.keys(map).forEach((k) => {
       map[k as ParcialKey].sort((a, b) => (a.sort_order ?? a.id) - (b.sort_order ?? b.id));
     });
@@ -97,9 +152,6 @@ export const EditorParcialAccordionPicker: React.FC<EditorParcialAccordionPicker
     return map;
   }, [temas, search]);
 
-  const selectedTema = useMemo(() => temas.find((t) => t.id === selectedTemaId) ?? null, [selectedTemaId, temas]);
-
-  // Subtemas del tema seleccionado ordenados
   const relevantSubtemas = useMemo(() => {
     if (!selectedTemaId) return [];
     return subtemas
@@ -111,222 +163,438 @@ export const EditorParcialAccordionPicker: React.FC<EditorParcialAccordionPicker
     setOpenParciales((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const handleTemaClick = (temaId: number) => {
+    onSelectTema(temaId);
+    if (mode === 'tema-and-subtema') {
+      setIsTemasPickerExpanded(false);
+    }
+  };
+
   return (
-    <div style={styles.container}>
-      {/* Encabezado del selector */}
-      <div style={styles.header}>
-        <div style={styles.headerTitleRow}>
-          <div style={styles.headerIconWrap}>
-            <Layers size={18} color="#0ea5e9" />
-          </div>
-          <div>
-            <h3 style={styles.title}>{title}</h3>
-            <p style={styles.subtitle}>{subtitle}</p>
-          </div>
-        </div>
+    <div className="editor-parcial-picker-root" style={s.container}>
+      {/* Inyección de micro-animaciones y efectos hover */}
+      <style>{`
+        .picker-card-hover {
+          transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .picker-card-hover:hover {
+          transform: translateY(-3px) scale(1.015);
+          box-shadow: 0 12px 24px -4px rgba(15, 23, 42, 0.12), 0 4px 10px -2px rgba(15, 23, 42, 0.06) !important;
+          border-color: #94a3b8 !important;
+        }
+        .subtema-card-hover {
+          transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .subtema-card-hover:hover {
+          transform: translateY(-3px) scale(1.015);
+          box-shadow: 0 14px 28px -4px rgba(139, 92, 246, 0.22), 0 6px 12px -2px rgba(139, 92, 246, 0.1) !important;
+          border-color: #a855f7 !important;
+        }
+        .pulse-dot {
+          animation: pulseGlow 2s infinite ease-in-out;
+        }
+        @keyframes pulseGlow {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.3); opacity: 0.7; }
+        }
+        .filter-chip-hover:hover {
+          background: #f1f5f9 !important;
+        }
+      `}</style>
 
-        {showSearch && (
-          <div style={styles.searchWrap}>
-            <Search size={15} color="#64748b" style={styles.searchIcon} />
-            <input
-              type="text"
-              placeholder="Buscar tema..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={styles.searchInput}
-            />
-            {search && (
-              <button type="button" onClick={() => setSearch('')} style={styles.searchClearBtn} title="Limpiar búsqueda">
-                <X size={13} />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {loadingTemas ? (
-        <div style={styles.loadingBox}>
-          <div style={styles.spinner} />
-          <span>Cargando temas del atlas...</span>
-        </div>
-      ) : temasError ? (
-        <div style={styles.errorBox}>⚠️ {temasError}</div>
-      ) : (
-        <div style={styles.accordionStack}>
-          {PARCIALES_CONFIG.map((parcial) => {
-            const list = temasByParcial[parcial.key] || [];
-            const isOpen = openParciales[parcial.key];
-            const hasSelectedInParcial = list.some((t) => t.id === selectedTemaId);
-
-            return (
-              <div
-                key={parcial.key}
+      {/* ── BANNER HERO: TEMA ACTIVO (COMPACTO Y ELEGANTE) ── */}
+      {selectedTema && !isTemasPickerExpanded && (
+        <div
+          style={{
+            ...s.heroBanner,
+            border: `1.5px solid ${selectedParcialConfig.border}`,
+            background: `linear-gradient(135deg, ${selectedParcialConfig.soft} 0%, #ffffff 70%)`,
+            boxShadow: `0 8px 24px -6px ${selectedParcialConfig.glow}, 0 2px 8px rgba(0,0,0,0.04)`,
+          }}
+        >
+          <div style={s.heroLeft}>
+            <div style={s.heroBadgeWrap}>
+              <span
                 style={{
-                  ...styles.accordionCard,
-                  borderColor: hasSelectedInParcial ? parcial.accent : styles.accordionCard.borderColor,
+                  ...s.heroParcialBadge,
+                  background: selectedParcialConfig.badgeBg,
                 }}
               >
-                {/* Cabecera del Parcial */}
-                <button
-                  type="button"
-                  onClick={() => toggleParcial(parcial.key)}
-                  style={{
-                    ...styles.accordionSummary,
-                    background: hasSelectedInParcial ? parcial.soft : '#ffffff',
-                  }}
-                  aria-expanded={isOpen}
-                >
-                  <div style={styles.summaryLeft}>
-                    <span
-                      style={{
-                        ...styles.parcialBadge,
-                        background: hasSelectedInParcial
-                          ? `linear-gradient(135deg, ${parcial.accent}, #38bdf8)`
-                          : '#f1f5f9',
-                        color: hasSelectedInParcial ? '#ffffff' : '#475569',
-                      }}
-                    >
-                      {parcial.number}
-                    </span>
-                    <span style={styles.parcialTitle}>{parcial.label}</span>
-                    <span style={styles.countBadge}>{list.length} temas</span>
-                  </div>
+                {selectedParcialConfig.shortLabel}
+              </span>
+            </div>
 
-                  <div style={styles.summaryRight}>
-                    {isOpen ? <ChevronDown size={18} color="#64748b" /> : <ChevronRight size={18} color="#64748b" />}
-                  </div>
-                </button>
-
-                {/* Contenido expandible de Temas */}
-                {isOpen && (
-                  <div style={styles.accordionBody}>
-                    {list.length === 0 ? (
-                      <div style={styles.emptyState}>
-                        {search ? 'No se encontraron temas con este filtro.' : 'No hay temas en este parcial.'}
-                      </div>
-                    ) : (
-                      <div style={styles.themeGrid}>
-                        {list.map((tema, index) => {
-                          const isSelected = selectedTemaId === tema.id;
-
-                          return (
-                            <button
-                              key={tema.id}
-                              type="button"
-                              onClick={() => onSelectTema(tema.id)}
-                              style={{
-                                ...styles.themeCard,
-                                borderColor: isSelected ? parcial.accent : '#e2e8f0',
-                                background: isSelected ? 'linear-gradient(135deg, #ffffff, #f0f9ff)' : '#ffffff',
-                                boxShadow: isSelected
-                                  ? '0 8px 20px rgba(14,165,233,0.18)'
-                                  : '0 2px 6px rgba(15,23,42,0.04)',
-                              }}
-                            >
-                              <div style={styles.themeCardTop}>
-                                <span style={styles.themeIndex}>{(tema.sort_order ?? index) + 1}</span>
-                                {tema.logo_url && (
-                                  <img
-                                    src={getCloudinaryImageUrl(tema.logo_url, 'thumb')}
-                                    alt={tema.nombre}
-                                    style={styles.themeLogo}
-                                    loading="lazy"
-                                  />
-                                )}
-                                {isSelected && (
-                                  <span style={{ ...styles.checkBadge, background: parcial.accent }}>
-                                    <Check size={12} strokeWidth={3} />
-                                  </span>
-                                )}
-                              </div>
-                              <span
-                                style={{
-                                  ...styles.themeName,
-                                  color: isSelected ? '#0369a1' : '#1e293b',
-                                  fontWeight: isSelected ? 800 : 700,
-                                }}
-                              >
-                                {tema.nombre}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
+            {selectedTema.logo_url ? (
+              <div style={s.heroLogoFrame}>
+                <img
+                  src={getCloudinaryImageUrl(selectedTema.logo_url, 'thumb')}
+                  alt={selectedTema.nombre}
+                  style={s.heroLogo}
+                />
               </div>
-            );
-          })}
+            ) : (
+              <div style={{ ...s.heroLogoPlaceholder, background: selectedParcialConfig.soft, borderColor: selectedParcialConfig.border }}>
+                <Layers size={18} color={selectedParcialConfig.accent} />
+              </div>
+            )}
+
+            <div style={s.heroTextCol}>
+              <div style={s.heroStatusRow}>
+                <span className="pulse-dot" style={{ ...s.liveDot, background: selectedParcialConfig.accent }} />
+                <span style={{ ...s.heroCategory, color: selectedParcialConfig.accent }}>Tema seleccionado</span>
+              </div>
+              <h3 style={s.heroTemaTitle}>{selectedTema.nombre}</h3>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsTemasPickerExpanded(true)}
+            style={{
+              ...s.heroChangeBtn,
+              background: '#ffffff',
+              border: `1.5px solid ${selectedParcialConfig.accent}`,
+              color: selectedParcialConfig.accent,
+            }}
+            title="Abrir selector para elegir otro tema"
+          >
+            <RefreshCw size={14} style={{ marginRight: '6px' }} />
+            <span>Cambiar tema</span>
+            <ChevronDown size={15} style={{ marginLeft: '4px' }} />
+          </button>
         </div>
       )}
 
-      {/* Selector de Subtemas si está en modo tema-and-subtema y hay un tema seleccionado */}
-      {mode === 'tema-and-subtema' && selectedTema && (
-        <div style={styles.subtemasSection}>
-          <div style={styles.subtemasHeading}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Sparkles size={16} color="#8b5cf6" />
-              <h4 style={styles.subtemasTitle}>Subtemas de {selectedTema.nombre}</h4>
+      {/* ── PANEL COMPLETO DE SELECCIÓN DE TEMAS ── */}
+      {isTemasPickerExpanded && (
+        <div style={s.pickerBox}>
+          {/* Header con título y búsqueda */}
+          <div style={s.header}>
+            <div style={s.headerLeft}>
+              <div style={s.iconBadge}>
+                <Layers size={20} color="#0284c7" />
+              </div>
+              <div>
+                <h3 style={s.headerTitle}>{title}</h3>
+                <p style={s.headerSubtitle}>{subtitle}</p>
+              </div>
             </div>
-            <span style={styles.subtemasCount}>{relevantSubtemas.length} disponibles</span>
+
+            <div style={s.headerRight}>
+              {showSearch && (
+                <div style={s.searchContainer}>
+                  <Search size={15} color="#64748b" style={s.searchIcon} />
+                  <input
+                    type="text"
+                    placeholder="Buscar tema por nombre..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={s.searchInput}
+                  />
+                  {search && (
+                    <button type="button" onClick={() => setSearch('')} style={s.searchClear} title="Limpiar">
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {selectedTema && mode === 'tema-and-subtema' && (
+                <button
+                  type="button"
+                  onClick={() => setIsTemasPickerExpanded(false)}
+                  style={s.closePickerBtn}
+                  title="Volver a los subtemas"
+                >
+                  Ocultar temas ✕
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Filtros rápidos por parcial */}
+          <div style={s.filterBar}>
+            <span style={s.filterLabel}>Filtrar:</span>
+            <button
+              type="button"
+              className="filter-chip-hover"
+              onClick={() => {
+                setActiveParcialFilter('all');
+                setOpenParciales({ primer: true, segundo: true, tercer: true });
+              }}
+              style={{
+                ...s.filterChip,
+                ...(activeParcialFilter === 'all' ? s.filterChipActive : {}),
+              }}
+            >
+              Todos los parciales
+            </button>
+            {PARCIALES_CONFIG.map((p) => {
+              const isActive = activeParcialFilter === p.key;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  className="filter-chip-hover"
+                  onClick={() => {
+                    setActiveParcialFilter(p.key);
+                    setOpenParciales({
+                      primer: p.key === 'primer',
+                      segundo: p.key === 'segundo',
+                      tercer: p.key === 'tercer',
+                    });
+                  }}
+                  style={{
+                    ...s.filterChip,
+                    borderColor: isActive ? p.accent : '#e2e8f0',
+                    background: isActive ? p.soft : '#ffffff',
+                    color: isActive ? p.accent : '#475569',
+                    fontWeight: isActive ? 700 : 500,
+                  }}
+                >
+                  <span style={{ ...s.filterDot, background: p.accent }} />
+                  {p.shortLabel}
+                </button>
+              );
+            })}
+          </div>
+
+          {loadingTemas ? (
+            <div style={s.loadingContainer}>
+              <div style={s.spinner} />
+              <p style={s.loadingText}>Cargando temario histológico...</p>
+            </div>
+          ) : temasError ? (
+            <div style={s.errorAlert}>⚠️ {temasError}</div>
+          ) : (
+            <div style={s.accordionsStack}>
+              {PARCIALES_CONFIG.filter((p) => activeParcialFilter === 'all' || activeParcialFilter === p.key).map((parcial) => {
+                const list = temasByParcial[parcial.key] || [];
+                const isOpen = openParciales[parcial.key];
+                const hasSelected = list.some((t) => t.id === selectedTemaId);
+
+                return (
+                  <div
+                    key={parcial.key}
+                    style={{
+                      ...s.accordionItem,
+                      border: hasSelected ? `2px solid ${parcial.accent}` : `1.5px solid ${parcial.border}`,
+                      boxShadow: hasSelected ? `0 6px 20px ${parcial.glow}` : '0 2px 8px rgba(0,0,0,0.02)',
+                    }}
+                  >
+                    {/* Barra de cabecera del parcial */}
+                    <button
+                      type="button"
+                      onClick={() => toggleParcial(parcial.key)}
+                      style={{
+                        ...s.accordionHeaderBtn,
+                        background: hasSelected ? `linear-gradient(90deg, ${parcial.soft}, #ffffff)` : '#ffffff',
+                      }}
+                      aria-expanded={isOpen}
+                    >
+                      <div style={s.accordionHeaderLeft}>
+                        <span
+                          style={{
+                            ...s.parcialNumberBadge,
+                            background: parcial.gradient,
+                          }}
+                        >
+                          {parcial.number}
+                        </span>
+                        <div style={s.parcialHeaderTextWrap}>
+                          <span style={s.parcialName}>{parcial.label}</span>
+                          <span style={s.parcialThemesCount}>{list.length} temas</span>
+                        </div>
+                      </div>
+
+                      <div style={s.accordionHeaderRight}>
+                        {isOpen ? (
+                          <div style={{ ...s.chevronBox, background: parcial.soft }}>
+                            <ChevronDown size={17} color={parcial.accent} />
+                          </div>
+                        ) : (
+                          <div style={s.chevronBox}>
+                            <ChevronRight size={17} color="#64748b" />
+                          </div>
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Grilla de temas */}
+                    {isOpen && (
+                      <div style={s.accordionBodyGrid}>
+                        {list.length === 0 ? (
+                          <div style={s.emptyMsg}>
+                            {search ? 'Ningún tema coincide con tu búsqueda.' : 'No hay temas registrados en este parcial.'}
+                          </div>
+                        ) : (
+                          <div style={s.themesGrid}>
+                            {list.map((tema, idx) => {
+                              const isSelected = selectedTemaId === tema.id;
+                              return (
+                                <button
+                                  key={tema.id}
+                                  type="button"
+                                  className="picker-card-hover"
+                                  onClick={() => handleTemaClick(tema.id)}
+                                  style={{
+                                    ...s.themeCard,
+                                    border: isSelected ? `2px solid ${parcial.accent}` : '1.5px solid #e2e8f0',
+                                    background: isSelected
+                                      ? `linear-gradient(145deg, #ffffff 0%, ${parcial.soft} 100%)`
+                                      : '#ffffff',
+                                    boxShadow: isSelected
+                                      ? `0 10px 22px -4px ${parcial.glow}, 0 2px 6px rgba(0,0,0,0.04)`
+                                      : '0 2px 6px rgba(15,23,42,0.03)',
+                                  }}
+                                >
+                                  <div style={s.themeCardTopRow}>
+                                    <span
+                                      style={{
+                                        ...s.themeIndexBadge,
+                                        background: isSelected ? parcial.accent : '#f1f5f9',
+                                        color: isSelected ? '#ffffff' : '#64748b',
+                                      }}
+                                    >
+                                      {(tema.sort_order ?? idx) + 1}
+                                    </span>
+
+                                    {isSelected ? (
+                                      <span style={{ ...s.checkCircle, background: parcial.gradient }}>
+                                        <Check size={12} strokeWidth={3.5} color="#ffffff" />
+                                      </span>
+                                    ) : tema.logo_url ? (
+                                      <img
+                                        src={getCloudinaryImageUrl(tema.logo_url, 'thumb')}
+                                        alt={tema.nombre}
+                                        style={s.themeCardLogo}
+                                        loading="lazy"
+                                      />
+                                    ) : null}
+                                  </div>
+
+                                  <div style={s.themeCardBottomRow}>
+                                    <span
+                                      style={{
+                                        ...s.themeCardTitle,
+                                        color: isSelected ? parcial.accent : '#1e293b',
+                                        fontWeight: isSelected ? 800 : 600,
+                                      }}
+                                    >
+                                      {tema.nombre}
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── SECCIÓN DE SUBTEMAS (VIBRANTE Y EN PRIMER PLANO) ── */}
+      {mode === 'tema-and-subtema' && selectedTema && (
+        <div style={s.subtemasRoot}>
+          <div style={s.subtemasHeader}>
+            <div style={s.subtemasHeaderLeft}>
+              <div style={s.subtemasIconBadge}>
+                <FolderTree size={20} color="#7c3aed" />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h4 style={s.subtemasHeadingTitle}>Subtemas de {selectedTema.nombre}</h4>
+                  <span style={s.subtemasCounterPill}>{relevantSubtemas.length} subtemas</span>
+                </div>
+                <p style={s.subtemasHeadingSubtitle}>Haz clic en un subtema para cargar sus mapas o placas al instante</p>
+              </div>
+            </div>
           </div>
 
           {loadingSubtemas ? (
-            <div style={styles.loadingBox}>
-              <div style={styles.spinner} />
-              <span>Cargando subtemas...</span>
+            <div style={s.loadingContainer}>
+              <div style={{ ...s.spinner, borderTopColor: '#7c3aed' }} />
+              <p style={s.loadingText}>Cargando subtemas...</p>
             </div>
           ) : subtemasError ? (
-            <div style={styles.errorBox}>⚠️ {subtemasError}</div>
+            <div style={s.errorAlert}>⚠️ {subtemasError}</div>
           ) : relevantSubtemas.length === 0 ? (
-            <div style={styles.emptyState}>Este tema no tiene subtemas registrados aún.</div>
+            <div style={s.subtemasEmptyBox}>
+              <Sparkles size={28} color="#a855f7" />
+              <p style={s.subtemasEmptyTitle}>No hay subtemas en este tema</p>
+              <p style={s.subtemasEmptySub}>Puedes añadir subtemas desde el panel de administración.</p>
+            </div>
           ) : (
-            <div style={styles.subtemaGrid}>
-              {relevantSubtemas.map((subtema, index) => {
+            <div style={s.subtemasGrid}>
+              {relevantSubtemas.map((subtema, idx) => {
                 const isSelected = selectedSubtemaId === subtema.id;
-
                 return (
                   <button
                     key={subtema.id}
                     type="button"
+                    className="subtema-card-hover"
                     onClick={() => onSelectSubtema && onSelectSubtema(subtema.id)}
                     style={{
-                      ...styles.subtemaCard,
-                      borderColor: isSelected ? '#8b5cf6' : '#e2e8f0',
-                      background: isSelected ? 'linear-gradient(135deg, #faf5ff, #ffffff)' : '#ffffff',
+                      ...s.subtemaCard,
+                      border: isSelected ? '2px solid #7c3aed' : '1.5px solid #e2e8f0',
+                      background: isSelected
+                        ? 'linear-gradient(145deg, #ffffff 0%, #faf5ff 100%)'
+                        : '#ffffff',
                       boxShadow: isSelected
-                        ? '0 8px 20px rgba(139,92,246,0.18)'
-                        : '0 2px 6px rgba(15,23,42,0.04)',
+                        ? '0 12px 28px -4px rgba(124, 58, 237, 0.28), 0 4px 10px rgba(0,0,0,0.04)'
+                        : '0 2px 8px rgba(15,23,42,0.03)',
                     }}
                   >
-                    <div style={styles.themeCardTop}>
-                      <span style={{ ...styles.themeIndex, background: '#ede9fe', color: '#6d28d9' }}>
-                        {(subtema.sort_order ?? index) + 1}
+                    <div style={s.subtemaCardTop}>
+                      <span
+                        style={{
+                          ...s.subtemaIndexBadge,
+                          background: isSelected ? '#7c3aed' : '#ede9fe',
+                          color: isSelected ? '#ffffff' : '#6d28d9',
+                        }}
+                      >
+                        #{(subtema.sort_order ?? idx) + 1}
                       </span>
+
                       {subtema.logo_url && (
                         <img
                           src={getCloudinaryImageUrl(subtema.logo_url, 'thumb')}
                           alt={subtema.nombre}
-                          style={styles.themeLogo}
+                          style={s.subtemaLogo}
                           loading="lazy"
                         />
                       )}
+
                       {isSelected && (
-                        <span style={{ ...styles.checkBadge, background: '#8b5cf6' }}>
-                          <Check size={12} strokeWidth={3} />
+                        <span style={s.subtemaCheckBadge}>
+                          <Check size={12} strokeWidth={3.5} color="#ffffff" />
                         </span>
                       )}
                     </div>
-                    <span
-                      style={{
-                        ...styles.themeName,
-                        color: isSelected ? '#6d28d9' : '#1e293b',
-                        fontWeight: isSelected ? 800 : 700,
-                      }}
-                    >
-                      {subtema.nombre}
-                    </span>
+
+                    <div style={s.subtemaTitleWrap}>
+                      <span
+                        style={{
+                          ...s.subtemaCardTitle,
+                          color: isSelected ? '#6d28d9' : '#1e293b',
+                          fontWeight: isSelected ? 800 : 700,
+                        }}
+                      >
+                        {subtema.nombre}
+                      </span>
+                    </div>
+
+                    {isSelected && (
+                      <div style={s.subtemaActiveIndicator}>
+                        <span style={s.subtemaActiveText}>Subtema activo</span>
+                      </div>
+                    )}
                   </button>
                 );
               })}
@@ -338,13 +606,122 @@ export const EditorParcialAccordionPicker: React.FC<EditorParcialAccordionPicker
   );
 };
 
-const styles: Record<string, React.CSSProperties> = {
+const s: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
     flexDirection: 'column',
     gap: '16px',
     width: '100%',
     boxSizing: 'border-box',
+    fontFamily: '"Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  },
+  // ── HERO BANNER ──
+  heroBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '14px',
+    padding: '14px 20px',
+    borderRadius: '16px',
+    boxSizing: 'border-box',
+    backdropFilter: 'blur(10px)',
+  },
+  heroLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    flexWrap: 'wrap',
+  },
+  heroBadgeWrap: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  heroParcialBadge: {
+    color: '#ffffff',
+    fontSize: '0.74em',
+    fontWeight: 800,
+    padding: '4px 10px',
+    borderRadius: '20px',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+  },
+  heroLogoFrame: {
+    width: '38px',
+    height: '38px',
+    borderRadius: '10px',
+    overflow: 'hidden',
+    border: '2px solid #ffffff',
+    boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+    flexShrink: 0,
+  },
+  heroLogo: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  heroLogoPlaceholder: {
+    width: '38px',
+    height: '38px',
+    borderRadius: '10px',
+    border: '1.5px solid',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  heroTextCol: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  heroStatusRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  liveDot: {
+    width: '7px',
+    height: '7px',
+    borderRadius: '50%',
+    display: 'inline-block',
+  },
+  heroCategory: {
+    fontSize: '0.72em',
+    fontWeight: 800,
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase',
+  },
+  heroTemaTitle: {
+    fontSize: '1.05em',
+    fontWeight: 800,
+    color: '#0f172a',
+    margin: 0,
+    lineHeight: 1.2,
+  },
+  heroChangeBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '8px 16px',
+    borderRadius: '12px',
+    fontSize: '0.84em',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.18s ease',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+  },
+  // ── PICKER BOX ──
+  pickerBox: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+    background: '#ffffff',
+    borderRadius: '20px',
+    border: '1.5px solid #e2e8f0',
+    padding: '20px',
+    boxShadow: '0 8px 30px rgba(15, 23, 42, 0.05)',
   },
   header: {
     display: 'flex',
@@ -352,84 +729,141 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '12px',
-    padding: '14px 18px',
-    borderRadius: '16px',
-    background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 2px 10px rgba(15,23,42,0.04)',
+    paddingBottom: '12px',
+    borderBottom: '1.5px solid #f1f5f9',
   },
-  headerTitleRow: {
+  headerLeft: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
   },
-  headerIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    background: '#e0f2fe',
-    display: 'grid',
-    placeItems: 'center',
+  iconBadge: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '12px',
+    background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    boxShadow: '0 2px 6px rgba(2, 132, 199, 0.15)',
   },
-  title: {
-    margin: 0,
-    fontSize: '1rem',
+  headerTitle: {
+    fontSize: '1.05em',
     fontWeight: 800,
     color: '#0f172a',
-    letterSpacing: '-0.02em',
+    margin: 0,
+    letterSpacing: '-0.01em',
   },
-  subtitle: {
-    margin: '2px 0 0',
-    fontSize: '0.78rem',
+  headerSubtitle: {
+    fontSize: '0.82em',
     color: '#64748b',
+    margin: '2px 0 0 0',
   },
-  searchWrap: {
+  headerRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  searchContainer: {
     position: 'relative',
     display: 'flex',
     alignItems: 'center',
-    minWidth: 220,
+    width: '230px',
   },
   searchIcon: {
     position: 'absolute',
-    left: 10,
+    left: '12px',
     pointerEvents: 'none',
   },
   searchInput: {
     width: '100%',
-    padding: '7px 28px 7px 32px',
-    fontSize: '0.82rem',
-    borderRadius: 999,
-    border: '1px solid #cbd5e1',
-    background: '#ffffff',
+    padding: '8px 32px 8px 36px',
+    fontSize: '0.85em',
+    borderRadius: '10px',
+    border: '1.5px solid #cbd5e1',
+    background: '#f8fafc',
+    color: '#0f172a',
     outline: 'none',
-    boxSizing: 'border-box',
     fontFamily: 'inherit',
+    transition: 'all 0.2s',
   },
-  searchClearBtn: {
+  searchClear: {
     position: 'absolute',
-    right: 8,
-    border: 0,
+    right: '10px',
     background: 'none',
-    color: '#94a3b8',
+    border: 'none',
     cursor: 'pointer',
-    padding: 2,
-    display: 'grid',
-    placeItems: 'center',
+    color: '#94a3b8',
+    padding: 0,
+    display: 'flex',
+    alignItems: 'center',
   },
-  accordionStack: {
+  closePickerBtn: {
+    padding: '8px 14px',
+    borderRadius: '10px',
+    border: '1px solid #cbd5e1',
+    background: '#f8fafc',
+    color: '#64748b',
+    fontSize: '0.82em',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.15s',
+  },
+  filterBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+    paddingTop: '2px',
+  },
+  filterLabel: {
+    fontSize: '0.78em',
+    fontWeight: 700,
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    marginRight: '4px',
+  },
+  filterChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 12px',
+    borderRadius: '20px',
+    border: '1.5px solid #e2e8f0',
+    background: '#ffffff',
+    fontSize: '0.8em',
+    fontWeight: 600,
+    color: '#475569',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.18s ease',
+  },
+  filterChipActive: {
+    borderColor: '#0284c7',
+    background: '#f0f9ff',
+    color: '#0284c7',
+    fontWeight: 700,
+  },
+  filterDot: {
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%',
+  },
+  accordionsStack: {
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
   },
-  accordionCard: {
+  accordionItem: {
     borderRadius: '16px',
-    border: '1.5px solid #e2e8f0',
     overflow: 'hidden',
     background: '#ffffff',
-    boxShadow: '0 4px 14px rgba(15,23,42,0.04)',
-    transition: 'all 0.2s ease',
+    transition: 'all 0.22s ease',
   },
-  accordionSummary: {
+  accordionHeaderBtn: {
     width: '100%',
     display: 'flex',
     alignItems: 'center',
@@ -438,172 +872,306 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     cursor: 'pointer',
     fontFamily: 'inherit',
-    textAlign: 'left',
-    transition: 'background 0.15s ease',
+    transition: 'background 0.18s',
   },
-  summaryLeft: {
+  accordionHeaderLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  parcialNumberBadge: {
+    width: '28px',
+    height: '28px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#ffffff',
+    fontSize: '0.82em',
+    fontWeight: 800,
+    boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+  },
+  parcialHeaderTextWrap: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
   },
-  parcialBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: '50%',
-    display: 'grid',
-    placeItems: 'center',
-    fontSize: '0.72rem',
-    fontWeight: 900,
-  },
-  parcialTitle: {
-    fontSize: '0.92rem',
+  parcialName: {
+    fontSize: '0.96em',
     fontWeight: 800,
-    color: '#1e293b',
+    color: '#0f172a',
   },
-  countBadge: {
-    padding: '2px 8px',
-    borderRadius: 999,
-    fontSize: '0.7rem',
-    fontWeight: 700,
-    background: '#f1f5f9',
+  parcialThemesCount: {
+    fontSize: '0.76em',
     color: '#64748b',
+    background: '#f1f5f9',
+    padding: '3px 9px',
+    borderRadius: '12px',
+    fontWeight: 600,
   },
-  summaryRight: {
-    display: 'grid',
-    placeItems: 'center',
+  accordionHeaderRight: {
+    display: 'flex',
+    alignItems: 'center',
   },
-  accordionBody: {
-    padding: '14px 16px 16px',
+  chevronBox: {
+    width: '28px',
+    height: '28px',
+    borderRadius: '8px',
+    background: '#f8fafc',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accordionBodyGrid: {
+    padding: '16px',
     borderTop: '1px solid #f1f5f9',
     background: '#f8fafc',
   },
-  themeGrid: {
+  themesGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 210px), 1fr))',
-    gap: '10px',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+    gap: '12px',
   },
   themeCard: {
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: '8px',
+    justifyContent: 'space-between',
+    minHeight: '80px',
     padding: '12px 14px',
-    borderRadius: '12px',
-    border: '1.5px solid #e2e8f0',
+    borderRadius: '14px',
     cursor: 'pointer',
-    textAlign: 'left',
     fontFamily: 'inherit',
-    transition: 'all 0.18s ease',
+    textAlign: 'left',
+    outline: 'none',
+    boxSizing: 'border-box',
   },
-  themeCardTop: {
+  themeCardTopRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    marginBottom: '8px',
   },
-  themeIndex: {
-    padding: '2px 6px',
-    borderRadius: 6,
-    background: '#f1f5f9',
-    color: '#475569',
-    fontSize: '0.68rem',
+  themeIndexBadge: {
+    fontSize: '0.72em',
     fontWeight: 800,
+    padding: '2px 8px',
+    borderRadius: '8px',
   },
-  themeLogo: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
+  themeCardLogo: {
+    width: '26px',
+    height: '26px',
+    borderRadius: '8px',
     objectFit: 'cover',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
   },
-  checkBadge: {
-    width: 18,
-    height: 18,
+  checkCircle: {
+    width: '20px',
+    height: '20px',
     borderRadius: '50%',
-    color: '#ffffff',
-    display: 'grid',
-    placeItems: 'center',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
   },
-  themeName: {
-    fontSize: '0.84rem',
+  themeCardBottomRow: {
+    marginTop: 'auto',
+  },
+  themeCardTitle: {
+    fontSize: '0.88em',
     lineHeight: 1.35,
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
   },
-  subtemasSection: {
-    marginTop: '6px',
-    padding: '18px',
-    borderRadius: '18px',
-    background: 'linear-gradient(135deg, #ffffff, #faf5ff)',
-    border: '1.5px solid #e9d5ff',
-    boxShadow: '0 6px 20px rgba(139,92,246,0.06)',
+  // ── SUBTEMAS SECTION ──
+  subtemasRoot: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    background: '#ffffff',
+    borderRadius: '20px',
+    border: '1.5px solid #ddd6fe',
+    padding: '20px',
+    boxShadow: '0 10px 30px rgba(124, 58, 237, 0.07)',
   },
-  subtemasHeading: {
+  subtemasHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '14px',
+    paddingBottom: '12px',
+    borderBottom: '1.5px solid #f5f3ff',
   },
-  subtemasTitle: {
-    margin: 0,
-    fontSize: '0.94rem',
-    fontWeight: 850,
-    color: '#581c87',
+  subtemasHeaderLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
   },
-  subtemasCount: {
-    padding: '3px 10px',
-    borderRadius: 999,
-    fontSize: '0.72rem',
+  subtemasIconBadge: {
+    width: '42px',
+    height: '42px',
+    borderRadius: '12px',
+    background: 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    boxShadow: '0 4px 10px rgba(124, 58, 237, 0.15)',
+  },
+  subtemasHeadingTitle: {
+    fontSize: '1.05em',
     fontWeight: 800,
-    background: '#f3e8ff',
-    color: '#7e22ce',
+    color: '#4c1d95',
+    margin: 0,
+    letterSpacing: '-0.01em',
   },
-  subtemaGrid: {
+  subtemasHeadingSubtitle: {
+    fontSize: '0.8em',
+    color: '#6b7280',
+    margin: '3px 0 0 0',
+  },
+  subtemasCounterPill: {
+    fontSize: '0.76em',
+    fontWeight: 800,
+    color: '#7c3aed',
+    background: '#f5f3ff',
+    padding: '3px 10px',
+    borderRadius: '14px',
+    border: '1px solid #ddd6fe',
+  },
+  subtemasGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 200px), 1fr))',
-    gap: '10px',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+    gap: '12px',
   },
   subtemaCard: {
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: '8px',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    border: '1.5px solid #e2e8f0',
+    justifyContent: 'space-between',
+    minHeight: '90px',
+    padding: '14px',
+    borderRadius: '16px',
     cursor: 'pointer',
-    textAlign: 'left',
     fontFamily: 'inherit',
-    transition: 'all 0.18s ease',
+    textAlign: 'left',
+    outline: 'none',
+    boxSizing: 'border-box',
+    position: 'relative',
+    overflow: 'hidden',
   },
-  emptyState: {
-    padding: '18px',
-    textAlign: 'center',
-    color: '#64748b',
-    fontSize: '0.82rem',
-    fontStyle: 'italic',
+  subtemaCardTop: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: '10px',
   },
-  loadingBox: {
+  subtemaIndexBadge: {
+    fontSize: '0.72em',
+    fontWeight: 800,
+    padding: '2px 8px',
+    borderRadius: '8px',
+    letterSpacing: '0.02em',
+  },
+  subtemaLogo: {
+    width: '28px',
+    height: '28px',
+    borderRadius: '8px',
+    objectFit: 'cover',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+  },
+  subtemaCheckBadge: {
+    width: '22px',
+    height: '22px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '10px',
-    padding: '24px',
-    color: '#64748b',
-    fontSize: '0.86rem',
+    boxShadow: '0 2px 8px rgba(124, 58, 237, 0.4)',
+  },
+  subtemaTitleWrap: {
+    marginTop: 'auto',
+  },
+  subtemaCardTitle: {
+    fontSize: '0.92em',
+    lineHeight: 1.35,
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  },
+  subtemaActiveIndicator: {
+    marginTop: '6px',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  subtemaActiveText: {
+    fontSize: '0.7em',
+    fontWeight: 800,
+    color: '#7c3aed',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+  subtemasEmptyBox: {
+    padding: '36px 20px',
+    textAlign: 'center',
+    background: '#faf5ff',
+    borderRadius: '16px',
+    border: '2px dashed #ddd6fe',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  subtemasEmptyTitle: {
+    margin: 0,
+    fontSize: '0.96em',
+    fontWeight: 800,
+    color: '#4c1d95',
+  },
+  subtemasEmptySub: {
+    margin: 0,
+    fontSize: '0.82em',
+    color: '#7c3aed',
+  },
+  loadingContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '30px',
+    justifyContent: 'center',
   },
   spinner: {
-    width: 20,
-    height: 20,
+    width: '24px',
+    height: '24px',
     borderRadius: '50%',
-    border: '2.5px solid #cbd5e1',
-    borderTopColor: '#0ea5e9',
+    border: '2.5px solid #e2e8f0',
+    borderTopColor: '#0284c7',
     animation: 'spin 0.8s linear infinite',
   },
-  errorBox: {
+  loadingText: {
+    fontSize: '0.85em',
+    color: '#64748b',
+    fontWeight: 600,
+    margin: 0,
+  },
+  errorAlert: {
     padding: '14px 18px',
-    borderRadius: '12px',
-    background: '#fef2f2',
-    border: '1px solid #fecaca',
+    background: '#fee2e2',
     color: '#b91c1c',
-    fontSize: '0.84rem',
+    borderRadius: '12px',
+    fontSize: '0.88em',
+    fontWeight: 700,
+  },
+  emptyMsg: {
+    padding: '20px',
+    textAlign: 'center',
+    color: '#94a3b8',
+    fontSize: '0.86em',
+    fontStyle: 'italic',
   },
 };
 

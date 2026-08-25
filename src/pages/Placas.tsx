@@ -425,9 +425,18 @@ const Placas: React.FC = () => {
       return;
     }
 
-    const objectUrl = URL.createObjectURL(selectedFile);
-    setSelectedFilePreviewUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
+    let isMounted = true;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (isMounted && typeof reader.result === 'string') {
+        setSelectedFilePreviewUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(selectedFile);
+
+    return () => {
+      isMounted = false;
+    };
   }, [selectedFile]);
 
   const handleImageSelect = (file: File) => {
@@ -555,9 +564,16 @@ const Placas: React.FC = () => {
   const handleScFilesAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newFiles = Array.from(e.target.files ?? []);
     if (newFiles.length === 0) return;
-    const newPreviews = newFiles.map(f => URL.createObjectURL(f));
     setScFiles(prev => [...prev, ...newFiles]);
-    setScPreviews(prev => [...prev, ...newPreviews]);
+    newFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setScPreviews(prev => [...prev, reader.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
     setScSaveSuccess(false);
     setScSaveError('');
     // Limpiar input para permitir reseleccionar el mismo archivo
@@ -960,9 +976,16 @@ const Placas: React.FC = () => {
                       const dt = e.dataTransfer;
                       const newFiles = Array.from(dt.files).filter(f => f.type.startsWith('image/'));
                       if (newFiles.length === 0) return;
-                      const newPreviews = newFiles.map(f => URL.createObjectURL(f));
                       setScFiles(prev => [...prev, ...newFiles]);
-                      setScPreviews(prev => [...prev, ...newPreviews]);
+                      newFiles.forEach(file => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          if (typeof reader.result === 'string') {
+                            setScPreviews(prev => [...prev, reader.result as string]);
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      });
                       setScSaveSuccess(false); setScSaveError('');
                     }}
                   >

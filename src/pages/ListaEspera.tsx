@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../services/supabase';
+import { useNavigate } from 'react-router-dom';
+import { describeSupabaseError, supabase } from '../services/supabase';
 import { deleteFromCloudinary } from '../services/cloudinary';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
@@ -114,7 +115,54 @@ const buildSenaladosPayload = (
 
 const ITEMS_PER_PAGE = 15;
 
+const ResilientPlacaImage: React.FC<{
+  photoUrl: string;
+  publicId?: string;
+  alt: string;
+  profile?: 'thumb' | 'view';
+  style?: React.CSSProperties;
+}> = ({ photoUrl, publicId, alt, profile = 'thumb', style }) => {
+  const initial = getCloudinaryImageUrl(photoUrl, profile);
+  const [src, setSrc] = useState(initial);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    setSrc(getCloudinaryImageUrl(photoUrl, profile));
+    setAttempt(0);
+  }, [photoUrl, profile]);
+
+  const handleError = () => {
+    const raw = (publicId || photoUrl || '').trim();
+    const filename = raw.split('/').pop()?.replace(/\.(jpe?g|png|bmp|tiff?|webp)$/i, '') || '';
+    if (!filename) return;
+
+    if (attempt === 0) {
+      setAttempt(1);
+      setSrc(`https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/sin_clasificar/${filename}.webp`);
+    } else if (attempt === 1) {
+      setAttempt(2);
+      setSrc(`https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/${filename}.webp`);
+    } else if (attempt === 2) {
+      setAttempt(3);
+      setSrc(`https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/${filename}.webp`);
+    }
+  };
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      style={style}
+      loading="lazy"
+      decoding="async"
+      draggable={false}
+      onError={handleError}
+    />
+  );
+};
+
 const ListaEspera: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
 
   // ── Datos ─────────────────────────────────────────────────────────────
@@ -165,10 +213,13 @@ const ListaEspera: React.FC = () => {
   const [isDeleting,    setIsDeleting]    = useState(false);
   const [deleteError,   setDeleteError]   = useState('');
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   // ── Cargar datos al montar ────────────────────────────────────────────
-  useEffect(() => {
-    const fetchAll = async () => {
-      setLoading(true);
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
       const [placasRes, temasRes] = await Promise.all([
         supabase
           .from('placas_sin_clasificar')
@@ -180,12 +231,24 @@ const ListaEspera: React.FC = () => {
           .order('parcial')
           .order('sort_order', { ascending: true }),
       ]);
-      if (placasRes.data) setPlacas(placasRes.data);
+      if (placasRes.error) {
+        console.error('Error cargando placas_sin_clasificar:', placasRes.error);
+        setLoadError(describeSupabaseError(placasRes.error));
+      } else if (placasRes.data) {
+        setPlacas(placasRes.data);
+      }
       if (temasRes.data) setTemas(temasRes.data);
+    } catch (err: any) {
+      console.error('Error inesperado cargando lista de espera:', err);
+      setLoadError(err?.message || 'Error de conexión');
+    } finally {
       setLoading(false);
-    };
-    fetchAll();
+    }
   }, []);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
   // ── Resetear form al deseleccionar ────────────────────────────────────
   const resetForm = () => {
@@ -456,15 +519,59 @@ const ListaEspera: React.FC = () => {
             <div style={s.spinner} />
             <p style={s.loadingText}>Cargando imágenes...</p>
           </div>
+        ) : loadError ? (
+          <div style={{ ...s.emptyCard, borderColor: '#fca5a5', background: '#fff5f5' }}>
+            <span style={{ fontSize: '2.5em' }}>⚠️</span>
+            <h2 style={{ margin: '10px 0 4px', fontWeight: 800, color: '#b91c1c' }}>
+              Error al cargar imágenes
+            </h2>
+            <p style={{ color: '#7f1d1d', margin: '0 0 16px', fontSize: '0.9em' }}>
+              {loadError}
+            </p>
+            <button
+              type="button"
+              onClick={fetchAll}
+              style={{
+                background: '#dc2626',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '10px',
+                padding: '10px 20px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              🔄 Reintentar
+            </button>
+          </div>
         ) : placas.length === 0 && !saveSuccess ? (
           <div style={s.emptyCard}>
             <span style={{ fontSize: '3em' }}>🎉</span>
             <h2 style={{ margin: '12px 0 6px', fontWeight: 800, color: '#0f172a' }}>
               ¡Lista vacía!
             </h2>
-            <p style={{ color: '#64748b', margin: 0 }}>
-              No hay imágenes pendientes de clasificar.
+            <p style={{ color: '#64748b', margin: '0 0 18px', maxWidth: '420px', lineHeight: 1.5 }}>
+              No hay imágenes pendientes de clasificar en este momento. Puedes subir nuevas fotos sin clasificar desde el panel de placas.
             </p>
+            <button
+              type="button"
+              onClick={() => navigate('/placas')}
+              style={{
+                background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '11px 22px',
+                fontWeight: 800,
+                fontSize: '0.92em',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+              }}
+            >
+              📤 Ir a subir placas
+            </button>
           </div>
         ) : (
           <>
@@ -527,13 +634,12 @@ const ListaEspera: React.FC = () => {
                           onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.85)'; e.currentTarget.style.color = '#ef4444'; }}
                         >✕</button>
                         <div style={s.imgWrap}>
-                          <img
-                            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+                          <ResilientPlacaImage
+                            photoUrl={placa.photo_url}
+                            publicId={placa.public_id}
                             alt={`Sin clasificar ${absoluteIndex + 1}`}
+                            profile="thumb"
                             style={s.img}
-                            loading="lazy"
-                            decoding="async"
-                            draggable={false}
                           />
                         </div>
                         <div style={{
@@ -609,11 +715,12 @@ const ListaEspera: React.FC = () => {
                       </button>
                     </div>
                     <div style={s.bigImgWrap}>
-                      <img
-                        src={getCloudinaryImageUrl(selected.photo_url, 'view')}
+                      <ResilientPlacaImage
+                        photoUrl={selected.photo_url}
+                        publicId={selected.public_id}
                         alt="Imagen a clasificar"
+                        profile="view"
                         style={s.bigImg}
-                        draggable={false}
                       />
                     </div>
 
@@ -637,13 +744,12 @@ const ListaEspera: React.FC = () => {
                                 onMouseEnter={() => setHoveredCard(placa.id)}
                                 onMouseLeave={() => setHoveredCard(null)}
                               >
-                                <img
-                                  src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+                                <ResilientPlacaImage
+                                  photoUrl={placa.photo_url}
+                                  publicId={placa.public_id}
                                   alt={`Mini ${miniStart + idx + 1}`}
+                                  profile="thumb"
                                   style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center', display: 'block' }}
-                                  loading="lazy"
-                                  decoding="async"
-                                  draggable={false}
                                 />
                               </div>
                             );
@@ -1050,9 +1156,11 @@ const ListaEspera: React.FC = () => {
                     <div style={{ fontSize: '0.82em', color: '#64748b' }}>Placa que esta editando</div>
                   </div>
                   <div style={{ borderRadius: '18px', overflow: 'hidden', background: '#0f172a', border: '1px solid rgba(148, 163, 184, 0.35)', aspectRatio: '3 / 4', minHeight: '340px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <img
-                      src={getCloudinaryImageUrl(preselectPlate.photo_url, 'view')}
+                    <ResilientPlacaImage
+                      photoUrl={preselectPlate.photo_url}
+                      publicId={preselectPlate.public_id}
                       alt="Miniatura de la placa en lista de espera"
+                      profile="view"
                       style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                     />
                   </div>

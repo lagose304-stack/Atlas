@@ -110,15 +110,8 @@ interface HydratedSectionsPayload {
   legacySectionsCount: number;
 }
 
-type ParcialKey = 'primer' | 'segundo' | 'tercer';
 type ZoomSensitivity = 'suave' | 'media' | 'rapida';
 type LassoInteractionMode = 'draw' | 'edit';
-
-const PARCIALES: { key: ParcialKey; label: string }[] = [
-  { key: 'primer', label: 'Primer parcial' },
-  { key: 'segundo', label: 'Segundo parcial' },
-  { key: 'tercer', label: 'Tercer parcial' },
-];
 
 const parseAumentoSortValue = (aumento: string): number => {
   const normalized = aumento.trim().replace(',', '.');
@@ -948,13 +941,22 @@ const MapasInteractivos: React.FC = () => {
     targetZoomRef.current = 1;
     targetPanRef.current = { x: 0, y: 0 };
 
+    const targetUrl = getCloudinaryImageUrl(selectedPlaca.photo_url, 'zoom');
     const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.src = getCloudinaryImageUrl(selectedPlaca.photo_url, 'zoom');
     img.onload = () => {
       if (!isEffectActive) return;
       setImageElement(img);
     };
+    img.onerror = () => {
+      if (!isEffectActive) return;
+      const retryImg = new window.Image();
+      retryImg.onload = () => {
+        if (!isEffectActive) return;
+        setImageElement(retryImg);
+      };
+      retryImg.src = targetUrl;
+    };
+    img.src = targetUrl;
 
     const loadSavedMap = async () => {
       const { data, error } = await supabase
@@ -2182,13 +2184,6 @@ const MapasInteractivos: React.FC = () => {
     persistedSelectionDetailsSnapshot,
   ]);
 
-  const temasByParcial: Record<ParcialKey, Tema[]> = { primer: [], segundo: [], tercer: [] };
-  temas.forEach(t => {
-    if (temasByParcial[t.parcial as ParcialKey]) {
-      temasByParcial[t.parcial as ParcialKey].push(t);
-    }
-  });
-
   const selectedTema = temas.find(t => t.id === selectedTemaId) ?? null;
   const selectedSubtema = subtemas.find(s => s.id === selectedSubtemaId) ?? null;
   const interactivePlacas = useMemo(() => placas.filter((placa) => placasConMapa.has(placa.id)), [placas, placasConMapa]);
@@ -3271,63 +3266,20 @@ const MapasInteractivos: React.FC = () => {
               <div style={s.accentLine} />
             </div>
 
-            <div style={s.card}>
-              <div style={s.cardHeader}>
-                <h2 style={s.cardTitle}>Selecciona tema y subtema</h2>
-                <p style={s.cardSubtitle}>Elige el subtema para visualizar sus placas</p>
-                <div style={s.divider} />
-              </div>
-
-              <div style={s.selectsRow}>
-                <div style={s.selectGroup}>
-                  <label style={s.selectLabel}>Tema</label>
-                  {loadingTemas ? (
-                    <div style={s.inlineLoading}><div style={s.spinnerSm} /> Cargando...</div>
-                  ) : (
-                    <select
-                      style={s.select}
-                      value={selectedTemaId ?? ''}
-                      onChange={e => setSelectedTemaId(e.target.value ? Number(e.target.value) : null)}
-                    >
-                      <option value="">— Elige un tema —</option>
-                      {PARCIALES.map(({ key, label }) =>
-                        temasByParcial[key].length > 0 ? (
-                          <optgroup key={key} label={label}>
-                            {temasByParcial[key].map(t => (
-                              <option key={t.id} value={t.id}>{t.nombre}</option>
-                            ))}
-                          </optgroup>
-                        ) : null
-                      )}
-                    </select>
-                  )}
-                </div>
-
-                <div style={s.selectGroup}>
-                  <label style={s.selectLabel}>Subtema</label>
-                  {loadingSubtemas ? (
-                    <div style={s.inlineLoading}><div style={s.spinnerSm} /> Cargando...</div>
-                  ) : (
-                    <select
-                      style={{ ...s.select, ...(!selectedTemaId ? s.selectDisabled : {}) }}
-                      value={selectedSubtemaId ?? ''}
-                      disabled={!selectedTemaId || subtemas.length === 0}
-                      onChange={e => setSelectedSubtemaId(e.target.value ? Number(e.target.value) : null)}
-                    >
-                      <option value="">
-                        {!selectedTemaId
-                          ? '— Primero elige un tema —'
-                          : subtemas.length === 0
-                          ? '— Sin subtemas —'
-                          : '— Elige un subtema —'}
-                      </option>
-                      {subtemas.map(sub => (
-                        <option key={sub.id} value={sub.id}>{sub.nombre}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </div>
+            <div style={{ marginBottom: '24px' }}>
+              <EditorParcialAccordionPicker
+                temas={temas}
+                subtemas={subtemas}
+                selectedTemaId={selectedTemaId}
+                selectedSubtemaId={selectedSubtemaId}
+                onSelectTema={(id) => setSelectedTemaId(id)}
+                onSelectSubtema={(id) => setSelectedSubtemaId(id)}
+                loadingTemas={loadingTemas}
+                loadingSubtemas={loadingSubtemas}
+                mode="tema-and-subtema"
+                title="Selecciona tema y subtema"
+                subtitle="Elige un parcial y tema para desplegar sus subtemas y placas interactivas"
+              />
             </div>
 
             {selectedSubtema && (

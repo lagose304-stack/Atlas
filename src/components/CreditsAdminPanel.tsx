@@ -104,13 +104,17 @@ const CreditsAdminPanel: React.FC = () => {
 
   const selectDraftPhoto = (file?: File) => {
     if (!file) return;
-    if (draftPhotoPreview) URL.revokeObjectURL(draftPhotoPreview);
     setDraftPhotoFile(file);
-    setDraftPhotoPreview(URL.createObjectURL(file));
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        setDraftPhotoPreview(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const clearDraftPhoto = () => {
-    if (draftPhotoPreview) URL.revokeObjectURL(draftPhotoPreview);
     setDraftPhotoFile(null);
     setDraftPhotoPreview('');
   };

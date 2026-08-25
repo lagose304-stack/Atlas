@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { getCloudinaryImageUrl } from './cloudinaryImages';
 
 describe('getCloudinaryImageUrl', () => {
-  it('devuelve directamente la URL de Cloudflare R2 sin alteraciones', () => {
-    const source = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/epitelio/placa.jpg';
+  it('devuelve directamente la URL de Cloudflare R2 con formato webp', () => {
+    const source = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/epitelio/placa.webp';
     const result = getCloudinaryImageUrl(source, 'thumb');
 
     expect(result).toBe(source);
