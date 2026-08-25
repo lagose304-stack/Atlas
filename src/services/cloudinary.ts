@@ -15,6 +15,11 @@ const resolveBackendBaseUrl = () => {
     const normalized = configured.replace(/\/+$/, '');
     const configuredIsLocalhost = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalized);
 
+    if (isLocal && configuredIsLocalhost) {
+      // En local, Vite dev server atiende directamente las rutas relativas /api/*
+      return '';
+    }
+
     if (!isLocal && configuredIsLocalhost) {
       return '';
     }
@@ -22,7 +27,7 @@ const resolveBackendBaseUrl = () => {
     return normalized;
   }
 
-  return isLocal ? 'http://localhost:3001' : '';
+  return '';
 };
 
 const backendBaseUrl = resolveBackendBaseUrl();
@@ -163,18 +168,25 @@ export const uploadToCloudinary = async (file: File, options?: UploadOptions) =>
     ? '/api/images-upload'
     : backendUrl('/api/images/upload');
 
-  const { data } = await axios.post(uploadUrl, formData, {
-    headers: {
-      ...authHeaders(),
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+  try {
+    const { data } = await axios.post(uploadUrl, formData, {
+      headers: {
+        ...authHeaders(),
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 60000,
+    });
 
-  if (data?.secure_url) {
-    return data;
+    if (data?.secure_url) {
+      return data;
+    }
+
+    throw new Error('No se pudo obtener la URL de la imagen subida.');
+  } catch (error: any) {
+    const detail = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Error al conectar con el servidor de subida';
+    console.error('Error al subir imagen a Cloudflare R2:', detail, error);
+    throw new Error(detail);
   }
-
-  throw new Error('No se pudo subir la imagen a Cloudflare R2.');
 };
 
 type DeleteFromCloudinaryInput =
@@ -201,22 +213,28 @@ export const deleteFromCloudinary = async (input: DeleteFromCloudinaryInput) => 
     throw new Error('No se pudo resolver el identificador para eliminar la imagen.');
   }
 
-  if (isUsingEdgeFunctions) {
-    const response = await axios.delete('/api/images-delete', {
+  try {
+    if (isUsingEdgeFunctions) {
+      const response = await axios.delete('/api/images-delete', {
+        headers: authHeaders(),
+        params: {
+          publicId: resolvedPublicId,
+          ...(imageUrl ? { imageUrl } : {}),
+        },
+      });
+      return response.data;
+    }
+
+    const response = await axios.delete(backendUrl(`/api/images/${encodeURIComponent(resolvedPublicId)}`), {
       headers: authHeaders(),
-      params: {
-        publicId: resolvedPublicId,
-        ...(imageUrl ? { imageUrl } : {}),
-      },
+      params: { publicId: resolvedPublicId },
     });
     return response.data;
+  } catch (error: any) {
+    const detail = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Error al eliminar imagen';
+    console.warn('Error al eliminar imagen:', detail);
+    throw new Error(detail);
   }
-
-  const response = await axios.delete(backendUrl(`/api/images/${encodeURIComponent(resolvedPublicId)}`), {
-    headers: authHeaders(),
-    params: { publicId: resolvedPublicId },
-  });
-  return response.data;
 };
 
 export const moveCloudinaryImage = async (fromPublicId: string, toPublicId: string): Promise<{ secure_url: string; public_id: string }> => {
@@ -224,10 +242,17 @@ export const moveCloudinaryImage = async (fromPublicId: string, toPublicId: stri
     from_public_id: fromPublicId,
     to_public_id: toPublicId,
   };
-  const response = isUsingEdgeFunctions
-    ? await axios.post('/api/images-move', payload, { headers: authHeaders() })
-    : await axios.post(backendUrl('/api/images/move'), payload, { headers: authHeaders() });
-  return response.data;
+
+  try {
+    const response = isUsingEdgeFunctions
+      ? await axios.post('/api/images-move', payload, { headers: authHeaders() })
+      : await axios.post(backendUrl('/api/images/move'), payload, { headers: authHeaders() });
+    return response.data;
+  } catch (error: any) {
+    const detail = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Error al mover imagen';
+    console.error('Error al mover imagen:', detail);
+    throw new Error(detail);
+  }
 };
 
 /**

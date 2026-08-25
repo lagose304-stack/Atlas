@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MousePointerClick } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../services/supabase';
+import { describeSupabaseError, supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -576,9 +576,10 @@ const MoverPlaca: React.FC = () => {
       setSelectedPlaca(null);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error al guardar placa:', err);
-      setSaveError('Error al guardar. Intenta de nuevo.');
+      const detail = err?.message || describeSupabaseError(err) || 'Intenta de nuevo.';
+      setSaveError(`Error al guardar: ${detail}`);
     } finally {
       setIsSaving(false);
     }

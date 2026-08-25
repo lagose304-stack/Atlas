@@ -81,7 +81,10 @@ const CreditsAdminPanel: React.FC = () => {
       if (previousUrl) await deleteFromCloudinary(previousUrl).catch(() => undefined);
       setProfiles(current => [...current.filter(item => item.profile_key !== key), { profile_key: key, photo_url: nextUrl }]);
       setMessage('Fotografía actualizada correctamente.');
-    } catch { setMessage('No se pudo actualizar la fotografía.'); }
+    } catch (error: any) {
+      const detail = error?.message || describeSupabaseError(error);
+      setMessage(`No se pudo actualizar la fotografía: ${detail}`);
+    }
     finally { setBusyKey(null); if (fileInputs.current[key]) fileInputs.current[key]!.value = ''; }
   };
 
@@ -90,7 +93,7 @@ const CreditsAdminPanel: React.FC = () => {
     if (!previousUrl || !window.confirm('¿Deseas borrar esta fotografía?')) return;
     setBusyKey(key); setMessage('');
     const { error } = await supabase.from('credit_profiles').update({ photo_url: null, updated_at: new Date().toISOString() }).eq('profile_key', key);
-    if (error) setMessage('No se pudo borrar la fotografía.');
+    if (error) setMessage(`No se pudo borrar la fotografía: ${describeSupabaseError(error)}`);
     else {
       await deleteFromCloudinary(previousUrl).catch(() => undefined);
       setProfiles(current => current.map(item => item.profile_key === key ? { ...item, photo_url: null } : item));

@@ -35,7 +35,7 @@ const CREDIT_GROUPS: CreditGroup[] = [
     accent: '#8b5cf6',
     soft: '#f5f3ff',
     icon: Code2,
-    pendingLabel: 'Elam Elisama Lagos Matamoros / Instructor del 2024 - 2025',
+    pendingLabel: 'Elam Elisama Lagos Matamoros / Instructor desde el 2024 - Actualidad',
     profileKey: 'developer',
     people: [],
   },

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageUploader from '../components/ImageUploader';
-import { supabase } from '../services/supabase';
+import { describeSupabaseError, supabase } from '../services/supabase';
 import { uploadToCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
 import Footer from '../components/Footer';
 import BackButton from '../components/BackButton';
@@ -531,9 +531,10 @@ const Placas: React.FC = () => {
       setTincion('');
       setShowTincion(false);
       setShowClasificadasForm(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error al guardar placa:', err);
-      setSaveError('Error al guardar. Por favor intenta de nuevo.');
+      const detail = err?.message || describeSupabaseError(err) || 'Por favor intenta de nuevo.';
+      setSaveError(`Error al guardar: ${detail}`);
     } finally {
       setIsSaving(false);
     }
@@ -609,8 +610,9 @@ const Placas: React.FC = () => {
             source: 'placas_form',
           },
         });
-      } catch (err) {
-        errors.push(`Imagen ${i + 1}: error al subir`);
+      } catch (err: any) {
+        const detail = err?.message || describeSupabaseError(err) || 'error al subir';
+        errors.push(`Imagen ${i + 1}: ${detail}`);
         console.error(err);
       }
       setScUploadProgress(Math.round(((i + 1) / scFiles.length) * 100));
