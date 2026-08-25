@@ -63,8 +63,20 @@ const Creditos: React.FC = () => {
   const goBack = useSmartBackNavigation('/');
   const [profiles, setProfiles] = useState<CreditProfile[]>([]);
   const [contributors, setContributors] = useState<CreditContributor[]>([]);
-  useEffect(() => { void loadCredits().then(data => { setProfiles(data.profiles); setContributors(data.contributors); }).catch(() => undefined); }, []);
-  const photoFor = (key: CreditProfileKey) => profiles.find(profile => profile.profile_key === key)?.photo_url ?? null;
+  const [failedProfiles, setFailedProfiles] = useState<Record<string, boolean>>({});
+  const [failedContributors, setFailedContributors] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    void loadCredits()
+      .then((data) => {
+        setProfiles(data.profiles);
+        setContributors(data.contributors);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const photoFor = (key: CreditProfileKey) =>
+    profiles.find((profile) => profile.profile_key === key)?.photo_url ?? null;
 
   return (
     <div style={s.page}>
@@ -98,6 +110,8 @@ const Creditos: React.FC = () => {
           {CREDIT_GROUPS.map(group => {
             const Icon = group.icon;
             const photoUrl = photoFor(group.profileKey);
+            const hasValidPhoto = Boolean(photoUrl && !failedProfiles[group.profileKey]);
+
             return (
               <article key={group.id} style={{ ...s.groupCard, borderTopColor: group.accent }}>
                 <span style={{ ...s.groupGlow, background: group.accent }} aria-hidden="true" />
@@ -127,8 +141,14 @@ const Creditos: React.FC = () => {
                 ) : (
                   <div style={{ ...s.creditIdentity, background: `linear-gradient(135deg,#ffffff,${group.soft})`, borderColor: `${group.accent}38` }}>
                     <div style={{ ...s.identityPhoto, background: group.soft, borderColor: `${group.accent}45` }}>
-                      {photoUrl ? (
-                        <img src={getCloudinaryImageUrl(photoUrl, 'thumb')} alt={group.pendingLabel.split('/')[0].trim()} style={s.identityPhotoImage} />
+                      {hasValidPhoto && photoUrl ? (
+                        <img
+                          src={getCloudinaryImageUrl(photoUrl, 'thumb')}
+                          alt={group.pendingLabel.split('/')[0].trim()}
+                          style={s.identityPhotoImage}
+                          loading="lazy"
+                          onError={() => setFailedProfiles((prev) => ({ ...prev, [group.profileKey]: true }))}
+                        />
                       ) : (
                         <div style={{ ...s.identityPhotoPlaceholder, color: group.accent }}>
                           <UserRound size={31} strokeWidth={1.7} />
@@ -162,27 +182,43 @@ const Creditos: React.FC = () => {
           {contributors.length === 0 && <p style={s.closingText}>Esta sección se actualizará con los nombres y aportes de cada integrante del proyecto.</p>}
         </section>
 
-        {contributors.length > 0 && <section style={s.contributorsSection} aria-labelledby="instructores-title">
-          <div style={s.contributorsHeading}>
-            <span style={s.contributorsEyebrow}>Nuestro reconocimiento</span>
-            <h2 id="instructores-title" style={s.contributorsTitle}>Instructores que han formado parte del atlas</h2>
-            <p style={s.contributorsIntro}>Agradecemos el tiempo, conocimiento y dedicación aportados durante cada período.</p>
-          </div>
-          <div className="credits-contributors-grid" style={s.contributorsGrid}>
-            {contributors.map((person, index) => <article key={person.id} style={s.contributorCard}>
-              <div style={s.contributorPhoto}>
-                {person.photo_url
-                  ? <img src={getCloudinaryImageUrl(person.photo_url, 'thumb')} alt={`Fotografía de ${person.name}`} style={s.contributorPhotoImage} />
-                  : <span style={s.contributorNumber}>{String(index + 1).padStart(2, '0')}</span>}
-              </div>
-              <div style={s.contributorBody}>
-                <h3 style={s.contributorName}>{person.name}</h3>
-                <span style={s.contributorPeriod}>{person.start_year} — {person.is_current ? 'Actualidad' : person.end_year}</span>
-                {person.contribution && <p style={s.contributorContribution}>{person.contribution}</p>}
-              </div>
-            </article>)}
-          </div>
-        </section>}
+        {contributors.length > 0 && (
+          <section style={s.contributorsSection} aria-labelledby="instructores-title">
+            <div style={s.contributorsHeading}>
+              <span style={s.contributorsEyebrow}>Nuestro reconocimiento</span>
+              <h2 id="instructores-title" style={s.contributorsTitle}>Instructores que han formado parte del atlas</h2>
+              <p style={s.contributorsIntro}>Agradecemos el tiempo, conocimiento y dedicación aportados durante cada período.</p>
+            </div>
+            <div className="credits-contributors-grid" style={s.contributorsGrid}>
+              {contributors.map((person, index) => {
+                const hasPhoto = Boolean(person.photo_url && !failedContributors[person.id]);
+
+                return (
+                  <article key={person.id} style={s.contributorCard}>
+                    <div style={s.contributorPhoto}>
+                      {hasPhoto && person.photo_url ? (
+                        <img
+                          src={getCloudinaryImageUrl(person.photo_url, 'thumb')}
+                          alt={`Fotografía de ${person.name}`}
+                          style={s.contributorPhotoImage}
+                          loading="lazy"
+                          onError={() => setFailedContributors((prev) => ({ ...prev, [person.id]: true }))}
+                        />
+                      ) : (
+                        <span style={s.contributorNumber}>{String(index + 1).padStart(2, '0')}</span>
+                      )}
+                    </div>
+                    <div style={s.contributorBody}>
+                      <h3 style={s.contributorName}>{person.name}</h3>
+                      <span style={s.contributorPeriod}>{person.start_year} — {person.is_current ? 'Actualidad' : person.end_year}</span>
+                      {person.contribution && <p style={s.contributorContribution}>{person.contribution}</p>}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
       </main>
       <Footer />
     </div>
