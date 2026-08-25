@@ -16,9 +16,9 @@ interface DualPlateViewportProps {
 }
 
 const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 4;
+const ZOOM_MAX = 6;
 const MIN_DYNAMIC_MAX_ZOOM = 1.2;
-const ZOOM_OVERSHOOT_FACTOR = 1.1;
+const ZOOM_OVERSHOOT_FACTOR = 1.15;
 
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 
@@ -130,6 +130,7 @@ export const DualPlateViewport: React.FC<DualPlateViewportProps> = ({
   showSignalings,
   onToggleSignalings,
 }) => {
+  const sharpenFilterId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const stateRef = useRef({ zoom: 1, pos: { x: 0, y: 0 } });
@@ -232,12 +233,18 @@ export const DualPlateViewport: React.FC<DualPlateViewportProps> = ({
     };
   }, [updateImageSize, srcView, srcZoom, useZoomSource]);
 
-  // Perceptual enhancement calculations (Atlas Microscope Standard)
+  // Perceptual enhancement calculations (Atlas Microscope Optical Standard)
   const perceptualEnhanceLevel = useMemo(() => {
-    if (zoom <= 1.35) return 0;
-    const span = Math.max(0.001, effectiveMaxZoom - 1.35);
-    return clamp((zoom - 1.35) / span, 0, 1);
+    if (zoom <= 1.25) return 0;
+    const span = Math.max(0.001, effectiveMaxZoom - 1.25);
+    return clamp((zoom - 1.25) / span, 0, 1);
   }, [zoom, effectiveMaxZoom]);
+
+  const sharpenK = useMemo(() => {
+    if (zoom <= 1.25) return 0;
+    const factor = clamp((zoom - 1.25) / 3.0, 0, 1);
+    return 0.08 + Math.pow(factor, 0.9) * 0.24;
+  }, [zoom]);
 
   const imageFilterStyle = useMemo(() => {
     if (perceptualEnhanceLevel <= 0) return 'none';
@@ -245,8 +252,9 @@ export const DualPlateViewport: React.FC<DualPlateViewportProps> = ({
     const contrast = 1 + boosted * 0.14;
     const saturate = 1 + boosted * 0.06;
     const brightness = 1 + boosted * 0.018;
-    return `contrast(${contrast.toFixed(3)}) saturate(${saturate.toFixed(3)}) brightness(${brightness.toFixed(3)}) drop-shadow(0 0 0.35px rgba(0,0,0,0.45))`;
-  }, [perceptualEnhanceLevel]);
+    const svgFilter = sharpenK > 0 ? `url(#${CSS.escape ? CSS.escape(sharpenFilterId) : sharpenFilterId})` : '';
+    return `${svgFilter} contrast(${contrast.toFixed(3)}) saturate(${saturate.toFixed(3)}) brightness(${brightness.toFixed(3)}) drop-shadow(0 0 0.35px rgba(0,0,0,0.45))`.trim();
+  }, [perceptualEnhanceLevel, sharpenK, sharpenFilterId]);
 
   const grainOpacity = useMemo(() => {
     if (perceptualEnhanceLevel <= 0) return 0;
@@ -754,6 +762,19 @@ export const DualPlateViewport: React.FC<DualPlateViewportProps> = ({
             transition: isDraggingRef.current ? 'none' : 'transform 0.25s ease',
           }}
         >
+          {/* SVG Filter Definitions for Optical Sharpening */}
+          <svg style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }} aria-hidden="true">
+            <defs>
+              <filter id={sharpenFilterId} x="-10%" y="-10%" width="120%" height="120%">
+                <feConvolveMatrix
+                  order="3"
+                  kernelMatrix={`0 -${sharpenK.toFixed(3)} 0 -${sharpenK.toFixed(3)} ${(1 + 4 * sharpenK).toFixed(3)} -${sharpenK.toFixed(3)} 0 -${sharpenK.toFixed(3)} 0`}
+                  preserveAlpha="true"
+                />
+              </filter>
+            </defs>
+          </svg>
+
           <img
             ref={imageRef}
             src={currentImageSrc}
@@ -768,6 +789,8 @@ export const DualPlateViewport: React.FC<DualPlateViewportProps> = ({
               userSelect: 'none',
               display: 'block',
               filter: imageFilterStyle,
+              imageRendering: zoom > 1.2 ? ('-webkit-optimize-contrast' as any) : 'auto',
+              willChange: 'transform',
               boxShadow: '0 10px 30px rgba(15, 75, 105, 0.16)',
               borderRadius: '4px',
             }}

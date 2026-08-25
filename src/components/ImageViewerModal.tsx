@@ -62,9 +62,9 @@ const interactiveMapViewerCache = new Map<number, InteractiveMapData>();
 const VIEWER_MODE_SESSION_KEY = 'atlas_public_viewer_mode';
 
 const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 4;
+const ZOOM_MAX = 6;
 const MIN_DYNAMIC_MAX_ZOOM = 1.2;
-const ZOOM_OVERSHOOT_FACTOR = 1.1;
+const ZOOM_OVERSHOOT_FACTOR = 1.15;
 const SIDEBAR_BREAKPOINT = 900;
 const MOBILE_BREAKPOINT = 640;
 const MOBILE_ARROW_SCALE = 0.6;
@@ -346,6 +346,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   plateCount,
 }) => {
   const { user } = useAuth();
+  const sharpenFilterId = useId();
   const resolvedInitialMarkerVisualMode: MarkerVisualMode = hideSidebar ? 'pointer' : initialMarkerVisualMode;
   const resolvedInitialMarkerIndex = hideSidebar && ((senaladosMeta?.length ?? senalados?.length ?? 0) > 0) ? 0 : null;
 
@@ -808,11 +809,18 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     return computeDynamicMaxZoom(imageSize, imageNaturalSize);
   }, [imageSize, imageNaturalSize]);
 
+  // Perceptual enhancement calculations (Atlas Microscope Optical Standard)
   const perceptualEnhanceLevel = useMemo(() => {
-    if (zoomLevel <= 1.35) return 0;
-    const span = Math.max(0.001, effectiveMaxZoom - 1.35);
-    return clamp((zoomLevel - 1.35) / span, 0, 1);
+    if (zoomLevel <= 1.25) return 0;
+    const span = Math.max(0.001, effectiveMaxZoom - 1.25);
+    return clamp((zoomLevel - 1.25) / span, 0, 1);
   }, [zoomLevel, effectiveMaxZoom]);
+
+  const sharpenK = useMemo(() => {
+    if (zoomLevel <= 1.25) return 0;
+    const factor = clamp((zoomLevel - 1.25) / 3.0, 0, 1);
+    return 0.08 + Math.pow(factor, 0.9) * 0.24;
+  }, [zoomLevel]);
 
   const imageFilterStyle = useMemo(() => {
     if (perceptualEnhanceLevel <= 0) return 'none';
@@ -820,8 +828,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     const contrast = 1 + boosted * 0.14;
     const saturate = 1 + boosted * 0.06;
     const brightness = 1 + boosted * 0.018;
-    return `contrast(${contrast.toFixed(3)}) saturate(${saturate.toFixed(3)}) brightness(${brightness.toFixed(3)}) drop-shadow(0 0 0.35px rgba(0,0,0,0.45))`;
-  }, [perceptualEnhanceLevel]);
+    const svgFilter = sharpenK > 0 ? `url(#${CSS.escape ? CSS.escape(sharpenFilterId) : sharpenFilterId})` : '';
+    return `${svgFilter} contrast(${contrast.toFixed(3)}) saturate(${saturate.toFixed(3)}) brightness(${brightness.toFixed(3)}) drop-shadow(0 0 0.35px rgba(0,0,0,0.45))`.trim();
+  }, [perceptualEnhanceLevel, sharpenK, sharpenFilterId]);
 
   const grainOpacity = useMemo(() => {
     if (perceptualEnhanceLevel <= 0) return 0;
@@ -2392,6 +2401,19 @@ const panBy = (dx: number, dy: number) => {
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
+          {/* SVG Filter Definitions for Optical Sharpening */}
+          <svg style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }} aria-hidden="true">
+            <defs>
+              <filter id={sharpenFilterId} x="-10%" y="-10%" width="120%" height="120%">
+                <feConvolveMatrix
+                  order="3"
+                  kernelMatrix={`0 -${sharpenK.toFixed(3)} 0 -${sharpenK.toFixed(3)} ${(1 + 4 * sharpenK).toFixed(3)} -${sharpenK.toFixed(3)} 0 -${sharpenK.toFixed(3)} 0`}
+                  preserveAlpha="true"
+                />
+              </filter>
+            </defs>
+          </svg>
+
           <div
             style={{
               position: 'relative',
@@ -2429,6 +2451,8 @@ const panBy = (dx: number, dy: number) => {
                 pointerEvents: 'none',
                 display: 'block',
                 filter: imageFilterStyle,
+                imageRendering: zoomLevel > 1.2 ? ('-webkit-optimize-contrast' as any) : 'auto',
+                willChange: 'transform',
               } as React.CSSProperties}
             />
 
