@@ -1,46 +1,56 @@
+import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createClient } from '@supabase/supabase-js';
-import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../backend/.env') });
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, serviceKey);
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+async function main() {
+  console.log('🚀 SINCRONIZANDO IMÁGENES DE PRUEBAS CON SUS SUBTEMAS CORRESPONDIENTES...\n');
 
-async function generatePruebasFix() {
-  const { data: pruebas } = await supabase.from('pruebas').select('id, nombre, tema_id, subtema_id');
-  const { data: subtemas } = await supabase.from('subtemas').select('id, nombre, logo_url');
-  const { data: temas } = await supabase.from('temas').select('id, nombre, logo_url');
+  // Obtener todas las pruebas con sus subtemas
+  const { data: pruebas, error } = await supabase
+    .from('pruebas')
+    .select('id, nombre, image_url, subtema_id, tema_id, subtemas:subtema_id(id, nombre, logo_url), temas:tema_id(id, nombre, logo_url)');
 
-  const subMap = new Map((subtemas || []).map((s) => [s.id, s.logo_url]));
-  const temaMap = new Map((temas || []).map((t) => [t.id, t.logo_url]));
+  if (error) {
+    console.error('Error cargando pruebas:', error);
+    return;
+  }
 
-  let sqlStatements = [];
-  for (const p of pruebas || []) {
-    const logo = (p.subtema_id && subMap.get(p.subtema_id)) || (p.tema_id && temaMap.get(p.tema_id));
-    if (logo) {
-      sqlStatements.push(`UPDATE public.pruebas SET image_url = '${logo}' WHERE id = '${p.id}';`);
+  console.log(`Analizando ${pruebas.length} pruebas...`);
+
+  let updated = 0;
+
+  for (const p of pruebas) {
+    const subtemaLogo = p.subtemas?.logo_url;
+    const temaLogo = p.temas?.logo_url;
+    const fallbackLogo = subtemaLogo || temaLogo;
+
+    if (fallbackLogo) {
+      const { error: updateError } = await supabase
+        .from('pruebas')
+        .update({ image_url: fallbackLogo })
+        .eq('id', p.id);
+
+      if (updateError) {
+        console.error(`❌ Error actualizando prueba ${p.nombre}:`, updateError);
+      } else {
+        console.log(`✅ [${p.nombre}] → Imagen actualizada a: ${fallbackLogo}`);
+        updated++;
+      }
+    } else {
+      console.warn(`⚠️ Prueba ${p.nombre} no tiene subtema ni tema con logo`);
     }
   }
 
-  const fullSql = `-- =====================================================================
--- Atlas de Histología — Corrección de imágenes de portada de Evaluaciones
--- Ejecuta este script en Supabase Dashboard -> SQL Editor -> Run
--- =====================================================================
-
-${sqlStatements.join('\n')}
-`;
-
-  const sqlPath = path.resolve(__dirname, '../database/fix_pruebas_covers.sql');
-  fs.writeFileSync(sqlPath, fullSql, 'utf-8');
-  console.log(`✅ Script SQL de corrección de portadas generado en: database/fix_pruebas_covers.sql`);
-  console.log(`Total de pruebas corregidas: ${sqlStatements.length}`);
+  console.log(`\n🎉 ¡Actualización completada! ${updated}/${pruebas.length} pruebas actualizadas con imágenes válidas.`);
 }
 
-generatePruebasFix();
+main().catch(console.error);
