@@ -174,6 +174,48 @@ const TestCard: React.FC<{
   );
 };
 
+const WeekThemeThumbnail: React.FC<{
+  themeGroup: { temaNombre: string; items: PruebaPublica[] };
+}> = ({ themeGroup }) => {
+  const candidateImages = React.useMemo(() => {
+    const list: string[] = [];
+    themeGroup.items.forEach((item) => {
+      if (item.tema?.logo_url) list.push(item.tema.logo_url);
+      if (item.subtema?.logo_url) list.push(item.subtema.logo_url);
+      if (item.image_url) list.push(item.image_url);
+    });
+    return Array.from(new Set(list.filter((url): url is string => Boolean(url && typeof url === 'string' && url.trim().length > 0))));
+  }, [themeGroup.items]);
+
+  const [imageIndex, setImageIndex] = React.useState(0);
+  const [failed, setFailed] = React.useState(false);
+
+  const currentUrl = candidateImages[imageIndex];
+  const logoSrc = currentUrl ? getCloudinaryImageUrl(currentUrl, 'thumb') : '';
+
+  const handleError = () => {
+    if (imageIndex + 1 < candidateImages.length) {
+      setImageIndex((prev) => prev + 1);
+    } else {
+      setFailed(true);
+    }
+  };
+
+  if (!logoSrc || failed) {
+    return <span style={s.weekThemeThumbFallback}>{(themeGroup.temaNombre || 'T').slice(0, 1).toUpperCase()}</span>;
+  }
+
+  return (
+    <img
+      src={logoSrc}
+      alt={themeGroup.temaNombre}
+      style={s.weekThemeThumb}
+      loading="lazy"
+      onError={handleError}
+    />
+  );
+};
+
 const Evaluaciones: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -377,15 +419,7 @@ const Evaluaciones: React.FC = () => {
                                       <summary style={{ ...s.historySummary, background: 'linear-gradient(135deg, rgba(248,250,252,0.96), rgba(239,246,255,0.9))' }}>
                                         <span style={s.weekThemeSummary}>
                                           <span style={s.weekThemeLabelWrap}>
-                                            {themeGroup.items[0]?.image_url ? (
-                                              <img
-                                                src={getCloudinaryImageUrl(themeGroup.items[0].image_url, 'thumb')}
-                                                alt={themeGroup.temaNombre}
-                                                style={s.weekThemeThumb}
-                                              />
-                                            ) : (
-                                              <span style={s.weekThemeThumbFallback}>{(themeGroup.temaNombre || 'T').slice(0, 1).toUpperCase()}</span>
-                                            )}
+                                            <WeekThemeThumbnail themeGroup={themeGroup} />
                                             <span style={s.weekThemeTitle}>{themeGroup.temaNombre}</span>
                                           </span>
                                           <span style={s.historySummaryMeta}>

@@ -289,21 +289,11 @@ const StandardSubtemas: React.FC = () => {
                         <div className="subtema-card-img-wrap" style={styles.subtemaLogoWrap}>
                           <img
                             src={getCloudinaryImageUrl(subtema.logo_url, 'thumb')}
-                            srcSet={`${getCloudinaryImageUrl(subtema.logo_url, 'thumbSmall')} 320w, ${getCloudinaryImageUrl(subtema.logo_url, 'thumb')} 560w`}
-                            sizes="(max-width: 640px) 70px, (max-width: 900px) 86px, (max-width: 1200px) 100px, 115px"
                             alt={subtema.nombre}
                             style={styles.subtemaLogo}
                             loading="lazy"
                             decoding="async"
-                            onError={(e) => {
-                              const img = e.currentTarget;
-                              if (img.dataset.fallbackTried !== '1') {
-                                img.dataset.fallbackTried = '1';
-                                img.srcset = '';
-                                img.sizes = '';
-                                img.src = subtema.logo_url as string;
-                                return;
-                              }
+                            onError={() => {
                               setFailedSubtemaLogos((prev) => ({ ...prev, [subtema.id]: true }));
                             }}
                           />

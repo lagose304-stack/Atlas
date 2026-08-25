@@ -529,8 +529,6 @@ const ListaEspera: React.FC = () => {
                         <div style={s.imgWrap}>
                           <img
                             src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
-                            srcSet={`${getCloudinaryImageUrl(placa.photo_url, 'thumbSmall')} 320w, ${getCloudinaryImageUrl(placa.photo_url, 'thumb')} 560w`}
-                            sizes="(max-width: 560px) 45vw, (max-width: 980px) 30vw, 220px"
                             alt={`Sin clasificar ${absoluteIndex + 1}`}
                             style={s.img}
                             loading="lazy"
@@ -641,8 +639,6 @@ const ListaEspera: React.FC = () => {
                               >
                                 <img
                                   src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
-                                  srcSet={`${getCloudinaryImageUrl(placa.photo_url, 'thumbSmall')} 320w, ${getCloudinaryImageUrl(placa.photo_url, 'thumb')} 560w`}
-                                  sizes="80px"
                                   alt={`Mini ${miniStart + idx + 1}`}
                                   style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center', display: 'block' }}
                                   loading="lazy"

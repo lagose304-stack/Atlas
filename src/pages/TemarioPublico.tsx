@@ -113,23 +113,9 @@ const buildTemasLoadError = (error: SupabaseQueryError | null | undefined): stri
 const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick }) => {
   const [hovered, setHovered] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
-  const [logoSrc, setLogoSrc] = useState(() =>
-    tema.logo_url ? getCloudinaryImageUrl(tema.logo_url, 'cardWide') : ''
-  );
-  const [logoSrcSet, setLogoSrcSet] = useState(() =>
-    tema.logo_url
-      ? `${getCloudinaryImageUrl(tema.logo_url, 'cardWideSmall')} 640w, ${getCloudinaryImageUrl(tema.logo_url, 'cardWide')} 960w`
-      : undefined
-  );
 
   useEffect(() => {
     setLogoFailed(false);
-    setLogoSrc(tema.logo_url ? getCloudinaryImageUrl(tema.logo_url, 'cardWide') : '');
-    setLogoSrcSet(
-      tema.logo_url
-        ? `${getCloudinaryImageUrl(tema.logo_url, 'cardWideSmall')} 640w, ${getCloudinaryImageUrl(tema.logo_url, 'cardWide')} 960w`
-        : undefined
-    );
   }, [tema.logo_url]);
 
   return (
@@ -177,21 +163,12 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
       >
         {tema.logo_url && !logoFailed ? (
           <img
-            src={logoSrc}
-            srcSet={logoSrcSet}
-            sizes="(max-width: 760px) 50vw, (max-width: 1100px) 33vw, 420px"
+            src={getCloudinaryImageUrl(tema.logo_url, 'cardWide')}
             alt={tema.nombre}
             style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center' }}
             loading="lazy"
             decoding="async"
-            onError={() => {
-              if (logoSrc !== tema.logo_url) {
-                setLogoSrc(tema.logo_url);
-                setLogoSrcSet(undefined);
-                return;
-              }
-              setLogoFailed(true);
-            }}
+            onError={() => setLogoFailed(true)}
           />
         ) : (
           <span style={styles.topicFallback}><Microscope size={30} /><span>Atlas histológico</span></span>
