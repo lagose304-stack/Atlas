@@ -5,7 +5,7 @@ import { getCloudinaryImageUrl } from '../../services/cloudinaryImages';
 export interface EditorTema {
   id: number;
   nombre: string;
-  parcial: string;
+  parcial?: string | null;
   sort_order?: number | null;
   logo_url?: string | null;
 }

@@ -19,6 +19,7 @@ import LoadingToast from './LoadingToast';
 import ContentBlockRenderer from './ContentBlockRenderer';
 import VisualBlockProperties from './page-editor/VisualBlockProperties';
 import SpanishEditorShortcuts from './page-editor/SpanishEditorShortcuts';
+import EditorParcialAccordionPicker from './editor/EditorParcialAccordionPicker';
 import {
   HistologyGeneralitiesInlineEditor,
   HistologyFunctionInlineEditor,
@@ -1099,71 +1100,103 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     setAllFilterTema('');
     setAllFilterSubtema('');
     setLoadingPlacas(true);
-    if (entityType === 'home_page') {
-      setAvailablePlacas([]);
-      setLoadingPlacas(false);
-    } else {
-      const col = entityType === 'placas_page' ? 'subtema_id' : 'tema_id';
-      supabase
-        .from('placas')
-        .select('id, photo_url')
-        .eq(col, entityId)
-        .order('sort_order', { ascending: true })
-        .then(({ data }) => {
+
+    const loadPlacas = async () => {
+      try {
+        if (entityType === 'placas_page') {
+          // Placas del subtema actual
+          const { data } = await supabase
+            .from('placas')
+            .select('id, photo_url')
+            .eq('subtema_id', entityId)
+            .order('sort_order', { ascending: true });
           setAvailablePlacas(data ?? []);
-          setLoadingPlacas(false);
-        });
-    }
-    // Cargar temas para la pestaña "Todas"
+        } else if (entityType === 'subtemas_page') {
+          // Placas de todos los subtemas de este tema
+          const { data: subData } = await supabase
+            .from('subtemas')
+            .select('id')
+            .eq('tema_id', entityId);
+          const subIds = (subData ?? []).map(s => s.id);
+
+          let query = supabase.from('placas').select('id, photo_url').order('sort_order', { ascending: true });
+          if (subIds.length > 0) {
+            query = query.or(`tema_id.eq.${entityId},subtema_id.in.(${subIds.join(',')})`);
+          } else {
+            query = query.eq('tema_id', entityId);
+          }
+          const { data } = await query;
+          setAvailablePlacas(data ?? []);
+        } else {
+          // En home_page o páginas generales: Cargar placas recientes y disponibles para nunca dejar vacío
+          const { data } = await supabase
+            .from('placas')
+            .select('id, photo_url')
+            .order('id', { ascending: false })
+            .limit(50);
+          setAvailablePlacas(data ?? []);
+        }
+      } catch (err) {
+        console.error('Error al cargar placas para el selector:', err);
+      } finally {
+        setLoadingPlacas(false);
+      }
+    };
+
+    void loadPlacas();
+
+    // Cargar temas para la pestaña "Todas" ordenados por parcial y sort_order
     supabase
       .from('temas')
       .select('id, nombre, logo_url, parcial, sort_order')
+      .order('parcial', { ascending: true })
       .order('sort_order', { ascending: true })
-      .then(({ data }) => setAllTemas(data ?? []));
+      .then(({ data }) => setAllTemas((data ?? []) as AllTema[]));
     supabase
       .from('subtemas')
-      .select('id, nombre, tema_id')
-      .order('nombre', { ascending: true })
-      .then(({ data }) => setAllSubtemas(data ?? []));
+      .select('id, nombre, tema_id, sort_order')
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => setAllSubtemas((data ?? []) as AllSubtema[]));
   }, [entityId, entityType]);
 
   // Cargar placas cuando cambia el filtro de la pestaña "Todas"
-  const handleAllFilterTema = (temaId: string) => {
+  const handleAllFilterTema = async (temaId: string) => {
     setAllFilterTema(temaId);
     setAllFilterSubtema('');
     setAllPlacas([]);
     if (!temaId) return;
     setLoadingAll(true);
-    supabase
-      .from('placas')
-      .select('id, photo_url')
-      .eq('tema_id', temaId)
-      .order('sort_order', { ascending: true })
-      .then(({ data }) => { setAllPlacas(data ?? []); setLoadingAll(false); });
+
+    const temaIdNum = Number(temaId);
+    const subIds = allSubtemas.filter(s => s.tema_id === temaIdNum).map(s => s.id);
+
+    let query = supabase.from('placas').select('id, photo_url').order('sort_order', { ascending: true });
+    if (subIds.length > 0) {
+      query = query.or(`tema_id.eq.${temaIdNum},subtema_id.in.(${subIds.join(',')})`);
+    } else {
+      query = query.eq('tema_id', temaIdNum);
+    }
+    const { data } = await query;
+    setAllPlacas(data ?? []);
+    setLoadingAll(false);
   };
 
-  const handleAllFilterSubtema = (subtemaId: string) => {
+  const handleAllFilterSubtema = async (subtemaId: string) => {
     setAllFilterSubtema(subtemaId);
     setAllPlacas([]);
     if (!subtemaId) {
-      // Volver a mostrar todas las del tema
       if (!allFilterTema) return;
-      setLoadingAll(true);
-      supabase
-        .from('placas')
-        .select('id, photo_url')
-        .eq('tema_id', allFilterTema)
-        .order('sort_order', { ascending: true })
-        .then(({ data }) => { setAllPlacas(data ?? []); setLoadingAll(false); });
+      void handleAllFilterTema(allFilterTema);
       return;
     }
     setLoadingAll(true);
-    supabase
+    const { data } = await supabase
       .from('placas')
       .select('id, photo_url')
-      .eq('subtema_id', subtemaId)
-      .order('sort_order', { ascending: true })
-      .then(({ data }) => { setAllPlacas(data ?? []); setLoadingAll(false); });
+      .eq('subtema_id', Number(subtemaId))
+      .order('sort_order', { ascending: true });
+    setAllPlacas(data ?? []);
+    setLoadingAll(false);
   };
 
   const closeImageModal = () => setImageModal(null);
@@ -4102,10 +4135,6 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
   onAllFilterTema,
   onAllFilterSubtema,
 }) => {
-  const subtemasFiltered = allTemas.length > 0 && allFilterTema
-    ? allSubtemas.filter(s => String(s.tema_id) === allFilterTema)
-    : [];
-
   return (
   <div style={es.overlay} onClick={onClose}>
     <div style={es.modalBox} onClick={e => e.stopPropagation()}>
@@ -4134,7 +4163,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
           style={{ ...es.modalTab, ...(tab === 'placas' ? es.modalTabActive : {}) }}
           onClick={() => onTabChange('placas')}
         >
-          🔬 {entityType === 'placas_page' ? 'Placas del subtema' : 'Placas del tema'}
+          🔬 {entityType === 'placas_page' ? 'Placas del subtema' : entityType === 'subtemas_page' ? 'Placas del tema' : 'Placas destacadas / recientes'}
         </button>
         <button
           style={{ ...es.modalTab, ...(tab === 'all' ? es.modalTabActive : {}) }}
@@ -4237,48 +4266,45 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
 
         {tab === 'all' && (
           <div style={es.placasTab}>
-            {/* Filtros */}
-            <div style={es.allFiltersRow}>
-              <select
-                style={es.allSelect}
-                value={allFilterTema}
-                onChange={e => onAllFilterTema(e.target.value)}
-              >
-                <option value="">— Elige un tema —</option>
-                {allTemas.map(t => (
-                  <option key={t.id} value={String(t.id)}>{t.nombre}</option>
-                ))}
-              </select>
-              <select
-                style={{
-                  ...es.allSelect,
-                  opacity: subtemasFiltered.length === 0 ? 0.5 : 1,
-                  cursor: subtemasFiltered.length === 0 ? 'not-allowed' : 'pointer',
-                }}
-                value={allFilterSubtema}
-                onChange={e => onAllFilterSubtema(e.target.value)}
-                disabled={subtemasFiltered.length === 0}
-              >
-                <option value="">— Todos los subtemas —</option>
-                {subtemasFiltered.map(s => (
-                  <option key={s.id} value={String(s.id)}>{s.nombre}</option>
-                ))}
-              </select>
+            {/* Acordeones ordenados por parcial para seleccionar tema y subtema */}
+            <div style={{ marginBottom: '18px' }}>
+              <EditorParcialAccordionPicker
+                temas={allTemas}
+                subtemas={allSubtemas}
+                selectedTemaId={allFilterTema ? Number(allFilterTema) : null}
+                selectedSubtemaId={allFilterSubtema ? Number(allFilterSubtema) : null}
+                onSelectTema={(id) => onAllFilterTema(String(id))}
+                onSelectSubtema={(id) => onAllFilterSubtema(String(id))}
+                mode="tema-and-subtema"
+                title="Catálogo de placas por parcial y tema"
+                subtitle="Selecciona un tema o subtema en los acordeones para explorar sus placas"
+              />
             </div>
 
-            {/* Resultados */}
+            {/* Resultados de placas */}
             {!allFilterTema ? (
-              <p style={es.noPlacasText}>Elige un tema para ver sus placas.</p>
+              <div style={es.emptyPickerBox}>
+                <span style={{ fontSize: '1.8rem', display: 'block', marginBottom: '8px' }}>🔬</span>
+                <strong style={{ color: '#0f172a' }}>Elige un tema en el acordeón</strong>
+                <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.82rem' }}>
+                  Despliega cualquiera de los 3 parciales para cargar sus placas histológicas.
+                </p>
+              </div>
             ) : loadingAll ? (
               <div style={es.uploadingState}>
                 <div style={es.spinner} />
-                <p style={{ color: '#64748b', margin: 0 }}>Cargando placas...</p>
+                <p style={{ color: '#64748b', margin: 0 }}>Cargando placas del tema...</p>
               </div>
             ) : allPlacas.length === 0 ? (
-              <p style={es.noPlacasText}>No hay placas disponibles para esta selección.</p>
+              <p style={es.noPlacasText}>No hay placas registradas para esta selección.</p>
             ) : (
               <>
-                <p style={es.placasHint}>Haz clic en una placa para usarla como imagen.</p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <p style={{ ...es.placasHint, margin: 0 }}>Haz clic en una placa para usarla como imagen.</p>
+                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0284c7', background: '#e0f2fe', padding: '2px 8px', borderRadius: 999 }}>
+                    {allPlacas.length} {allPlacas.length === 1 ? 'placa' : 'placas'}
+                  </span>
+                </div>
                 <div style={es.placasGrid}>
                   {allPlacas.map(p => (
                     <div
@@ -5549,8 +5575,8 @@ const es: Record<string, React.CSSProperties> = {
     background: '#ffffff',
     borderRadius: '20px',
     width: '100%',
-    maxWidth: '660px',
-    maxHeight: '88vh',
+    maxWidth: '840px',
+    maxHeight: '90vh',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
@@ -5645,6 +5671,14 @@ const es: Record<string, React.CSSProperties> = {
   },
   placasTab: {
     minHeight: '200px',
+  },
+  emptyPickerBox: {
+    padding: '36px 20px',
+    textAlign: 'center' as const,
+    background: '#f8fafc',
+    borderRadius: '16px',
+    border: '1.5px dashed #cbd5e1',
+    color: '#334155',
   },
   noPlacasText: {
     textAlign: 'center',
