@@ -21,51 +21,57 @@ const tables = [
   'content_page_versions',
   'pruebas',
   'preguntas',
+  'pruebas_preguntas',
   'autores',
   'creditos',
   'users',
-  'atlas_system_settings',
-  'audit_logs'
+  'atlas_system_settings'
 ];
 
-async function audit() {
-  console.log('==================================================');
-  console.log('🔍 AUDITORÍA GLOBAL DE URLs EN SUPABASE');
-  console.log('==================================================');
+async function runAudit() {
+  console.log('====================================================');
+  console.log('🔍 AUDITORÍA DETALLADA DE TODAS LAS TABLAS Y URLs');
+  console.log('====================================================');
 
-  let totalCloudinaryFound = 0;
-  let totalR2Found = 0;
+  let totalWebp = 0;
+  let totalNonWebp = 0;
+  let totalCloudinary = 0;
 
   for (const table of tables) {
     try {
       const { data, error } = await supabase.from(table).select('*');
       if (error) {
-        // tabla no existe en el esquema o no accesible
+        // tabla no existe en el esquema
         continue;
       }
+      if (!data) continue;
 
-      const jsonStr = JSON.stringify(data || []);
-      const cldMatches = jsonStr.match(/https:\/\/res\.cloudinary\.com\/[^\s"'\\]+/g) || [];
-      const r2Matches = jsonStr.match(/https:\/\/[a-z0-9-]+\.r2\.dev\/[^\s"'\\]+/g) || [];
+      const str = JSON.stringify(data);
+      const webpMatches = str.match(/https:\/\/[a-z0-9-]+\.r2\.dev\/[^\s"'\\]+\.webp/gi) || [];
+      const nonWebpMatches = str.match(/https:\/\/[a-z0-9-]+\.r2\.dev\/[^\s"'\\]+\.(jpe?g|png|bmp|gif)/gi) || [];
+      const cldMatches = str.match(/res\.cloudinary\.com/gi) || [];
 
-      totalCloudinaryFound += cldMatches.length;
-      totalR2Found += r2Matches.length;
+      totalWebp += webpMatches.length;
+      totalNonWebp += nonWebpMatches.length;
+      totalCloudinary += cldMatches.length;
 
-      if (cldMatches.length > 0) {
-        console.log(`❌ [${table}] CONTIENE ${cldMatches.length} URLs de Cloudinary!`);
-        cldMatches.slice(0, 3).forEach((u) => console.log(`   - ${u}`));
-      } else {
-        console.log(`✅ [${table}] 100% LIMPIO (0 Cloudinary, ${r2Matches.length} R2, ${data.length} filas)`);
+      console.log(
+        `Tabla [${table}] (${data.length} filas): ${webpMatches.length} WebP en R2, ${nonWebpMatches.length} No-WebP, ${cldMatches.length} Cloudinary`
+      );
+
+      if (nonWebpMatches.length > 0) {
+        console.log(`   ⚠️ Muestras No-WebP en ${table}:`, nonWebpMatches.slice(0, 3));
       }
     } catch (e) {
-      console.log(`[${table}] Omitido:`, e.message);
+      console.log(`Error en ${table}:`, e.message);
     }
   }
 
-  console.log('==================================================');
-  console.log(`TOTAL CLOUDINARY: ${totalCloudinaryFound}`);
-  console.log(`TOTAL CLOUDFLARE R2: ${totalR2Found}`);
-  console.log('==================================================');
+  console.log('====================================================');
+  console.log(`TOTAL GENERAL WEBP EN R2: ${totalWebp}`);
+  console.log(`TOTAL GENERAL NO-WEBP: ${totalNonWebp}`);
+  console.log(`TOTAL GENERAL CLOUDINARY: ${totalCloudinary}`);
+  console.log('====================================================');
 }
 
-audit();
+runAudit();
