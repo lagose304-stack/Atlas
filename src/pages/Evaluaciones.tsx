@@ -20,8 +20,8 @@ interface PruebaPublica {
   image_url?: string | null;
   tema_id?: number | null;
   subtema_id?: number | null;
-  tema?: { id: number; nombre: string } | null;
-  subtema?: { id: number; nombre: string } | null;
+  tema?: { id: number; nombre: string; logo_url?: string | null } | null;
+  subtema?: { id: number; nombre: string; logo_url?: string | null } | null;
 }
 
 interface ParcialSection {
@@ -63,9 +63,10 @@ const TestCard: React.FC<{
   const { user } = useAuth();
   const [logoFailed, setLogoFailed] = React.useState(false);
   const plainName = toPlainText(prueba.nombre) || 'Prueba';
-  const logoSrc = prueba.image_url ? getCloudinaryImageUrl(prueba.image_url, 'cardWide') : '';
-  const logoSrcSet = prueba.image_url
-    ? `${getCloudinaryImageUrl(prueba.image_url, 'cardWideSmall')} 640w, ${getCloudinaryImageUrl(prueba.image_url, 'cardWide')} 960w`
+  const rawImage = prueba.image_url || prueba.subtema?.logo_url || prueba.tema?.logo_url || '';
+  const logoSrc = rawImage ? getCloudinaryImageUrl(rawImage, 'cardWide') : '';
+  const logoSrcSet = rawImage
+    ? `${getCloudinaryImageUrl(rawImage, 'cardWideSmall')} 640w, ${getCloudinaryImageUrl(rawImage, 'cardWide')} 960w`
     : undefined;
 
   const baseStyle: React.CSSProperties = {
@@ -189,7 +190,7 @@ const Evaluaciones: React.FC = () => {
 
       const { data, error: queryError } = await supabase
         .from('pruebas')
-        .select('id, nombre, instrucciones, scope, parcial_key, created_at, image_url, tema_id, subtema_id, tema:temas(id, nombre), subtema:subtemas(id, nombre)')
+        .select('id, nombre, instrucciones, scope, parcial_key, created_at, image_url, tema_id, subtema_id, tema:temas(id, nombre, logo_url), subtema:subtemas(id, nombre, logo_url)')
         .eq('estado', 'publicada')
         .order('created_at', { ascending: false });
 
