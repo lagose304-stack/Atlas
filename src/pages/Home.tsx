@@ -224,50 +224,7 @@ const Home: React.FC = () => {
               </div>
             </div>
 
-            {/* 2. SECCIÓN INFERIOR: Las 3 tarjetas de células van ABAJO del diagrama ocupando todo el ancho */}
-            <div className="home-fact-bottom-row">
-              <div className="home-fact-steps home-fact-steps-horizontal" aria-label="Las tres células protagonistas en la regulación del calcio">
-                {/* Célula 1: Osteoclastos */}
-                <div className="home-fact-step-item home-fact-step-pth">
-                  <div className="home-fact-step-header">
-                    <span className="home-fact-step-title">🟣 1. Osteoclastos · Liberación (Resorción)</span>
-                    <span className="home-fact-step-badge">Sacan Ca²⁺ a la sangre</span>
-                  </div>
-                  <p className="home-fact-step-text">
-                    Células gigantes multinucleadas estimuladas por la <strong>PTH</strong> vía <strong>RANKL</strong> y frenadas directamente por la <strong>Calcitonina</strong>. En la <em>laguna de Howship</em>, disuelven la matriz ósea con ácido (H⁺) y <em>catepsina K</em> para <strong>liberar calcio a la circulación</strong>.
-                  </p>
-                </div>
 
-                {/* Célula 2: Osteoblastos */}
-                <div className="home-fact-step-item home-fact-step-calcitonin">
-                  <div className="home-fact-step-header">
-                    <span className="home-fact-step-title">🟢 2. Osteoblastos · Depósito (Formación)</span>
-                    <span className="home-fact-step-badge">Guardan Ca²⁺ en el hueso</span>
-                  </div>
-                  <p className="home-fact-step-text">
-                    Sintetizan la matriz orgánica (<em>osteoide</em>) y mediante la enzima <em>fosfatasa alcalina</em> <strong>mineralizan y fijan calcio</strong> en el hueso, respondiendo a las demandas hormonales del organismo.
-                  </p>
-                </div>
-
-                {/* Célula 3: Osteocitos */}
-                <div className="home-fact-step-item home-fact-step-osteocyte">
-                  <div className="home-fact-step-header">
-                    <span className="home-fact-step-title">🔵 3. Osteocitos · Mantenimiento y Nutrición</span>
-                    <span className="home-fact-step-badge">Mantenimiento de matriz</span>
-                  </div>
-                  <p className="home-fact-step-text">
-                    Osteoblastos maduros alojados en <em>osteoplastos</em>. Con su red 3D de <em>canalículos</em> se encargan del <strong>mantenimiento y la nutrición de la matriz ósea</strong>, detectando fuerzas mecánicas e intercambiando iones con los fluidos corporales.
-                  </p>
-                </div>
-              </div>
-
-              <div className="home-histology-fact-pills" aria-hidden="true">
-                <span>🩸 Control hormonal: PTH (estimula salida) vs Calcitonina (favorece depósito)</span>
-                <span>🟣 Osteoclastos: Resorción ósea</span>
-                <span>🟢 Osteoblastos: Formación y mineralización</span>
-                <span>🔵 Osteocitos: Red canalicular de intercambio</span>
-              </div>
-            </div>
           </div>
         </section>
 
