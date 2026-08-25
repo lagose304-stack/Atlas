@@ -37,23 +37,15 @@ export type UploadOptions = {
   folder?: string;
   optimizeForPlaque?: boolean;
   optimizeImage?: boolean;
+  quality?: number;
+  maxDimension?: number;
 };
 
-const PLAQUE_MIN_BYTES_TO_OPTIMIZE = 1.5 * 1024 * 1024;
-const PLAQUE_JPEG_QUALITY = 0.94;
-const IMAGE_MIN_BYTES_TO_OPTIMIZE = 0.8 * 1024 * 1024;
-const IMAGE_MAX_DIMENSION = 2400;
-const IMAGE_WEBP_QUALITY = 0.88;
-
-const shouldOptimizePlaque = (file: File) => {
-  if (file.size < PLAQUE_MIN_BYTES_TO_OPTIMIZE) return false;
-  return file.type.startsWith('image/');
-};
-
-const shouldOptimizeImage = (file: File) => {
-  if (file.size < IMAGE_MIN_BYTES_TO_OPTIMIZE) return false;
-  return file.type.startsWith('image/');
-};
+// Calibración de máxima calidad WebP para microscopía y UI
+const PLAQUE_WEBP_QUALITY = 0.94; // Fidelidad diagnóstica superior sin distorsión
+const GENERAL_WEBP_QUALITY = 0.92;
+const MAX_PLAQUE_DIMENSION = 3400; // Resolución ultra-alta para zoom microscópico
+const MAX_GENERAL_DIMENSION = 2400;
 
 const fileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -80,7 +72,7 @@ const canvasToBlobWithType = (
     canvas.toBlob(
       (blob) => {
         if (!blob) {
-          reject(new Error('No se pudo exportar la imagen optimizada.'));
+          reject(new Error('No se pudo exportar la imagen optimizada a WebP.'));
           return;
         }
         resolve(blob);
@@ -90,120 +82,79 @@ const canvasToBlobWithType = (
     );
   });
 
-const hasAlphaPixels = (ctx: CanvasRenderingContext2D, width: number, height: number): boolean => {
-  const { data } = ctx.getImageData(0, 0, width, height);
-  for (let i = 3; i < data.length; i += 4) {
-    if (data[i] < 255) return true;
-  }
-  return false;
-};
-
-const optimizePlaqueFile = async (file: File): Promise<File> => {
-  const dataUrl = await fileToDataUrl(file);
-  const image = await dataUrlToImage(dataUrl);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = image.naturalWidth || image.width;
-  canvas.height = image.naturalHeight || image.height;
-
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) return file;
-
-  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-  const containsAlpha = file.type.includes('png') ? hasAlphaPixels(ctx, canvas.width, canvas.height) : false;
-
-  let mimeType = 'image/jpeg';
-  let quality: number | undefined = PLAQUE_JPEG_QUALITY;
-  let extension = 'jpg';
-
-  if (containsAlpha) {
-    mimeType = 'image/webp';
-    quality = IMAGE_WEBP_QUALITY;
-    extension = 'webp';
-  }
-
-  let optimizedBlob: Blob;
-  try {
-    optimizedBlob = await canvasToBlobWithType(canvas, mimeType, quality);
-  } catch {
-    optimizedBlob = await canvasToBlobWithType(canvas, 'image/jpeg', PLAQUE_JPEG_QUALITY);
-    extension = 'jpg';
-  }
-
-  if (optimizedBlob.size >= file.size) return file;
-
-  const baseName = file.name.replace(/\.[^.]+$/, '');
-  return new File([optimizedBlob], `${baseName}.${extension}`, {
-    type: optimizedBlob.type || (extension === 'webp' ? 'image/webp' : 'image/jpeg'),
-    lastModified: Date.now(),
-  });
-};
-
-const optimizeImageFile = async (file: File): Promise<File> => {
-  const dataUrl = await fileToDataUrl(file);
-  const image = await dataUrlToImage(dataUrl);
-
-  let width = image.naturalWidth || image.width;
-  let height = image.naturalHeight || image.height;
-
-  if (width > IMAGE_MAX_DIMENSION || height > IMAGE_MAX_DIMENSION) {
-    if (width >= height) {
-      height = Math.round((height * IMAGE_MAX_DIMENSION) / width);
-      width = IMAGE_MAX_DIMENSION;
-    } else {
-      width = Math.round((width * IMAGE_MAX_DIMENSION) / height);
-      height = IMAGE_MAX_DIMENSION;
-    }
-  }
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return file;
-
-  ctx.drawImage(image, 0, 0, width, height);
-
-  let optimizedBlob: Blob;
-  try {
-    optimizedBlob = await canvasToBlobWithType(canvas, 'image/webp', IMAGE_WEBP_QUALITY);
-  } catch {
+/**
+ * Conversión universal a WebP de máxima calidad diagnóstica en el navegador
+ */
+export const convertAndOptimizeToWebP = async (
+  file: File,
+  options?: { isPlaque?: boolean; customQuality?: number; customMaxDimension?: number }
+): Promise<File> => {
+  if (!file.type.startsWith('image/')) {
     return file;
   }
 
-  if (optimizedBlob.size >= file.size) return file;
+  const isPlaque = options?.isPlaque ?? true;
+  const targetQuality = options?.customQuality ?? (isPlaque ? PLAQUE_WEBP_QUALITY : GENERAL_WEBP_QUALITY);
+  const maxDim = options?.customMaxDimension ?? (isPlaque ? MAX_PLAQUE_DIMENSION : MAX_GENERAL_DIMENSION);
 
-  const baseName = file.name.replace(/\.[^.]+$/, '');
-  return new File([optimizedBlob], `${baseName}.webp`, {
-    type: 'image/webp',
-    lastModified: Date.now(),
-  });
+  try {
+    const dataUrl = await fileToDataUrl(file);
+    const image = await dataUrlToImage(dataUrl);
+
+    let width = image.naturalWidth || image.width;
+    let height = image.naturalHeight || image.height;
+
+    // Solo reescalamos si excede la dimensión máxima ultra-alta permitida
+    if (width > maxDim || height > maxDim) {
+      if (width >= height) {
+        height = Math.round((height * maxDim) / width);
+        width = maxDim;
+      } else {
+        width = Math.round((width * maxDim) / height);
+        height = maxDim;
+      }
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: false });
+    if (!ctx) return file;
+
+    // Renderizar con máxima suavidad
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(image, 0, 0, width, height);
+
+    const webpBlob = await canvasToBlobWithType(canvas, 'image/webp', targetQuality);
+
+    const baseName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    return new File([webpBlob], `${baseName}.webp`, {
+      type: 'image/webp',
+      lastModified: Date.now(),
+    });
+  } catch (err) {
+    console.warn('Conversión a WebP en cliente falló, subiendo archivo original:', err);
+    return file;
+  }
 };
 
 /**
- * Subida universal a Cloudflare R2 (vía Backend o Cloudflare Pages Function)
+ * Subida universal a Cloudflare R2: Convierte SIEMPRE y obligatoriamente a WebP
  */
 export const uploadToCloudinary = async (file: File, options?: UploadOptions) => {
-  let fileToUpload = file;
-
-  if (options?.optimizeForPlaque && shouldOptimizePlaque(file)) {
-    try {
-      fileToUpload = await optimizePlaqueFile(file);
-    } catch {
-      fileToUpload = file;
-    }
-  } else if (options?.optimizeImage && shouldOptimizeImage(file)) {
-    try {
-      fileToUpload = await optimizeImageFile(file);
-    } catch {
-      fileToUpload = file;
-    }
-  }
+  const isPlaque = options?.optimizeForPlaque || (!options?.optimizeImage && file.size > 1.2 * 1024 * 1024);
+  
+  // 1. Conversión universal y obligatoria a WebP de máxima calidad
+  const webpFile = await convertAndOptimizeToWebP(file, {
+    isPlaque,
+    customQuality: options?.quality,
+    customMaxDimension: options?.maxDimension,
+  });
 
   const formData = new FormData();
-  formData.append('file', fileToUpload);
+  formData.append('file', webpFile);
   if (options?.folder) {
     formData.append('folder', options.folder);
   }
@@ -223,7 +174,7 @@ export const uploadToCloudinary = async (file: File, options?: UploadOptions) =>
     return data;
   }
 
-  throw new Error('No se pudo subir la imagen al almacenamiento.');
+  throw new Error('No se pudo subir la imagen a Cloudflare R2.');
 };
 
 type DeleteFromCloudinaryInput =
