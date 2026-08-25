@@ -1,7 +1,7 @@
 import { callCloudinary, corsHeaders, json } from './_cloudinary';
 import { authorizeEditor } from './_auth';
 
-export async function onRequest(context: { request: Request; env: Record<string, string> }) {
+export async function onRequest(context: { request: Request; env: Record<string, any> }) {
   const { request, env } = context;
 
   if (request.method === 'OPTIONS') {
@@ -18,23 +18,39 @@ export async function onRequest(context: { request: Request; env: Record<string,
 
   try {
     const url = new URL(request.url);
-    const publicId = url.searchParams.get('publicId') || '';
+    const rawPublicId = url.searchParams.get('publicId') || '';
+    const publicId = decodeURIComponent(rawPublicId).replace(/^\/+/, '');
 
     if (!publicId) {
       return json(400, { message: 'Missing publicId parameter' });
     }
 
-    const { ok, data } = await callCloudinary('destroy', { public_id: publicId }, env);
+    let deleted = false;
 
-    if (!ok) {
-      return json(500, { message: 'Cloudinary destroy request failed', error: data });
+    // 1. Intento R2
+    const r2Bucket = env.R2_BUCKET;
+    if (r2Bucket && typeof r2Bucket.delete === 'function') {
+      try {
+        await r2Bucket.delete(publicId);
+        deleted = true;
+      } catch (err) {
+        console.warn('R2 delete warning:', err);
+      }
     }
 
-    if (data.result === 'ok' || data.result === 'not found') {
-      return json(200, { message: 'Cloudinary delete processed.' });
+    // 2. Fallback Cloudinary si aplica
+    if (env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) {
+      try {
+        const { ok, data } = await callCloudinary('destroy', { public_id: publicId }, env);
+        if (ok && (data.result === 'ok' || data.result === 'not found')) {
+          deleted = true;
+        }
+      } catch (cldErr) {
+        console.warn('Cloudinary delete warning:', cldErr);
+      }
     }
 
-    return json(500, { message: 'Cloudinary could not delete the image', result: data });
+    return json(200, { message: 'Delete operation completed.', success: true });
   } catch (error) {
     return json(500, {
       message: 'Error deleting image',

@@ -39,17 +39,16 @@ const authHeaders = () => {
   return token ? { 'X-Atlas-Session': token } : {};
 };
 
-type UploadOptions = {
+export type UploadOptions = {
   folder?: string;
   optimizeForPlaque?: boolean;
   optimizeImage?: boolean;
 };
 
-const PLAQUE_MIN_BYTES_TO_OPTIMIZE = 2 * 1024 * 1024;
-const PLAQUE_JPEG_QUALITY = 0.96;
-const IMAGE_MIN_BYTES_TO_OPTIMIZE = 1 * 1024 * 1024;
-const IMAGE_MAX_DIMENSION = 2200;
-const IMAGE_JPEG_QUALITY = 0.9;
+const PLAQUE_MIN_BYTES_TO_OPTIMIZE = 1.5 * 1024 * 1024;
+const PLAQUE_JPEG_QUALITY = 0.94;
+const IMAGE_MIN_BYTES_TO_OPTIMIZE = 0.8 * 1024 * 1024;
+const IMAGE_MAX_DIMENSION = 2400;
 const IMAGE_WEBP_QUALITY = 0.88;
 
 const shouldOptimizePlaque = (file: File) => {
@@ -76,21 +75,6 @@ const dataUrlToImage = (dataUrl: string): Promise<HTMLImageElement> =>
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error('No se pudo cargar la imagen para optimizar.'));
     img.src = dataUrl;
-  });
-
-const canvasToBlob = (canvas: HTMLCanvasElement, quality: number): Promise<Blob> =>
-  new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          reject(new Error('No se pudo exportar la imagen optimizada.'));
-          return;
-        }
-        resolve(blob);
-      },
-      'image/jpeg',
-      quality
-    );
   });
 
 const canvasToBlobWithType = (
@@ -146,20 +130,11 @@ const optimizeImageFile = async (file: File): Promise<File> => {
   ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
 
   const keepsAlpha = file.type === 'image/png' && hasAlphaPixels(ctx, targetWidth, targetHeight);
-  const targetMimeType = keepsAlpha
-    ? 'image/png'
-    : file.type === 'image/webp'
-      ? 'image/webp'
-      : 'image/jpeg';
-  const quality = targetMimeType === 'image/jpeg'
-    ? IMAGE_JPEG_QUALITY
-    : targetMimeType === 'image/webp'
-      ? IMAGE_WEBP_QUALITY
-      : undefined;
+  const targetMimeType: 'image/png' | 'image/webp' = keepsAlpha ? 'image/png' : 'image/webp';
+  const quality = targetMimeType === 'image/webp' ? IMAGE_WEBP_QUALITY : undefined;
 
   const optimizedBlob = await canvasToBlobWithType(canvas, targetMimeType, quality);
 
-  // Conserva original si la mejora no compensa el reprocesado.
   if (optimizedBlob.size >= file.size * 0.98) {
     return file;
   }
@@ -183,23 +158,25 @@ const optimizePlaqueFile = async (file: File): Promise<File> => {
   const ctx = canvas.getContext('2d');
   if (!ctx) return file;
 
-  // Mantiene resolución original; solo optimiza codificación para reducir peso.
+  // Convertimos a WebP manteniendo resolución original para alta fidelidad y peso mínimo
   ctx.drawImage(image, 0, 0);
 
-  const optimizedBlob = await canvasToBlob(canvas, PLAQUE_JPEG_QUALITY);
+  const optimizedBlob = await canvasToBlobWithType(canvas, 'image/webp', PLAQUE_JPEG_QUALITY);
 
-  // Si no hay mejora de tamaño, conserva original para evitar pérdida innecesaria.
   if (optimizedBlob.size >= file.size * 0.98) {
     return file;
   }
 
   const baseName = file.name.replace(/\.[^.]+$/, '');
-  return new File([optimizedBlob], `${baseName}.jpg`, {
-    type: 'image/jpeg',
+  return new File([optimizedBlob], `${baseName}.webp`, {
+    type: 'image/webp',
     lastModified: Date.now(),
   });
 };
 
+/**
+ * Subida universal compatible con Cloudflare R2 (vía Backend/Edge) y Cloudinary (fallback)
+ */
 export const uploadToCloudinary = async (file: File, options?: UploadOptions) => {
   let fileToUpload = file;
 
@@ -219,28 +196,57 @@ export const uploadToCloudinary = async (file: File, options?: UploadOptions) =>
 
   const formData = new FormData();
   formData.append('file', fileToUpload);
-  formData.append('upload_preset', cloudinaryUploadPreset);
   if (options?.folder) {
-    // Cloudinary crea carpetas si no existen al usar el parámetro folder
     formData.append('folder', options.folder);
   }
 
+  // 1. Intento principal: Subir a Cloudflare R2 a través del endpoint de backend / edge function
   try {
-    const { data } = await axios.post(
-      `https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`,
-      formData
-    );
-    return data;
-  } catch (error: unknown) {
-    if (axios.isAxiosError(error)) {
-      const cloudinaryMessage =
-        (error.response?.data as { error?: { message?: string } } | undefined)?.error?.message ||
-        error.response?.data?.message ||
-        error.message;
-      throw new Error(`No se pudo subir la imagen a Cloudinary. ${cloudinaryMessage}`);
+    const uploadUrl = isUsingEdgeFunctions
+      ? '/api/images-upload'
+      : backendUrl('/api/images/upload');
+
+    const { data } = await axios.post(uploadUrl, formData, {
+      headers: {
+        ...authHeaders(),
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    if (data?.secure_url) {
+      return data;
     }
-    throw new Error('No se pudo subir la imagen a Cloudinary.');
+  } catch (r2UploadError) {
+    console.warn('Subida a R2 no disponible o fallida, intentando fallback...', r2UploadError);
   }
+
+  // 2. Fallback: Cloudinary directo si está configurado
+  if (cloudinaryCloudName && cloudinaryUploadPreset) {
+    const cldFormData = new FormData();
+    cldFormData.append('file', fileToUpload);
+    cldFormData.append('upload_preset', cloudinaryUploadPreset);
+    if (options?.folder) {
+      cldFormData.append('folder', options.folder);
+    }
+
+    try {
+      const { data } = await axios.post(
+        `https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`,
+        cldFormData
+      );
+      return data;
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const cloudinaryMessage =
+          (error.response?.data as { error?: { message?: string } } | undefined)?.error?.message ||
+          error.response?.data?.message ||
+          error.message;
+        throw new Error(`Error en subida: ${cloudinaryMessage}`);
+      }
+    }
+  }
+
+  throw new Error('No se pudo subir la imagen al almacenamiento.');
 };
 
 type DeleteFromCloudinaryInput =
@@ -259,12 +265,12 @@ export const deleteFromCloudinary = async (input: DeleteFromCloudinaryInput) => 
   const imageUrl = (parsed.imageUrl || '').trim();
 
   if (!publicId && !imageUrl) {
-    throw new Error('Se requiere publicId o imageUrl para borrar en Cloudinary.');
+    throw new Error('Se requiere publicId o imageUrl para borrar la imagen.');
   }
 
   const resolvedPublicId = publicId || getCloudinaryPublicId(imageUrl);
   if (!resolvedPublicId) {
-    throw new Error('No se pudo resolver el publicId para eliminar la imagen.');
+    throw new Error('No se pudo resolver el identificador para eliminar la imagen.');
   }
 
   if (isUsingEdgeFunctions) {
@@ -278,7 +284,10 @@ export const deleteFromCloudinary = async (input: DeleteFromCloudinaryInput) => 
     return response.data;
   }
 
-  const response = await axios.delete(backendUrl(`/api/images/${resolvedPublicId}`), { headers: authHeaders() });
+  const response = await axios.delete(backendUrl(`/api/images/${encodeURIComponent(resolvedPublicId)}`), {
+    headers: authHeaders(),
+    params: { publicId: resolvedPublicId },
+  });
   return response.data;
 };
 
@@ -293,37 +302,44 @@ export const moveCloudinaryImage = async (fromPublicId: string, toPublicId: stri
   return response.data;
 };
 
+/**
+ * Extrae el ID / Key tanto de URLs de Cloudinary como de Cloudflare R2
+ */
 export const getCloudinaryPublicId = (url: string): string => {
+  if (!url || typeof url !== 'string') return '';
+
   try {
     const parsed = new URL(url);
-    const pathname = decodeURIComponent(parsed.pathname);
-    const uploadToken = '/upload/';
+    const pathname = decodeURIComponent(parsed.pathname).replace(/^\/+/, '');
+
+    // Caso 1: URL de Cloudinary (/upload/...)
+    const uploadToken = 'upload/';
     const uploadIndex = pathname.indexOf(uploadToken);
-    if (uploadIndex === -1) return '';
+    if (uploadIndex !== -1) {
+      const afterUpload = pathname.slice(uploadIndex + uploadToken.length);
+      let segments = afterUpload.split('/').filter(Boolean);
+      if (segments.length === 0) return '';
 
-    // Toma la parte posterior a /upload/ para normalizar transformaciones/versiones.
-    const afterUpload = pathname.slice(uploadIndex + uploadToken.length);
-    let segments = afterUpload.split('/').filter(Boolean);
-    if (segments.length === 0) return '';
-
-    // Si existe segmento de versión (v123...), todo lo anterior no es parte del public_id.
-    const versionIndex = segments.findIndex((s) => /^v\d+$/.test(s));
-    if (versionIndex >= 0) {
-      segments = segments.slice(versionIndex + 1);
-    } else {
-      // Sin versión, elimina prefijos de transformación comunes (c_..., f_auto, q_auto, etc.).
-      const isTransformationSegment = (segment: string) =>
-        /^([a-z]{1,3}_[^/]+)(,[a-z]{1,3}_[^/]+)*$/.test(segment);
-      while (segments.length > 1 && isTransformationSegment(segments[0])) {
-        segments.shift();
+      const versionIndex = segments.findIndex((s) => /^v\d+$/.test(s));
+      if (versionIndex >= 0) {
+        segments = segments.slice(versionIndex + 1);
+      } else {
+        const isTransformationSegment = (segment: string) =>
+          /^([a-z]{1,3}_[^/]+)(,[a-z]{1,3}_[^/]+)*$/.test(segment);
+        while (segments.length > 1 && isTransformationSegment(segments[0])) {
+          segments.shift();
+        }
       }
+
+      if (segments.length === 0) return '';
+      const last = segments[segments.length - 1];
+      segments[segments.length - 1] = last.replace(/\.[^.]+$/, '');
+      return segments.join('/');
     }
 
-    if (segments.length === 0) return '';
-    const last = segments[segments.length - 1];
-    segments[segments.length - 1] = last.replace(/\.[^.]+$/, '');
-    return segments.join('/');
+    // Caso 2: URL de Cloudflare R2 o subdominio directo (ej. pub-xxxx.r2.dev/placas/...)
+    return pathname;
   } catch {
-    return '';
+    return url.replace(/^\/+/, '');
   }
 };
