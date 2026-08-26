@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Upload,
   CheckCircle,
   XCircle,
   Eye,
-  ArrowRight,
   ArrowLeft,
   Image as ImageIcon,
   Sparkles,
@@ -89,7 +87,6 @@ const formatBytes = (bytes: number) => {
 const MATCHED_PLACAS_STORAGE_KEY = 'atlas_reencontrar_matched_placas';
 
 const ReencontrarPlaca: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const handleGoBack = useSmartBackNavigation('/placas');
 
@@ -970,7 +967,11 @@ const ReencontrarPlaca: React.FC = () => {
         </div>
       )}
 
-      {isSaving && <LoadingToast message="Optimizando y guardando imagen en Cloudflare R2..." />}
+      <LoadingToast
+        visible={isSaving}
+        type="uploading"
+        message="Optimizando y guardando imagen en Cloudflare R2..."
+      />
 
       <Footer />
     </div>
