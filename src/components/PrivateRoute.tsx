@@ -9,9 +9,10 @@ interface PrivateRouteProps {
   children: React.ReactElement;
   allowedRoles?: UserRole[];
   requireProtectedUser?: boolean;
+  allowedUserIds?: number[];
 }
 
-const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles, requireProtectedUser }) => {
+const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles, requireProtectedUser, allowedUserIds }) => {
   const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
 
@@ -48,6 +49,21 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles, req
           path: location.pathname,
           role: currentRole ?? null,
           allowedRoles,
+        },
+      });
+      return <Navigate to="/acceso-denegado" replace state={{ from: location.pathname }} />;
+    }
+  }
+
+  // Si la ruta requiere un usuario específico por ID
+  if (allowedUserIds && allowedUserIds.length > 0) {
+    if (!user?.id || !allowedUserIds.includes(user.id)) {
+      void logSecurityEvent('route_denied', {
+        userId: user?.id ?? null,
+        username: user?.username ?? null,
+        details: {
+          path: location.pathname,
+          reason: 'user_id_not_allowed',
         },
       });
       return <Navigate to="/acceso-denegado" replace state={{ from: location.pathname }} />;

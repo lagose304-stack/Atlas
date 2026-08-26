@@ -1,4 +1,4 @@
-import React, { useId, useState, useEffect, useMemo, useRef } from 'react';
+import React, { useId, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Pencil, X, Hand, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Shield } from 'lucide-react';
 import { renderBoldText } from './BoldField';
@@ -28,6 +28,10 @@ interface ImageViewerModalProps {
   hasInteractiveMapHint?: boolean;
   hideSidebar?: boolean;
   initialMarkerVisualMode?: 'pointer' | 'arrow';
+  initialActiveMarkerIndex?: number | null;
+  onActiveMarkerChange?: (index: number | null) => void;
+  initialActiveMapSectionIndex?: number | null;
+  onActiveMapSectionChange?: (index: number | null) => void;
   temaNombre?: string;
   subtemaNombre?: string;
   aumento?: string | null;
@@ -333,6 +337,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   hasInteractiveMapHint,
   hideSidebar = false,
   initialMarkerVisualMode = 'arrow',
+  initialActiveMarkerIndex,
+  onActiveMarkerChange,
+  initialActiveMapSectionIndex,
+  onActiveMapSectionChange,
   temaNombre,
   subtemaNombre,
   aumento,
@@ -451,7 +459,26 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const laserAnimFrameRef = useRef<number | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
   const isMinimapDraggingRef = useRef(false);
-  const [activeMarkerIndex, setActiveMarkerIndex] = useState<number | null>(resolvedInitialMarkerIndex);
+  const [activeMarkerIndex, setActiveMarkerIndexState] = useState<number | null>(() => {
+    if (typeof initialActiveMarkerIndex === 'number') {
+      return initialActiveMarkerIndex;
+    }
+    return resolvedInitialMarkerIndex;
+  });
+
+  const setActiveMarkerIndex = useCallback((indexOrUpdater: number | null | ((prev: number | null) => number | null)) => {
+    if (typeof indexOrUpdater === 'function') {
+      setActiveMarkerIndexState(prev => {
+        const next = indexOrUpdater(prev);
+        if (onActiveMarkerChange) setTimeout(() => onActiveMarkerChange(next), 0);
+        return next;
+      });
+    } else {
+      setActiveMarkerIndexState(indexOrUpdater);
+      onActiveMarkerChange?.(indexOrUpdater);
+    }
+  }, [onActiveMarkerChange]);
+
   const [markerRecenterRequest, setMarkerRecenterRequest] = useState(0);
   const [showCommentHint, setShowCommentHint] = useState(false);
   const [isCommentHintExiting, setIsCommentHintExiting] = useState(false);
@@ -463,12 +490,48 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [markerColorKey, setMarkerColorKey] = useState<MarkerColorKey>('black');
   const [isDragging, setIsDragging] = useState(false);
   const [isPinching, setIsPinching] = useState(false);
-  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
-  const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(null);
+  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(() => ({ width: 1200, height: 800 }));
+  const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(() => ({ width: 1200, height: 800 }));
   const [interactiveMapData, setInteractiveMapData] = useState<InteractiveMapData | null>(null);
   const [loadingInteractiveMap, setLoadingInteractiveMap] = useState<boolean>(() => hasInteractiveMapHint === true);
-  const [isInteractiveMapVisible, setIsInteractiveMapVisible] = useState(true);
-  const [activeMapSectionIndex, setActiveMapSectionIndex] = useState<number | null>(null);
+  const [isInteractiveMapVisible, setIsInteractiveMapVisible] = useState(() => !(typeof initialActiveMarkerIndex === 'number'));
+
+  const [activeMapSectionIndex, setActiveMapSectionIndexState] = useState<number | null>(() => {
+    if (typeof initialActiveMapSectionIndex === 'number') {
+      return initialActiveMapSectionIndex;
+    }
+    return null;
+  });
+
+  const setActiveMapSectionIndex = useCallback((indexOrUpdater: number | null | ((prev: number | null) => number | null)) => {
+    if (typeof indexOrUpdater === 'function') {
+      setActiveMapSectionIndexState(prev => {
+        const next = indexOrUpdater(prev);
+        if (onActiveMapSectionChange) setTimeout(() => onActiveMapSectionChange(next), 0);
+        return next;
+      });
+    } else {
+      setActiveMapSectionIndexState(indexOrUpdater);
+      onActiveMapSectionChange?.(indexOrUpdater);
+    }
+  }, [onActiveMapSectionChange]);
+
+  useEffect(() => {
+    if (typeof initialActiveMarkerIndex === 'number') {
+      setActiveMarkerIndexState(initialActiveMarkerIndex);
+      setIsInteractiveMapVisible(false);
+      setViewerMode(prev => (prev === 'map' ? 'pointer' : prev));
+    }
+  }, [initialActiveMarkerIndex]);
+
+  useEffect(() => {
+    if (typeof initialActiveMapSectionIndex === 'number') {
+      setActiveMapSectionIndexState(initialActiveMapSectionIndex);
+      setIsInteractiveMapVisible(true);
+      setViewerMode('map');
+    }
+  }, [initialActiveMapSectionIndex]);
+
   const [hoveredMapSectionIndex, setHoveredMapSectionIndex] = useState<number | null>(null);
   const [focusedMapSectionIndex, setFocusedMapSectionIndex] = useState<number | null>(null);
   const [mapFocusRequest, setMapFocusRequest] = useState(0);
@@ -718,12 +781,15 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, [zoomLevel, srcZoom, zoomSourceFailed]);
 
   useEffect(() => {
-    setActiveMarkerIndex(null);
     setHoveredMarkerIndex(null);
     setFocusedMarkerIndex(null);
     setMarkerColorKey('black');
     setMarkerVisualMode(resolvedInitialMarkerVisualMode);
-    setActiveMarkerIndex(resolvedInitialMarkerIndex);
+    // Only reset activeMarkerIndex if the parent is NOT controlling it
+    if (typeof initialActiveMarkerIndex !== 'number') {
+      setActiveMarkerIndex(null);
+      setActiveMarkerIndex(resolvedInitialMarkerIndex);
+    }
   }, [src, senaladosMeta, senalados, resolvedInitialMarkerVisualMode, resolvedInitialMarkerIndex]);
 
   useEffect(() => {
@@ -793,15 +859,25 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const updateImageSize = () => {
     const imageEl = imageRef.current;
     if (!imageEl) return;
-    setImageSize({ width: imageEl.clientWidth, height: imageEl.clientHeight });
-    setImageNaturalSize({ width: imageEl.naturalWidth, height: imageEl.naturalHeight });
+    const w = imageEl.clientWidth || imageEl.naturalWidth || 0;
+    const h = imageEl.clientHeight || imageEl.naturalHeight || 0;
+    if (w > 0 && h > 0) {
+      setImageSize(prev => {
+        if (prev && prev.width === w && prev.height === h) return prev;
+        return { width: w, height: h };
+      });
+      setImageNaturalSize(prev => {
+        const nw = imageEl.naturalWidth || w;
+        const nh = imageEl.naturalHeight || h;
+        if (prev && prev.width === nw && prev.height === nh) return prev;
+        return { width: nw, height: nh };
+      });
+    }
   };
 
   const handlePlateNavigation = (navigate?: () => void) => {
     if (!navigate || isPlateImageLoading) return;
     setIsPlateImageLoading(true);
-    setImageSize(null);
-    setImageNaturalSize(null);
     navigate();
   };
 
@@ -839,12 +915,16 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, [perceptualEnhanceLevel]);
 
   useEffect(() => {
-    updateImageSize();
     const imageEl = imageRef.current;
-    if (!imageEl) return;
+    if (imageEl) {
+      if (imageEl.complete && imageEl.naturalWidth > 0) {
+        updateImageSize();
+        setIsPlateImageLoading(false);
+      }
+    }
 
     const observer = new ResizeObserver(() => updateImageSize());
-    observer.observe(imageEl);
+    if (imageEl) observer.observe(imageEl);
 
     window.addEventListener('resize', updateImageSize);
     return () => {
@@ -1638,10 +1718,12 @@ const panBy = (dx: number, dy: number) => {
           setInteractiveMapData(cached);
           setLoadingInteractiveMap(false);
           if (cached) {
-            const nextMode = resolveAvailableMode();
-            setViewerMode(nextMode);
-            setMarkerVisualMode(nextMode === 'pointer' ? 'pointer' : 'arrow');
-            setIsInteractiveMapVisible(nextMode === 'map');
+            if (typeof initialActiveMarkerIndex !== 'number') {
+              const nextMode = resolveAvailableMode();
+              setViewerMode(nextMode);
+              setMarkerVisualMode(nextMode === 'pointer' ? 'pointer' : 'arrow');
+              setIsInteractiveMapVisible(nextMode === 'map');
+            }
           } else {
             setViewerMode(resolvedInitialMarkerVisualMode);
             setMarkerVisualMode(resolvedInitialMarkerVisualMode);
@@ -1696,10 +1778,12 @@ const panBy = (dx: number, dy: number) => {
       };
       interactiveMapViewerCache.set(plateIdNumber, nextMapData);
       setInteractiveMapData(nextMapData);
-      const nextMode = resolveAvailableMode();
-      setViewerMode(nextMode);
-      setMarkerVisualMode(nextMode === 'pointer' ? 'pointer' : 'arrow');
-      setIsInteractiveMapVisible(nextMode === 'map');
+      if (typeof initialActiveMarkerIndex !== 'number') {
+        const nextMode = resolveAvailableMode();
+        setViewerMode(nextMode);
+        setMarkerVisualMode(nextMode === 'pointer' ? 'pointer' : 'arrow');
+        setIsInteractiveMapVisible(nextMode === 'map');
+      }
       setActiveMapSectionIndex(null);
       setLoadingInteractiveMap(false);
     };

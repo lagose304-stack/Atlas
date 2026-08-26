@@ -104,25 +104,31 @@ const Edicion: React.FC = () => {
                 Sube, clasifica y reorganiza las placas histológicas. Asígnalas a sus temas y subtemas.
               </p>
             </div>
-            <Link
-              to="/placas"
-              style={{ ...s.cardBtn, color: '#10b981', background: '#ecfdf5', borderColor: '#a7f3d0' }}
-              className="edicion-action-btn"
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLAnchorElement).style.background = 'linear-gradient(135deg, #10b981, #34d399)';
-                (e.currentTarget as HTMLAnchorElement).style.color = '#fff';
-                (e.currentTarget as HTMLAnchorElement).style.borderColor = 'transparent';
-                (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLAnchorElement).style.background = '#ecfdf5';
-                (e.currentTarget as HTMLAnchorElement).style.color = '#10b981';
-                (e.currentTarget as HTMLAnchorElement).style.borderColor = '#a7f3d0';
-                (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(0)';
-              }}
-            >
-              Gestionar placas →
-            </Link>
+            <div style={s.pagesBtnGroup} className="edicion-pages-btn-group">
+              <button
+                style={{ ...s.pagesBtn, flex: 1 }}
+                className="edicion-pages-btn"
+                onClick={() => navigate('/placas')}
+              >
+                Gestionar placas
+              </button>
+              {user?.id === 4 && (
+                <button
+                  style={{
+                    ...s.pagesBtn,
+                    background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
+                    color: '#ffffff',
+                    borderColor: 'transparent',
+                    fontWeight: 700,
+                  }}
+                  className="edicion-pages-btn"
+                  onClick={() => navigate('/reencontrar-placa')}
+                  title="Empareja fotos locales con registros existentes"
+                >
+                  🔍 Reencontrar placas
+                </button>
+              )}
+            </div>
           </div>}
 
           {/* Tarjeta: Editar páginas */}

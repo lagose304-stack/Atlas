@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageUploader from '../components/ImageUploader';
 import { describeSupabaseError, supabase } from '../services/supabase';
-import { uploadToCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
+import { uploadToCloudinary, getCloudinaryPublicId, slugify } from '../services/cloudinary';
 import Footer from '../components/Footer';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
@@ -287,14 +287,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginTop: '6px', transition: 'background 0.15s',
   },
 };
-
-// Convierte un nombre en slug seguro para carpeta de Cloudinary
-const slugify = (text: string) =>
-  text
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9]+/g, '_')
-    .replace(/^_|_$/g, '');
 
 const Placas: React.FC = () => {
   const navigate = useNavigate();
@@ -1099,6 +1091,17 @@ const Placas: React.FC = () => {
               >
                 ⏳ Lista de espera
               </button>
+              {user?.id === 4 && (
+                <button
+                  style={{ ...p.actionBtn, color: '#4338ca', background: '#e0e7ff', borderColor: '#c7d2fe', fontWeight: 700 }}
+                  onClick={() => navigate('/reencontrar-placa')}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#4f46e5,#6366f1)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'transparent'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#e0e7ff'; e.currentTarget.style.color = '#4338ca'; e.currentTarget.style.borderColor = '#c7d2fe'; }}
+                  title="Emparejar imágenes locales con registros existentes"
+                >
+                  🔍 Reencontrar
+                </button>
+              )}
             </div>
           </div>
 

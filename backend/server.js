@@ -194,20 +194,51 @@ const handleMoveImage = async (req, res) => {
     return res.status(500).json({ message: 'Cloudflare R2 no está configurado' });
   }
 
+  const cleanFrom = from_public_id.replace(/^\/+/, '');
+  const cleanTo = to_public_id.replace(/^\/+/, '');
+
   try {
-    await r2Client.send(new CopyObjectCommand({
-      Bucket: r2BucketName,
-      CopySource: `${r2BucketName}/${from_public_id}`,
-      Key: to_public_id,
-    }));
+    const candidates = [
+      cleanFrom,
+      cleanFrom.replace(/^placas_sin_clasificar\//, 'placas/sin_clasificar/'),
+      cleanFrom.replace(/^placas\/sin_clasificar\//, 'placas_sin_clasificar/'),
+      cleanFrom.endsWith('.webp') ? cleanFrom.replace(/\.webp$/, '') : `${cleanFrom}.webp`,
+      cleanFrom.replace(/\.(jpe?g|png|bmp)$/i, '.webp'),
+    ];
+    const uniqueCandidates = Array.from(new Set(candidates));
 
-    await r2Client.send(new DeleteObjectCommand({
-      Bucket: r2BucketName,
-      Key: from_public_id,
-    }));
+    let copied = false;
+    let matchedSourceKey = cleanFrom;
+    let lastErr = null;
 
-    const secureUrl = `${r2PublicDomain}/${to_public_id}`;
-    res.status(200).json({ secure_url: secureUrl, public_id: to_public_id });
+    for (const candidate of uniqueCandidates) {
+      try {
+        await r2Client.send(new CopyObjectCommand({
+          Bucket: r2BucketName,
+          CopySource: `${r2BucketName}/${candidate}`,
+          Key: cleanTo,
+        }));
+        copied = true;
+        matchedSourceKey = candidate;
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+
+    if (!copied) {
+      throw lastErr || new Error(`No se pudo copiar el archivo '${cleanFrom}' en R2`);
+    }
+
+    if (matchedSourceKey !== cleanTo) {
+      await r2Client.send(new DeleteObjectCommand({
+        Bucket: r2BucketName,
+        Key: matchedSourceKey,
+      }));
+    }
+
+    const secureUrl = `${r2PublicDomain}/${cleanTo}`;
+    res.status(200).json({ secure_url: secureUrl, public_id: cleanTo });
   } catch (error) {
     console.error('Error al mover imagen en R2:', error);
     res.status(500).json({ message: 'Error al mover la imagen en R2', error: error.message });

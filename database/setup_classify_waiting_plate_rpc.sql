@@ -9,7 +9,8 @@ CREATE OR REPLACE FUNCTION public.classify_waiting_plate(
   p_senalados TEXT[] DEFAULT NULL,
   p_senalados_meta JSONB DEFAULT NULL,
   p_comentario TEXT DEFAULT NULL,
-  p_tincion TEXT DEFAULT NULL
+  p_tincion TEXT DEFAULT NULL,
+  p_photo_url TEXT DEFAULT NULL
 )
 RETURNS BIGINT
 LANGUAGE plpgsql
@@ -20,6 +21,7 @@ DECLARE
   v_waiting RECORD;
   v_new_placa_id BIGINT;
   v_next_sort_order INTEGER;
+  v_final_photo_url TEXT;
 BEGIN
   SELECT *
   INTO v_waiting
@@ -45,6 +47,8 @@ BEGIN
   FROM public.placas
   WHERE subtema_id = p_subtema_id;
 
+  v_final_photo_url := COALESCE(NULLIF(TRIM(p_photo_url), ''), v_waiting.photo_url);
+
   INSERT INTO public.placas (
     photo_url,
     tema_id,
@@ -56,7 +60,7 @@ BEGIN
     tincion,
     sort_order
   ) VALUES (
-    v_waiting.photo_url,
+    v_final_photo_url,
     p_tema_id,
     p_subtema_id,
     p_aumento,
@@ -75,6 +79,5 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.classify_waiting_plate(BIGINT, INTEGER, INTEGER, TEXT, TEXT[], JSONB, TEXT, TEXT)
-TO anon, authenticated;
-c
+GRANT EXECUTE ON FUNCTION public.classify_waiting_plate(BIGINT, INTEGER, INTEGER, TEXT, TEXT[], JSONB, TEXT, TEXT, TEXT)
+TO anon, authenticated;

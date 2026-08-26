@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { describeSupabaseError, supabase } from '../services/supabase';
-import { deleteFromCloudinary } from '../services/cloudinary';
+import { deleteFromCloudinary, moveCloudinaryImage, getCloudinaryPublicId, buildPlacaStorageKey } from '../services/cloudinary';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -362,20 +362,64 @@ const ListaEspera: React.FC = () => {
 
     try {
       const { labels: senalados_filtrados, meta: senalados_meta } = senaladosPayload;
-      const { data: createdPlacaId, error } = await supabase.rpc('classify_waiting_plate', {
-        p_waiting_id: selected.id,
-        p_tema_id: temaId,
-        p_subtema_id: subtemaId,
-        p_aumento: aumento || null,
-        p_senalados: senalados_filtrados.length > 0 ? senalados_filtrados : null,
-        p_senalados_meta: senalados_meta.length > 0 ? senalados_meta : null,
-        p_comentario: comentario.trim() || null,
-        p_tincion: tincion.trim() || null,
-      });
-      if (error) throw error;
 
-      const temaObj = temas.find(t => t.id === temaId);
-      const subtemaObj = subtemas.find(s => s.id === subtemaId);
+      // 1. Reubicar físicamente la imagen en Cloudflare R2 a la carpeta de su tema y subtema
+      const fromPublicId = selected.public_id || getCloudinaryPublicId(selected.photo_url);
+      const targetPublicId = buildPlacaStorageKey(temaObj.nombre, subObj.nombre, fromPublicId || selected.photo_url);
+
+      let finalPhotoUrl = selected.photo_url;
+      if (fromPublicId && targetPublicId && fromPublicId !== targetPublicId) {
+        try {
+          const moveResult = await moveCloudinaryImage(fromPublicId, targetPublicId);
+          if (moveResult?.secure_url) {
+            finalPhotoUrl = moveResult.secure_url;
+          }
+        } catch (moveErr) {
+          console.warn('Advertencia al mover imagen en Cloudflare R2:', moveErr);
+        }
+      }
+
+      // 2. Guardar en base de datos clasificando la placa
+      let createdPlacaId: number | null = null;
+      try {
+        const { data, error } = await supabase.rpc('classify_waiting_plate', {
+          p_waiting_id: selected.id,
+          p_tema_id: temaId,
+          p_subtema_id: subtemaId,
+          p_aumento: aumento || null,
+          p_senalados: senalados_filtrados.length > 0 ? senalados_filtrados : null,
+          p_senalados_meta: senalados_meta.length > 0 ? senalados_meta : null,
+          p_comentario: comentario.trim() || null,
+          p_tincion: tincion.trim() || null,
+          p_photo_url: finalPhotoUrl,
+        });
+        if (error) throw error;
+        createdPlacaId = typeof data === 'number' ? data : null;
+      } catch (rpcErr: any) {
+        // Fallback para esquemas RPC remotos que aún no tengan el parámetro p_photo_url
+        const { data: fallbackId, error: fallbackErr } = await supabase.rpc('classify_waiting_plate', {
+          p_waiting_id: selected.id,
+          p_tema_id: temaId,
+          p_subtema_id: subtemaId,
+          p_aumento: aumento || null,
+          p_senalados: senalados_filtrados.length > 0 ? senalados_filtrados : null,
+          p_senalados_meta: senalados_meta.length > 0 ? senalados_meta : null,
+          p_comentario: comentario.trim() || null,
+          p_tincion: tincion.trim() || null,
+        });
+        if (fallbackErr) throw fallbackErr;
+        createdPlacaId = typeof fallbackId === 'number' ? fallbackId : null;
+
+        if (createdPlacaId && finalPhotoUrl !== selected.photo_url) {
+          await supabase
+            .from('placas')
+            .update({ photo_url: finalPhotoUrl })
+            .eq('id', createdPlacaId);
+        }
+      }
+
+      const temaObjFinal = temas.find(t => t.id === temaId);
+      const subtemaObjFinal = subtemas.find(s => s.id === subtemaId);
 
       await logPlateActivity({
         actionType: 'classify_waiting_plate',
@@ -389,12 +433,12 @@ const ListaEspera: React.FC = () => {
           role: user?.rol ?? null,
         },
         details: {
-          photo_url: selected.photo_url,
-          nombre_placa: `Placa #${typeof createdPlacaId === 'number' ? createdPlacaId : selected.id} - ${subtemaObj?.nombre || 'Placa'}`,
+          photo_url: finalPhotoUrl,
+          nombre_placa: `Placa #${typeof createdPlacaId === 'number' ? createdPlacaId : selected.id} - ${subtemaObjFinal?.nombre || 'Placa'}`,
           tema_id: temaId,
-          tema_nombre: temaObj?.nombre || null,
+          tema_nombre: temaObjFinal?.nombre || null,
           subtema_id: subtemaId,
-          subtema_nombre: subtemaObj?.nombre || null,
+          subtema_nombre: subtemaObjFinal?.nombre || null,
           aumento: aumento || null,
           tincion: tincion.trim() || null,
           comentario: comentario.trim() || null,
@@ -407,9 +451,10 @@ const ListaEspera: React.FC = () => {
       resetForm();
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 4000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error al clasificar placa:', err);
-      setSaveError('Error al clasificar. Intenta de nuevo.');
+      const detail = err?.message || describeSupabaseError(err) || 'Error al clasificar. Intenta de nuevo.';
+      setSaveError(`Error al clasificar: ${detail}`);
     } finally {
       setIsSaving(false);
     }

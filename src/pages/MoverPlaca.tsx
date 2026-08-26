@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MousePointerClick } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { describeSupabaseError, supabase } from '../services/supabase';
+import { moveCloudinaryImage, getCloudinaryPublicId, buildPlacaStorageKey } from '../services/cloudinary';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -509,9 +510,34 @@ const MoverPlaca: React.FC = () => {
     setSaveSuccess(false);
     const { labels: senalados_filtrados, meta: senalados_meta } = senaladosPayload;
     try {
+      const toTemaObj = editTemas.find(t => t.id === editTemaId);
+      const toSubtemaObj = editSubtemas.find(s => s.id === editSubtemaId);
+
+      const isLocationChanging = editTemaId !== selectedPlaca.tema_id ||
+        editSubtemaId !== selectedPlaca.subtema_id ||
+        selectedPlaca.photo_url.includes('sin_clasificar');
+
+      let finalPhotoUrl = selectedPlaca.photo_url;
+      if (isLocationChanging && toTemaObj && toSubtemaObj) {
+        const fromPublicId = getCloudinaryPublicId(selectedPlaca.photo_url);
+        const targetPublicId = buildPlacaStorageKey(toTemaObj.nombre, toSubtemaObj.nombre, fromPublicId || selectedPlaca.photo_url);
+
+        if (fromPublicId && targetPublicId && fromPublicId !== targetPublicId) {
+          try {
+            const moveResult = await moveCloudinaryImage(fromPublicId, targetPublicId);
+            if (moveResult?.secure_url) {
+              finalPhotoUrl = moveResult.secure_url;
+            }
+          } catch (moveErr) {
+            console.warn('Advertencia al mover imagen en Cloudflare R2 al mover placa:', moveErr);
+          }
+        }
+      }
+
       const { error } = await supabase
         .from('placas')
         .update({
+          photo_url:   finalPhotoUrl,
           tema_id:     editTemaId,
           subtema_id:  editSubtemaId,
           aumento:     editAumento || null,
@@ -524,6 +550,7 @@ const MoverPlaca: React.FC = () => {
       if (error) throw error;
 
       const updatedFields = {
+        photo_url:  finalPhotoUrl,
         tema_id:    editTemaId,
         subtema_id: editSubtemaId,
         aumento:    editAumento || null,
@@ -532,9 +559,6 @@ const MoverPlaca: React.FC = () => {
         comentario: editComentario.trim() || null,
         tincion:    editTincion.trim() || null,
       };
-
-      const toTemaObj = editTemas.find(t => t.id === editTemaId);
-      const toSubtemaObj = editSubtemas.find(s => s.id === editSubtemaId);
 
       await logPlateActivity({
         actionType: 'edit_plate',
@@ -547,7 +571,7 @@ const MoverPlaca: React.FC = () => {
           role: user?.rol ?? null,
         },
         details: {
-          photo_url: selectedPlaca.photo_url,
+          photo_url: finalPhotoUrl,
           nombre_placa: `Placa #${selectedPlaca.id} - ${toSubtemaObj?.nombre || 'Placa'}`,
           tema_id: editTemaId,
           tema_nombre: toTemaObj?.nombre || null,

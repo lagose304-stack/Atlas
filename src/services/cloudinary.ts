@@ -294,3 +294,35 @@ export const getCloudinaryPublicId = (url: string): string => {
     return url.replace(/^\/+/, '');
   }
 };
+
+/**
+ * Convierte un texto en slug seguro para carpetas y claves en Cloudflare R2
+ */
+export const slugify = (text: string): string =>
+  (text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+/**
+ * Construye la ruta / Key estandarizada de una placa en Cloudflare R2 a partir del tema, subtema y nombre de archivo o URL
+ */
+export const buildPlacaStorageKey = (
+  temaNombre: string,
+  subtemaNombre: string,
+  filenameOrUrl: string
+): string => {
+  const cleanTema = slugify(temaNombre || 'sin_tema');
+  const cleanSubtema = slugify(subtemaNombre || 'sin_subtema');
+
+  const rawKey = getCloudinaryPublicId(filenameOrUrl);
+  let filename = (rawKey.split('/').pop() || filenameOrUrl.split('/').pop() || `placa_${Date.now()}.webp`).trim();
+
+  // Normalizar extensión a .webp si aplica
+  if (!/\.(webp|jpe?g|png|gif|svg)$/i.test(filename)) {
+    filename = `${filename.replace(/\.[^.]+$/, '')}.webp`;
+  }
+
+  return `placas/${cleanTema}/${cleanSubtema}/${filename}`;
+};

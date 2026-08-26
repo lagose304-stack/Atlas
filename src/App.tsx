@@ -23,6 +23,7 @@ const EditorPaginas = lazy(() => import('./pages/EditorPaginas'));
 const EliminarPlacas = lazy(() => import('./pages/EliminarPlacas'));
 const MoverPlaca = lazy(() => import('./pages/MoverPlaca'));
 const ListaEspera = lazy(() => import('./pages/ListaEspera'));
+const ReencontrarPlaca = lazy(() => import('./pages/ReencontrarPlaca'));
 const GestionTinciones = lazy(() => import('./pages/GestionTinciones'));
 const MapasInteractivos = lazy(() => import('./pages/MapasInteractivos'));
 const GestionUsuarios = lazy(() => import('./pages/GestionUsuarios'));
@@ -215,6 +216,14 @@ const App: React.FC = () => {
             element={
               <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <ListaEspera />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/reencontrar-placa"
+            element={
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]} allowedUserIds={[4]}>
+                <ReencontrarPlaca />
               </PrivateRoute>
             }
           />

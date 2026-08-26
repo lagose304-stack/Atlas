@@ -187,16 +187,44 @@ function r2DevServerPlugin(): Plugin {
                 return;
               }
 
-              await r2Client.send(new CopyObjectCommand({
-                Bucket: r2BucketName,
-                CopySource: `${r2BucketName}/${fromPublicId}`,
-                Key: toPublicId,
-              }));
+              const candidates = [
+                fromPublicId,
+                fromPublicId.replace(/^placas_sin_clasificar\//, 'placas/sin_clasificar/'),
+                fromPublicId.replace(/^placas\/sin_clasificar\//, 'placas_sin_clasificar/'),
+                fromPublicId.endsWith('.webp') ? fromPublicId.replace(/\.webp$/, '') : `${fromPublicId}.webp`,
+                fromPublicId.replace(/\.(jpe?g|png|bmp)$/i, '.webp'),
+              ];
+              const uniqueCandidates = Array.from(new Set(candidates));
 
-              await r2Client.send(new DeleteObjectCommand({
-                Bucket: r2BucketName,
-                Key: fromPublicId,
-              }));
+              let copied = false;
+              let matchedSourceKey = fromPublicId;
+              let lastErr: any = null;
+
+              for (const candidate of uniqueCandidates) {
+                try {
+                  await r2Client.send(new CopyObjectCommand({
+                    Bucket: r2BucketName,
+                    CopySource: `${r2BucketName}/${candidate}`,
+                    Key: toPublicId,
+                  }));
+                  copied = true;
+                  matchedSourceKey = candidate;
+                  break;
+                } catch (e: any) {
+                  lastErr = e;
+                }
+              }
+
+              if (!copied) {
+                throw lastErr || new Error(`No se pudo copiar el archivo '${fromPublicId}' en R2`);
+              }
+
+              if (matchedSourceKey !== toPublicId) {
+                await r2Client.send(new DeleteObjectCommand({
+                  Bucket: r2BucketName,
+                  Key: matchedSourceKey,
+                }));
+              }
 
               const secureUrl = `${r2PublicDomain}/${toPublicId}`;
               res.setHeader('Content-Type', 'application/json');
