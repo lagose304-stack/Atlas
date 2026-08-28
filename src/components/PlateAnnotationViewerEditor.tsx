@@ -2558,33 +2558,85 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 return null;
               })}
 
-              {/* Live Freehand Polygon Drawing In-Progress */}
-              {(activeTool === 'border' || activeTool === 'batch-border') && drawingPolygonPoints.length >= 4 && (
-                <g>
-                  {/* Filled preview */}
-                  <polygon
-                    points={Array.from({ length: drawingPolygonPoints.length / 2 }, (_, i) => `${drawingPolygonPoints[i * 2] * imageSize.width},${drawingPolygonPoints[i * 2 + 1] * imageSize.height}`).join(' ')}
-                    fill={drawingPolygonColor}
-                    fillOpacity={drawingPolygonOpacity}
-                    stroke={drawingPolygonColor}
-                    strokeWidth={3 / zoomLevel}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
+              {/* Live Freehand Polygon / Exclusion Zone Drawing In-Progress */}
+              {drawingPolygonPoints.length >= 2 && (() => {
+                const isExclusionDrawing = Boolean(activeSelectedMarker && activeSelectedMarker.regionPoints && activeSelectedMarker.regionPoints.length >= 6);
+                const strokePointsStr = Array.from({ length: drawingPolygonPoints.length / 2 }, (_, i) =>
+                  `${drawingPolygonPoints[i * 2] * imageSize.width},${drawingPolygonPoints[i * 2 + 1] * imageSize.height}`
+                ).join(' ');
 
-                  {/* Pulsing brush tip at current position */}
-                  {cursorImagePos && (
-                    <circle
-                      cx={cursorImagePos.x * imageSize.width}
-                      cy={cursorImagePos.y * imageSize.height}
-                      r={7 / zoomLevel}
-                      fill={drawingPolygonColor}
-                      stroke="#ffffff"
-                      strokeWidth={2 / zoomLevel}
-                    />
-                  )}
-                </g>
-              )}
+                const previewColor = isExclusionDrawing ? '#ef4444' : drawingPolygonColor;
+                const previewFill = isExclusionDrawing ? 'rgba(239, 68, 68, 0.28)' : drawingPolygonColor;
+                const previewOpacity = isExclusionDrawing ? 1 : drawingPolygonOpacity;
+
+                return (
+                  <g pointerEvents="none">
+                    {/* Live stroke path or polygon */}
+                    {drawingPolygonPoints.length >= 4 && (
+                      <>
+                        <polygon
+                          points={strokePointsStr}
+                          fill={previewFill}
+                          fillOpacity={previewOpacity}
+                          stroke={previewColor}
+                          strokeWidth={2.5 / zoomLevel}
+                          strokeDasharray={isExclusionDrawing ? '6 3' : undefined}
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                        />
+                        <polyline
+                          points={strokePointsStr}
+                          fill="none"
+                          stroke={previewColor}
+                          strokeWidth={3 / zoomLevel}
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                        />
+                      </>
+                    )}
+
+                    {/* Pulsing brush tip at current pointer position */}
+                    {cursorImagePos && (
+                      <g transform={`translate(${cursorImagePos.x * imageSize.width}, ${cursorImagePos.y * imageSize.height})`}>
+                        <circle
+                          cx={0}
+                          cy={0}
+                          r={7 / zoomLevel}
+                          fill={previewColor}
+                          stroke="#ffffff"
+                          strokeWidth={2 / zoomLevel}
+                          style={{ filter: 'drop-shadow(0 2px 5px rgba(0,0,0,0.35))' }}
+                        />
+                        {isExclusionDrawing && (
+                          <g transform={`translate(${12 / zoomLevel}, ${-12 / zoomLevel})`}>
+                            <rect
+                              x={0}
+                              y={-9 / zoomLevel}
+                              width={82 / zoomLevel}
+                              height={18 / zoomLevel}
+                              rx={4 / zoomLevel}
+                              fill="#ef4444"
+                              stroke="#ffffff"
+                              strokeWidth={1 / zoomLevel}
+                            />
+                            <text
+                              x={41 / zoomLevel}
+                              y={3.5 / zoomLevel}
+                              textAnchor="middle"
+                              fill="#ffffff"
+                              fontSize={9.5 / zoomLevel}
+                              fontWeight="800"
+                              fontFamily="Inter, sans-serif"
+                            >
+                              ✂️ Excluyendo
+                            </text>
+                          </g>
+                        )}
+                      </g>
+                    )}
+                  </g>
+                );
+              })()}
             </svg>
           )}
         </div>
