@@ -2,7 +2,6 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BadgeInfo, BookOpen, ClipboardList, House, Search, Wrench } from 'lucide-react';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail, OPEN_HEADER_SEARCH_EVENT } from '../constants/uiEvents';
-import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import {
   canBypassMaintenance,
@@ -10,7 +9,7 @@ import {
   isFeatureDisabled,
   isTemaDisabled,
 } from '../services/siteMaintenance';
-import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
+import { getCachedTemas, getCachedSubtemas } from '../services/catalogService';
 
 import logoFacultad from '../assets/logos/facultad.png';
 import microscopioHeader from '../assets/logos/laboratorio.png';
@@ -133,21 +132,6 @@ const scoreTextMatch = (query: string, candidate: string): number => {
   return score;
 };
 
-const getThemeNameFromRelation = (relation: unknown): string => {
-  if (!relation) return '';
-  if (Array.isArray(relation)) {
-    const firstItem = relation[0] as { nombre?: string } | undefined;
-    return firstItem?.nombre?.trim() ?? '';
-  }
-
-  if (typeof relation === 'object') {
-    const maybeRelation = relation as { nombre?: string };
-    return maybeRelation.nombre?.trim() ?? '';
-  }
-
-  return '';
-};
-
 const buildSearchSuggestions = (
   query: string,
   temas: SearchTemaRecord[],
@@ -173,7 +157,8 @@ const buildSearchSuggestions = (
       score,
     });
   });
-  subtemas.forEach((subtema) => {
+
+  subtemas.forEach((subtema) => {
     const themeScore = scoreTextMatch(normalizedQuery, subtema.tema_nombre);
     const subtemaScore = scoreTextMatch(normalizedQuery, subtema.nombre);
     const combinedScore = scoreTextMatch(normalizedQuery, `${subtema.tema_nombre} ${subtema.nombre}`);

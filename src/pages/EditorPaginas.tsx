@@ -26,7 +26,6 @@ import FullScreenPageSelector from '../components/page-editor/FullScreenPageSele
 import CreditsAdminPanel from '../components/CreditsAdminPanel';
 import '../components/page-editor/pageEditor.css';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
-import { supabase } from '../services/supabase';
 import type { ContentBlock, PageEntityType } from '../types/contentBlocks';
 import { useAuth } from '../contexts/AuthContext';
 import {
