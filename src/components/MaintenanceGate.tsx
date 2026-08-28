@@ -27,9 +27,14 @@ const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
     return <AtlasLoadingScreen fullScreen label="Preparando el sitio…" />;
   }
 
-  const isSuperAdmin = isAuthenticated && (user?.rol === 'Administrador' || Boolean(user?.is_protected));
+  const canBypassMaintenance =
+    isAuthenticated && (
+      user?.rol === 'Administrador' ||
+      user?.rol === 'Microscopía' ||
+      Boolean(user?.is_protected)
+    );
 
-  if (!status.enabled || isSuperAdmin) {
+  if (!status.enabled || canBypassMaintenance) {
     const disabled = !isAuthenticated && (
       (status.disabledFeatures.includes('evaluations') && location.pathname.startsWith('/evaluaciones'))
       || (status.disabledFeatures.includes('public_catalog') && ['/temario', '/subtemas/', '/ver-placas/'].some((path) => location.pathname === path || location.pathname.startsWith(path)))

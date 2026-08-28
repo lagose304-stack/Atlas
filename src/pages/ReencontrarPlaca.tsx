@@ -13,6 +13,8 @@ import {
   FolderOpen,
   Info,
   Trash2,
+  AlertCircle,
+  SkipForward,
 } from 'lucide-react';
 import { describeSupabaseError, supabase } from '../services/supabase';
 import { uploadToCloudinary, slugify } from '../services/cloudinary';
@@ -85,6 +87,7 @@ const formatBytes = (bytes: number) => {
 };
 
 const MATCHED_PLACAS_STORAGE_KEY = 'atlas_reencontrar_matched_placas';
+const NOT_FOUND_PLACAS_STORAGE_KEY = 'atlas_reencontrar_not_found_placas';
 
 const ReencontrarPlaca: React.FC = () => {
   const { user } = useAuth();
@@ -121,7 +124,22 @@ const ReencontrarPlaca: React.FC = () => {
     return new Set<number>();
   });
 
-  const [filterPlacasMode, setFilterPlacasMode] = useState<'todas' | 'pendientes' | 'vinculadas'>('todas');
+  const [notFoundPlacaIds, setNotFoundPlacaIds] = useState<Set<number>>(() => {
+    try {
+      const saved = localStorage.getItem(NOT_FOUND_PLACAS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return new Set(parsed.map(Number));
+        }
+      }
+    } catch (err) {
+      console.error('Error cargando placas no encontradas desde localStorage:', err);
+    }
+    return new Set<number>();
+  });
+
+  const [filterPlacasMode, setFilterPlacasMode] = useState<'todas' | 'pendientes' | 'vinculadas' | 'no_encontradas'>('todas');
   const [activeMarkerIndex, setActiveMarkerIndex] = useState<number | null>(null);
   const [activeMapSectionIndex, setActiveMapSectionIndex] = useState<number | null>(null);
 
@@ -133,6 +151,15 @@ const ReencontrarPlaca: React.FC = () => {
       console.error('Error guardando placas emparejadas en localStorage:', err);
     }
   }, [matchedPlacaIds]);
+
+  // Sincronizar notFoundPlacaIds con localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(NOT_FOUND_PLACAS_STORAGE_KEY, JSON.stringify(Array.from(notFoundPlacaIds)));
+    } catch (err) {
+      console.error('Error guardando placas no encontradas en localStorage:', err);
+    }
+  }, [notFoundPlacaIds]);
 
   // Al cambiar de placa seleccionada, reseteamos el señalado activo
   useEffect(() => {
@@ -227,8 +254,10 @@ const ReencontrarPlaca: React.FC = () => {
         setPlacas(rows);
 
         if (rows.length > 0) {
-          // Selecciona automáticamente la primera placa que aún no haya sido emparejada
-          const firstPending = rows.find(p => !matchedPlacaIds.has(p.id)) || rows[0];
+          // Selecciona automáticamente la primera placa pendiente (no vinculada y no marcada como no encontrada)
+          const firstPending = rows.find(p => !matchedPlacaIds.has(p.id) && !notFoundPlacaIds.has(p.id))
+            || rows.find(p => !matchedPlacaIds.has(p.id))
+            || rows[0];
           setSelectedPlacaId(firstPending.id);
 
           const placaIds = rows.map(p => p.id);
@@ -286,26 +315,39 @@ const ReencontrarPlaca: React.FC = () => {
     return candidates[currentCandidateIndex] || null;
   }, [candidates, currentCandidateIndex]);
 
-  // Placas filtradas según la pestaña activa (Todas, Pendientes, Vinculadas)
-  const filteredPlacas = useMemo(() => {
-    if (filterPlacasMode === 'pendientes') {
-      return placas.filter(p => !matchedPlacaIds.has(p.id));
-    }
-    if (filterPlacasMode === 'vinculadas') {
-      return placas.filter(p => matchedPlacaIds.has(p.id));
-    }
-    return placas;
-  }, [placas, filterPlacasMode, matchedPlacaIds]);
-
   const matchedInCurrentSubtemaCount = useMemo(() => {
     return placas.filter(p => matchedPlacaIds.has(p.id)).length;
   }, [placas, matchedPlacaIds]);
 
+  const notFoundInCurrentSubtemaCount = useMemo(() => {
+    return placas.filter(p => notFoundPlacaIds.has(p.id)).length;
+  }, [placas, notFoundPlacaIds]);
+
+  const pendingInCurrentSubtemaCount = useMemo(() => {
+    return placas.filter(p => !matchedPlacaIds.has(p.id) && !notFoundPlacaIds.has(p.id)).length;
+  }, [placas, matchedPlacaIds, notFoundPlacaIds]);
+
+  // Placas filtradas según la pestaña activa (Todas, Pendientes, Vinculadas, No encontradas)
+  const filteredPlacas = useMemo(() => {
+    if (filterPlacasMode === 'pendientes') {
+      return placas.filter(p => !matchedPlacaIds.has(p.id) && !notFoundPlacaIds.has(p.id));
+    }
+    if (filterPlacasMode === 'vinculadas') {
+      return placas.filter(p => matchedPlacaIds.has(p.id));
+    }
+    if (filterPlacasMode === 'no_encontradas') {
+      return placas.filter(p => notFoundPlacaIds.has(p.id));
+    }
+    return placas;
+  }, [placas, filterPlacasMode, matchedPlacaIds, notFoundPlacaIds]);
+
   const handleClearMatchedHistory = () => {
-    if (window.confirm('¿Deseas reiniciar la lista de placas marcadas como vinculadas en tu navegador? (Esto no modifica ni borra los datos ya guardados en la base de datos).')) {
+    if (window.confirm('¿Deseas reiniciar la lista local de placas marcadas (vinculadas y no encontradas)? (Esto no modifica ni borra los datos guardados en la base de datos).')) {
       setMatchedPlacaIds(new Set());
+      setNotFoundPlacaIds(new Set());
       try {
         localStorage.removeItem(MATCHED_PLACAS_STORAGE_KEY);
+        localStorage.removeItem(NOT_FOUND_PLACAS_STORAGE_KEY);
       } catch (err) {
         console.error('Error al limpiar localStorage:', err);
       }
@@ -373,6 +415,61 @@ const ReencontrarPlaca: React.FC = () => {
     setCurrentCandidateIndex(prev => (prev - 1 + candidates.length) % candidates.length);
   }, [candidates.length]);
 
+  // ── Marcar Placa como No Encontrada y Avanzar a Calibrar Siguiente ──────
+  const handleMarkAsNotFound = useCallback((placaIdToMark?: number) => {
+    const targetId = placaIdToMark ?? activePlaca?.id;
+    if (!targetId) return;
+
+    setNotFoundPlacaIds(prev => new Set(prev).add(targetId));
+
+    // Si estaba marcada como vinculada, quitarla de vinculadas
+    setMatchedPlacaIds(prev => {
+      if (prev.has(targetId)) {
+        const updated = new Set(prev);
+        updated.delete(targetId);
+        return updated;
+      }
+      return prev;
+    });
+
+    // Encontrar la siguiente placa pendiente (no vinculada y no marcada como no encontrada)
+    const currentIndex = placas.findIndex(p => p.id === targetId);
+    let nextPlaca = placas
+      .slice(currentIndex + 1)
+      .find(p => p.id !== targetId && !matchedPlacaIds.has(p.id) && !notFoundPlacaIds.has(p.id));
+
+    if (!nextPlaca) {
+      nextPlaca = placas.find(p => p.id !== targetId && !matchedPlacaIds.has(p.id) && !notFoundPlacaIds.has(p.id));
+    }
+
+    if (nextPlaca) {
+      setSelectedPlacaId(nextPlaca.id);
+      setCurrentCandidateIndex(0); // Reiniciar a la primera foto para calibrar la nueva placa
+      setSaveSuccessMsg(`⚠️ Placa #${targetId} marcada como NO encontrada. Pasando a calibrar Placa #${nextPlaca.id}`);
+    } else {
+      setSaveSuccessMsg(`⚠️ Placa #${targetId} marcada como NO encontrada. ¡No quedan más placas pendientes en este subtema!`);
+    }
+
+    setTimeout(() => setSaveSuccessMsg(null), 4500);
+  }, [activePlaca, notFoundPlacaIds, matchedPlacaIds, placas]);
+
+  // ── Alternar Marca de No Encontrada Directamente ────────────────────────
+  const handleToggleNotFound = useCallback((placaId: number, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setNotFoundPlacaIds(prev => {
+      const updated = new Set(prev);
+      if (updated.has(placaId)) {
+        updated.delete(placaId);
+        setSaveSuccessMsg(`Placa #${placaId} desmarcada como no encontrada.`);
+      } else {
+        updated.add(placaId);
+        setSaveSuccessMsg(`Placa #${placaId} marcada como no encontrada.`);
+      }
+      return updated;
+    });
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
+  }, []);
+
   // ── Vincular y Guardar Imagen a la Placa ────────────────────────────────
   const handleConfirmMatch = useCallback(async () => {
     if (!activePlaca || !currentCandidate || !activeTema || !activeSubtema) return;
@@ -426,6 +523,15 @@ const ReencontrarPlaca: React.FC = () => {
 
       // 4. Actualizar estado local
       setMatchedPlacaIds(prev => new Set(prev).add(activePlaca.id));
+      setNotFoundPlacaIds(prev => {
+        if (prev.has(activePlaca.id)) {
+          const updated = new Set(prev);
+          updated.delete(activePlaca.id);
+          return updated;
+        }
+        return prev;
+      });
+
       setPlacas(prev =>
         prev.map(p => (p.id === activePlaca.id ? { ...p, photo_url: uploadResult.secure_url } : p))
       );
@@ -435,8 +541,11 @@ const ReencontrarPlaca: React.FC = () => {
       // 5. Remover la imagen emparejada de la lista de candidatas
       handleRemoveCandidate(currentCandidateIndex);
 
-      // 6. Seleccionar automáticamente la siguiente placa que no esté emparejada
-      const nextUnmatched = placas.find(p => p.id !== activePlaca.id && !matchedPlacaIds.has(p.id));
+      // 6. Seleccionar automáticamente la siguiente placa que no esté emparejada ni marcada como no encontrada
+      const nextUnmatched = placas.find(
+        p => p.id !== activePlaca.id && !matchedPlacaIds.has(p.id) && !notFoundPlacaIds.has(p.id)
+      ) || placas.find(p => p.id !== activePlaca.id && !matchedPlacaIds.has(p.id));
+
       if (nextUnmatched) {
         setSelectedPlacaId(nextUnmatched.id);
       }
@@ -457,6 +566,7 @@ const ReencontrarPlaca: React.FC = () => {
     currentCandidateIndex,
     placas,
     matchedPlacaIds,
+    notFoundPlacaIds,
     handleRemoveCandidate,
     user,
   ]);
@@ -474,11 +584,14 @@ const ReencontrarPlaca: React.FC = () => {
       } else if (e.key === 'Enter' || e.key === 'v' || e.key === 'V') {
         e.preventDefault();
         if (!isSaving) void handleConfirmMatch();
+      } else if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        handleMarkAsNotFound();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isViewerOpen, handleNextCandidate, handlePrevCandidate, handleConfirmMatch, isSaving]);
+  }, [isViewerOpen, handleNextCandidate, handlePrevCandidate, handleConfirmMatch, handleMarkAsNotFound, isSaving]);
 
   return (
     <div style={styles.page}>
@@ -731,7 +844,7 @@ const ReencontrarPlaca: React.FC = () => {
             </div>
           </div>
 
-          {/* Filtros de placas: Todas / Pendientes / Vinculadas */}
+          {/* Filtros de placas: Todas / Pendientes / Vinculadas / No encontradas */}
           {placas.length > 0 && (
             <div style={styles.placasFilterRow}>
               <button
@@ -752,7 +865,7 @@ const ReencontrarPlaca: React.FC = () => {
                 }}
                 onClick={() => setFilterPlacasMode('pendientes')}
               >
-                ⏳ Pendientes ({placas.length - matchedInCurrentSubtemaCount})
+                ⏳ Pendientes ({pendingInCurrentSubtemaCount})
               </button>
               <button
                 type="button"
@@ -763,6 +876,16 @@ const ReencontrarPlaca: React.FC = () => {
                 onClick={() => setFilterPlacasMode('vinculadas')}
               >
                 ✅ Vinculadas ({matchedInCurrentSubtemaCount})
+              </button>
+              <button
+                type="button"
+                style={{
+                  ...styles.filterTabBtn,
+                  ...(filterPlacasMode === 'no_encontradas' ? styles.filterTabBtnActive : {}),
+                }}
+                onClick={() => setFilterPlacasMode('no_encontradas')}
+              >
+                ⚠️ No encontradas ({notFoundInCurrentSubtemaCount})
               </button>
             </div>
           )}
@@ -782,7 +905,11 @@ const ReencontrarPlaca: React.FC = () => {
               <CheckCircle size={32} color="#059669" />
               <p>
                 {filterPlacasMode === 'pendientes'
-                  ? '¡Excelente! Todas las placas de este subtema ya están vinculadas.'
+                  ? '¡Excelente! Todas las placas de este subtema ya están vinculadas o marcadas.'
+                  : filterPlacasMode === 'no_encontradas'
+                  ? 'No hay placas marcadas como no encontradas en este subtema.'
+                  : filterPlacasMode === 'vinculadas'
+                  ? 'No hay placas vinculadas en este subtema aún.'
                   : 'No hay placas en esta categoría.'}
               </p>
             </div>
@@ -791,6 +918,7 @@ const ReencontrarPlaca: React.FC = () => {
               {filteredPlacas.map((placa, idx) => {
                 const isSelected = placa.id === selectedPlacaId;
                 const isMatched = matchedPlacaIds.has(placa.id);
+                const isNotFound = notFoundPlacaIds.has(placa.id);
                 const hasMap = placasConMapa.has(placa.id);
                 const senaladosCount = Array.isArray(placa.senalados) ? placa.senalados.length : 0;
 
@@ -801,16 +929,24 @@ const ReencontrarPlaca: React.FC = () => {
                       ...styles.placaCard,
                       ...(isSelected ? styles.placaCardSelected : {}),
                       ...(isMatched ? styles.placaCardMatched : {}),
+                      ...(isNotFound ? styles.placaCardNotFound : {}),
                     }}
                     onClick={() => setSelectedPlacaId(placa.id)}
                   >
                     <div style={styles.placaCardTop}>
                       <span style={styles.placaNumber}>#{idx + 1} (ID: {placa.id})</span>
-                      {isMatched && (
-                        <span style={styles.matchedBadge}>
-                          <CheckCircle size={12} /> Emparejada
-                        </span>
-                      )}
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        {isMatched && (
+                          <span style={styles.matchedBadge}>
+                            <CheckCircle size={12} /> Emparejada
+                          </span>
+                        )}
+                        {isNotFound && (
+                          <span style={styles.notFoundBadge}>
+                            <AlertCircle size={12} /> No encontrada
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div style={styles.placaDetails}>
@@ -832,20 +968,35 @@ const ReencontrarPlaca: React.FC = () => {
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      style={{
-                        ...styles.selectPlacaBtn,
-                        ...(isSelected ? styles.selectPlacaBtnActive : {}),
-                      }}
-                      onClick={e => {
-                        e.stopPropagation();
-                        setSelectedPlacaId(placa.id);
-                        if (candidates.length > 0) setIsViewerOpen(true);
-                      }}
-                    >
-                      {isSelected ? '🎯 Seleccionada para calibrar' : 'Elegir para emparejar'}
-                    </button>
+                    <div style={styles.placaCardActions}>
+                      <button
+                        type="button"
+                        style={{
+                          ...styles.selectPlacaBtn,
+                          ...(isSelected ? styles.selectPlacaBtnActive : {}),
+                        }}
+                        onClick={e => {
+                          e.stopPropagation();
+                          setSelectedPlacaId(placa.id);
+                          if (candidates.length > 0) setIsViewerOpen(true);
+                        }}
+                      >
+                        {isSelected ? '🎯 Seleccionada para calibrar' : 'Elegir para emparejar'}
+                      </button>
+
+                      <button
+                        type="button"
+                        style={{
+                          ...styles.toggleNotFoundBtn,
+                          ...(isNotFound ? styles.toggleNotFoundBtnActive : {}),
+                        }}
+                        onClick={e => handleToggleNotFound(placa.id, e)}
+                        title={isNotFound ? 'Quitar marca de no encontrada' : 'Marcar como no encontrada'}
+                      >
+                        <AlertCircle size={13} />
+                        <span>{isNotFound ? 'Desmarcar' : 'No encontrada'}</span>
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -871,6 +1022,15 @@ const ReencontrarPlaca: React.FC = () => {
                 >
                   <XCircle size={18} />
                   <span>Siguiente foto (❌)</span>
+                </button>
+                <button
+                  type="button"
+                  style={styles.actionBtnNotFound}
+                  onClick={() => handleMarkAsNotFound()}
+                  title="Marcar placa como no encontrada y pasar a calibrar la siguiente (Tecla N)"
+                >
+                  <SkipForward size={18} />
+                  <span>No encontrada (⏭️)</span>
                 </button>
                 <button
                   type="button"
@@ -918,14 +1078,22 @@ const ReencontrarPlaca: React.FC = () => {
           {/* Barra Flotante de Decisión en Pantalla Completa */}
           <div style={styles.floatingDecisionBar}>
             <div style={styles.floatingInfo}>
-              <div style={styles.floatingPlateTitle}>
+              <div
+                style={styles.floatingPlateTitle}
+                title={`Placa #${activePlaca.id} (${activePlaca.aumento || 'Sin aumento'}) — ${activeSubtema?.nombre}`}
+              >
                 Placa #{activePlaca.id} ({activePlaca.aumento || 'Sin aumento'}) — {activeSubtema?.nombre}
               </div>
-              <div style={styles.floatingCandidateTitle}>
-                Foto {currentCandidateIndex + 1} de {candidates.length}: <strong>{currentCandidate.name}</strong>
+              <div
+                style={styles.floatingCandidateTitle}
+                title={`Foto ${currentCandidateIndex + 1} de ${candidates.length}: ${currentCandidate.name}`}
+              >
+                <span style={{ whiteSpace: 'nowrap' }}>
+                  Foto {currentCandidateIndex + 1}/{candidates.length}: <strong>{currentCandidate.name}</strong>
+                </span>
                 {activeMarkerIndex !== null && (activePlaca.senalados_meta?.[activeMarkerIndex]?.label || activePlaca.senalados?.[activeMarkerIndex]) && (
-                  <span style={{ marginLeft: '10px', color: '#fde047', fontWeight: 600 }}>
-                    🎯 Señalado de referencia: "{activePlaca.senalados_meta?.[activeMarkerIndex]?.label || activePlaca.senalados?.[activeMarkerIndex]}"
+                  <span style={styles.floatingMarkerTag}>
+                    🎯 {activePlaca.senalados_meta?.[activeMarkerIndex]?.label || activePlaca.senalados?.[activeMarkerIndex]}
                   </span>
                 )}
               </div>
@@ -938,7 +1106,7 @@ const ReencontrarPlaca: React.FC = () => {
                 onClick={handlePrevCandidate}
                 title="Foto anterior (Flecha Izquierda)"
               >
-                <ArrowLeft size={18} />
+                <ArrowLeft size={16} />
                 <span>Anterior</span>
               </button>
 
@@ -948,8 +1116,18 @@ const ReencontrarPlaca: React.FC = () => {
                 onClick={handleNextCandidate}
                 title="Descartar y probar siguiente (X o Flecha Derecha)"
               >
-                <XCircle size={20} />
+                <XCircle size={16} />
                 <span>Siguiente (❌)</span>
+              </button>
+
+              <button
+                type="button"
+                style={styles.floatingNotFoundBtn}
+                onClick={() => handleMarkAsNotFound()}
+                title="Marcar esta placa como no encontrada y pasar de inmediato a calibrar la siguiente placa (Tecla N)"
+              >
+                <SkipForward size={16} />
+                <span>No encontrada (⏭️)</span>
               </button>
 
               <button
@@ -959,8 +1137,8 @@ const ReencontrarPlaca: React.FC = () => {
                 disabled={isSaving}
                 title="Confirmar que esta foto pertenece a esta placa (Enter o V)"
               >
-                <CheckCircle size={22} />
-                <span>{isSaving ? 'Guardando en R2...' : '¡Confirmar y Guardar! (✔️)'}</span>
+                <CheckCircle size={17} />
+                <span>{isSaving ? 'Guardando...' : '¡Confirmar! (✔️)'}</span>
               </button>
             </div>
           </div>
@@ -1408,16 +1586,21 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '16px',
-    padding: '16px 24px',
+    flexWrap: 'nowrap',
+    gap: '12px',
+    padding: '10px 18px',
     backgroundColor: '#0f172a',
     color: '#ffffff',
-    borderRadius: '16px',
+    borderRadius: '12px',
     boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
   },
   quickInfo: {
-    fontSize: '15px',
+    fontSize: '13px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    flex: '1 1 auto',
+    minWidth: '180px',
   },
   quickFilename: {
     color: '#38bdf8',
@@ -1425,47 +1608,67 @@ const styles: Record<string, React.CSSProperties> = {
   },
   quickActions: {
     display: 'flex',
-    gap: '10px',
+    gap: '8px',
     alignItems: 'center',
+    flexShrink: 0,
+    flexWrap: 'nowrap',
   },
   actionBtnReject: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '6px',
-    padding: '8px 16px',
+    gap: '5px',
+    padding: '6px 12px',
     backgroundColor: '#ef4444',
     color: '#ffffff',
     border: 'none',
-    borderRadius: '10px',
+    borderRadius: '8px',
     fontWeight: 600,
-    fontSize: '14px',
+    fontSize: '13px',
     cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  },
+  actionBtnNotFound: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
+    padding: '6px 12px',
+    backgroundColor: '#d97706',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    fontWeight: 600,
+    fontSize: '13px',
+    cursor: 'pointer',
+    boxShadow: '0 2px 8px rgba(217, 119, 6, 0.3)',
+    whiteSpace: 'nowrap',
   },
   actionBtnAccept: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '6px',
-    padding: '8px 20px',
+    gap: '5px',
+    padding: '6px 14px',
     backgroundColor: '#10b981',
     color: '#ffffff',
     border: 'none',
-    borderRadius: '10px',
+    borderRadius: '8px',
     fontWeight: 700,
-    fontSize: '14px',
+    fontSize: '13px',
     cursor: 'pointer',
+    whiteSpace: 'nowrap',
   },
   actionBtnExpand: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '6px',
-    padding: '8px 14px',
+    gap: '5px',
+    padding: '6px 12px',
     backgroundColor: '#334155',
     color: '#f8fafc',
     border: 'none',
-    borderRadius: '10px',
+    borderRadius: '8px',
     fontWeight: 600,
-    fontSize: '14px',
+    fontSize: '13px',
     cursor: 'pointer',
+    whiteSpace: 'nowrap',
   },
   viewerOverlayWrapper: {
     position: 'relative',
@@ -1473,80 +1676,167 @@ const styles: Record<string, React.CSSProperties> = {
   },
   floatingDecisionBar: {
     position: 'fixed',
-    bottom: '24px',
+    bottom: '18px',
     left: '50%',
     transform: 'translateX(-50%)',
     zIndex: 100000,
     backgroundColor: 'rgba(15, 23, 42, 0.95)',
-    backdropFilter: 'blur(10px)',
-    borderRadius: '20px',
-    padding: '16px 24px',
+    backdropFilter: 'blur(12px)',
+    borderRadius: '16px',
+    padding: '8px 18px',
     border: '1px solid rgba(255, 255, 255, 0.15)',
     boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
     display: 'flex',
     alignItems: 'center',
-    gap: '24px',
-    maxWidth: '90vw',
+    justifyContent: 'space-between',
+    gap: '16px',
+    maxWidth: '95vw',
+    width: 'auto',
+    boxSizing: 'border-box',
   },
   floatingInfo: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '2px',
+    minWidth: '180px',
+    maxWidth: '380px',
+    flex: '1 1 auto',
+    overflow: 'hidden',
   },
   floatingPlateTitle: {
     color: '#38bdf8',
     fontWeight: 700,
-    fontSize: '15px',
+    fontSize: '13.5px',
+    lineHeight: '1.25',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   floatingCandidateTitle: {
     color: '#cbd5e1',
-    fontSize: '13px',
+    fontSize: '12px',
+    lineHeight: '1.25',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  floatingMarkerTag: {
+    color: '#fde047',
+    fontWeight: 600,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    maxWidth: '180px',
   },
   floatingButtonsGroup: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
+    gap: '8px',
+    flexShrink: 0,
+    flexWrap: 'nowrap',
   },
   floatingPrevBtn: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '6px',
-    padding: '10px 16px',
+    gap: '5px',
+    padding: '7px 12px',
     backgroundColor: '#334155',
     color: '#ffffff',
     border: 'none',
-    borderRadius: '12px',
+    borderRadius: '10px',
     fontWeight: 600,
-    fontSize: '14px',
+    fontSize: '13px',
     cursor: 'pointer',
+    whiteSpace: 'nowrap',
   },
   floatingRejectBtn: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '10px 20px',
+    gap: '6px',
+    padding: '7px 14px',
     backgroundColor: '#dc2626',
     color: '#ffffff',
     border: 'none',
-    borderRadius: '12px',
+    borderRadius: '10px',
     fontWeight: 700,
-    fontSize: '14px',
+    fontSize: '13px',
     cursor: 'pointer',
-    boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)',
+    boxShadow: '0 3px 10px rgba(220, 38, 38, 0.35)',
+    whiteSpace: 'nowrap',
+  },
+  floatingNotFoundBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '7px 14px',
+    backgroundColor: '#d97706',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '10px',
+    fontWeight: 700,
+    fontSize: '13px',
+    cursor: 'pointer',
+    boxShadow: '0 3px 10px rgba(217, 119, 6, 0.4)',
+    whiteSpace: 'nowrap',
   },
   floatingAcceptBtn: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '10px 24px',
+    gap: '6px',
+    padding: '7px 18px',
     backgroundColor: '#059669',
     color: '#ffffff',
     border: 'none',
-    borderRadius: '12px',
+    borderRadius: '10px',
     fontWeight: 800,
-    fontSize: '15px',
+    fontSize: '13.5px',
     cursor: 'pointer',
-    boxShadow: '0 4px 14px rgba(5, 150, 105, 0.5)',
+    boxShadow: '0 3px 12px rgba(5, 150, 105, 0.45)',
+    whiteSpace: 'nowrap',
+  },
+  notFoundBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '3px 8px',
+    backgroundColor: '#fffbeb',
+    color: '#b45309',
+    borderRadius: '8px',
+    fontSize: '11px',
+    fontWeight: 700,
+    border: '1px solid #fde68a',
+  },
+  placaCardNotFound: {
+    borderColor: '#fde68a',
+    backgroundColor: '#fffdf5',
+  },
+  placaCardActions: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+    marginTop: 'auto',
+  },
+  toggleNotFoundBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '8px 10px',
+    backgroundColor: '#f1f5f9',
+    color: '#64748b',
+    border: '1px solid #cbd5e1',
+    borderRadius: '8px',
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  },
+  toggleNotFoundBtnActive: {
+    backgroundColor: '#fef3c7',
+    color: '#b45309',
+    borderColor: '#fde68a',
   },
   alertSuccess: {
     display: 'flex',
