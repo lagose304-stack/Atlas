@@ -438,12 +438,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const laserTrailRef = useRef<Array<{ x: number; y: number; time: number }>>([]);
   const laserCurrentPosRef = useRef<{ x: number; y: number } | null>(null);
   const laserStabilizedPosRef = useRef<{ x: number; y: number } | null>(null);
+  const [isZoomImageReady, setIsZoomImageReady] = useState(false);
   const laserPinchRef = useRef<{
     dist: number;
     startZoom: number;
     midX: number;
     midY: number;
     startPos: { x: number; y: number };
+    containerMetrics: { left: number; top: number; width: number; height: number };
   } | null>(null);
   const normalPinchRef = useRef<{
     dist: number;
@@ -451,6 +453,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     midX: number;
     midY: number;
     startPos: { x: number; y: number };
+    containerMetrics: { left: number; top: number; width: number; height: number };
   } | null>(null);
   const lastPinchEndedAtRef = useRef(0);
   const pinchTouchStartAtRef = useRef(0);
@@ -770,8 +773,26 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   useEffect(() => {
     setUseZoomSource(false);
     setZoomSourceFailed(false);
+    setIsZoomImageReady(false);
     setZoomLevel(1);
     setPosition({ x: 0, y: 0 });
+
+    if (!srcZoom) return;
+    let active = true;
+    const preloadImg = new Image();
+    preloadImg.src = srcZoom;
+    preloadImg.onload = () => {
+      if (active) setIsZoomImageReady(true);
+    };
+    preloadImg.onerror = () => {
+      if (active) {
+        setIsZoomImageReady(false);
+        setZoomSourceFailed(true);
+      }
+    };
+    return () => {
+      active = false;
+    };
   }, [src, srcZoom]);
 
   useEffect(() => {
@@ -933,12 +954,20 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     };
   }, [src, useZoomSource, srcZoom]);
 
-  const addLaserPoint = (rawX: number, rawY: number) => {
+  const addLaserPoint = (rawX: number, rawY: number, isNewStroke = false) => {
     const now = performance.now();
     const trail = laserTrailRef.current;
 
-    // Estabilizador Streamline de pulso (amortiguador de temblor)
-    const prevStable = laserStabilizedPosRef.current ?? { x: rawX, y: rawY };
+    // Si es un trazo nuevo o se había levantado el dedo/cursor, inicializar de inmediato en el nuevo punto
+    if (isNewStroke || !laserStabilizedPosRef.current) {
+      laserStabilizedPosRef.current = { x: rawX, y: rawY };
+      laserCurrentPosRef.current = { x: rawX, y: rawY };
+      laserTrailRef.current = [{ x: rawX, y: rawY, time: now }];
+      return;
+    }
+
+    // Estabilizador Streamline de pulso (amortiguador de temblor continuo)
+    const prevStable = laserStabilizedPosRef.current;
     const smoothFactor = 0.38;
     const sx = prevStable.x + (rawX - prevStable.x) * smoothFactor;
     const sy = prevStable.y + (rawY - prevStable.y) * smoothFactor;
@@ -951,14 +980,23 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       const dx = sx - lastPoint.x;
       const dy = sy - lastPoint.y;
       const dist = Math.hypot(dx, dy);
+      const timeDelta = now - lastPoint.time;
+
+      // Si hubo un salto brusco en distancia o tiempo (ej. tocar en otro lugar de la pantalla)
+      if (dist > 75 || timeDelta > 200) {
+        laserStabilizedPosRef.current = { x: rawX, y: rawY };
+        laserCurrentPosRef.current = { x: rawX, y: rawY };
+        laserTrailRef.current = [{ x: rawX, y: rawY, time: now }];
+        return;
+      }
 
       // Si el cursor se mueve muy poco, evitamos acumulación
       if (dist < 4) {
         return;
       }
 
-      // Si el movimiento es rápido, interpolamos para mantener densidad homogénea
-      if (dist > 14) {
+      // Si el movimiento es rápido y continuo, interpolamos para mantener densidad homogénea
+      if (dist > 14 && dist <= 75) {
         const steps = Math.min(5, Math.floor(dist / 7));
         for (let i = 1; i < steps; i++) {
           const t = i / steps;
@@ -1317,7 +1355,8 @@ const panBy = (dx: number, dy: number) => {
     if (annotationTool === 'laser' && e.button === 0) {
       const { x, y } = getCanvasCoords(e);
       laserStabilizedPosRef.current = { x, y };
-      addLaserPoint(x, y);
+      laserCurrentPosRef.current = { x, y };
+      addLaserPoint(x, y, true);
     }
   };
 
@@ -1365,12 +1404,14 @@ const panBy = (dx: number, dy: number) => {
       const { x, y } = getCanvasCoords(e);
       laserStabilizedPosRef.current = { x, y };
       laserCurrentPosRef.current = { x, y };
+      addLaserPoint(x, y, true);
     }
   };
 
   const handleCanvasMouseLeave = () => {
     laserCurrentPosRef.current = null;
     laserStabilizedPosRef.current = null;
+    laserTrailRef.current = [];
   };
 
   const getTouchDistance = (t0: { clientX: number; clientY: number }, t1: { clientX: number; clientY: number }) => {
@@ -1388,6 +1429,12 @@ const panBy = (dx: number, dy: number) => {
       midX: number;
       midY: number;
       startPos: { x: number; y: number };
+      containerMetrics?: {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+      };
     },
     containerEl: HTMLElement | null,
     displayedImageSize: { width: number; height: number } | null,
@@ -1402,14 +1449,15 @@ const panBy = (dx: number, dy: number) => {
     const currentMidX = (t0.clientX + t1.clientX) / 2;
     const currentMidY = (t0.clientY + t1.clientY) / 2;
 
-    const containerRect = containerEl?.getBoundingClientRect();
-    const containerWidth = containerEl?.clientWidth ?? 800;
-    const containerHeight = containerEl?.clientHeight ?? 600;
-    const containerLeft = containerRect?.left ?? 0;
-    const containerTop = containerRect?.top ?? 0;
+    const metrics = pinchData.containerMetrics ?? {
+      left: containerEl?.getBoundingClientRect().left ?? 0,
+      top: containerEl?.getBoundingClientRect().top ?? 0,
+      width: containerEl?.clientWidth ?? 800,
+      height: containerEl?.clientHeight ?? 600,
+    };
 
-    const containerCenterX = containerLeft + containerWidth / 2;
-    const containerCenterY = containerTop + containerHeight / 2;
+    const containerCenterX = metrics.left + metrics.width / 2;
+    const containerCenterY = metrics.top + metrics.height / 2;
 
     const pRel0X = pinchData.midX - containerCenterX;
     const pRel0Y = pinchData.midY - containerCenterY;
@@ -1426,7 +1474,7 @@ const panBy = (dx: number, dy: number) => {
       { x: rawX, y: rawY },
       targetZoom,
       displayedImageSize,
-      { width: containerWidth, height: containerHeight }
+      { width: metrics.width, height: metrics.height }
     );
 
     return { targetZoom, clampedPos };
@@ -1437,19 +1485,21 @@ const panBy = (dx: number, dy: number) => {
     e.preventDefault();
 
     if (e.touches.length === 1) {
+      // Cooldown después de soltar un pinch para evitar trazos o saltos accidentales
+      if (Date.now() - lastPinchEndedAtRef.current < 260) {
+        return;
+      }
+
       laserPinchRef.current = null;
       setIsPinching(false);
       pinchTouchStartAtRef.current = Date.now();
-
-      if (Date.now() - lastPinchEndedAtRef.current < 160) {
-        return;
-      }
 
       const touch = e.touches[0];
       if (annotationTool === 'laser') {
         const { x, y } = getTouchCoords(touch);
         laserStabilizedPosRef.current = { x, y };
-        addLaserPoint(x, y);
+        laserCurrentPosRef.current = { x, y };
+        addLaserPoint(x, y, true);
       } else if (annotationTool === 'hand') {
         if (stateRef.current.zoom > 1) {
           isDraggingRef.current = true;
@@ -1461,16 +1511,17 @@ const panBy = (dx: number, dy: number) => {
         }
       }
     } else if (e.touches.length >= 2) {
-      // 2 dedos en tablet: Zoom & Navegación / Pan ultra-fluido sin tirones CSS
+      // 2 o más dedos: Zoom táctil ultra-fluido en puntero láser
       laserCurrentPosRef.current = null;
       laserStabilizedPosRef.current = null;
+      laserTrailRef.current = [];
       isDraggingRef.current = false;
       setIsDragging(false);
       setIsPinching(true);
 
-      // Si el primer dedo dejó un punto accidental en los últimos 120ms antes de que cayera el 2do dedo, limpiarlo
-      if (Date.now() - pinchTouchStartAtRef.current < 120 && laserTrailRef.current.length > 0) {
-        laserTrailRef.current = laserTrailRef.current.slice(0, -1);
+      // Si el primer dedo dejó un punto accidental dentro de los últimos 260ms, limpiarlo
+      if (Date.now() - pinchTouchStartAtRef.current < 260 && laserTrailRef.current.length > 0) {
+        laserTrailRef.current = [];
       }
 
       const t0 = e.touches[0];
@@ -1479,12 +1530,22 @@ const panBy = (dx: number, dy: number) => {
       const midX = (t0.clientX + t1.clientX) / 2;
       const midY = (t0.clientY + t1.clientY) / 2;
 
+      const containerEl = containerRef.current;
+      const containerRect = containerEl?.getBoundingClientRect();
+      const containerMetrics = {
+        left: containerRect?.left ?? 0,
+        top: containerRect?.top ?? 0,
+        width: containerEl?.clientWidth ?? 800,
+        height: containerEl?.clientHeight ?? 600,
+      };
+
       laserPinchRef.current = {
         dist,
         startZoom: stateRef.current.zoom,
         midX,
         midY,
         startPos: { ...stateRef.current.pos },
+        containerMetrics,
       };
     }
   };
@@ -1494,7 +1555,7 @@ const panBy = (dx: number, dy: number) => {
     e.preventDefault();
 
     if (e.touches.length === 1 && !laserPinchRef.current) {
-      if (Date.now() - lastPinchEndedAtRef.current < 160) {
+      if (Date.now() - lastPinchEndedAtRef.current < 260) {
         return;
       }
 
@@ -1547,6 +1608,7 @@ const panBy = (dx: number, dy: number) => {
     if (e.touches.length === 0) {
       laserCurrentPosRef.current = null;
       laserStabilizedPosRef.current = null;
+      laserTrailRef.current = [];
       isDraggingRef.current = false;
       setIsDragging(false);
       setIsPinching(false);
@@ -1890,12 +1952,21 @@ const panBy = (dx: number, dy: number) => {
         const midX = (t0.clientX + t1.clientX) / 2;
         const midY = (t0.clientY + t1.clientY) / 2;
 
+        const containerRect = el.getBoundingClientRect();
+        const containerMetrics = {
+          left: containerRect.left,
+          top: containerRect.top,
+          width: el.clientWidth,
+          height: el.clientHeight,
+        };
+
         normalPinchRef.current = {
           dist,
           startZoom: stateRef.current.zoom,
           midX,
           midY,
           startPos: { ...stateRef.current.pos },
+          containerMetrics,
         };
         isDraggingRef.current = false;
         setIsDragging(false);
@@ -2502,14 +2573,16 @@ const panBy = (dx: number, dy: number) => {
             style={{
               position: 'relative',
               display: 'inline-block',
-              transform: `translate(${position.x}px, ${position.y}px) scale(${zoomLevel}) rotate(${rotation}deg)`,
+              transform: `translate3d(${position.x}px, ${position.y}px, 0) scale(${zoomLevel}) rotate(${rotation}deg)`,
               cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-              transition: (isDragging || isPinching || prefersReducedMotion) ? 'none' : 'transform 0.3s ease',
+              transition: (isDragging || isPinching || prefersReducedMotion) ? 'none' : 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              willChange: 'transform',
             }}
           >
+            {/* Imagen base principal: siempre presente para garantizar 0 parpadeos ni cuadros negros */}
             <img
               ref={imageRef}
-              src={useZoomSource && srcZoom ? srcZoom : src}
+              src={src}
               alt="Vista ampliada"
               draggable={false}
               onDragStart={(e) => e.preventDefault()}
@@ -2520,10 +2593,6 @@ const panBy = (dx: number, dy: number) => {
               }}
               onError={() => {
                 setIsPlateImageLoading(false);
-                if (useZoomSource) {
-                  setUseZoomSource(false);
-                  setZoomSourceFailed(true);
-                }
               }}
               style={{
                 maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
@@ -2534,11 +2603,38 @@ const panBy = (dx: number, dy: number) => {
                 WebkitTouchCallout: 'none',
                 pointerEvents: 'none',
                 display: 'block',
-                filter: imageFilterStyle,
-                imageRendering: zoomLevel > 1.2 ? ('-webkit-optimize-contrast' as any) : 'auto',
-                willChange: 'transform',
+                filter: isPinching ? 'none' : imageFilterStyle,
+                imageRendering: 'auto',
               } as React.CSSProperties}
             />
+
+            {/* Capa de ultra alta resolución (srcZoom) montada sin destruir la capa base */}
+            {srcZoom && isZoomImageReady && useZoomSource && (
+              <img
+                src={srcZoom}
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
+                onContextMenu={(e) => e.preventDefault()}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  objectPosition: 'center center',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                  WebkitUserDrag: 'none',
+                  WebkitTouchCallout: 'none',
+                  pointerEvents: 'none',
+                  display: 'block',
+                  filter: isPinching ? 'none' : imageFilterStyle,
+                  imageRendering: 'auto',
+                } as React.CSSProperties}
+              />
+            )}
 
             {grainOpacity > 0 && (
               <div
