@@ -10,6 +10,15 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { getCloudinaryImageUrl } from '../../services/cloudinaryImages';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  canBypassMaintenance,
+  fetchSiteMaintenanceStatus,
+  isFeatureDisabled,
+  isParcialDisabled,
+  isTemaDisabled,
+  type SiteMaintenanceStatus,
+} from '../../services/siteMaintenance';
 
 export interface ComparadorPlacaItem {
   id: number;
@@ -90,6 +99,10 @@ export const PlatePickerModal: React.FC<PlatePickerModalProps> = ({
   onSelectPlate,
   targetLetter,
 }) => {
+  const { user, isAuthenticated } = useAuth();
+  const canBypass = canBypassMaintenance(user, isAuthenticated);
+  const [maintenanceStatus, setMaintenanceStatus] = useState<SiteMaintenanceStatus | null>(null);
+
   // Navigation Steps: 'parcial' -> 'tema' -> 'subtema' -> 'placas'
   const [selectedParcial, setSelectedParcial] = useState<ParcialOption | null>(null);
   const [selectedTema, setSelectedTema] = useState<TemaRow | null>(null);
@@ -116,8 +129,15 @@ export const PlatePickerModal: React.FC<PlatePickerModalProps> = ({
       setPlacas([]);
       setError(null);
       setFailedImages({});
+    } else {
+      void fetchSiteMaintenanceStatus().then(setMaintenanceStatus);
     }
   }, [isOpen]);
+
+  const visibleParciales = React.useMemo(() => {
+    if (canBypass || !maintenanceStatus) return PARCIALES;
+    return PARCIALES.filter((p) => !isParcialDisabled(p.key, maintenanceStatus.disabledFeatures));
+  }, [canBypass, maintenanceStatus]);
 
   // Step 2: Fetch Temas when Parcial is selected
   const handleSelectParcial = async (parcial: ParcialOption) => {
@@ -130,6 +150,22 @@ export const PlatePickerModal: React.FC<PlatePickerModalProps> = ({
     setError(null);
 
     try {
+      const currentMaintenance = maintenanceStatus ?? (await fetchSiteMaintenanceStatus());
+      if (!maintenanceStatus) setMaintenanceStatus(currentMaintenance);
+
+      if (!canBypass) {
+        if (currentMaintenance.enabled) {
+          setError('El catálogo de placas se encuentra temporalmente en mantenimiento.');
+          setLoading(false);
+          return;
+        }
+        if (isFeatureDisabled('public_catalog', currentMaintenance.disabledFeatures)) {
+          setError('El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.');
+          setLoading(false);
+          return;
+        }
+      }
+
       const { data, error: err } = await supabase
         .from('temas')
         .select('id, nombre, logo_url, parcial, sort_order')
@@ -137,10 +173,12 @@ export const PlatePickerModal: React.FC<PlatePickerModalProps> = ({
 
       if (err) throw err;
 
-      // Filter in memory to match any parcial string format
+      // Filter in memory to match any parcial string format and exclude disabled temas if not admin
       const filtered = (data || []).filter((t: TemaRow) => {
         const p = (t.parcial || '').toLowerCase();
-        return p.includes(parcial.key);
+        if (!p.includes(parcial.key)) return false;
+        if (!canBypass && isTemaDisabled(t.id, t.parcial, currentMaintenance.disabledFeatures)) return false;
+        return true;
       });
 
       setTemas(filtered);
@@ -375,7 +413,7 @@ export const PlatePickerModal: React.FC<PlatePickerModalProps> = ({
             <div className="plate-picker-step-section">
               <h3 className="plate-picker-step-heading">Paso 1: Selecciona un Parcial</h3>
               <div className="plate-picker-parciales-grid">
-                {PARCIALES.map((parcial) => (
+                {visibleParciales.map((parcial) => (
                   <button
                     key={parcial.key}
                     type="button"

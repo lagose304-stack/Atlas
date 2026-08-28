@@ -9,7 +9,14 @@ import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { collectWeeklyThemeIds, groupHistoricalTestsByPartial, orderTestsByWeeklyPriority } from './evaluacionesUtils';
 import { ArrowRight, BookOpenCheck, CalendarDays, ClipboardCheck, Sparkles, Shield } from 'lucide-react';
-import { fetchSiteMaintenanceStatus, isParcialDisabled, isTemaDisabled, type SiteMaintenanceStatus } from '../services/siteMaintenance';
+import {
+  canBypassMaintenance,
+  fetchSiteMaintenanceStatus,
+  isFeatureDisabled,
+  isParcialDisabled,
+  isTemaDisabled,
+  type SiteMaintenanceStatus,
+} from '../services/siteMaintenance';
 
 interface PruebaPublica {
   id: string;
@@ -219,7 +226,7 @@ const WeekThemeThumbnail: React.FC<{
 
 const Evaluaciones: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [pruebas, setPruebas] = React.useState<PruebaPublica[]>([]);
   const [maintenanceStatus, setMaintenanceStatus] = React.useState<SiteMaintenanceStatus | null>(null);
   const [weeklyThemeIds, setWeeklyThemeIds] = React.useState<number[]>([]);
@@ -265,16 +272,18 @@ const Evaluaciones: React.FC = () => {
     void loadPublicTests();
   }, []);
 
+  const canBypass = canBypassMaintenance(user, isAuthenticated);
+
   const visiblePruebas = React.useMemo(() => {
-    const isAdmin = user?.rol === 'Administrador' || user?.rol === 'Microscopía';
-    if (isAdmin) return pruebas;
+    if (canBypass) return pruebas;
     const disabled = maintenanceStatus?.disabledFeatures ?? [];
+    if (isFeatureDisabled('evaluations', disabled)) return [];
     return pruebas.filter((p) => {
       if (isParcialDisabled(p.parcial_key, disabled)) return false;
       if (isTemaDisabled(p.tema_id, p.parcial_key, disabled)) return false;
       return true;
     });
-  }, [pruebas, user, maintenanceStatus]);
+  }, [pruebas, canBypass, maintenanceStatus]);
 
   const orderedPruebas = React.useMemo(
     () => orderTestsByWeeklyPriority(visiblePruebas, weeklyThemeIds),

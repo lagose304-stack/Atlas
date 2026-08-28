@@ -61,16 +61,39 @@ export const setSiteMaintenanceMode = async (
   return { ok: true };
 };
 
+export const canBypassMaintenance = (
+  user: { rol?: string; is_protected?: boolean } | null | undefined,
+  isAuthenticated: boolean,
+): boolean => {
+  if (!isAuthenticated || !user) return false;
+  return (
+    user.rol === 'Administrador' ||
+    user.rol === 'Microscopía' ||
+    Boolean(user.is_protected)
+  );
+};
+
+export const isFeatureDisabled = (
+  featureKey: string,
+  disabledFeatures: string[] = [],
+): boolean => {
+  if (!Array.isArray(disabledFeatures)) return false;
+  return disabledFeatures.includes(featureKey);
+};
+
 export const isParcialDisabled = (parcialKey: string, disabledFeatures: string[] = []): boolean => {
   if (!parcialKey || !Array.isArray(disabledFeatures)) return false;
   const normalized = parcialKey.toLowerCase().trim();
-  return disabledFeatures.includes(`parcial_${normalized}`) || disabledFeatures.includes(normalized);
+  return (
+    disabledFeatures.includes(`parcial_${normalized}`) ||
+    disabledFeatures.includes(normalized)
+  );
 };
 
 export const isTemaDisabled = (
   temaId: number | string | null | undefined,
   parcialKey?: string | null,
-  disabledFeatures: string[] = []
+  disabledFeatures: string[] = [],
 ): boolean => {
   if (!Array.isArray(disabledFeatures)) return false;
   if (parcialKey && isParcialDisabled(parcialKey, disabledFeatures)) {
@@ -78,4 +101,52 @@ export const isTemaDisabled = (
   }
   if (temaId === null || temaId === undefined) return false;
   return disabledFeatures.includes(`tema_${temaId}`);
+};
+
+export const subscribeSiteMaintenanceStatus = (
+  onStatusChange: (status: SiteMaintenanceStatus) => void,
+): (() => void) => {
+  let isSubscribed = true;
+
+  const triggerUpdate = () => {
+    if (!isSubscribed) return;
+    void fetchSiteMaintenanceStatus().then((status) => {
+      if (isSubscribed) onStatusChange(status);
+    });
+  };
+
+  // Realtime subscription using Supabase channel
+  const channel = supabase
+    .channel('atlas_maintenance_realtime_channel')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'site_runtime_settings', filter: 'id=eq.1' },
+      () => {
+        triggerUpdate();
+      },
+    )
+    .subscribe();
+
+  // Background polling every 15 seconds to ensure fast sync even if realtime is delayed
+  const pollInterval = window.setInterval(triggerUpdate, 15_000);
+
+  // Sync on tab visibility change and window focus
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      triggerUpdate();
+    }
+  };
+
+  window.addEventListener('focus', triggerUpdate);
+  window.addEventListener('online', triggerUpdate);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+
+  return () => {
+    isSubscribed = false;
+    window.clearInterval(pollInterval);
+    window.removeEventListener('focus', triggerUpdate);
+    window.removeEventListener('online', triggerUpdate);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    void supabase.removeChannel(channel);
+  };
 };

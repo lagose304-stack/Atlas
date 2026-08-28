@@ -28,6 +28,13 @@ import { supabase } from '../services/supabase';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { logTemaView } from '../services/analytics';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  canBypassMaintenance,
+  fetchSiteMaintenanceStatus,
+  isFeatureDisabled,
+  isTemaDisabled,
+} from '../services/siteMaintenance';
 import '../styles/microscopy-topic.css';
 
 interface MicroscopyTopicExperienceProps {
@@ -425,6 +432,7 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
   const [illumination, setIllumination] = useState(72);
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizSelected, setQuizSelected] = useState<string | null>(null);
+  const { user, isAuthenticated } = useAuth();
   const [quizScore, setQuizScore] = useState(0);
   const [quizFinished, setQuizFinished] = useState(false);
   const handleGoBack = useSmartBackNavigation('/temario');
@@ -435,6 +443,23 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
     const fetchExperience = async () => {
       setLoading(true);
       setLoadError(null);
+
+      const canBypass = canBypassMaintenance(user, isAuthenticated);
+      const maintenanceStatus = await fetchSiteMaintenanceStatus();
+
+      if (!canBypass) {
+        if (maintenanceStatus.enabled) {
+          setLoadError('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
+          setLoading(false);
+          return;
+        }
+        if (isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures)) {
+          setLoadError('El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.');
+          setLoading(false);
+          return;
+        }
+      }
+
       void logTemaView(temaId);
 
       const [temaResult, subtemasResult, placasResult, mapsResult, objectiveSamplesResult] = await Promise.all([
@@ -462,6 +487,12 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
       ]);
 
       if (!isMounted) return;
+
+      if (temaResult.data && !canBypass && isTemaDisabled(temaId, temaResult.data.parcial, maintenanceStatus.disabledFeatures)) {
+        setLoadError('Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.');
+        setLoading(false);
+        return;
+      }
 
       const firstError = temaResult.error || subtemasResult.error || placasResult.error || mapsResult.error;
       if (firstError || !temaResult.data) {

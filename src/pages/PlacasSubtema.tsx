@@ -13,7 +13,12 @@ import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { logPlacaView, logSubtemaView } from '../services/analytics';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
-import { fetchSiteMaintenanceStatus, isTemaDisabled } from '../services/siteMaintenance';
+import {
+  canBypassMaintenance,
+  fetchSiteMaintenanceStatus,
+  isFeatureDisabled,
+  isTemaDisabled,
+} from '../services/siteMaintenance';
 
 interface Placa {
   id: number;
@@ -74,7 +79,7 @@ const normalizeAumentoLabel = (aumento: string): string => aumento.trim().replac
 
 const PlacasSubtema: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { subtemaId } = useParams<{ subtemaId: string }>();
   const [placas, setPlacas] = useState<Placa[]>([]);
   const [subtema, setSubtema] = useState<SubtemaInfo | null>(null);
@@ -92,6 +97,23 @@ const PlacasSubtema: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       setErrorMessage(null);
+
+      const canBypass = canBypassMaintenance(user, isAuthenticated);
+      const maintenanceStatus = await fetchSiteMaintenanceStatus();
+
+      if (!canBypass) {
+        if (maintenanceStatus.enabled) {
+          setErrorMessage('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
+          setLoading(false);
+          return;
+        }
+        if (isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures)) {
+          setErrorMessage('El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.');
+          setLoading(false);
+          return;
+        }
+      }
+
       void logSubtemaView(Number(subtemaId));
 
       // Cargar info del subtema (con nombre del tema padre)
@@ -105,12 +127,10 @@ const PlacasSubtema: React.FC = () => {
       if (subtemaData) {
         setSubtema(subtemaData as unknown as SubtemaInfo);
 
-        const maintenanceStatus = await fetchSiteMaintenanceStatus();
-        const isAdmin = user?.rol === 'Administrador' || user?.rol === 'Microscopía';
         const rawTemas = subtemaData.temas as { nombre?: string; parcial?: string } | { nombre?: string; parcial?: string }[] | null;
         const temaParcial = Array.isArray(rawTemas) ? rawTemas[0]?.parcial : rawTemas?.parcial;
 
-        if (!isAdmin && isTemaDisabled(subtemaData.tema_id, temaParcial, maintenanceStatus.disabledFeatures)) {
+        if (!canBypass && isTemaDisabled(subtemaData.tema_id, temaParcial, maintenanceStatus.disabledFeatures)) {
           setErrorMessage('Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.');
           setLoading(false);
           return;

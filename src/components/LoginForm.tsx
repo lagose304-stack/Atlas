@@ -4,16 +4,17 @@ import { useNavigate } from 'react-router-dom';
 
 interface LoginFormProps {
   onClose: () => void;
+  isMaintenanceLogin?: boolean;
 }
 
-const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
+const LoginForm: React.FC<LoginFormProps> = ({ onClose, isMaintenanceLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const navigate = useNavigate();
 
   const removeWhitespaces = (value: string) => value.replace(/\s+/g, '');
@@ -49,6 +50,24 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
       const result = await login(username.trim(), password);
 
       if (result.ok) {
+        // Si el login se hace desde la pantalla de mantenimiento, validar que tenga rol permitido
+        if (isMaintenanceLogin) {
+          const loggedUser = result.user;
+          const isAllowedInMaintenance =
+            loggedUser && (
+              loggedUser.rol === 'Administrador' ||
+              loggedUser.rol === 'Microscopía' ||
+              Boolean(loggedUser.is_protected)
+            );
+
+          if (!isAllowedInMaintenance) {
+            logout();
+            setError('El sitio se encuentra en mantenimiento. Solo usuarios con rol de Administrador o Microscopía tienen acceso permitido.');
+            setLoading(false);
+            return;
+          }
+        }
+
         // Login exitoso - cerrar modal y redirigir
         setUsername('');
         setPassword('');
@@ -59,8 +78,8 @@ const LoginForm: React.FC<LoginFormProps> = ({ onClose }) => {
       } else {
         setError(result.message);
       }
-    } catch (error) {
-      console.error('Error durante el login:', error);
+    } catch (err) {
+      console.error('Error durante el login:', err);
       setError('Error de conexión. Por favor, intenta de nuevo.');
     }
 

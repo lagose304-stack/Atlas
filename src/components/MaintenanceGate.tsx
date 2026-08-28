@@ -2,7 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Wrench } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchSiteMaintenanceStatus, type SiteMaintenanceStatus } from '../services/siteMaintenance';
+import {
+  canBypassMaintenance,
+  fetchSiteMaintenanceStatus,
+  isFeatureDisabled,
+  subscribeSiteMaintenanceStatus,
+  type SiteMaintenanceStatus,
+} from '../services/siteMaintenance';
 import LoginForm from './LoginForm';
 import AtlasLoadingScreen from './AtlasLoadingScreen';
 import laboratoryLogo from '../assets/logos/laboratorio.png';
@@ -13,36 +19,74 @@ const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [status, setStatus] = useState<SiteMaintenanceStatus | null>(null);
   const [showLogin, setShowLogin] = useState(false);
 
+  // Carga inicial y suscripción a cambios en tiempo real + sondeo
   useEffect(() => {
     void fetchSiteMaintenanceStatus().then(setStatus);
+    const unsubscribe = subscribeSiteMaintenanceStatus((nextStatus) => {
+      setStatus(nextStatus);
+    });
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
+  // Re-validar estado al cambiar de ruta para evitar estados obsoletos
   useEffect(() => {
-    const searchDisabled = !isAuthenticated && status?.disabledFeatures.includes('search');
+    void fetchSiteMaintenanceStatus().then(setStatus);
+  }, [location.pathname]);
+
+  const canBypass = canBypassMaintenance(user, isAuthenticated);
+
+  useEffect(() => {
+    const searchDisabled = !canBypass && isFeatureDisabled('search', status?.disabledFeatures);
     document.body.classList.toggle('atlas-search-disabled', Boolean(searchDisabled));
     return () => document.body.classList.remove('atlas-search-disabled');
-  }, [isAuthenticated, status]);
+  }, [canBypass, status]);
 
   if (authLoading || status === null) {
     return <AtlasLoadingScreen fullScreen label="Preparando el sitio…" />;
   }
 
-  const canBypassMaintenance =
-    isAuthenticated && (
-      user?.rol === 'Administrador' ||
-      user?.rol === 'Microscopía' ||
-      Boolean(user?.is_protected)
-    );
+  // Si el mantenimiento global no está activo o el usuario es Administrador / Microscopía
+  if (!status.enabled || canBypass) {
+    const isEvaluationsDisabled =
+      !canBypass &&
+      isFeatureDisabled('evaluations', status.disabledFeatures) &&
+      (location.pathname.startsWith('/evaluaciones') || location.pathname.startsWith('/pruebas/ejecutar'));
 
-  if (!status.enabled || canBypassMaintenance) {
-    const disabled = !isAuthenticated && (
-      (status.disabledFeatures.includes('evaluations') && location.pathname.startsWith('/evaluaciones'))
-      || (status.disabledFeatures.includes('public_catalog') && ['/temario', '/subtemas/', '/ver-placas/'].some((path) => location.pathname === path || location.pathname.startsWith(path)))
+    const isCatalogDisabled =
+      !canBypass &&
+      isFeatureDisabled('public_catalog', status.disabledFeatures) &&
+      ['/temario', '/subtemas', '/ver-placas', '/herramientas/comparador'].some(
+        (path) => location.pathname === path || location.pathname.startsWith(`${path}/`),
+      );
+
+    if (isEvaluationsDisabled || isCatalogDisabled) {
+      return (
+        <main className="site-feature-disabled">
+          <section>
+            <Wrench size={36} />
+            <h1>Sección temporalmente no disponible</h1>
+            <p>Estamos realizando ajustes de mantenimiento. Intenta nuevamente más tarde.</p>
+            <a href="/">Volver al inicio</a>
+          </section>
+        </main>
+      );
+    }
+
+    return (
+      <>
+        {status.bannerEnabled && status.bannerMessage && !canBypass && (
+          <div className="site-global-banner" role="status">
+            {status.bannerMessage}
+          </div>
+        )}
+        {children}
+      </>
     );
-    if (disabled) return <main className="site-feature-disabled"><section><Wrench size={36}/><h1>Sección temporalmente no disponible</h1><p>Estamos realizando ajustes. Intenta nuevamente más tarde.</p><a href="/">Volver al inicio</a></section></main>;
-    return <>{status.bannerEnabled && status.bannerMessage && !isAuthenticated && <div className="site-global-banner" role="status">{status.bannerMessage}</div>}{children}</>;
   }
 
+  // Mantenimiento global activado: solo accesible para rol Administrador o Microscopía
   return (
     <main className="site-maintenance-page">
       <section className="site-maintenance-panel" role="status" aria-live="polite">
@@ -52,8 +96,12 @@ const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
         </div>
         <p className="site-maintenance-eyebrow">Histolab UNAH</p>
         <h1>Sitio en mantenimiento</h1>
-        <p className="site-maintenance-visible-message">Estamos preparando mejoras para brindarte una mejor experiencia. Volveremos muy pronto.</p>
-        <span className="site-maintenance-status"><i /> Modo de mantenimiento activado</span>
+        <p className="site-maintenance-visible-message">
+          {status.message || 'Estamos preparando mejoras para brindarte una mejor experiencia. Volveremos muy pronto.'}
+        </p>
+        <span className="site-maintenance-status">
+          <i /> Modo de mantenimiento activado
+        </span>
         <button type="button" className="site-maintenance-login" onClick={() => setShowLogin(true)}>
           Acceso administrativo
         </button>
@@ -65,7 +113,7 @@ const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
           <p>Histolab reúne temarios, subtemas, evaluaciones y placas histológicas para apoyar el aprendizaje y la identificación de tejidos mediante microscopía.</p>
         </div>
       </section>
-      {showLogin && <LoginForm onClose={() => setShowLogin(false)} />}
+      {showLogin && <LoginForm onClose={() => setShowLogin(false)} isMaintenanceLogin={true} />}
     </main>
   );
 };

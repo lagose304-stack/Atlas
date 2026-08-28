@@ -23,6 +23,7 @@ export interface LoginResult {
   status: LoginStatus;
   message: string;
   lockoutRemainingMs?: number;
+  user?: AuthUser;
 }
 
 interface AuthContextType {
@@ -184,7 +185,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         },
       });
 
-      return { ok: true, status: 'success', message: 'Inicio de sesión exitoso.' };
+      return { ok: true, status: 'success', message: 'Inicio de sesión exitoso.', user: result.user };
     } catch {
       return { ok: false, status: 'login_exception', message: 'Error de conexión al iniciar sesión.' };
     }

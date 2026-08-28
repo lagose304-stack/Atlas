@@ -18,7 +18,13 @@ import { getRenderableBlocks } from '../services/contentPublication';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { ArrowRight, GraduationCap, Microscope, Shield, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchSiteMaintenanceStatus, isParcialDisabled, isTemaDisabled, type SiteMaintenanceStatus } from '../services/siteMaintenance';
+import {
+  canBypassMaintenance,
+  fetchSiteMaintenanceStatus,
+  isParcialDisabled,
+  isTemaDisabled,
+  type SiteMaintenanceStatus,
+} from '../services/siteMaintenance';
 
 interface Tema {
   id: number;
@@ -127,7 +133,7 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void; isDisabled?: boolean
         boxShadow: hovered
           ? '0 18px 34px rgba(23, 65, 101, 0.16)'
           : '0 8px 22px rgba(23, 65, 101, 0.08)',
-        cursor: 'pointer',
+        cursor: isDisabled ? 'not-allowed' : 'pointer',
         transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, filter 0.2s ease',
         border: isDisabled
           ? '1px dashed #f87171'
@@ -145,8 +151,8 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void; isDisabled?: boolean
         padding: 0,
         width: '100%',
         minHeight: '196px',
-        transform: hovered ? 'translateY(-3px)' : 'translateY(0)',
-        filter: hovered ? 'saturate(1.02)' : 'none',
+        transform: hovered && !isDisabled ? 'translateY(-3px)' : 'translateY(0)',
+        filter: hovered && !isDisabled ? 'saturate(1.02)' : 'none',
       }}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
@@ -236,8 +242,8 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void; isDisabled?: boolean
 
 const TemarioPublico: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const isAdmin = user?.rol === 'Administrador' || user?.rol === 'Microscopía';
+  const { user, isAuthenticated } = useAuth();
+  const canBypass = canBypassMaintenance(user, isAuthenticated);
   const [temas, setTemas] = useState<Tema[]>([]);
   const [maintenanceStatus, setMaintenanceStatus] = useState<SiteMaintenanceStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -357,7 +363,7 @@ const TemarioPublico: React.FC = () => {
                   const isActive = selectedParcial === key;
                   const isParcialOff = isParcialDisabled(key, maintenanceStatus?.disabledFeatures ?? []);
                   const temasParcial = temas.filter((tema) => tema.parcial === key);
-                  const visibleTemasCount = isAdmin
+                  const visibleTemasCount = canBypass
                     ? temasParcial.length
                     : temasParcial.filter((t) => !isTemaDisabled(t.id, t.parcial, maintenanceStatus?.disabledFeatures ?? [])).length;
 
@@ -403,7 +409,7 @@ const TemarioPublico: React.FC = () => {
               {PARCIALES.filter(({ key }) => key === selectedParcial).map(({ key, label, num }) => {
                 const isParcialOff = isParcialDisabled(key, maintenanceStatus?.disabledFeatures ?? []);
                 const temasParcial = temas.filter((tema) => tema.parcial === key);
-                const displayedTemas = isAdmin
+                const displayedTemas = canBypass
                   ? temasParcial
                   : temasParcial.filter((t) => !isTemaDisabled(t.id, t.parcial, maintenanceStatus?.disabledFeatures ?? []));
 
@@ -425,7 +431,7 @@ const TemarioPublico: React.FC = () => {
                       <span style={styles.parcialCount}>{displayedTemas.length} {displayedTemas.length === 1 ? 'tema' : 'temas'}</span>
                     </div>
 
-                    {isParcialOff && !isAdmin ? (
+                    {isParcialOff && !canBypass ? (
                       <div style={{ padding: '36px 20px', textAlign: 'center', background: '#fff5f5', borderRadius: '16px', border: '1px solid #fecaca', margin: '14px 0' }}>
                         <AlertTriangle size={36} color="#dc2626" style={{ margin: '0 auto 10px' }} />
                         <h4 style={{ margin: '0 0 6px', color: '#991b1b', fontSize: '1.1rem', fontWeight: 700 }}>
@@ -444,7 +450,10 @@ const TemarioPublico: React.FC = () => {
                               key={tema.id}
                               tema={tema}
                               isDisabled={isOff}
-                              onClick={() => navigate(`/subtemas/${tema.id}`)}
+                              onClick={() => {
+                                if (isOff && !canBypass) return;
+                                navigate(`/subtemas/${tema.id}`);
+                              }}
                             />
                           );
                         })}

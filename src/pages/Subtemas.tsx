@@ -14,7 +14,12 @@ import { ArrowLeft, ArrowRight, Layers3, Microscope, Shield } from 'lucide-react
 import { useAuth } from '../contexts/AuthContext';
 import MicroscopyTopicExperience from './MicroscopyTopicExperience';
 
-import { fetchSiteMaintenanceStatus, isTemaDisabled } from '../services/siteMaintenance';
+import {
+  canBypassMaintenance,
+  fetchSiteMaintenanceStatus,
+  isFeatureDisabled,
+  isTemaDisabled,
+} from '../services/siteMaintenance';
 
 interface Tema {
   id: number;
@@ -43,7 +48,7 @@ const normalizeParcial = (parcial: string | null | undefined): string => {
 const StandardSubtemas: React.FC = () => {
   const { temaId } = useParams<{ temaId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [tema, setTema] = useState<Tema | null>(null);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,10 +95,24 @@ const StandardSubtemas: React.FC = () => {
       nextError = 'El tema solicitado no existe o ya no esta disponible.';
     } else {
       const maintenanceStatus = await fetchSiteMaintenanceStatus();
-      const isAdmin = user?.rol === 'Administrador' || user?.rol === 'Microscopía';
-      if (!isAdmin && isTemaDisabled(temaData.id, temaData.parcial, maintenanceStatus.disabledFeatures)) {
-        nextError = 'Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.';
+      const canBypass = canBypassMaintenance(user, isAuthenticated);
+      if (!canBypass) {
+        if (maintenanceStatus.enabled) {
+          nextError = 'El sitio se encuentra temporalmente fuera de servicio por mantenimiento.';
+        } else if (isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures)) {
+          nextError = 'El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.';
+        } else if (isTemaDisabled(temaData.id, temaData.parcial, maintenanceStatus.disabledFeatures)) {
+          nextError = 'Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.';
+        }
       }
+    }
+
+    if (nextError) {
+      setSubtemas([]);
+      setAllTemas([]);
+      setLoadError(nextError);
+      setLoading(false);
+      return;
     }
 
     const { data: subtemasData, error: subtemasError } = await supabase

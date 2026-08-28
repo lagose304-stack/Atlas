@@ -3,6 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { BadgeInfo, BookOpen, ClipboardList, House, Search, Wrench } from 'lucide-react';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail, OPEN_HEADER_SEARCH_EVENT } from '../constants/uiEvents';
 import { supabase } from '../services/supabase';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  canBypassMaintenance,
+  fetchSiteMaintenanceStatus,
+  isFeatureDisabled,
+  isTemaDisabled,
+} from '../services/siteMaintenance';
 
 import logoFacultad from '../assets/logos/facultad.png';
 import microscopioHeader from '../assets/logos/laboratorio.png';
@@ -165,8 +172,7 @@ const buildSearchSuggestions = (
       score,
     });
   });
-
-  subtemas.forEach((subtema) => {
+  subtemas.forEach((subtema) => {
     const themeScore = scoreTextMatch(normalizedQuery, subtema.tema_nombre);
     const subtemaScore = scoreTextMatch(normalizedQuery, subtema.nombre);
     const combinedScore = scoreTextMatch(normalizedQuery, `${subtema.tema_nombre} ${subtema.nombre}`);
@@ -195,6 +201,7 @@ const buildSearchSuggestions = (
 const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { user, isAuthenticated } = useAuth();
   const headerRef = React.useRef<HTMLElement | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const searchFieldShellRef = React.useRef<HTMLDivElement | null>(null);
@@ -209,7 +216,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
   const [searchSubtemas, setSearchSubtemas] = React.useState<SearchSubtemaRecord[]>([]);
   const [searchIndexLoading, setSearchIndexLoading] = React.useState(false);
   const [searchIndexLoaded, setSearchIndexLoaded] = React.useState(false);
-  const [searchSuggestionsFrame, setSearchSuggestionsFrame] = React.useState<{ top: number; left: number; width: number } | null>(null);
+  const [searchSuggestionsFrame, setSearchSuggestionsFrame] = React.useState<{ top: number; left: number; width: number } | null>(null);;
   const isImageViewerOpen = openImageViewerCount > 0;
   const isHeaderLocked = disableInteractions;
   const isMenuItemActive = React.useCallback((key: typeof MENU_ITEMS[number]['key']) => {
@@ -400,23 +407,41 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
     const loadSearchIndex = async () => {
       setSearchIndexLoading(true);
 
-      const [temasResult, subtemasResult] = await Promise.all([
-        supabase.from('temas').select('id, nombre').order('sort_order', { ascending: true }),
+      const [temasResult, subtemasResult, maintenanceStatus] = await Promise.all([
+        supabase.from('temas').select('id, nombre, parcial').order('sort_order', { ascending: true }),
         supabase.from('subtemas').select('id, nombre, tema_id, temas(nombre)').order('sort_order', { ascending: true }),
+        fetchSiteMaintenanceStatus(),
       ]);
 
-      if (!temasResult.error) {
-        setSearchTemas((temasResult.data ?? []) as SearchTemaRecord[]);
-      }
+      const canBypass = canBypassMaintenance(user, isAuthenticated);
 
-      if (!subtemasResult.error) {
-        const nextSubtemas = (subtemasResult.data ?? []).map((row) => ({
-          id: row.id,
-          nombre: row.nombre,
-          tema_id: row.tema_id,
-          tema_nombre: getThemeNameFromRelation((row as { temas?: unknown }).temas),
-        }));
-        setSearchSubtemas(nextSubtemas);
+      if (
+        !canBypass &&
+        (maintenanceStatus.enabled ||
+          isFeatureDisabled('search', maintenanceStatus.disabledFeatures) ||
+          isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures))
+      ) {
+        setSearchTemas([]);
+        setSearchSubtemas([]);
+      } else {
+        let validTemas = (temasResult.data ?? []) as Array<SearchTemaRecord & { parcial?: string }>;
+        if (!canBypass) {
+          validTemas = validTemas.filter((t) => !isTemaDisabled(t.id, t.parcial, maintenanceStatus.disabledFeatures));
+        }
+        setSearchTemas(validTemas);
+
+        if (!subtemasResult.error) {
+          const validTemaIdSet = new Set(validTemas.map((t) => t.id));
+          const nextSubtemas = (subtemasResult.data ?? [])
+            .filter((row) => canBypass || validTemaIdSet.has(row.tema_id))
+            .map((row) => ({
+              id: row.id,
+              nombre: row.nombre,
+              tema_id: row.tema_id,
+              tema_nombre: getThemeNameFromRelation((row as { temas?: unknown }).temas),
+            }));
+          setSearchSubtemas(nextSubtemas);
+        }
       }
 
       setSearchIndexLoaded(true);
@@ -424,7 +449,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
     };
 
     void loadSearchIndex();
-  }, [searchIndexLoaded, searchIndexLoading, showSearchBar]);
+  }, [searchIndexLoaded, searchIndexLoading, showSearchBar, user, isAuthenticated]);
 
   const searchSuggestions = React.useMemo(
     () => buildSearchSuggestions(searchQuery, searchTemas, searchSubtemas, 7),

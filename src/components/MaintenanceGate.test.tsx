@@ -29,6 +29,17 @@ vi.mock('../contexts/AuthContext', () => ({
 
 vi.mock('../services/siteMaintenance', () => ({
   fetchSiteMaintenanceStatus: vi.fn(async () => maintenanceStatusState.current),
+  subscribeSiteMaintenanceStatus: vi.fn((cb: (status: SiteMaintenanceStatus) => void) => {
+    cb(maintenanceStatusState.current);
+    return () => {};
+  }),
+  canBypassMaintenance: (user: any, isAuth: boolean) => {
+    if (!isAuth || !user) return false;
+    if (user.is_protected) return true;
+    return user.rol === 'Administrador' || user.rol === 'Microscopía';
+  },
+  isFeatureDisabled: (featureKey: string, disabledFeatures?: string[]) =>
+    Array.isArray(disabledFeatures) && disabledFeatures.includes(featureKey),
 }));
 
 describe('MaintenanceGate', () => {
@@ -129,5 +140,60 @@ describe('MaintenanceGate', () => {
 
     expect(await screen.findByText('Contenido del Atlas')).toBeInTheDocument();
     expect(screen.queryByText('Sitio en mantenimiento')).not.toBeInTheDocument();
+  });
+
+  it('bloquea la ruta /temario cuando public_catalog está desactivado para no autorizados', async () => {
+    maintenanceStatusState.current.enabled = false;
+    maintenanceStatusState.current.disabledFeatures = ['public_catalog'];
+
+    render(
+      <MemoryRouter initialEntries={['/temario']}>
+        <MaintenanceGate>
+          <div>Contenido del Atlas</div>
+        </MaintenanceGate>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Sección temporalmente no disponible')).toBeInTheDocument();
+    expect(screen.getByText(/Estamos realizando ajustes de mantenimiento/i)).toBeInTheDocument();
+    expect(screen.queryByText('Contenido del Atlas')).not.toBeInTheDocument();
+  });
+
+  it('bloquea la ruta /evaluaciones cuando evaluations está desactivado para no autorizados', async () => {
+    maintenanceStatusState.current.enabled = false;
+    maintenanceStatusState.current.disabledFeatures = ['evaluations'];
+
+    render(
+      <MemoryRouter initialEntries={['/evaluaciones']}>
+        <MaintenanceGate>
+          <div>Contenido del Atlas</div>
+        </MaintenanceGate>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Sección temporalmente no disponible')).toBeInTheDocument();
+    expect(screen.getByText(/Estamos realizando ajustes de mantenimiento/i)).toBeInTheDocument();
+    expect(screen.queryByText('Contenido del Atlas')).not.toBeInTheDocument();
+  });
+
+  it('permite el acceso a /temario cuando public_catalog está desactivado si el usuario es Microscopía', async () => {
+    maintenanceStatusState.current.enabled = false;
+    maintenanceStatusState.current.disabledFeatures = ['public_catalog'];
+    authState.current = {
+      isAuthenticated: true,
+      isLoading: false,
+      user: { id: 3, username: 'microscopia1', rol: 'Microscopía' },
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/temario']}>
+        <MaintenanceGate>
+          <div>Contenido del Atlas</div>
+        </MaintenanceGate>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Contenido del Atlas')).toBeInTheDocument();
+    expect(screen.queryByText('Módulo en mantenimiento')).not.toBeInTheDocument();
   });
 });

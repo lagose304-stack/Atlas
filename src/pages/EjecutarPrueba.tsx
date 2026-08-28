@@ -7,6 +7,13 @@ import ImageViewerModal from '../components/ImageViewerModal';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { supabase } from '../services/supabase';
+import {
+  canBypassMaintenance,
+  fetchSiteMaintenanceStatus,
+  isFeatureDisabled,
+  isParcialDisabled,
+  isTemaDisabled,
+} from '../services/siteMaintenance';
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
 
@@ -170,7 +177,7 @@ const EjecutarPrueba: React.FC = () => {
   const { pruebaId } = useParams<{ pruebaId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [prueba, setPrueba] = useState<PruebaRow | null>(null);
   const [questions, setQuestions] = useState<QuestionDraft[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<SelectedAnswersState>({});
@@ -198,11 +205,45 @@ const EjecutarPrueba: React.FC = () => {
       setIsLoading(true);
       setError('');
 
+      const canBypass = canBypassMaintenance(user, isAuthenticated);
+      const isManagementPreview = location.pathname.startsWith('/pruebas/ejecutar/');
+
+      if (!canBypass && !isManagementPreview) {
+        const maintenanceStatus = await fetchSiteMaintenanceStatus();
+        if (maintenanceStatus.enabled) {
+          setError('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
+          setIsLoading(false);
+          return;
+        }
+        if (isFeatureDisabled('evaluations', maintenanceStatus.disabledFeatures)) {
+          setError('El módulo de evaluaciones se encuentra temporalmente deshabilitado por mantenimiento.');
+          setIsLoading(false);
+          return;
+        }
+
+        // Consultar metadatos de la prueba para verificar tema y parcial
+        const { data: testMeta } = await supabase
+          .from('pruebas')
+          .select('tema_id, parcial_key')
+          .eq('id', pruebaId)
+          .maybeSingle();
+
+        if (testMeta) {
+          if (
+            isParcialDisabled(testMeta.parcial_key, maintenanceStatus.disabledFeatures) ||
+            isTemaDisabled(testMeta.tema_id, testMeta.parcial_key, maintenanceStatus.disabledFeatures)
+          ) {
+            setError('Esta evaluación no se encuentra disponible temporalmente por mantenimiento del tema o parcial correspondiente.');
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+
       const { data, error: pruebaError } = await supabase.rpc('atlas_get_public_test', {
         p_prueba_id: pruebaId,
       });
       const payload = data as PublicTestPayload | null;
-      const isManagementPreview = location.pathname.startsWith('/pruebas/ejecutar/');
 
       if (!pruebaError && payload?.test) {
         setPrueba(payload.test);
