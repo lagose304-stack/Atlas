@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Move } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import BoldField from './BoldField';
 import TincionAccordionSelector from './TincionAccordionSelector';
 import AllSenaladosMoverModal from './AllSenaladosMoverModal';
+import PlateAnnotationViewerEditor from './PlateAnnotationViewerEditor';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
 
 interface MarkerLocation {
@@ -19,6 +20,7 @@ interface PlateEditorPanelProps {
   title?: string;
   imageSrc?: string;
   imageAlt?: string;
+  highResImageSrc?: string;
   primaryActionLabel?: string;
   primaryActionDisabled?: boolean;
   primaryActionLoading?: boolean;
@@ -34,10 +36,11 @@ interface PlateEditorPanelProps {
   senalados: string[];
   senaladosPos: Array<MarkerLocation | null>;
   onSenaladosPosChange?: (newPos: Array<MarkerLocation | null>) => void;
-  onSenaladoChange: (index: number, value: string) => void;
-  onRemoveSenalado: (index: number) => void;
-  onOpenSenaladoLocation: (index: number) => void;
-  onAddSenalado: () => void;
+  onSaveAllSenalados?: (labels: string[], newPos: Array<MarkerLocation | null>) => void;
+  onSenaladoChange?: (index: number, value: string) => void;
+  onRemoveSenalado?: (index: number) => void;
+  onOpenSenaladoLocation?: (index: number) => void;
+  onAddSenalado?: () => void;
   onAddMultipleSenalado?: () => void;
   onAddBorderSenalado?: () => void;
   showComentario: boolean;
@@ -46,6 +49,7 @@ interface PlateEditorPanelProps {
   onComentarioChange: (value: string) => void;
   onClearComentario?: () => void;
   onRequestClose?: () => void;
+  hasChanges?: boolean;
   labels?: {
     aumento?: string;
     tincion?: string;
@@ -192,6 +196,7 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
   title,
   imageSrc,
   imageAlt,
+  highResImageSrc,
   primaryActionLabel,
   primaryActionDisabled,
   primaryActionLoading,
@@ -207,18 +212,15 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
   senalados,
   senaladosPos,
   onSenaladosPosChange,
+  onSaveAllSenalados,
   onSenaladoChange,
-  onRemoveSenalado,
-  onOpenSenaladoLocation,
-  onAddSenalado,
-  onAddMultipleSenalado,
-  onAddBorderSenalado,
   showComentario,
   onShowComentario,
   comentario,
   onComentarioChange,
   onClearComentario,
   onRequestClose,
+  hasChanges = false,
   labels,
   styles,
 }) => {
@@ -228,39 +230,7 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
   };
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showMoveAllModal, setShowMoveAllModal] = useState(false);
-
-  const groupedSenalados = useMemo(() => {
-    const groups = new Map<string, { label: string; count: number; firstIndex: number; indices: number[]; representativeIndex: number; representativePos: MarkerLocation | null }>();
-
-    senalados.forEach((rawLabel, index) => {
-      const label = rawLabel.trim();
-      if (!label) return;
-
-      const position = senaladosPos[index] ?? null;
-      const existing = groups.get(label);
-
-      if (!existing) {
-        groups.set(label, {
-          label,
-          count: 1,
-          firstIndex: index,
-          indices: [index],
-          representativeIndex: index,
-          representativePos: position,
-        });
-        return;
-      }
-
-      existing.count += 1;
-      existing.indices.push(index);
-      if (existing.representativePos == null && position != null) {
-        existing.representativeIndex = index;
-        existing.representativePos = position;
-      }
-    });
-
-    return Array.from(groups.values()).sort((a, b) => a.firstIndex - b.firstIndex);
-  }, [senalados, senaladosPos]);
+  const [showFullVisualEditor, setShowFullVisualEditor] = useState(false);
 
   useEffect(() => {
     acquireAtlasScrollLock();
@@ -271,7 +241,12 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
 
   const handleRequestClose = () => {
     if (!onRequestClose) return;
-    setShowCloseConfirm(true);
+    if (showFullVisualEditor || showMoveAllModal) return;
+    if (hasChanges) {
+      setShowCloseConfirm(true);
+    } else {
+      onRequestClose();
+    }
   };
 
   const confirmClose = () => {
@@ -295,8 +270,6 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
     placeLocation: labels?.placeLocation ?? '📍 Ubicar',
   };
 
-  const hasPlacedMarkers = Boolean(imageSrc && senaladosPos.some(pos => pos !== null));
-
   return (
     <div
       style={{
@@ -309,8 +282,8 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
         justifyContent: 'center',
         padding: 'clamp(10px, 2vw, 24px)',
       }}
-      onClick={() => {
-        if (!showCloseConfirm) {
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !showCloseConfirm && !showFullVisualEditor && !showMoveAllModal) {
           handleRequestClose();
         }
       }}
@@ -524,109 +497,46 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
             <div style={mergedStyles.section}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                 <label style={mergedStyles.label}>{texts.senalados}</label>
-                {onSenaladosPosChange && hasPlacedMarkers && (
-                  <button
-                    type="button"
+                {senalados.length > 0 && (
+                  <span
                     style={{
-                      border: '1.5px solid #818cf8',
-                      borderRadius: '10px',
-                      background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
-                      color: '#4338ca',
-                      fontFamily: 'inherit',
+                      fontSize: '0.8em',
                       fontWeight: 800,
-                      fontSize: '0.82em',
-                      cursor: 'pointer',
-                      padding: '6px 12px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      boxShadow: '0 2px 6px rgba(99, 102, 241, 0.15)',
+                      color: '#0369a1',
+                      background: '#e0f2fe',
+                      padding: '3px 10px',
+                      borderRadius: '999px',
                     }}
-                    onClick={() => setShowMoveAllModal(true)}
-                    title="Desplazar o alinear todos los señalados a la vez"
                   >
-                    <Move size={14} /> Mover todos a la vez
-                  </button>
+                    {senalados.filter(s => s.trim()).length} señalado{senalados.filter(s => s.trim()).length === 1 ? '' : 's'} configurado{senalados.filter(s => s.trim()).length === 1 ? '' : 's'}
+                  </span>
                 )}
               </div>
 
-              {groupedSenalados.map((group, displayIndex) => {
-                const hasMarker = group.representativePos != null;
-                const idx = group.representativeIndex;
-
-                return (
-                  <div key={group.firstIndex} style={mergedStyles.senalRow}>
-                    <span style={mergedStyles.senalNum}>{displayIndex + 1}</span>
-                    <BoldField
-                      as="input"
-                      inline
-                      style={mergedStyles.senalInput}
-                      value={group.label}
-                      placeholder={`Señalado ${displayIndex + 1}`}
-                      onChange={value => {
-                        group.indices.forEach(groupIndex => onSenaladoChange(groupIndex, value));
-                      }}
-                      onFocus={event => (event.currentTarget.style.borderColor = '#818cf8')}
-                      onBlur={event => (event.currentTarget.style.borderColor = '#cbd5e1')}
-                    />
-                    <span style={{
-                      fontSize: '0.72em',
-                      fontWeight: 800,
-                      borderRadius: '999px',
-                      padding: '4px 10px',
-                      border: '1px solid #bae6fd',
-                      background: '#ecfeff',
-                      color: '#0c4a6e',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {group.count > 1 ? `${group.count}x` : '1x'}
-                    </span>
-                    <button type="button" style={mergedStyles.removeBtn} title={group.count > 1 ? 'Eliminar grupo' : 'Eliminar señalado'} onClick={() => {
-                      [...group.indices].sort((a, b) => b - a).forEach(groupIndex => onRemoveSenalado(groupIndex));
-                    }}>
-                      ✕
-                    </button>
-                    <button
-                      type="button"
-                      style={{ ...mergedStyles.addBtn, padding: '8px 10px' }}
-                      onClick={() => onOpenSenaladoLocation(idx)}
-                    >
-                      {hasMarker ? texts.editLocation : texts.placeLocation}
-                    </button>
-                  </div>
-                );
-              })}
-              <button type="button" style={mergedStyles.addBtn} onClick={onAddSenalado}>
-                {texts.addSenalado}
-              </button>
-              {onAddMultipleSenalado && (
-                <button type="button" style={{ ...mergedStyles.addBtn, marginTop: '0px' }} onClick={onAddMultipleSenalado}>
-                  {texts.addMultipleSenalado}
-                </button>
-              )}
-              {onAddBorderSenalado && (
-                <button type="button" style={{ ...mergedStyles.addBtn, marginTop: '0px', borderColor: '#bbf7d0', background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', color: '#166534' }} onClick={onAddBorderSenalado}>
-                  {texts.addBorderSenalado}
-                </button>
-              )}
-              {onSenaladosPosChange && hasPlacedMarkers && (
+              {imageSrc && (
                 <button
                   type="button"
                   style={{
-                    ...mergedStyles.addBtn,
-                    marginTop: '0px',
-                    borderColor: '#818cf8',
-                    background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
-                    color: '#4338ca',
-                    display: 'inline-flex',
+                    border: '1.5px solid #0ea5e9',
+                    borderRadius: '14px',
+                    background: 'linear-gradient(135deg, #0ea5e9 0%, #4f46e5 100%)',
+                    color: '#ffffff',
+                    fontFamily: 'inherit',
+                    fontWeight: 900,
+                    fontSize: '0.95em',
+                    cursor: 'pointer',
+                    padding: '13px 18px',
+                    display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '8px',
-                    boxShadow: '0 2px 8px rgba(99, 102, 241, 0.15)',
+                    gap: '10px',
+                    boxShadow: '0 8px 20px rgba(14, 165, 233, 0.28)',
+                    transition: 'all 0.15s ease',
                   }}
-                  onClick={() => setShowMoveAllModal(true)}
+                  onClick={() => setShowFullVisualEditor(true)}
+                  title="Abrir el editor interactivo de señalados en pantalla completa (estilo visor)"
                 >
-                  <Move size={16} /> Mover todos los señalados a la vez
+                  <Sparkles size={18} /> Abrir editor visual de señalados
                 </button>
               )}
             </div>
@@ -726,6 +636,34 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
             onSenaladosPosChange?.(updatedPos);
             setShowMoveAllModal(false);
           }}
+        />
+      )}
+
+      {imageSrc && showFullVisualEditor && (
+        <PlateAnnotationViewerEditor
+          imageSrc={imageSrc}
+          imageAlt={imageAlt}
+          highResImageSrc={highResImageSrc || imageSrc}
+          aumento={aumento}
+          tincion={tincion}
+          comentario={comentario}
+          initialSenalados={senalados}
+          initialSenaladosPos={senaladosPos}
+          onSaveAll={(newLabels, newPos) => {
+            if (onSaveAllSenalados) {
+              onSaveAllSenalados(newLabels, newPos);
+            } else {
+              if (onSenaladosPosChange) {
+                onSenaladosPosChange(newPos);
+              }
+              if (onSenaladoChange) {
+                newLabels.forEach((label, idx) => {
+                  onSenaladoChange(idx, label);
+                });
+              }
+            }
+          }}
+          onCancel={() => setShowFullVisualEditor(false)}
         />
       )}
     </div>

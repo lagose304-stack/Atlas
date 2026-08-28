@@ -850,6 +850,10 @@ const Placas: React.FC = () => {
                           senalados={senalados}
                           senaladosPos={senaladosPos}
                           onSenaladosPosChange={setSenaladosPos}
+                          onSaveAllSenalados={(newLabels, newPos) => {
+                            setSenalados(newLabels);
+                            setSenaladosPos(newPos);
+                          }}
                           onSenaladoChange={(index, value) => {
                             setSenalados(previous => {
                               const updated = [...previous];

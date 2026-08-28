@@ -421,7 +421,8 @@ const ListaEspera: React.FC = () => {
       const temaObjFinal = temas.find(t => t.id === temaId);
       const subtemaObjFinal = subtemas.find(s => s.id === subtemaId);
 
-      await logPlateActivity({
+      // Registro de auditoría en segundo plano para agilizar el guardado
+      void logPlateActivity({
         actionType: 'classify_waiting_plate',
         targetTable: 'placas',
         placaId: typeof createdPlacaId === 'number' ? createdPlacaId : null,
@@ -444,7 +445,7 @@ const ListaEspera: React.FC = () => {
           comentario: comentario.trim() || null,
           source: 'lista_espera',
         },
-      });
+      }).catch(auditErr => console.warn('Advertencia al registrar auditoría de clasificación:', auditErr));
 
       setPlacas(prev => prev.filter(p => p.id !== selected.id));
       setSelected(null);
@@ -939,6 +940,7 @@ const ListaEspera: React.FC = () => {
                     <PlateEditorPanel
                       title="Clasificar placa"
                       imageSrc={getCloudinaryImageUrl(selected.photo_url, 'thumb')}
+                      highResImageSrc={getCloudinaryImageUrl(selected.photo_url, 'view')}
                       imageAlt="Miniatura de la placa en lista de espera"
                       primaryActionLabel="💾 Clasificar y guardar placa"
                       primaryActionLoading={isSaving}
@@ -946,6 +948,7 @@ const ListaEspera: React.FC = () => {
                       primaryActionFeedback={saveError || (saveSuccess ? 'Placa clasificada correctamente.' : '')}
                       primaryActionFeedbackTone={saveError ? 'error' : saveSuccess ? 'success' : 'info'}
                       onPrimaryAction={handleClasificar}
+                      hasChanges={Boolean(aumento || tincion || comentario || senalados.some(s => s.trim() !== ''))}
                       aumento={aumento}
                       onAumentoChange={setAumento}
                       showTincion={showTincion}
@@ -955,6 +958,10 @@ const ListaEspera: React.FC = () => {
                       senalados={senalados}
                       senaladosPos={senaladosPos}
                       onSenaladosPosChange={setSenaladosPos}
+                      onSaveAllSenalados={(newLabels, newPos) => {
+                        setSenalados(newLabels);
+                        setSenaladosPos(newPos);
+                      }}
                       onSenaladoChange={(index, value) => {
                         setSenalados(previous => {
                           const updated = [...previous];

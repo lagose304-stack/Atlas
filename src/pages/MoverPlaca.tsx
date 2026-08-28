@@ -513,9 +513,8 @@ const MoverPlaca: React.FC = () => {
       const toTemaObj = editTemas.find(t => t.id === editTemaId);
       const toSubtemaObj = editSubtemas.find(s => s.id === editSubtemaId);
 
-      const isLocationChanging = editTemaId !== selectedPlaca.tema_id ||
-        editSubtemaId !== selectedPlaca.subtema_id ||
-        selectedPlaca.photo_url.includes('sin_clasificar');
+      const isLocationChanging = (editTemaId !== selectedPlaca.tema_id || editSubtemaId !== selectedPlaca.subtema_id) &&
+        toTemaObj != null && toSubtemaObj != null;
 
       let finalPhotoUrl = selectedPlaca.photo_url;
       if (isLocationChanging && toTemaObj && toSubtemaObj) {
@@ -575,7 +574,8 @@ const MoverPlaca: React.FC = () => {
         tincion:    editTincion.trim() || null,
       };
 
-      await logPlateActivity({
+      // Registro de auditoría asíncrono en segundo plano para no demorar la respuesta de guardado
+      void logPlateActivity({
         actionType: 'edit_plate',
         targetTable: 'placas',
         placaId: selectedPlaca.id,
@@ -602,7 +602,7 @@ const MoverPlaca: React.FC = () => {
           source: 'mover_placa',
           changed_fields: updatedFields,
         },
-      });
+      }).catch(auditErr => console.warn('Advertencia al registrar auditoría de edición de placa:', auditErr));
 
       // Si el subtema destino es diferente al actual, quitar la placa de la lista
       if (editSubtemaId !== selectedPlaca.subtema_id) {
@@ -1124,6 +1124,7 @@ const MoverPlaca: React.FC = () => {
                 <PlateEditorPanel
                   title="Editar placa"
                   imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'thumb')}
+                  highResImageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
                   imageAlt="Miniatura de la placa que estás editando"
                   primaryActionLabel="💾 Guardar cambios"
                   primaryActionLoading={isSaving}
@@ -1131,6 +1132,7 @@ const MoverPlaca: React.FC = () => {
                   primaryActionFeedback={saveError || (saveSuccess ? 'Placa reasignada correctamente.' : '')}
                   primaryActionFeedbackTone={saveError ? 'error' : saveSuccess ? 'success' : 'info'}
                   onPrimaryAction={handleSave}
+                  hasChanges={hasChanges}
                   aumento={editAumento}
                   onAumentoChange={setEditAumento}
                   showTincion={showEditTincion}
@@ -1140,6 +1142,10 @@ const MoverPlaca: React.FC = () => {
                   senalados={editSenalados}
                   senaladosPos={editSenaladosPos}
                   onSenaladosPosChange={setEditSenaladosPos}
+                  onSaveAllSenalados={(newLabels, newPos) => {
+                    setEditSenalados(newLabels);
+                    setEditSenaladosPos(newPos);
+                  }}
                   onSenaladoChange={(index, value) => {
                     setEditSenalados(previous => {
                       const updated = [...previous];
