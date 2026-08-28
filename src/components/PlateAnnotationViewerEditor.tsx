@@ -472,6 +472,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Freehand continuous drawing state
   const [isDrawingFreehand, setIsDrawingFreehand] = useState(false);
+  const isDrawingFreehandRef = useRef(false);
+  const justDrawnRef = useRef(false);
 
   // Reassign tip on next click state
   const [reassigningTipMarkerId, setReassigningTipMarkerId] = useState<string | null>(null);
@@ -492,6 +494,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Active drawing polygon buffer
   const [drawingPolygonPoints, setDrawingPolygonPoints] = useState<number[]>([]);
+  const drawingPolygonPointsRef = useRef<number[]>([]);
   const [drawingPolygonColor, setDrawingPolygonColor] = useState('#22c55e');
   const [drawingPolygonOpacity, setDrawingPolygonOpacity] = useState(0.28);
   const [cursorImagePos, setCursorImagePos] = useState<{ x: number; y: number } | null>(null);
@@ -832,12 +835,32 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   }, [markers, selectedMarkerId]);
 
   // Marcadores ordenados para el renderizado SVG (Z-Index visual e interactivo):
+  // Marcador actualmente seleccionado
+  const selectedMarker = useMemo(() => {
+    return selectedMarkerId ? markers.find(m => m.id === selectedMarkerId) ?? null : null;
+  }, [markers, selectedMarkerId]);
+
+  const selectedGroupLabel = useMemo(() => {
+    return selectedMarker ? selectedMarker.label.trim().toLowerCase() : '';
+  }, [selectedMarker]);
+
+  // Marcadores visibles en la imagen: si hay uno seleccionado, solo se muestran el seleccionado y sus hermanos del mismo grupo múltiple
+  const activeGroupMarkers = useMemo(() => {
+    if (!selectedMarkerId) return markers;
+    return markers.filter(m => {
+      if (m.id === selectedMarkerId) return true;
+      if (selectedGroupLabel && m.label.trim().toLowerCase() === selectedGroupLabel) return true;
+      return false;
+    });
+  }, [markers, selectedMarkerId, selectedGroupLabel]);
+
+  // Orden Z inteligente de renderizado para el canvas SVG:
   // 1. Las regiones/bordes más grandes y envolventes se renderizan primero (al fondo).
   // 2. Las regiones/bordes más pequeños y contenidos se renderizan después (encima).
   // 3. Los punteros (agujas/flechas) se renderizan sobre cualquier región.
   // 4. El señalado actualmente seleccionado (y sus controles de edición) se renderiza en la capa superior absoluta.
   const sortedMarkersForRendering = useMemo(() => {
-    return [...markers].sort((a, b) => {
+    return [...activeGroupMarkers].sort((a, b) => {
       const aSelected = a.id === selectedMarkerId;
       const bSelected = b.id === selectedMarkerId;
       if (aSelected && !bSelected) return 1;
@@ -850,7 +873,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       }
       return 0;
     });
-  }, [markers, selectedMarkerId]);
+  }, [activeGroupMarkers, selectedMarkerId]);
 
   // Group markers by structure name for accordion display
   const markerGroups = useMemo(() => {
@@ -963,7 +986,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       targetSelectedMarker.regionPoints.length >= 6 &&
       (
         pointInPolygon(centroidX, centroidY, targetSelectedMarker.regionPoints) ||
-        pointInPolygon(simplified[0], simplified[1], targetSelectedMarker.regionPoints)
+        pointInPolygon(simplified[0], simplified[1], targetSelectedMarker.regionPoints) ||
+        simplified.some((_, i) => i % 2 === 0 && pointInPolygon(simplified[i], simplified[i + 1], targetSelectedMarker.regionPoints!))
       )
     );
 
@@ -1052,13 +1076,13 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       setHasUnsavedModifications(true);
       return;
     }
-  }, [activeTool, currentCreationLabel, drawingPolygonColor, drawingPolygonOpacity, markers, pushHistory, sessionMarkerIds, singlePickerMode, targetLabel]);
+  }, [activeTool, currentCreationLabel, drawingPolygonColor, drawingPolygonOpacity, markers, pushHistory, selectedMarkerId, sessionMarkerIds, singlePickerMode, targetLabel]);
 
-  // Unified Pointer Down for Canvas (Handles Freehand Drawing and Panning)
-  const handleCanvasPointerDown = (e: React.PointerEvent) => {
+  // Unified Pointer Down for Canvas (Handles Freehand Drawing, Exclusion Holes, and Panning)
+  const handleCanvasPointerDown = (e: React.PointerEvent | React.MouseEvent) => {
     if (isPinching) return;
 
-    if (e.button === 1 || isSpacePressed || (activeTool === 'pan' && !reassigningTipMarkerId)) {
+    if (e.button === 1 || isSpacePressed) {
       e.preventDefault();
       setIsDraggingCanvas(true);
       setDragStartMouse({ x: e.clientX, y: e.clientY });
@@ -1066,32 +1090,52 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       return;
     }
 
-    if ((activeTool === 'border' || activeTool === 'batch-border') && !reassigningTipMarkerId) {
+    const hasSelectedPolygon = Boolean(activeSelectedMarker && activeSelectedMarker.regionPoints && activeSelectedMarker.regionPoints.length >= 6);
+
+    if ((activeTool === 'border' || activeTool === 'batch-border' || hasSelectedPolygon) && !reassigningTipMarkerId && e.button === 0) {
       const coords = clientToImageCoords(e.clientX, e.clientY);
       if (!coords) return;
-      (e.target as Element).setPointerCapture?.(e.pointerId);
+      const pointerId = 'pointerId' in e ? (e as React.PointerEvent).pointerId : undefined;
+      if (pointerId != null) {
+        (e.target as Element).setPointerCapture?.(pointerId);
+      }
+      isDrawingFreehandRef.current = true;
       setIsDrawingFreehand(true);
+      drawingPolygonPointsRef.current = [coords.x, coords.y];
       setDrawingPolygonPoints([coords.x, coords.y]);
+      return;
+    }
+
+    if (activeTool === 'pan' && !reassigningTipMarkerId) {
+      e.preventDefault();
+      setIsDraggingCanvas(true);
+      setDragStartMouse({ x: e.clientX, y: e.clientY });
+      setDragStartPosition({ ...position });
+      return;
     }
   };
 
   // Unified Pointer Move for Canvas
-  const handleCanvasPointerMove = (e: React.PointerEvent) => {
+  const handleCanvasPointerMove = (e: React.PointerEvent | React.MouseEvent) => {
     const coords = clientToImageCoords(e.clientX, e.clientY);
     if (coords) setCursorImagePos(coords);
 
-    if (isDrawingFreehand && (activeTool === 'border' || activeTool === 'batch-border') && coords) {
-      setDrawingPolygonPoints(prev => {
-        if (prev.length < 2) return [coords.x, coords.y];
+    if (isDrawingFreehandRef.current && coords) {
+      const prev = drawingPolygonPointsRef.current;
+      if (prev.length < 2) {
+        drawingPolygonPointsRef.current = [coords.x, coords.y];
+        setDrawingPolygonPoints([coords.x, coords.y]);
+      } else {
         const lastX = prev[prev.length - 2];
         const lastY = prev[prev.length - 1];
         const dist = Math.hypot(coords.x - lastX, coords.y - lastY);
         // Continuous sampling when moved by at least ~3-4px
         if (dist >= 0.003) {
-          return [...prev, coords.x, coords.y];
+          const next = [...prev, coords.x, coords.y];
+          drawingPolygonPointsRef.current = next;
+          setDrawingPolygonPoints(next);
         }
-        return prev;
-      });
+      }
       return;
     }
 
@@ -1107,9 +1151,19 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Unified Pointer Up for Canvas
   const handleCanvasPointerUp = () => {
-    if (isDrawingFreehand && (activeTool === 'border' || activeTool === 'batch-border')) {
+    if (isDrawingFreehandRef.current) {
+      isDrawingFreehandRef.current = false;
       setIsDrawingFreehand(false);
-      finalizeFreehandPolygon(drawingPolygonPoints);
+      const pointsToFinalize = drawingPolygonPointsRef.current;
+      drawingPolygonPointsRef.current = [];
+      setDrawingPolygonPoints([]);
+      if (pointsToFinalize.length >= 6) {
+        justDrawnRef.current = true;
+        setTimeout(() => {
+          justDrawnRef.current = false;
+        }, 120);
+      }
+      finalizeFreehandPolygon(pointsToFinalize);
       return;
     }
 
@@ -1117,19 +1171,18 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     setDragStartMouse(null);
   };
 
-  // Double-click outside any marker deselects the current selection
+  // Double-click outside any marker deselects the current selection and reveals all markers
   const handleCanvasDoubleClick = (event: React.MouseEvent) => {
-    if (selectedMarkerId) {
-      event.stopPropagation();
-      setSelectedMarkerId(null);
-      setSelectedVertex(null);
-      setReassigningTipMarkerId(null);
-    }
+    event.stopPropagation();
+    setSelectedMarkerId(null);
+    setSelectedVertex(null);
+    setSelectedHoleIndex(null);
+    setReassigningTipMarkerId(null);
   };
 
   // Click on image canvas (For Pointer, Batch or Reassigning Tip)
   const handleCanvasClick = (event: React.MouseEvent) => {
-    if (isDraggingCanvas || isSpacePressed || isDrawingFreehand) return;
+    if (isDraggingCanvas || isSpacePressed || isDrawingFreehand || justDrawnRef.current) return;
 
     const coords = clientToImageCoords(event.clientX, event.clientY);
     if (!coords) return;
@@ -1143,7 +1196,14 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       return;
     }
 
-    if (activeTool === 'pan') return;
+    if (activeTool === 'pan') {
+      if (selectedMarkerId) {
+        setSelectedMarkerId(null);
+        setSelectedVertex(null);
+        setSelectedHoleIndex(null);
+      }
+      return;
+    }
 
     pushHistory(markers);
 
@@ -1551,6 +1611,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         onPointerMove={handleCanvasPointerMove}
         onPointerUp={handleCanvasPointerUp}
         onPointerCancel={handleCanvasPointerUp}
+        onMouseDown={handleCanvasPointerDown}
+        onMouseMove={handleCanvasPointerMove}
+        onMouseUp={handleCanvasPointerUp}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -2048,13 +2111,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                         strokeLinejoin="round"
                         strokeLinecap="round"
                         vectorEffect="non-scaling-stroke"
-                        style={{ cursor: 'pointer' }}
+                        style={{ cursor: isSelected ? 'crosshair' : 'pointer', pointerEvents: isSelected ? 'none' : 'auto' }}
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedMarkerId(marker.id);
-                        }}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
                         }}
                       />
 
@@ -3322,7 +3382,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
                 <span style={{ fontSize: '0.85em', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   {selectedMarkerId && markers.length > 1
-                    ? `Señalado Seleccionado (1 de ${markers.length})`
+                    ? (activeGroupMarkers.length > 1
+                        ? `Grupo Seleccionado (${activeGroupMarkers.length} de ${markers.length})`
+                        : `Señalado Seleccionado (1 de ${markers.length})`)
                     : `Lista de Señalados (${markers.length})`}
                 </span>
 
@@ -3330,7 +3392,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                   {selectedMarkerId && markers.length > 1 && (
                     <button
                       type="button"
-                      title="Mostrar todos los señalados en la lista"
+                      title="Mostrar todos los señalados en la imagen y en la lista"
                       onClick={() => setSelectedMarkerId(null)}
                       style={{
                         border: '1.5px solid #cbd5e1',
@@ -3369,21 +3431,25 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                   Haz clic sobre la placa para agregar el primero.
                 </div>
               ) : selectedMarkerId ? (
-                // 1. Single active marker focus mode
-                markers.filter(m => m.id === selectedMarkerId).map((marker) => {
+                // 1. Single active marker or multiple group members focus mode
+                activeGroupMarkers.map((marker) => {
                   const originalIndex = markers.findIndex(m => m.id === marker.id);
                   const isPolygon = Boolean(marker.regionPoints && marker.regionPoints.length >= 6);
+                  const isThisMarkerSelected = marker.id === selectedMarkerId;
 
                   return (
                     <div
                       key={marker.id}
-                      onClick={() => focusOnMarker(marker)}
+                      onClick={() => {
+                        setSelectedMarkerId(marker.id);
+                        focusOnMarker(marker);
+                      }}
                       style={{
                         padding: '10px 12px',
                         borderRadius: '12px',
-                        border: '2px solid #0ea5e9',
-                        background: '#f0f9ff',
-                        boxShadow: '0 4px 12px rgba(14, 165, 233, 0.15)',
+                        border: isThisMarkerSelected ? '2px solid #0ea5e9' : '1.5px solid #cbd5e1',
+                        background: isThisMarkerSelected ? '#f0f9ff' : '#f8fafc',
+                        boxShadow: isThisMarkerSelected ? '0 4px 12px rgba(14, 165, 233, 0.15)' : 'none',
                         cursor: 'pointer',
                         display: 'flex',
                         flexDirection: 'column',
@@ -3416,6 +3482,12 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                           <span style={{ fontSize: '0.88em', fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {renderBoldText(marker.label || `Señalado ${originalIndex + 1}`)}
                           </span>
+
+                          {isThisMarkerSelected && activeGroupMarkers.length > 1 && (
+                            <span style={{ fontSize: '0.68em', fontWeight: 800, color: '#0284c7', background: '#e0f2fe', padding: '2px 6px', borderRadius: '4px' }}>
+                              Activo
+                            </span>
+                          )}
                         </div>
 
                         {/* Actions */}
@@ -3427,7 +3499,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                               e.stopPropagation();
                               pushHistory(markers);
                               setMarkers(prev => prev.filter(m => m.id !== marker.id));
-                              setSelectedMarkerId(null);
+                              if (marker.id === selectedMarkerId) {
+                                setSelectedMarkerId(null);
+                              }
                             }}
                             style={{
                               border: 'none',

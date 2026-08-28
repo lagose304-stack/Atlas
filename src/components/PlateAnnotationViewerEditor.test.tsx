@@ -330,4 +330,106 @@ describe('PlateAnnotationViewerEditor', () => {
     expect(screen.getByText(/Zonas de exclusión \(1\)/i)).toBeInTheDocument();
     expect(screen.queryByText(/Hueco interior #2/i)).not.toBeInTheDocument();
   });
+
+  it('oculta en el canvas los señalados ajenos al seleccionar uno, manteniendo visibles los del mismo grupo múltiple', () => {
+    render(
+      <PlateAnnotationViewerEditor
+        imageSrc="https://res.cloudinary.com/demo/image/upload/sample.jpg"
+        initialSenalados={[
+          'Célula Parietal',
+          'Célula Parietal',
+          'Célula Principal',
+        ]}
+        initialSenaladosPos={[
+          { x: 0.2, y: 0.3, startX: 0, startY: 0.3 },
+          { x: 0.4, y: 0.5, startX: 0, startY: 0.5 },
+          { x: 0.8, y: 0.8, startX: 1, startY: 0.8 },
+        ]}
+        onCancel={vi.fn()}
+      />
+    );
+
+    // Simular carga de imagen
+    const img = screen.getByAltText(/Placa histológica de alta calidad/i);
+    Object.defineProperty(img, 'naturalWidth', { value: 1000 });
+    Object.defineProperty(img, 'naturalHeight', { value: 800 });
+    Object.defineProperty(img, 'clientWidth', { value: 1000 });
+    Object.defineProperty(img, 'clientHeight', { value: 800 });
+    Object.defineProperty(img, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 1000, height: 800, right: 1000, bottom: 800 }),
+    });
+    fireEvent.load(img);
+
+    // Inicialmente los 3 señalados están en la vista del SVG
+    expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
+
+    // Seleccionar el señalado #1 ("Célula Parietal")
+    const marker1 = screen.getAllByText('1')[0];
+    fireEvent.click(marker1);
+
+    // En el canvas solo deben estar visibles los señalados 1 y 2 (Célula Parietal), el 3 (Célula Principal) se oculta
+    expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('3')).toBeNull();
+
+    // El encabezado indica "Grupo Seleccionado (2 de 3)" y el botón "Ver todos (3)"
+    expect(screen.getByText(/Grupo Seleccionado \(2 de 3\)/i)).toBeInTheDocument();
+    const verTodosBtn = screen.getByRole('button', { name: /Ver todos \(3\)/i });
+    expect(verTodosBtn).toBeInTheDocument();
+
+    // Al hacer clic en "Ver todos", vuelve a mostrarse el señalado 3
+    fireEvent.click(verTodosBtn);
+    expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('permite dibujar inmediatamente una zona de exclusión al seleccionar una región sin cambiar de herramienta', () => {
+    render(
+      <PlateAnnotationViewerEditor
+        imageSrc="https://res.cloudinary.com/demo/image/upload/sample.jpg"
+        initialSenalados={['Célula Foveolar']}
+        initialSenaladosPos={[
+          {
+            x: 0.5,
+            y: 0.5,
+            regionPoints: [0.1, 0.1, 0.9, 0.1, 0.9, 0.9, 0.1, 0.9],
+            regionColor: '#22c55e',
+            regionOpacity: 0.35,
+          },
+        ]}
+        onCancel={vi.fn()}
+      />
+    );
+
+    // Simular carga de imagen
+    const img = screen.getByAltText(/Placa histológica de alta calidad/i);
+    Object.defineProperty(img, 'naturalWidth', { value: 1000 });
+    Object.defineProperty(img, 'naturalHeight', { value: 800 });
+    Object.defineProperty(img, 'clientWidth', { value: 1000 });
+    Object.defineProperty(img, 'clientHeight', { value: 800 });
+    Object.defineProperty(img, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 1000, height: 800, right: 1000, bottom: 800 }),
+    });
+    fireEvent.load(img);
+
+    // Seleccionar la región
+    const regionPath = document.querySelector('path[fill-rule="evenodd"]');
+    fireEvent.click(regionPath!);
+    expect(screen.getByText(/Detalle del Señalado/i)).toBeInTheDocument();
+
+    // No hay zonas de exclusión inicialmente
+    expect(screen.queryByText(/Hueco interior/i)).toBeNull();
+
+    // Dibujar directamente una zona de exclusión dentro de la región seleccionada (mouseDown, mouseMove, mouseUp)
+    const container = img.parentElement!.parentElement!;
+    fireEvent.mouseDown(container, { clientX: 400, clientY: 400, button: 0 });
+    fireEvent.mouseMove(container, { clientX: 450, clientY: 400 });
+    fireEvent.mouseMove(container, { clientX: 450, clientY: 450 });
+    fireEvent.mouseMove(container, { clientX: 400, clientY: 450 });
+    fireEvent.mouseUp(container, { clientX: 400, clientY: 400 });
+
+    // La zona de exclusión debe crearse inmediatamente sin haber tocado otros botones
+    expect(screen.getByText(/Hueco interior #1/i)).toBeInTheDocument();
+  });
 });
