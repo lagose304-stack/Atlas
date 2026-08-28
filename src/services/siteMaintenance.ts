@@ -60,3 +60,22 @@ export const setSiteMaintenanceMode = async (
 
   return { ok: true };
 };
+
+export const isParcialDisabled = (parcialKey: string, disabledFeatures: string[] = []): boolean => {
+  if (!parcialKey || !Array.isArray(disabledFeatures)) return false;
+  const normalized = parcialKey.toLowerCase().trim();
+  return disabledFeatures.includes(`parcial_${normalized}`) || disabledFeatures.includes(normalized);
+};
+
+export const isTemaDisabled = (
+  temaId: number | string | null | undefined,
+  parcialKey?: string | null,
+  disabledFeatures: string[] = []
+): boolean => {
+  if (!Array.isArray(disabledFeatures)) return false;
+  if (parcialKey && isParcialDisabled(parcialKey, disabledFeatures)) {
+    return true;
+  }
+  if (temaId === null || temaId === undefined) return false;
+  return disabledFeatures.includes(`tema_${temaId}`);
+};

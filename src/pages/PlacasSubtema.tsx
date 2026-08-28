@@ -13,6 +13,7 @@ import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { logPlacaView, logSubtemaView } from '../services/analytics';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import { fetchSiteMaintenanceStatus, isTemaDisabled } from '../services/siteMaintenance';
 
 interface Placa {
   id: number;
@@ -38,7 +39,7 @@ interface SubtemaInfo {
   nombre: string;
   tema_id: number;
   sort_order?: number | null;
-  temas?: { nombre: string } | { nombre: string }[];
+  temas?: { nombre: string; parcial?: string } | { nombre: string; parcial?: string }[];
 }
 
 interface SubtemaNav {
@@ -78,6 +79,7 @@ const PlacasSubtema: React.FC = () => {
   const [placas, setPlacas] = useState<Placa[]>([]);
   const [subtema, setSubtema] = useState<SubtemaInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
@@ -89,17 +91,31 @@ const PlacasSubtema: React.FC = () => {
 
     const fetchData = async () => {
       setLoading(true);
+      setErrorMessage(null);
       void logSubtemaView(Number(subtemaId));
 
       // Cargar info del subtema (con nombre del tema padre)
       const { data: subtemaData, error: subtemaError } = await supabase
         .from('subtemas')
-        .select('id, nombre, tema_id, temas(nombre)')
+        .select('id, nombre, tema_id, temas(nombre, parcial)')
         .eq('id', subtemaId)
         .single();
 
       if (subtemaError) console.error('Error fetching subtema:', subtemaError);
-      if (subtemaData) setSubtema(subtemaData as unknown as SubtemaInfo);
+      if (subtemaData) {
+        setSubtema(subtemaData as unknown as SubtemaInfo);
+
+        const maintenanceStatus = await fetchSiteMaintenanceStatus();
+        const isAdmin = user?.rol === 'Administrador' || user?.rol === 'Microscopía';
+        const rawTemas = subtemaData.temas as { nombre?: string; parcial?: string } | { nombre?: string; parcial?: string }[] | null;
+        const temaParcial = Array.isArray(rawTemas) ? rawTemas[0]?.parcial : rawTemas?.parcial;
+
+        if (!isAdmin && isTemaDisabled(subtemaData.tema_id, temaParcial, maintenanceStatus.disabledFeatures)) {
+          setErrorMessage('Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.');
+          setLoading(false);
+          return;
+        }
+      }
 
       if (subtemaData?.tema_id) {
         const { data: subtemasListData, error: subtemasListError } = await supabase
@@ -302,6 +318,14 @@ const PlacasSubtema: React.FC = () => {
             alt="Placa histológica"
             style={styles.thumbImg}
             loading="lazy"
+            decoding="async"
+            onError={(e) => {
+              const target = e.currentTarget;
+              const full = getCloudinaryImageUrl(placa.photo_url, 'view');
+              if (target.src !== full) {
+                target.src = full;
+              }
+            }}
           />
           {(placa.aumento || hasInteractiveMap) && (
             <div style={styles.thumbBadgesRow}>
@@ -361,6 +385,17 @@ const PlacasSubtema: React.FC = () => {
           {loading ? (
             <div style={styles.spinnerWrap}>
               <div style={styles.spinner} />
+            </div>
+          ) : errorMessage ? (
+            <div style={{ padding: '36px 20px', textAlign: 'center', background: '#fff5f5', borderRadius: '16px', border: '1px solid #fecaca', margin: '20px 0' }}>
+              <p style={{ margin: '0 0 16px', color: '#991b1b', fontSize: '1rem', fontWeight: 600 }}>{errorMessage}</p>
+              <button
+                type="button"
+                onClick={() => navigate('/temario')}
+                style={{ padding: '9px 18px', background: '#0284c7', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Volver al temario
+              </button>
             </div>
           ) : placas.length > 0 ? (
             <div style={styles.gridSectionsWrap}>

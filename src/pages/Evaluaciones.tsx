@@ -9,6 +9,7 @@ import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { collectWeeklyThemeIds, groupHistoricalTestsByPartial, orderTestsByWeeklyPriority } from './evaluacionesUtils';
 import { ArrowRight, BookOpenCheck, CalendarDays, ClipboardCheck, Sparkles, Shield } from 'lucide-react';
+import { fetchSiteMaintenanceStatus, isParcialDisabled, isTemaDisabled, type SiteMaintenanceStatus } from '../services/siteMaintenance';
 
 interface PruebaPublica {
   id: string;
@@ -220,6 +221,7 @@ const Evaluaciones: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [pruebas, setPruebas] = React.useState<PruebaPublica[]>([]);
+  const [maintenanceStatus, setMaintenanceStatus] = React.useState<SiteMaintenanceStatus | null>(null);
   const [weeklyThemeIds, setWeeklyThemeIds] = React.useState<number[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState('');
@@ -236,6 +238,7 @@ const Evaluaciones: React.FC = () => {
     };
 
     void loadWeeklyThemes();
+    void fetchSiteMaintenanceStatus().then(setMaintenanceStatus);
   }, []);
 
   React.useEffect(() => {
@@ -262,9 +265,20 @@ const Evaluaciones: React.FC = () => {
     void loadPublicTests();
   }, []);
 
+  const visiblePruebas = React.useMemo(() => {
+    const isAdmin = user?.rol === 'Administrador' || user?.rol === 'Microscopía';
+    if (isAdmin) return pruebas;
+    const disabled = maintenanceStatus?.disabledFeatures ?? [];
+    return pruebas.filter((p) => {
+      if (isParcialDisabled(p.parcial_key, disabled)) return false;
+      if (isTemaDisabled(p.tema_id, p.parcial_key, disabled)) return false;
+      return true;
+    });
+  }, [pruebas, user, maintenanceStatus]);
+
   const orderedPruebas = React.useMemo(
-    () => orderTestsByWeeklyPriority(pruebas, weeklyThemeIds),
-    [pruebas, weeklyThemeIds],
+    () => orderTestsByWeeklyPriority(visiblePruebas, weeklyThemeIds),
+    [visiblePruebas, weeklyThemeIds],
   );
 
   const parcialSections = React.useMemo<ParcialSection[]>(() => {

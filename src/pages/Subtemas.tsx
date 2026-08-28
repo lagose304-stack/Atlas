@@ -14,6 +14,8 @@ import { ArrowLeft, ArrowRight, Layers3, Microscope, Shield } from 'lucide-react
 import { useAuth } from '../contexts/AuthContext';
 import MicroscopyTopicExperience from './MicroscopyTopicExperience';
 
+import { fetchSiteMaintenanceStatus, isTemaDisabled } from '../services/siteMaintenance';
+
 interface Tema {
   id: number;
   nombre: string;
@@ -86,6 +88,12 @@ const StandardSubtemas: React.FC = () => {
       nextError = 'No se pudo cargar la informacion del tema en este momento.';
     } else if (!temaData) {
       nextError = 'El tema solicitado no existe o ya no esta disponible.';
+    } else {
+      const maintenanceStatus = await fetchSiteMaintenanceStatus();
+      const isAdmin = user?.rol === 'Administrador' || user?.rol === 'Microscopía';
+      if (!isAdmin && isTemaDisabled(temaData.id, temaData.parcial, maintenanceStatus.disabledFeatures)) {
+        nextError = 'Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.';
+      }
     }
 
     const { data: subtemasData, error: subtemasError } = await supabase

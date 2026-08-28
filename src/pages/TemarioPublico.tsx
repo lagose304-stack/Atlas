@@ -16,8 +16,9 @@ import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
-import { ArrowRight, GraduationCap, Microscope, Shield } from 'lucide-react';
+import { ArrowRight, GraduationCap, Microscope, Shield, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { fetchSiteMaintenanceStatus, isParcialDisabled, isTemaDisabled, type SiteMaintenanceStatus } from '../services/siteMaintenance';
 
 interface Tema {
   id: number;
@@ -102,15 +103,13 @@ const buildTemasLoadError = (error: SupabaseQueryError | null | undefined): stri
   if (details.includes('aborterror') || details.includes('operation was aborted')) {
     return 'La conexion se interrumpio mientras cargaba el temario. Revisa estabilidad de red e intenta de nuevo.';
   }
-
   if (isLikelyTransientNetworkError(error)) {
     return 'No se pudo cargar el temario por un problema de red. Revisa tu WiFi o DNS e intenta de nuevo.';
   }
-
   return 'No se pudo cargar el temario en este momento. Revisa tu conexion e intenta de nuevo.';
 };
 
-const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick }) => {
+const TemaCard: React.FC<{ tema: Tema; onClick: () => void; isDisabled?: boolean }> = ({ tema, onClick, isDisabled }) => {
   const [hovered, setHovered] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
 
@@ -130,7 +129,12 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
           : '0 8px 22px rgba(23, 65, 101, 0.08)',
         cursor: 'pointer',
         transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, filter 0.2s ease',
-        border: hovered ? '1px solid rgba(97, 143, 202, 0.56)' : '1px solid rgba(199, 215, 232, 0.92)',
+        border: isDisabled
+          ? '1px dashed #f87171'
+          : hovered
+            ? '1px solid rgba(97, 143, 202, 0.56)'
+            : '1px solid rgba(199, 215, 232, 0.92)',
+        opacity: isDisabled ? 0.78 : 1,
         position: 'relative',
         overflow: 'hidden',
         display: 'flex',
@@ -148,6 +152,27 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
+      {isDisabled && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            zIndex: 3,
+            background: 'rgba(239, 68, 68, 0.92)',
+            color: '#ffffff',
+            fontSize: '0.68rem',
+            fontWeight: 800,
+            padding: '2px 7px',
+            borderRadius: '6px',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+          }}
+        >
+          Desactivado
+        </div>
+      )}
       <div
         style={{
           height: '138px',
@@ -212,7 +237,9 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void }> = ({ tema, onClick
 const TemarioPublico: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isAdmin = user?.rol === 'Administrador' || user?.rol === 'Microscopía';
   const [temas, setTemas] = useState<Tema[]>([]);
+  const [maintenanceStatus, setMaintenanceStatus] = useState<SiteMaintenanceStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
@@ -283,6 +310,7 @@ const TemarioPublico: React.FC = () => {
 
     void fetchTemas();
     void fetchBlocks();
+    void fetchSiteMaintenanceStatus().then(setMaintenanceStatus);
   }, [fetchTemas]);
 
   return (
@@ -327,7 +355,12 @@ const TemarioPublico: React.FC = () => {
               <nav className="temario-partial-nav" style={styles.partialNav} aria-label="Seleccionar parcial">
                 {PARCIALES.map(({ key, label, num }) => {
                   const isActive = selectedParcial === key;
-                  const count = temas.filter((tema) => tema.parcial === key).length;
+                  const isParcialOff = isParcialDisabled(key, maintenanceStatus?.disabledFeatures ?? []);
+                  const temasParcial = temas.filter((tema) => tema.parcial === key);
+                  const visibleTemasCount = isAdmin
+                    ? temasParcial.length
+                    : temasParcial.filter((t) => !isTemaDisabled(t.id, t.parcial, maintenanceStatus?.disabledFeatures ?? [])).length;
+
                   return (
                     <button
                       key={key}
@@ -336,22 +369,30 @@ const TemarioPublico: React.FC = () => {
                       style={{
                         ...styles.partialTab,
                         ...(isActive ? styles.partialTabActive : {}),
+                        opacity: isParcialOff && !isActive ? 0.7 : 1,
                       }}
                       onClick={() => setSelectedParcial(key)}
                     >
                       <span
                         style={{
                           ...styles.partialTabNumber,
-                          background: isActive ? 'rgba(255, 255, 255, 0.25)' : '#e2e8f0',
-                          color: isActive ? '#ffffff' : '#1e3a5f',
+                          background: isActive ? 'rgba(255, 255, 255, 0.25)' : isParcialOff ? '#fee2e2' : '#e2e8f0',
+                          color: isActive ? '#ffffff' : isParcialOff ? '#b91c1c' : '#1e3a5f',
                         }}
                       >
                         {num}
                       </span>
                       <span style={styles.partialTabCopy}>
-                        <strong style={{ color: isActive ? '#ffffff' : '#123b66', fontWeight: 800 }}>{label}</strong>
+                        <strong style={{ color: isActive ? '#ffffff' : '#123b66', fontWeight: 800 }}>
+                          {label}
+                          {isParcialOff && (
+                            <span style={{ marginLeft: '6px', fontSize: '0.72rem', color: isActive ? '#fef08a' : '#ef4444' }}>
+                              (Mantenimiento)
+                            </span>
+                          )}
+                        </strong>
                         <small style={{ color: isActive ? 'rgba(255, 255, 255, 0.92)' : '#5c7897', fontWeight: 600 }}>
-                          {count} {count === 1 ? 'tema' : 'temas'}
+                          {visibleTemasCount} {visibleTemasCount === 1 ? 'tema' : 'temas'}
                         </small>
                       </span>
                     </button>
@@ -360,32 +401,60 @@ const TemarioPublico: React.FC = () => {
               </nav>
 
               {PARCIALES.filter(({ key }) => key === selectedParcial).map(({ key, label, num }) => {
+                const isParcialOff = isParcialDisabled(key, maintenanceStatus?.disabledFeatures ?? []);
                 const temasParcial = temas.filter((tema) => tema.parcial === key);
+                const displayedTemas = isAdmin
+                  ? temasParcial
+                  : temasParcial.filter((t) => !isTemaDisabled(t.id, t.parcial, maintenanceStatus?.disabledFeatures ?? []));
+
                 return (
                   <div className="temario-main-section temario-section-enter" key={key} style={styles.temarioSection}>
                     <div style={styles.parcialHeaderRow}>
                       <span style={styles.parcialIconWrap}>{num}</span>
                       <div style={styles.parcialHeadingCopy}>
                         <span style={styles.parcialEyebrow}><GraduationCap size={14} /> Ruta de aprendizaje</span>
-                        <h3 className="temario-partial-title atlas-typo-section-title" style={styles.parcialTitle}>{label}</h3>
+                        <h3 className="temario-partial-title atlas-typo-section-title" style={styles.parcialTitle}>
+                          {label}
+                          {isParcialOff && (
+                            <span style={{ marginLeft: '8px', fontSize: '0.8rem', color: '#ef4444', fontWeight: 700 }}>
+                              · Desactivado temporalmente
+                            </span>
+                          )}
+                        </h3>
                       </div>
-                      <span style={styles.parcialCount}>{temasParcial.length} {temasParcial.length === 1 ? 'tema' : 'temas'}</span>
+                      <span style={styles.parcialCount}>{displayedTemas.length} {displayedTemas.length === 1 ? 'tema' : 'temas'}</span>
                     </div>
 
-                    {temasParcial.length > 0 ? (
+                    {isParcialOff && !isAdmin ? (
+                      <div style={{ padding: '36px 20px', textAlign: 'center', background: '#fff5f5', borderRadius: '16px', border: '1px solid #fecaca', margin: '14px 0' }}>
+                        <AlertTriangle size={36} color="#dc2626" style={{ margin: '0 auto 10px' }} />
+                        <h4 style={{ margin: '0 0 6px', color: '#991b1b', fontSize: '1.1rem', fontWeight: 700 }}>
+                          Parcial en mantenimiento
+                        </h4>
+                        <p style={{ margin: 0, color: '#7f1d1d', fontSize: '0.92rem' }}>
+                          El contenido de este parcial se encuentra temporalmente fuera de servicio por actualización.
+                        </p>
+                      </div>
+                    ) : displayedTemas.length > 0 ? (
                       <div className="temario-grid-public" style={styles.temasGrid}>
-                        {temasParcial.map((tema) => (
-                          <TemaCard
-                            key={tema.id}
-                            tema={tema}
-                            onClick={() => navigate(`/subtemas/${tema.id}`)}
-                          />
-                        ))}
+                        {displayedTemas.map((tema) => {
+                          const isOff = isTemaDisabled(tema.id, tema.parcial, maintenanceStatus?.disabledFeatures ?? []);
+                          return (
+                            <TemaCard
+                              key={tema.id}
+                              tema={tema}
+                              isDisabled={isOff}
+                              onClick={() => navigate(`/subtemas/${tema.id}`)}
+                            />
+                          );
+                        })}
                       </div>
                     ) : (
                       <div style={styles.emptyState}>
                         <span style={styles.emptyIcon}>📋</span>
-                        <p className="atlas-typo-body" style={styles.noTemasMessage}>Aun no hay temas asignados a este parcial.</p>
+                        <p className="atlas-typo-body" style={styles.noTemasMessage}>
+                          {isParcialOff ? 'No hay temas activos disponibles en este parcial.' : 'Aún no hay temas asignados a este parcial.'}
+                        </p>
                       </div>
                     )}
                   </div>

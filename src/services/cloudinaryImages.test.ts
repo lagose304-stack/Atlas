@@ -2,11 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { getCloudinaryImageUrl, getImageCandidateUrls } from './cloudinaryImages';
 
 describe('getCloudinaryImageUrl', () => {
-  it('devuelve directamente la URL de Cloudflare R2 con formato webp', () => {
+  it('devuelve la URL con sufijo _thumb.webp cuando el perfil es thumb o thumbSmall', () => {
     const source = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/epitelio/placa.webp';
     const result = getCloudinaryImageUrl(source, 'thumb');
 
-    expect(result).toBe(source);
+    expect(result).toBe('https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/epitelio/placa_thumb.webp');
+  });
+
+  it('devuelve la URL original completa para perfiles de alta resolución (view, zoom)', () => {
+    const source = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/epitelio/placa.webp';
+    const result = getCloudinaryImageUrl(source, 'view');
+
+    expect(result).toBe('https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/epitelio/placa.webp');
   });
 
   it('conserva URLs externas y valores vacíos', () => {
@@ -23,6 +30,14 @@ describe('getImageCandidateUrls', () => {
 
     expect(candidates.length).toBeGreaterThanOrEqual(2);
     expect(candidates[0]).toContain('.webp');
+    expect(candidates).toContain(source);
+  });
+
+  it('incluye fallback a la versión completa cuando se solicita miniatura', () => {
+    const source = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/epitelio/placa.webp';
+    const candidates = getImageCandidateUrls(source, 'thumb');
+
+    expect(candidates[0]).toContain('_thumb.webp');
     expect(candidates).toContain(source);
   });
 

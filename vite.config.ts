@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import sharp from 'sharp';
 import multer from 'multer';
 import {
   S3Client,
@@ -108,6 +109,26 @@ function r2DevServerPlugin(): Plugin {
                 ContentType: contentType,
                 CacheControl: 'public, max-age=31536000, immutable',
               }));
+
+              // Generar y subir miniatura optimizada _thumb.webp
+              try {
+                const thumbKey = uniqueKey.replace(/\.[^.]+$/, '') + '_thumb.webp';
+                const thumbBuffer = await sharp(req.file.buffer)
+                  .resize({ width: 480, withoutEnlargement: true })
+                  .webp({ quality: 78, effort: 4 })
+                  .toBuffer();
+
+                await r2Client.send(new PutObjectCommand({
+                  Bucket: r2BucketName,
+                  Key: thumbKey,
+                  Body: thumbBuffer,
+                  ContentType: 'image/webp',
+                  CacheControl: 'public, max-age=31536000, immutable',
+                }));
+                console.log(`[Vite Dev R2 Upload] Miniatura generada con éxito: ${thumbKey}`);
+              } catch (thumbErr: any) {
+                console.warn(`[Vite Dev R2 Upload] No se pudo generar la miniatura para ${uniqueKey}:`, thumbErr.message);
+              }
 
               const secureUrl = `${r2PublicDomain}/${uniqueKey}`;
               console.log(`[Vite Dev R2 Upload] Archivo subido con éxito: ${uniqueKey}`);

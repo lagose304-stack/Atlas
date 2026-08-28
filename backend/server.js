@@ -89,6 +89,8 @@ const authorizeEditor = async (req, res, next) => {
   return next();
 };
 
+const sharp = require('sharp');
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -109,7 +111,7 @@ const sanitizeFileName = (name) => {
     .replace(/_+/g, '_');
 };
 
-// 1. Ruta para SUBIR imagen a Cloudflare R2
+// 1. Ruta para SUBIR imagen a Cloudflare R2 con generación de miniatura _thumb.webp
 app.post('/api/images/upload', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: 'No se envió ningún archivo de imagen' });
@@ -128,6 +130,7 @@ app.post('/api/images/upload', upload.single('file'), async (req, res) => {
 
     const contentType = req.file.mimetype || 'image/webp';
 
+    // Subir imagen original principal
     await r2Client.send(new PutObjectCommand({
       Bucket: r2BucketName,
       Key: uniqueKey,
@@ -135,6 +138,26 @@ app.post('/api/images/upload', upload.single('file'), async (req, res) => {
       ContentType: contentType,
       CacheControl: 'public, max-age=31536000, immutable',
     }));
+
+    // Generar y subir miniatura optimizada _thumb.webp
+    try {
+      const thumbKey = uniqueKey.replace(/\.[^.]+$/, '') + '_thumb.webp';
+      const thumbBuffer = await sharp(req.file.buffer)
+        .resize({ width: 480, withoutEnlargement: true })
+        .webp({ quality: 78, effort: 4 })
+        .toBuffer();
+
+      await r2Client.send(new PutObjectCommand({
+        Bucket: r2BucketName,
+        Key: thumbKey,
+        Body: thumbBuffer,
+        ContentType: 'image/webp',
+        CacheControl: 'public, max-age=31536000, immutable',
+      }));
+      console.log(`[R2 Upload] Miniatura generada con éxito: ${thumbKey}`);
+    } catch (thumbErr) {
+      console.warn(`[R2 Upload] No se pudo generar la miniatura para ${uniqueKey}:`, thumbErr.message);
+    }
 
     const secureUrl = `${r2PublicDomain}/${uniqueKey}`;
 
@@ -152,7 +175,7 @@ app.post('/api/images/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// 2. Ruta para ELIMINAR imagen de R2
+// 2. Ruta para ELIMINAR imagen de R2 (incluyendo su miniatura si existe)
 const handleDeleteImage = async (req, res) => {
   const rawKey = req.query.publicId || req.path.replace(/^\/api\/images\/?/, '') || '';
   const key = decodeURIComponent(rawKey).replace(/^\/+/, '');
@@ -170,6 +193,17 @@ const handleDeleteImage = async (req, res) => {
         Key: key,
       }));
       console.log(`[R2 Delete] Objeto eliminado de R2: ${key}`);
+
+      // Eliminar también la miniatura asociada
+      const thumbKey = key.replace(/\.[^.]+$/, '') + '_thumb.webp';
+      try {
+        await r2Client.send(new DeleteObjectCommand({
+          Bucket: r2BucketName,
+          Key: thumbKey,
+        }));
+        console.log(`[R2 Delete] Miniatura eliminada de R2: ${thumbKey}`);
+      } catch (_) {}
+
       return res.status(200).json({ message: 'Operación de eliminación procesada con éxito.' });
     } catch (r2Error) {
       console.warn(`[R2 Delete Warning] No se pudo borrar en R2 (${key}):`, r2Error.message);
@@ -183,7 +217,7 @@ const handleDeleteImage = async (req, res) => {
 app.delete('/api/images-delete', authorizeEditor, handleDeleteImage);
 app.delete(/^\/api\/images\/(.+)$/, authorizeEditor, handleDeleteImage);
 
-// 3. Ruta para MOVER/RENOMBRAR imagen en R2
+// 3. Ruta para MOVER/RENOMBRAR imagen en R2 (y su miniatura)
 const handleMoveImage = async (req, res) => {
   const { from_public_id, to_public_id } = req.body;
   if (!from_public_id || !to_public_id) {
@@ -236,6 +270,23 @@ const handleMoveImage = async (req, res) => {
         Key: matchedSourceKey,
       }));
     }
+
+    // Copiar y mover también la miniatura asociada si existe
+    const fromThumb = matchedSourceKey.replace(/\.[^.]+$/, '') + '_thumb.webp';
+    const toThumb = cleanTo.replace(/\.[^.]+$/, '') + '_thumb.webp';
+    try {
+      await r2Client.send(new CopyObjectCommand({
+        Bucket: r2BucketName,
+        CopySource: `${r2BucketName}/${fromThumb}`,
+        Key: toThumb,
+      }));
+      if (fromThumb !== toThumb) {
+        await r2Client.send(new DeleteObjectCommand({
+          Bucket: r2BucketName,
+          Key: fromThumb,
+        }));
+      }
+    } catch (_) {}
 
     const secureUrl = `${r2PublicDomain}/${cleanTo}`;
     res.status(200).json({ secure_url: secureUrl, public_id: cleanTo });
