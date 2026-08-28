@@ -9,9 +9,42 @@ export interface MarkerLocation {
   startX?: number | null;
   startY?: number | null;
   regionPoints?: number[] | null;
+  regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
 }
+
+const getPolygonPathD = (
+  outerPoints: number[],
+  holes: number[][] | null | undefined,
+  width: number,
+  height: number
+): string => {
+  if (outerPoints.length < 6) return '';
+  let d = '';
+
+  for (let i = 0; i < outerPoints.length; i += 2) {
+    const x = outerPoints[i] * width;
+    const y = outerPoints[i + 1] * height;
+    d += (i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
+  }
+  d += ' Z';
+
+  if (holes && holes.length > 0) {
+    for (const hole of holes) {
+      if (hole.length >= 6) {
+        for (let i = 0; i < hole.length; i += 2) {
+          const x = hole[i] * width;
+          const y = hole[i + 1] * height;
+          d += (i === 0 ? ` M ${x} ${y}` : ` L ${x} ${y}`);
+        }
+        d += ' Z';
+      }
+    }
+  }
+
+  return d;
+};
 
 interface AllSenaladosMoverModalProps {
   isOpen: boolean;
@@ -152,7 +185,11 @@ export const AllSenaladosMoverModal: React.FC<AllSenaladosMoverModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setCurrentPositions(
-        senaladosPos.map(pos => (pos ? { ...pos, regionPoints: pos.regionPoints ? [...pos.regionPoints] : null } : null))
+        senaladosPos.map(pos => (pos ? {
+          ...pos,
+          regionPoints: pos.regionPoints ? [...pos.regionPoints] : null,
+          regionHoles: pos.regionHoles ? pos.regionHoles.map(h => [...h]) : null,
+        } : null))
       );
       acquireAtlasScrollLock();
     }
@@ -206,6 +243,13 @@ export const AllSenaladosMoverModal: React.FC<AllSenaladosMoverModalProps> = ({
               idx % 2 === 0 ? clamp(val + deltaNormalizedX, 0, 1) : clamp(val + deltaNormalizedY, 0, 1)
             )
           : null;
+        const nextRegionHoles = pos.regionHoles
+          ? pos.regionHoles.map(hole =>
+              hole.map((val, idx) =>
+                idx % 2 === 0 ? clamp(val + deltaNormalizedX, 0, 1) : clamp(val + deltaNormalizedY, 0, 1)
+              )
+            )
+          : null;
 
         return {
           ...pos,
@@ -214,6 +258,7 @@ export const AllSenaladosMoverModal: React.FC<AllSenaladosMoverModalProps> = ({
           startX: nextStartX,
           startY: nextStartY,
           regionPoints: nextRegionPoints,
+          regionHoles: nextRegionHoles,
         };
       })
     );
@@ -272,6 +317,15 @@ export const AllSenaladosMoverModal: React.FC<AllSenaladosMoverModalProps> = ({
                 : clamp(centerY + (val - centerY) * factor, 0, 1)
             )
           : null;
+        const nextRegionHoles = pos.regionHoles
+          ? pos.regionHoles.map(hole =>
+              hole.map((val, idx) =>
+                idx % 2 === 0
+                  ? clamp(centerX + (val - centerX) * factor, 0, 1)
+                  : clamp(centerY + (val - centerY) * factor, 0, 1)
+              )
+            )
+          : null;
 
         return {
           ...pos,
@@ -280,6 +334,7 @@ export const AllSenaladosMoverModal: React.FC<AllSenaladosMoverModalProps> = ({
           startX: nextStartX,
           startY: nextStartY,
           regionPoints: nextRegionPoints,
+          regionHoles: nextRegionHoles,
         };
       })
     );
@@ -287,7 +342,11 @@ export const AllSenaladosMoverModal: React.FC<AllSenaladosMoverModalProps> = ({
 
   const resetToInitial = () => {
     setCurrentPositions(
-      senaladosPos.map(pos => (pos ? { ...pos, regionPoints: pos.regionPoints ? [...pos.regionPoints] : null } : null))
+      senaladosPos.map(pos => (pos ? {
+        ...pos,
+        regionPoints: pos.regionPoints ? [...pos.regionPoints] : null,
+        regionHoles: pos.regionHoles ? pos.regionHoles.map(h => [...h]) : null,
+      } : null))
     );
   };
 
@@ -296,7 +355,11 @@ export const AllSenaladosMoverModal: React.FC<AllSenaladosMoverModalProps> = ({
     e.preventDefault();
     dragStartRef.current = { clientX: e.clientX, clientY: e.clientY };
     dragSnapshotRef.current = currentPositions.map(pos =>
-      pos ? { ...pos, regionPoints: pos.regionPoints ? [...pos.regionPoints] : null } : null
+      pos ? {
+        ...pos,
+        regionPoints: pos.regionPoints ? [...pos.regionPoints] : null,
+        regionHoles: pos.regionHoles ? pos.regionHoles.map(h => [...h]) : null,
+      } : null
     );
     setIsDragging(true);
   };
@@ -322,6 +385,13 @@ export const AllSenaladosMoverModal: React.FC<AllSenaladosMoverModalProps> = ({
               idx % 2 === 0 ? clamp(val + deltaX, 0, 1) : clamp(val + deltaY, 0, 1)
             )
           : null;
+        const nextRegionHoles = pos.regionHoles
+          ? pos.regionHoles.map(hole =>
+              hole.map((val, idx) =>
+                idx % 2 === 0 ? clamp(val + deltaX, 0, 1) : clamp(val + deltaY, 0, 1)
+              )
+            )
+          : null;
 
         return {
           ...pos,
@@ -330,6 +400,7 @@ export const AllSenaladosMoverModal: React.FC<AllSenaladosMoverModalProps> = ({
           startX: nextStartX,
           startY: nextStartY,
           regionPoints: nextRegionPoints,
+          regionHoles: nextRegionHoles,
         };
       })
     );
@@ -538,17 +609,15 @@ export const AllSenaladosMoverModal: React.FC<AllSenaladosMoverModalProps> = ({
               <g clipPath={`url(#${pointerClipId})`}>
                 {currentPositions.map((pos, index) => {
                   if (!pos || !pos.regionPoints || pos.regionPoints.length < 4) return null;
-                  const pts = pos.regionPoints;
-                  const pointsStr = Array.from({ length: pts.length / 2 }, (_, i) =>
-                    `${pts[i * 2] * imageSize.width},${pts[i * 2 + 1] * imageSize.height}`
-                  ).join(' ');
+                  const pathD = getPolygonPathD(pos.regionPoints, pos.regionHoles, imageSize.width, imageSize.height);
 
                   return (
-                    <polygon
+                    <path
                       key={`region-${index}`}
-                      points={pointsStr}
+                      d={pathD}
                       fill={pos.regionColor || '#22c55e'}
                       fillOpacity={pos.regionOpacity || 0.28}
+                      fillRule="evenodd"
                       stroke={pos.regionColor || '#22c55e'}
                       strokeWidth={2.5}
                       strokeDasharray="8 6"

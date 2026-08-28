@@ -16,6 +16,7 @@ interface SenaladoMetaItem {
   startX?: number | null;
   startY?: number | null;
   regionPoints?: number[] | null;
+  regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
 }
@@ -221,6 +222,77 @@ const polygonPoints = (points: ReadonlyArray<{ x: number; y: number }>) => (
   points.map(point => `${point.x},${point.y}`).join(' ')
 );
 
+const getPolygonPathD = (
+  outerPoints: number[],
+  holes: number[][] | null | undefined,
+  width: number,
+  height: number
+): string => {
+  if (outerPoints.length < 6) return '';
+  let d = '';
+
+  // Anillo exterior
+  for (let i = 0; i < outerPoints.length; i += 2) {
+    const x = outerPoints[i] * width;
+    const y = outerPoints[i + 1] * height;
+    d += (i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
+  }
+  d += ' Z';
+
+  // Anillos interiores (zonas de exclusión / huecos)
+  if (holes && holes.length > 0) {
+    for (const hole of holes) {
+      if (hole.length >= 6) {
+        for (let i = 0; i < hole.length; i += 2) {
+          const x = hole[i] * width;
+          const y = hole[i + 1] * height;
+          d += (i === 0 ? ` M ${x} ${y}` : ` L ${x} ${y}`);
+        }
+        d += ' Z';
+      }
+    }
+  }
+
+  return d;
+};
+
+const getMarkerArea = (marker: { regionPoints?: number[] | null; regionHoles?: number[][] | null }): number => {
+  if (marker.regionPoints && marker.regionPoints.length >= 6) {
+    let area = 0;
+    const pts = marker.regionPoints;
+    const n = pts.length / 2;
+    for (let i = 0; i < n; i++) {
+      const x1 = pts[i * 2];
+      const y1 = pts[i * 2 + 1];
+      const nextIdx = (i + 1) % n;
+      const x2 = pts[nextIdx * 2];
+      const y2 = pts[nextIdx * 2 + 1];
+      area += x1 * y2 - x2 * y1;
+    }
+    let totalArea = Math.abs(area) / 2;
+
+    if (marker.regionHoles && marker.regionHoles.length > 0) {
+      for (const hole of marker.regionHoles) {
+        if (hole.length >= 6) {
+          let holeArea = 0;
+          const hn = hole.length / 2;
+          for (let i = 0; i < hn; i++) {
+            const x1 = hole[i * 2];
+            const y1 = hole[i * 2 + 1];
+            const nextIdx = (i + 1) % hn;
+            const x2 = hole[nextIdx * 2];
+            const y2 = hole[nextIdx * 2 + 1];
+            holeArea += x1 * y2 - x2 * y1;
+          }
+          totalArea = Math.max(0, totalArea - Math.abs(holeArea) / 2);
+        }
+      }
+    }
+    return totalArea;
+  }
+  return 0;
+};
+
 interface RegionCalloutLayout {
   boxX: number;
   boxY: number;
@@ -357,7 +429,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const sharpenFilterId = useId();
   const resolvedInitialMarkerVisualMode: MarkerVisualMode = hideSidebar ? 'pointer' : initialMarkerVisualMode;
   const resolvedInitialMarkerIndex = hideSidebar && ((senaladosMeta?.length ?? senalados?.length ?? 0) > 0) ? 0 : null;
-
   const senaladosItems = useMemo<SenaladoMetaItem[]>(() => {
     if (senaladosMeta && senaladosMeta.length > 0) {
       return senaladosMeta.map(item => ({
@@ -367,6 +438,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         startX: item.startX ?? null,
         startY: item.startY ?? null,
         regionPoints: Array.isArray(item.regionPoints) ? item.regionPoints : null,
+        regionHoles: Array.isArray(item.regionHoles) ? item.regionHoles : null,
         regionColor: item.regionColor ?? null,
         regionOpacity: item.regionOpacity ?? null,
       }));
@@ -380,7 +452,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       startY: null,
     }));
   }, [senalados, senaladosMeta]);
-
   const groupedSenaladosItems = useMemo(() => {
     const groups = new Map<string, { label: string; count: number; firstIndex: number; representativeIndex: number; representative: SenaladoMetaItem }>();
 
@@ -408,7 +479,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     });
 
     return Array.from(groups.values()).sort((a, b) => a.firstIndex - b.firstIndex);
-  }, [senaladosItems]);
+  }, [senaladosItems]);;
 
   const hasPlateDetails = !!(
     senaladosItems.length > 0 ||
@@ -2856,9 +2927,28 @@ const panBy = (dx: number, dy: number) => {
                         </text>
                       </g>
                     )}
-                    {activeMarkerIndices.map((markerIndex) => {
-                      const marker = senaladosItems[markerIndex];
-                      if (!marker || marker.x == null || marker.y == null) return null;
+                    {/* Markers ordenados por Z-Index (regiones grandes al fondo, regiones pequeñas/contenidas y punteros encima) */}
+                    {(() => {
+                      const sortedMarkerIndices = [...activeMarkerIndices].sort((idxA, idxB) => {
+                        const a = senaladosItems[idxA];
+                        const b = senaladosItems[idxB];
+                        if (!a || !b) return 0;
+                        const aSelected = activeMarkerIndex === idxA;
+                        const bSelected = activeMarkerIndex === idxB;
+                        if (aSelected && !bSelected) return 1;
+                        if (!aSelected && bSelected) return -1;
+
+                        const areaA = getMarkerArea(a);
+                        const areaB = getMarkerArea(b);
+                        if (areaA !== areaB) {
+                          return areaB - areaA;
+                        }
+                        return 0;
+                      });
+
+                      return sortedMarkerIndices.map((markerIndex) => {
+                        const marker = senaladosItems[markerIndex];
+                        if (!marker || marker.x == null || marker.y == null) return null;
                       const endPx = {
                         x: marker.x * imageSize.width,
                         y: marker.y * imageSize.height,
@@ -2970,10 +3060,11 @@ const panBy = (dx: number, dy: number) => {
                       return (
                         <g key={markerIndex}>
                           {marker.regionPoints && marker.regionPoints.length >= 6 && (
-                            <polygon
-                              points={Array.from({ length: marker.regionPoints.length / 2 }, (_, index) => `${marker.regionPoints![index * 2] * imageSize.width},${marker.regionPoints![index * 2 + 1] * imageSize.height}`).join(' ')}
+                            <path
+                              d={getPolygonPathD(marker.regionPoints, marker.regionHoles, imageSize.width, imageSize.height)}
                               fill={marker.regionColor ?? '#22c55e'}
                               fillOpacity={marker.regionOpacity ?? 0.28}
+                              fillRule="evenodd"
                               stroke={marker.regionColor ?? '#22c55e'}
                               strokeWidth={2.5}
                               strokeDasharray="10 7"
@@ -3063,7 +3154,8 @@ const panBy = (dx: number, dy: number) => {
                           )}
                         </g>
                       );
-                    })}
+                    });
+                  })()}
                     {activeMarkerIndices.map(markerIndex => {
                       const marker = senaladosItems[markerIndex];
                       const layout = regionCalloutLayouts.get(markerIndex);
