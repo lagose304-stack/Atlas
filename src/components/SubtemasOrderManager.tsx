@@ -4,6 +4,7 @@ import { useDraggableList } from '../hooks/useDraggableList';
 import LoadingToast from './LoadingToast';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import EditorParcialAccordionPicker from './editor/EditorParcialAccordionPicker';
+import { invalidateCatalogCache } from '../services/catalogService';
 
 interface Tema {
   id: number;
@@ -122,6 +123,7 @@ const SubtemasOrderManager: React.FC<SubtemasOrderManagerProps> = ({ title, subt
           supabase.from('subtemas').update({ sort_order: index }).eq('id', subtema.id)
         )
       );
+      invalidateCatalogCache();
       setHasChanges(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);

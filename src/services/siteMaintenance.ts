@@ -18,30 +18,64 @@ const DEFAULT_STATUS: SiteMaintenanceStatus = {
   disabledFeatures: [],
 };
 
-export const fetchSiteMaintenanceStatus = async (): Promise<SiteMaintenanceStatus> => {
-  const { data, error } = await supabase
-    .from('site_runtime_settings')
-    .select('maintenance_enabled, maintenance_message, updated_at, banner_enabled, banner_message, disabled_features, maintenance_starts_at, maintenance_ends_at')
-    .eq('id', 1)
-    .maybeSingle();
+let cachedMaintenanceStatus: SiteMaintenanceStatus | null = null;
+let lastMaintenanceFetchTime = 0;
+let maintenanceInFlightPromise: Promise<SiteMaintenanceStatus> | null = null;
+const MAINTENANCE_CACHE_TTL_MS = 15_000;
 
-  if (error || !data) {
-    if (error) console.error('No fue posible consultar el estado del sitio:', error);
-    return DEFAULT_STATUS;
+export const invalidateMaintenanceCache = (): void => {
+  cachedMaintenanceStatus = null;
+  lastMaintenanceFetchTime = 0;
+};
+
+export const fetchSiteMaintenanceStatus = async (options?: { forceRefresh?: boolean }): Promise<SiteMaintenanceStatus> => {
+  const force = options?.forceRefresh === true;
+  const isFresh = !force && cachedMaintenanceStatus !== null && Date.now() - lastMaintenanceFetchTime < MAINTENANCE_CACHE_TTL_MS;
+
+  if (isFresh && cachedMaintenanceStatus) {
+    return cachedMaintenanceStatus;
   }
 
-  const now = Date.now();
-  const scheduled = Boolean(data.maintenance_starts_at)
-    && new Date(data.maintenance_starts_at).getTime() <= now
-    && (!data.maintenance_ends_at || new Date(data.maintenance_ends_at).getTime() > now);
-  return {
-    enabled: data.maintenance_enabled === true || scheduled,
-    message: data.maintenance_message?.trim() || DEFAULT_STATUS.message,
-    updatedAt: data.updated_at ?? null,
-    bannerEnabled: data.banner_enabled === true,
-    bannerMessage: data.banner_message ?? '',
-    disabledFeatures: Array.isArray(data.disabled_features) ? data.disabled_features : [],
-  };
+  if (maintenanceInFlightPromise) {
+    return maintenanceInFlightPromise;
+  }
+
+  maintenanceInFlightPromise = (async () => {
+    try {
+      const { data, error } = await supabase
+        .from('site_runtime_settings')
+        .select('maintenance_enabled, maintenance_message, updated_at, banner_enabled, banner_message, disabled_features, maintenance_starts_at, maintenance_ends_at')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (error || !data) {
+        if (error) console.error('No fue posible consultar el estado del sitio:', error);
+        return cachedMaintenanceStatus || DEFAULT_STATUS;
+      }
+
+      const now = Date.now();
+      const scheduled = Boolean(data.maintenance_starts_at)
+        && new Date(data.maintenance_starts_at).getTime() <= now
+        && (!data.maintenance_ends_at || new Date(data.maintenance_ends_at).getTime() > now);
+
+      const status: SiteMaintenanceStatus = {
+        enabled: data.maintenance_enabled === true || scheduled,
+        message: data.maintenance_message?.trim() || DEFAULT_STATUS.message,
+        updatedAt: data.updated_at ?? null,
+        bannerEnabled: data.banner_enabled === true,
+        bannerMessage: data.banner_message ?? '',
+        disabledFeatures: Array.isArray(data.disabled_features) ? data.disabled_features : [],
+      };
+
+      cachedMaintenanceStatus = status;
+      lastMaintenanceFetchTime = Date.now();
+      return status;
+    } finally {
+      maintenanceInFlightPromise = null;
+    }
+  })();
+
+  return maintenanceInFlightPromise;
 };
 
 export const setSiteMaintenanceMode = async (
@@ -58,6 +92,7 @@ export const setSiteMaintenanceMode = async (
     return { ok: false, error: error.message || 'Error desconocido.' };
   }
 
+  invalidateMaintenanceCache();
   return { ok: true };
 };
 
@@ -122,6 +157,7 @@ export const subscribeSiteMaintenanceStatus = (
       'postgres_changes',
       { event: '*', schema: 'public', table: 'site_runtime_settings', filter: 'id=eq.1' },
       () => {
+        invalidateMaintenanceCache();
         triggerUpdate();
       },
     )

@@ -36,6 +36,7 @@ import {
   ensurePageHasInitialVersion,
   type PageVersionRow,
 } from '../services/pageVersionsService';
+import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
 
 type WorkspaceMode = 'edit' | 'preview';
 type ViewMode = 'versions_hub' | 'editor';
@@ -81,10 +82,11 @@ const EditorPaginas: React.FC = () => {
       ? { kind: 'credits', label: 'Créditos' }
       : null
   ));
-  
-  const [temas, setTemas] = useState<EditorTemaItem[]>([]);
-  const [subtemas, setSubtemas] = useState<EditorSubtemaItem[]>([]);
-  const [loadingPages, setLoadingPages] = useState(true);
+  const quickTemas = (getQuickTemas() ?? []) as EditorTemaItem[];
+  const quickSubtemas = (getQuickSubtemas() ?? []) as EditorSubtemaItem[];
+  const [temas, setTemas] = useState<EditorTemaItem[]>(quickTemas);
+  const [subtemas, setSubtemas] = useState<EditorSubtemaItem[]>(quickSubtemas);
+  const [loadingPages, setLoadingPages] = useState(quickTemas.length === 0);
   const [loadError, setLoadError] = useState('');
   
   // Estado de vista: Hub de Versiones vs Editor de Bloques
@@ -111,18 +113,25 @@ const EditorPaginas: React.FC = () => {
   // Carga de catálogo de temas y subtemas
   useEffect(() => {
     const loadPages = async () => {
-      setLoadingPages(true);
-      setLoadError('');
-      const [temasResult, subtemasResult] = await Promise.all([
-        supabase.from('temas').select('id, nombre, parcial, sort_order').order('parcial').order('sort_order'),
-        supabase.from('subtemas').select('id, nombre, tema_id, sort_order').order('sort_order'),
-      ]);
-      if (temasResult.error || subtemasResult.error) {
-        setLoadError('No se pudo cargar el listado de páginas.');
+      if (temas.length === 0) {
+        setLoadingPages(true);
       }
-      setTemas((temasResult.data ?? []) as EditorTemaItem[]);
-      setSubtemas((subtemasResult.data ?? []) as EditorSubtemaItem[]);
-      setLoadingPages(false);
+      setLoadError('');
+      try {
+        const [temasData, subtemasData] = await Promise.all([
+          getCachedTemas(),
+          getCachedSubtemas(),
+        ]);
+        setTemas(temasData as EditorTemaItem[]);
+        setSubtemas(subtemasData as EditorSubtemaItem[]);
+      } catch (err) {
+        console.error('Error al cargar páginas:', err);
+        if (temas.length === 0) {
+          setLoadError('No se pudo cargar el listado de páginas.');
+        }
+      } finally {
+        setLoadingPages(false);
+      }
     };
     void loadPages();
   }, []);

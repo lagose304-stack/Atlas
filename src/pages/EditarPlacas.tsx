@@ -9,6 +9,7 @@ import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import LoadingToast from '../components/LoadingToast';
 import EditorParcialAccordionPicker from '../components/editor/EditorParcialAccordionPicker';
 import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
+import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
 
 interface Tema {
   id: number;
@@ -60,7 +61,8 @@ const EditarPlacas: React.FC = () => {
   const handleGoBack = useSmartBackNavigation('/edicion');
   const drag = useDraggableList();
 
-  const [temas, setTemas] = useState<Tema[]>([]);
+  const initialTemas = getQuickTemas() ?? [];
+  const [temas, setTemas] = useState<Tema[]>(initialTemas);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [placas, setPlacas] = useState<Placa[]>([]);
   const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
@@ -68,7 +70,7 @@ const EditarPlacas: React.FC = () => {
   const [selectedTemaId, setSelectedTemaId] = useState<number | null>(null);
   const [selectedSubtemaId, setSelectedSubtemaId] = useState<number | null>(null);
 
-  const [loadingTemas, setLoadingTemas] = useState(true);
+  const [loadingTemas, setLoadingTemas] = useState(initialTemas.length === 0);
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
   const [loadingPlacas, setLoadingPlacas] = useState(false);
   const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
@@ -84,46 +86,38 @@ const EditarPlacas: React.FC = () => {
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
 
   const fetchTemas = useCallback(async (): Promise<boolean> => {
-    setLoadingTemas(true);
+    if (temas.length === 0) {
+      setLoadingTemas(true);
+    }
     setTemasLoadError(null);
     try {
-      const { data, error } = await supabase
-        .from('temas')
-        .select('id, nombre, parcial, sort_order')
-        .order('parcial')
-        .order('sort_order', { ascending: true });
-
-      if (error) {
-        throw error;
-      }
-
-      setTemas(data ?? []);
+      const data = await getCachedTemas({ forceRefresh: temasReloadTick > 0 });
+      setTemas(data);
       return true;
     } catch (err) {
       console.error('Error al cargar temas en edición de placas:', err);
-      setTemas([]);
-      setTemasLoadError('No se pudieron cargar los temas. Revisa tu conexión e inténtalo de nuevo.');
+      if (temas.length === 0) {
+        setTemas([]);
+        setTemasLoadError('No se pudieron cargar los temas. Revisa tu conexión e inténtalo de nuevo.');
+      }
       return false;
     } finally {
       setLoadingTemas(false);
     }
-  }, []);
+  }, [temas.length, temasReloadTick]);
 
   const fetchSubtemas = useCallback(async (temaId: number): Promise<boolean> => {
-    setLoadingSubtemas(true);
+    const quick = getQuickSubtemas(temaId);
+    if (quick && quick.length > 0) {
+      setSubtemas(quick);
+      setLoadingSubtemas(false);
+    } else {
+      setLoadingSubtemas(true);
+    }
     setSubtemasLoadError(null);
     try {
-      const { data, error } = await supabase
-        .from('subtemas')
-        .select('id, nombre, tema_id, logo_url')
-        .eq('tema_id', temaId)
-        .order('sort_order', { ascending: true });
-
-      if (error) {
-        throw error;
-      }
-
-      setSubtemas(data ?? []);
+      const data = await getCachedSubtemas(temaId, { forceRefresh: subtemasReloadTick > 0 });
+      setSubtemas(data);
       return true;
     } catch (err) {
       console.error('Error al cargar subtemas en edición de placas:', err);
@@ -133,7 +127,7 @@ const EditarPlacas: React.FC = () => {
     } finally {
       setLoadingSubtemas(false);
     }
-  }, []);
+  }, [subtemasReloadTick]);
 
   const fetchPlacas = useCallback(async (subtemaId: number): Promise<boolean> => {
     setLoadingPlacas(true);

@@ -16,6 +16,7 @@ import { uploadToCloudinary, deleteFromCloudinary, getCloudinaryPublicId } from 
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { useAuth } from '../contexts/AuthContext';
 import { logAuditEvent } from '../services/unifiedAuditService';
+import { invalidateCatalogCache } from '../services/catalogService';
 
 // --- Interfaces ---
 interface Tema {
@@ -181,6 +182,7 @@ const Temario: React.FC = () => {
     }
 
     setTemas(data ?? []);
+    invalidateCatalogCache();
     return true;
   }, []);
 

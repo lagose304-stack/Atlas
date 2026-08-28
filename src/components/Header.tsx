@@ -10,6 +10,7 @@ import {
   isFeatureDisabled,
   isTemaDisabled,
 } from '../services/siteMaintenance';
+import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
 
 import logoFacultad from '../assets/logos/facultad.png';
 import microscopioHeader from '../assets/logos/laboratorio.png';
@@ -407,9 +408,9 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
     const loadSearchIndex = async () => {
       setSearchIndexLoading(true);
 
-      const [temasResult, subtemasResult, maintenanceStatus] = await Promise.all([
-        supabase.from('temas').select('id, nombre, parcial').order('sort_order', { ascending: true }),
-        supabase.from('subtemas').select('id, nombre, tema_id, temas(nombre)').order('sort_order', { ascending: true }),
+      const [temasData, subtemasData, maintenanceStatus] = await Promise.all([
+        getCachedTemas(),
+        getCachedSubtemas(),
         fetchSiteMaintenanceStatus(),
       ]);
 
@@ -424,24 +425,22 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
         setSearchTemas([]);
         setSearchSubtemas([]);
       } else {
-        let validTemas = (temasResult.data ?? []) as Array<SearchTemaRecord & { parcial?: string }>;
+        let validTemas = (temasData ?? []) as Array<SearchTemaRecord & { parcial?: string }>;
         if (!canBypass) {
           validTemas = validTemas.filter((t) => !isTemaDisabled(t.id, t.parcial, maintenanceStatus.disabledFeatures));
         }
         setSearchTemas(validTemas);
 
-        if (!subtemasResult.error) {
-          const validTemaIdSet = new Set(validTemas.map((t) => t.id));
-          const nextSubtemas = (subtemasResult.data ?? [])
-            .filter((row) => canBypass || validTemaIdSet.has(row.tema_id))
-            .map((row) => ({
-              id: row.id,
-              nombre: row.nombre,
-              tema_id: row.tema_id,
-              tema_nombre: getThemeNameFromRelation((row as { temas?: unknown }).temas),
-            }));
-          setSearchSubtemas(nextSubtemas);
-        }
+        const validTemaMap = new Map(validTemas.map((t) => [t.id, t.nombre]));
+        const nextSubtemas = (subtemasData ?? [])
+          .filter((row) => canBypass || validTemaMap.has(row.tema_id))
+          .map((row) => ({
+            id: row.id,
+            nombre: row.nombre,
+            tema_id: row.tema_id,
+            tema_nombre: validTemaMap.get(row.tema_id) || '',
+          }));
+        setSearchSubtemas(nextSubtemas);
       }
 
       setSearchIndexLoaded(true);

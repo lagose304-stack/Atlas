@@ -10,6 +10,7 @@ import { getImageCandidateUrls } from '../services/cloudinaryImages';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import EditorParcialAccordionPicker from '../components/editor/EditorParcialAccordionPicker';
 import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
+import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
 
 interface Tema {
   id: number;
@@ -617,7 +618,8 @@ const MapasInteractivos: React.FC = () => {
   const [searchParams] = useSearchParams();
   const isManageMode = searchParams.get('modo') === 'editar';
 
-  const [temas, setTemas] = useState<Tema[]>([]);
+  const initialTemas = (getQuickTemas() ?? []) as Tema[];
+  const [temas, setTemas] = useState<Tema[]>(initialTemas);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [placas, setPlacas] = useState<Placa[]>([]);
   const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
@@ -640,7 +642,7 @@ const MapasInteractivos: React.FC = () => {
   const [isZoomDragging, setIsZoomDragging] = useState(false);
   const [panOffset, setPanOffset] = useState<Point2D>({ x: 0, y: 0 });
 
-  const [loadingTemas, setLoadingTemas] = useState(true);
+  const [loadingTemas, setLoadingTemas] = useState(initialTemas.length === 0);
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
   const [loadingPlacas, setLoadingPlacas] = useState(false);
 
@@ -718,16 +720,17 @@ const MapasInteractivos: React.FC = () => {
 
   useEffect(() => {
     const fetchTemas = async () => {
-      const { data } = await supabase
-        .from('temas')
-        .select('id, nombre, parcial, sort_order')
-        .order('parcial')
-        .order('sort_order', { ascending: true });
-      if (data) setTemas(data);
-      setLoadingTemas(false);
+      try {
+        const data = await getCachedTemas();
+        if (data) setTemas(data as Tema[]);
+      } catch (err) {
+        console.error('Error al consultar temas:', err);
+      } finally {
+        setLoadingTemas(false);
+      }
     };
 
-    fetchTemas();
+    void fetchTemas();
   }, []);
 
   useEffect(() => {
@@ -737,18 +740,26 @@ const MapasInteractivos: React.FC = () => {
     setSelectedPlaca(null);
     if (!selectedTemaId) return;
 
-    const fetchSubtemas = async () => {
-      setLoadingSubtemas(true);
-      const { data } = await supabase
-        .from('subtemas')
-        .select('id, nombre, tema_id')
-        .eq('tema_id', selectedTemaId)
-        .order('sort_order', { ascending: true });
-      if (data) setSubtemas(data);
+    const quick = getQuickSubtemas(selectedTemaId);
+    if (quick && quick.length > 0) {
+      setSubtemas(quick as Subtema[]);
       setLoadingSubtemas(false);
+    } else {
+      setLoadingSubtemas(true);
+    }
+
+    const fetchSubtemas = async () => {
+      try {
+        const data = await getCachedSubtemas(selectedTemaId);
+        if (data) setSubtemas(data as Subtema[]);
+      } catch (err) {
+        console.error('Error al consultar subtemas:', err);
+      } finally {
+        setLoadingSubtemas(false);
+      }
     };
 
-    fetchSubtemas();
+    void fetchSubtemas();
   }, [selectedTemaId]);
 
   useEffect(() => {

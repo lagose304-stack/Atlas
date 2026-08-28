@@ -3,6 +3,7 @@ import { supabase } from '../services/supabase';
 import { useDraggableList } from '../hooks/useDraggableList';
 import LoadingToast from './LoadingToast';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { invalidateCatalogCache } from '../services/catalogService';
 
 interface Tema {
   id: number;
@@ -80,6 +81,7 @@ const TemasOrderManager: React.FC<TemasOrderManagerProps> = ({ title, subtitle }
       }
 
       await Promise.all(promises);
+      invalidateCatalogCache();
       setHasChanges(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
@@ -138,7 +140,7 @@ const TemasOrderManager: React.FC<TemasOrderManagerProps> = ({ title, subtitle }
                     if (item.type === 'placeholder') {
                       return (
                         <div key={item.key} style={s.placeholder}>
-                          <span style={s.placeholderIcon}>+</span>
+                          <span style={s.placeholderIcon}>⬇</span>
                         </div>
                       );
                     }
@@ -185,7 +187,7 @@ const TemasOrderManager: React.FC<TemasOrderManagerProps> = ({ title, subtitle }
                               decoding="async"
                             />
                           ) : (
-                            <span style={s.imgFallback}>+</span>
+                            <span style={s.imgFallback}>🖼️</span>
                           )}
                         </div>
                         <h4 className="tema-card-label" style={s.cardName}>
@@ -198,7 +200,7 @@ const TemasOrderManager: React.FC<TemasOrderManagerProps> = ({ title, subtitle }
                             borderColor: isHovered ? '#7dd3fc' : '#e2e8f0',
                           }}
                         >
-                          <span style={s.dragHandleDots}>+</span>
+                          <span style={s.dragHandleDots}>⠿</span>
                           <span style={s.dragHandleText}>Arrastra</span>
                         </div>
                       </div>
@@ -213,14 +215,14 @@ const TemasOrderManager: React.FC<TemasOrderManagerProps> = ({ title, subtitle }
 
       {!loading && (
         <div style={s.fab}>
-          {saveSuccess && <div style={s.fabToast}>Guardado correctamente</div>}
+          {saveSuccess && <div style={s.fabToast}>✅ Guardado correctamente</div>}
           <button
             style={hasChanges && !isSaving ? s.fabBtn : s.fabBtnDisabled}
             onClick={handleSave}
             disabled={!hasChanges || isSaving}
             title="Guardar orden"
           >
-            {isSaving ? 'Guardando...' : hasChanges ? 'Guardar orden' : 'Sin cambios'}
+            {isSaving ? '⏳ Guardando...' : hasChanges ? '💾 Guardar orden' : '✓ Sin cambios'}
           </button>
         </div>
       )}
@@ -280,6 +282,16 @@ const s: { [key: string]: React.CSSProperties } = {
     textAlign: 'center' as const,
     background: '#fff',
   },
+  placeholder: {
+    borderRadius: '18px',
+    border: '2px dashed #38bdf8',
+    background: 'rgba(56,189,248,0.08)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '220px',
+  },
+  placeholderIcon: { fontSize: '1.8em', color: '#38bdf8' },
   temaCard: {
     position: 'relative',
     background: '#fff',
@@ -370,24 +382,28 @@ const s: { [key: string]: React.CSSProperties } = {
     background: '#ecfdf5',
     color: '#047857',
     border: '1px solid #a7f3d0',
+    fontSize: '0.88em',
     fontWeight: 700,
   },
   fabBtn: {
+    padding: '12px 24px',
+    borderRadius: '12px',
     border: 'none',
-    borderRadius: '999px',
-    padding: '12px 18px',
     background: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
     color: '#fff',
-    fontWeight: 800,
+    fontSize: '0.9em',
+    fontWeight: 700,
     cursor: 'pointer',
+    boxShadow: '0 4px 14px rgba(14,165,233,0.35)',
   },
   fabBtnDisabled: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '999px',
-    padding: '12px 18px',
+    padding: '12px 24px',
+    borderRadius: '12px',
+    border: '1px solid #e2e8f0',
     background: '#f8fafc',
     color: '#94a3b8',
-    fontWeight: 800,
+    fontSize: '0.9em',
+    fontWeight: 600,
     cursor: 'not-allowed',
   },
 };
