@@ -954,6 +954,7 @@ const ListaEspera: React.FC = () => {
                       onTincionChange={setTincion}
                       senalados={senalados}
                       senaladosPos={senaladosPos}
+                      onSenaladosPosChange={setSenaladosPos}
                       onSenaladoChange={(index, value) => {
                         setSenalados(previous => {
                           const updated = [...previous];

@@ -549,6 +549,21 @@ const MoverPlaca: React.FC = () => {
         .eq('id', selectedPlaca.id);
       if (error) throw error;
 
+      // Sincronizar tema y subtema en interactive_maps si la placa tiene mapa asociado
+      if (editTemaId && editSubtemaId) {
+        try {
+          await supabase
+            .from('interactive_maps')
+            .update({
+              tema_id: editTemaId,
+              subtema_id: editSubtemaId,
+            })
+            .eq('placa_id', selectedPlaca.id);
+        } catch (mapSyncErr) {
+          console.warn('Advertencia al sincronizar mapa interactivo al mover placa:', mapSyncErr);
+        }
+      }
+
       const updatedFields = {
         photo_url:  finalPhotoUrl,
         tema_id:    editTemaId,
@@ -1124,6 +1139,7 @@ const MoverPlaca: React.FC = () => {
                   onTincionChange={setEditTincion}
                   senalados={editSenalados}
                   senaladosPos={editSenaladosPos}
+                  onSenaladosPosChange={setEditSenaladosPos}
                   onSenaladoChange={(index, value) => {
                     setEditSenalados(previous => {
                       const updated = [...previous];

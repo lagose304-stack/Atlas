@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Image as KonvaImage, Line, Circle, Path } from 'react-konva';
-import { MousePointerClick } from 'lucide-react';
+import { MousePointerClick, Move, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Plus, Minus } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import BackButton from '../components/BackButton';
 import { supabase } from '../services/supabase';
-import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { getImageCandidateUrls } from '../services/cloudinaryImages';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import EditorParcialAccordionPicker from '../components/editor/EditorParcialAccordionPicker';
+import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
 
 interface Tema {
   id: number;
@@ -629,7 +630,9 @@ const MapasInteractivos: React.FC = () => {
   const [selectedTemaId, setSelectedTemaId] = useState<number | null>(null);
   const [selectedSubtemaId, setSelectedSubtemaId] = useState<number | null>(null);
   const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(null);
-  const [selectedTool, setSelectedTool] = useState<'lasso' | 'zoom'>('lasso');
+  const [selectedTool, setSelectedTool] = useState<'lasso' | 'zoom' | 'move_all'>('lasso');
+  const [moveAllStep, setMoveAllStep] = useState<1 | 5 | 20>(5);
+  const [isMoveAllDragging, setIsMoveAllDragging] = useState(false);
   const [lassoInteractionMode, setLassoInteractionMode] = useState<LassoInteractionMode>('draw');
   const [isEditingExistingMap, setIsEditingExistingMap] = useState(false);
   const [zoomSensitivity, setZoomSensitivity] = useState<ZoomSensitivity>('media');
@@ -643,6 +646,8 @@ const MapasInteractivos: React.FC = () => {
 
   const [workspaceSize, setWorkspaceSize] = useState({ width: 0, height: 0 });
   const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
+  const [imageLoadError, setImageLoadError] = useState(false);
+  const [showPlatePickerModal, setShowPlatePickerModal] = useState(false);
   const [isCoarsePointer, setIsCoarsePointer] = useState(false);
 
   const [isDrawing, setIsDrawing] = useState(false);
@@ -690,6 +695,9 @@ const MapasInteractivos: React.FC = () => {
   const targetPanRef = useRef<Point2D>({ x: 0, y: 0 });
   const animationFrameRef = useRef<number | null>(null);
   const previousImageRectRef = useRef<RectBox | null>(null);
+  const moveAllDragStartRef = useRef<Point2D | null>(null);
+  const moveAllSelectionsSnapshotRef = useRef<number[][] | null>(null);
+  const moveAllPendingSnapshotRef = useRef<number[] | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
@@ -910,6 +918,13 @@ const MapasInteractivos: React.FC = () => {
 
     let isEffectActive = true;
 
+    if (animationFrameRef.current !== null) {
+      window.cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    isZoomDraggingRef.current = false;
+    setIsZoomDragging(false);
+
     setZoomScale(1);
     setPanOffset({ x: 0, y: 0 });
     setLassoInteractionMode('draw');
@@ -940,23 +955,34 @@ const MapasInteractivos: React.FC = () => {
     isPointerGestureActiveRef.current = false;
     targetZoomRef.current = 1;
     targetPanRef.current = { x: 0, y: 0 };
+    setImageLoadError(false);
 
-    const targetUrl = getCloudinaryImageUrl(selectedPlaca.photo_url, 'zoom');
-    const img = new window.Image();
-    img.onload = () => {
+    const candidateUrls = getImageCandidateUrls(selectedPlaca.photo_url, 'zoom');
+    let candidateIndex = 0;
+
+    const tryNextCandidate = () => {
       if (!isEffectActive) return;
-      setImageElement(img);
-    };
-    img.onerror = () => {
-      if (!isEffectActive) return;
-      const retryImg = new window.Image();
-      retryImg.onload = () => {
+      if (candidateIndex >= candidateUrls.length) {
+        setImageLoadError(true);
+        return;
+      }
+      const currentUrl = candidateUrls[candidateIndex];
+      candidateIndex += 1;
+
+      const img = new window.Image();
+      img.onload = () => {
         if (!isEffectActive) return;
-        setImageElement(retryImg);
+        setImageLoadError(false);
+        setImageElement(img);
       };
-      retryImg.src = targetUrl;
+      img.onerror = () => {
+        if (!isEffectActive) return;
+        tryNextCandidate();
+      };
+      img.src = currentUrl;
     };
-    img.src = targetUrl;
+
+    tryNextCandidate();
 
     const loadSavedMap = async () => {
       const { data, error } = await supabase
@@ -996,6 +1022,10 @@ const MapasInteractivos: React.FC = () => {
 
     return () => {
       isEffectActive = false;
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     };
   }, [selectedPlaca]);
 
@@ -1006,13 +1036,12 @@ const MapasInteractivos: React.FC = () => {
     if (!frame) return;
 
     const updateSize = () => {
-      const rect = frame.getBoundingClientRect();
-      const nextWidth = Math.max(1, Math.round(rect.width));
-      const nextHeight = Math.max(1, Math.round(rect.height));
+      const nextWidth = Math.max(1, Math.round(frame.clientWidth));
+      const nextHeight = Math.max(1, Math.round(frame.clientHeight));
 
       const prev = lastMeasuredSizeRef.current;
-      const widthChanged = Math.abs(prev.width - nextWidth) >= 1;
-      const heightChanged = Math.abs(prev.height - nextHeight) >= 1;
+      const widthChanged = Math.abs(prev.width - nextWidth) >= 2;
+      const heightChanged = Math.abs(prev.height - nextHeight) >= 2;
 
       if (!widthChanged && !heightChanged) return;
 
@@ -1022,9 +1051,13 @@ const MapasInteractivos: React.FC = () => {
 
     updateSize();
 
-    // Solo recalcular en resize real de ventana evita el loop de auto-zoom.
+    const observer = new ResizeObserver(() => updateSize());
+    observer.observe(frame);
     window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
   }, [selectedPlaca]);
 
   const runAnimationStep = () => {
@@ -1033,7 +1066,7 @@ const MapasInteractivos: React.FC = () => {
     setZoomScale(prev => {
       const target = targetZoomRef.current;
       const diff = target - prev;
-      if (Math.abs(diff) < 0.0008) return target;
+      if (Math.abs(diff) < 0.003) return target;
       keepAnimating = true;
       return prev + diff * ZOOM_EASE;
     });
@@ -1043,7 +1076,7 @@ const MapasInteractivos: React.FC = () => {
       const dx = target.x - prev.x;
       const dy = target.y - prev.y;
 
-      if (Math.abs(dx) < 0.12 && Math.abs(dy) < 0.12) {
+      if (Math.abs(dx) < 0.3 && Math.abs(dy) < 0.3) {
         return target;
       }
 
@@ -1856,6 +1889,15 @@ const MapasInteractivos: React.FC = () => {
       return;
     }
 
+    if (selectedTool === 'move_all') {
+      if (!pointInsideRect(pointer.x, pointer.y, imageRect)) return;
+      moveAllDragStartRef.current = { x: pointer.x, y: pointer.y };
+      moveAllSelectionsSnapshotRef.current = cloneSelections(savedSelections);
+      moveAllPendingSnapshotRef.current = [...selectionPoints];
+      setIsMoveAllDragging(true);
+      return;
+    }
+
     if (selectedTool === 'zoom') {
       if (!pointInsideRect(pointer.x, pointer.y, imageRect)) return;
       isZoomDraggingRef.current = true;
@@ -1871,6 +1913,42 @@ const MapasInteractivos: React.FC = () => {
   const handleStageMouseMove = () => {
     if (selectedTool === 'lasso') {
       continueLassoDrawing();
+      return;
+    }
+
+    if (selectedTool === 'move_all') {
+      if (!isMoveAllDragging || !moveAllDragStartRef.current || !moveAllSelectionsSnapshotRef.current || !stageRef.current || !imageRect) return;
+      const pointer = stageRef.current.getPointerPosition();
+      if (!pointer) return;
+
+      const deltaX = pointer.x - moveAllDragStartRef.current.x;
+      const deltaY = pointer.y - moveAllDragStartRef.current.y;
+
+      const baseSelections = moveAllSelectionsSnapshotRef.current;
+      setSavedSelections(
+        baseSelections.map(poly =>
+          poly.map((val, idx) => {
+            if (idx % 2 === 0) {
+              return clamp(val + deltaX, imageRect.x, imageRect.x + imageRect.width);
+            }
+            return clamp(val + deltaY, imageRect.y, imageRect.y + imageRect.height);
+          })
+        )
+      );
+
+      if (moveAllPendingSnapshotRef.current && moveAllPendingSnapshotRef.current.length >= 6) {
+        const basePending = moveAllPendingSnapshotRef.current;
+        setSelectionPoints(
+          basePending.map((val, idx) => {
+            if (idx % 2 === 0) {
+              return clamp(val + deltaX, imageRect.x, imageRect.x + imageRect.width);
+            }
+            return clamp(val + deltaY, imageRect.y, imageRect.y + imageRect.height);
+          })
+        );
+      }
+
+      markPendingMapChanges();
       return;
     }
 
@@ -1899,6 +1977,12 @@ const MapasInteractivos: React.FC = () => {
   const handleStageMouseUp = () => {
     stopLassoDrawing();
     stopZoomDrag();
+    if (isMoveAllDragging) {
+      setIsMoveAllDragging(false);
+      moveAllDragStartRef.current = null;
+      moveAllSelectionsSnapshotRef.current = null;
+      moveAllPendingSnapshotRef.current = null;
+    }
   };
 
   const handleStageTouchStart = (e: any) => {
@@ -2030,6 +2114,92 @@ const MapasInteractivos: React.FC = () => {
       next[selectionIndex] = nextSelection;
       return next;
     });
+
+    markPendingMapChanges();
+  };
+
+  const nudgeAllSelections = (dx: number, dy: number) => {
+    if (!imageRect) return;
+
+    setSavedSelections(prev => {
+      if (prev.length === 0) return prev;
+      return prev.map(polygon =>
+        polygon.map((val, idx) => {
+          if (idx % 2 === 0) {
+            return clamp(val + dx, imageRect.x, imageRect.x + imageRect.width);
+          }
+          return clamp(val + dy, imageRect.y, imageRect.y + imageRect.height);
+        })
+      );
+    });
+
+    if (selectionPoints.length >= 6) {
+      setSelectionPoints(prev =>
+        prev.map((val, idx) => {
+          if (idx % 2 === 0) {
+            return clamp(val + dx, imageRect.x, imageRect.x + imageRect.width);
+          }
+          return clamp(val + dy, imageRect.y, imageRect.y + imageRect.height);
+        })
+      );
+    }
+
+    markPendingMapChanges();
+  };
+
+  const scaleAllSelections = (factor: number) => {
+    if (!imageRect) return;
+
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+
+    const allPolys = [...savedSelections];
+    if (selectionPoints.length >= 6) allPolys.push(selectionPoints);
+
+    allPolys.forEach(poly => {
+      for (let i = 0; i < poly.length; i += 2) {
+        minX = Math.min(minX, poly[i]);
+        maxX = Math.max(maxX, poly[i]);
+        minY = Math.min(minY, poly[i + 1]);
+        maxY = Math.max(maxY, poly[i + 1]);
+      }
+    });
+
+    const centerX = Number.isFinite(minX) && Number.isFinite(maxX)
+      ? (minX + maxX) / 2
+      : imageRect.x + imageRect.width / 2;
+    const centerY = Number.isFinite(minY) && Number.isFinite(maxY)
+      ? (minY + maxY) / 2
+      : imageRect.y + imageRect.height / 2;
+
+    setSavedSelections(prev => {
+      if (prev.length === 0) return prev;
+      return prev.map(polygon =>
+        polygon.map((val, idx) => {
+          if (idx % 2 === 0) {
+            const scaled = centerX + (val - centerX) * factor;
+            return clamp(scaled, imageRect.x, imageRect.x + imageRect.width);
+          }
+          const scaled = centerY + (val - centerY) * factor;
+          return clamp(scaled, imageRect.y, imageRect.y + imageRect.height);
+        })
+      );
+    });
+
+    if (selectionPoints.length >= 6) {
+      setSelectionPoints(prev =>
+        prev.map((val, idx) => {
+          if (idx % 2 === 0) {
+            const scaled = centerX + (val - centerX) * factor;
+            return clamp(scaled, imageRect.x, imageRect.x + imageRect.width);
+          }
+          const scaled = centerY + (val - centerY) * factor;
+          return clamp(scaled, imageRect.y, imageRect.y + imageRect.height);
+        })
+      );
+    }
 
     markPendingMapChanges();
   };
@@ -2397,11 +2567,10 @@ const MapasInteractivos: React.FC = () => {
           </span>
         )}
         <div style={s.imgWrap}>
-          <img
-            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+          <ResilientPlacaThumb
+            photoUrl={placa.photo_url}
             alt={`Placa ${visualIndex + 1}`}
-            style={s.img}
-            loading="lazy"
+            profile="thumb"
             draggable={false}
           />
         </div>
@@ -2439,6 +2608,14 @@ const MapasInteractivos: React.FC = () => {
                 >
                   {isPersistingMap ? 'Guardando...' : 'Actualizar mapa'}
                 </button>
+                <button
+                  type="button"
+                  style={s.secondaryWorkspaceBtn}
+                  onClick={() => setShowPlatePickerModal(true)}
+                  title="Vincular este mapa a otra placa del subtema"
+                >
+                  🔄 Cambiar placa
+                </button>
                 <button type="button" style={s.secondaryWorkspaceBtn} onClick={clearSelection}>
                   Limpiar no guardadas
                 </button>
@@ -2456,7 +2633,12 @@ const MapasInteractivos: React.FC = () => {
               </div>
             </div>
 
-            <div style={s.workspaceLayout}>
+            <div
+              style={{
+                ...s.workspaceLayout,
+                gridTemplateColumns: selectedTool === 'move_all' ? 'minmax(0, 1fr) 210px' : 'minmax(0, 1fr) 64px',
+              }}
+            >
               <div style={s.canvasArea}>
                 <div
                   ref={canvasFrameRef}
@@ -2466,13 +2648,20 @@ const MapasInteractivos: React.FC = () => {
                     cursor:
                       selectedTool === 'zoom'
                         ? (isZoomDragging ? 'ew-resize' : 'zoom-in')
-                        : (insertHint.visible ? 'copy' : 'crosshair'),
+                        : selectedTool === 'move_all'
+                          ? (isMoveAllDragging ? 'grabbing' : 'grab')
+                          : (insertHint.visible ? 'copy' : 'crosshair'),
                   }}
                 >
                   {selectedTool === 'lasso' && (
                     <div style={s.lassoModeBadge}>
                       Modo: {lassoInteractionMode === 'draw' ? 'Nuevo' : 'Editar'}
                       {isEditingExistingMap ? ' · mapa existente' : ''}
+                    </div>
+                  )}
+                  {selectedTool === 'move_all' && (
+                    <div style={{ ...s.lassoModeBadge, background: '#0f172a', borderColor: '#38bdf8', color: '#f8fafc' }}>
+                      Modo: Mover todo (arrastra el lienzo o usa el pad de flechas)
                     </div>
                   )}
                   {imageElement && imageRect ? (
@@ -2846,6 +3035,60 @@ const MapasInteractivos: React.FC = () => {
                         )}
                       </Layer>
                     </Stage>
+                  ) : imageLoadError ? (
+                    <div style={{ ...s.canvasLoading, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '28px', maxWidth: '520px', textAlign: 'center' }}>
+                      <span style={{ color: '#b91c1c', fontWeight: 800, fontSize: '1.05em' }}>
+                        No se pudo cargar la imagen de la placa actual.
+                      </span>
+                      <p style={{ color: '#64748b', fontSize: '0.86em', margin: 0, lineHeight: 1.5 }}>
+                        La URL de esta placa aún no está actualizada en el almacenamiento. Puedes reintentar la conexión o vincular este mapa interactivo a otra placa activa de este subtema manteniendo todas sus selecciones.
+                      </p>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '4px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!selectedPlaca) return;
+                            setImageLoadError(false);
+                            setImageElement(null);
+                            const img = new window.Image();
+                            img.onload = () => setImageElement(img);
+                            img.onerror = () => setImageLoadError(true);
+                            img.src = `${selectedPlaca.photo_url}?t=${Date.now()}`;
+                          }}
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: '10px',
+                            border: '1.5px solid #cbd5e1',
+                            background: '#fff',
+                            color: '#0f172a',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '0.84em',
+                            fontFamily: 'inherit',
+                          }}
+                        >
+                          🔄 Reintentar carga
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowPlatePickerModal(true)}
+                          style={{
+                            padding: '8px 18px',
+                            borderRadius: '10px',
+                            border: 'none',
+                            background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            fontWeight: 800,
+                            fontSize: '0.84em',
+                            fontFamily: 'inherit',
+                            boxShadow: '0 2px 8px rgba(37,99,235,0.25)',
+                          }}
+                        >
+                          🖼️ Cambiar placa de este mapa
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <div style={s.canvasLoading}>Cargando imagen...</div>
                   )}
@@ -2861,24 +3104,56 @@ const MapasInteractivos: React.FC = () => {
                 </div>
               </div>
 
-              <aside style={s.toolsRibbon}>
-                <button
-                  type="button"
-                  style={{ ...s.toolBtn, ...(selectedTool === 'lasso' ? s.toolBtnActive : {}) }}
-                  onClick={() => setSelectedTool('lasso')}
-                  title="Lazo"
+              <aside
+                style={{
+                  ...s.toolsRibbon,
+                  alignItems: selectedTool === 'move_all' ? 'stretch' : 'center',
+                  padding: selectedTool === 'move_all' ? '12px 10px' : '10px 8px',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '8px',
+                    justifyContent: 'center',
+                    width: '100%',
+                    flexDirection: selectedTool === 'move_all' ? 'row' : 'column',
+                    alignItems: 'center',
+                  }}
                 >
-                  🪢
-                </button>
+                  <button
+                    type="button"
+                    style={{ ...s.toolBtn, ...(selectedTool === 'lasso' ? s.toolBtnActive : {}) }}
+                    onClick={() => setSelectedTool('lasso')}
+                    title="Lazo (Dibujar y editar selecciones)"
+                  >
+                    🪢
+                  </button>
 
-                <button
-                  type="button"
-                  style={{ ...s.toolBtn, ...(selectedTool === 'zoom' ? s.toolBtnActive : {}) }}
-                  onClick={() => setSelectedTool('zoom')}
-                  title="Lupa"
-                >
-                  🔍
-                </button>
+                  <button
+                    type="button"
+                    style={{ ...s.toolBtn, ...(selectedTool === 'zoom' ? s.toolBtnActive : {}) }}
+                    onClick={() => setSelectedTool('zoom')}
+                    title="Lupa (Acercar y alejar)"
+                  >
+                    🔍
+                  </button>
+
+                  <button
+                    type="button"
+                    style={{ ...s.toolBtn, ...(selectedTool === 'move_all' ? s.toolBtnActive : {}) }}
+                    onClick={() => {
+                      setSelectedTool('move_all');
+                      setActiveSavedSelectionIndex(null);
+                      setShowDeleteConfirm(false);
+                      hideInsertHint();
+                    }}
+                    title="Mover todo (Alinear todas las selecciones en bloque)"
+                  >
+                    <Move size={18} />
+                  </button>
+                </div>
+
                 {selectedTool === 'lasso' && (
                   <div style={s.lassoModeSwitch}>
                     <button
@@ -2907,6 +3182,105 @@ const MapasInteractivos: React.FC = () => {
                     </button>
                   </div>
                 )}
+
+                {selectedTool === 'move_all' && (
+                  <div style={s.moveAllContainer}>
+                    <div style={s.moveAllHeader}>
+                      <span style={s.moveAllTitle}>Mover todo</span>
+                      <span style={s.moveAllSubtitle}>Ajuste global</span>
+                    </div>
+
+                    <div style={s.moveAllStepRow}>
+                      <span style={s.moveAllStepLabel}>Paso:</span>
+                      {([1, 5, 20] as const).map((stepVal) => (
+                        <button
+                          key={stepVal}
+                          type="button"
+                          style={{
+                            ...s.moveAllStepBtn,
+                            ...(moveAllStep === stepVal ? s.moveAllStepBtnActive : {}),
+                          }}
+                          onClick={() => setMoveAllStep(stepVal)}
+                        >
+                          {stepVal}px
+                        </button>
+                      ))}
+                    </div>
+
+                    <div style={s.moveAllPadGrid}>
+                      <div />
+                      <button
+                        type="button"
+                        style={s.moveAllArrowBtn}
+                        onClick={() => nudgeAllSelections(0, -moveAllStep)}
+                        title="Mover todo hacia arriba"
+                        aria-label="Mover todo hacia arriba"
+                      >
+                        <ArrowUp size={16} />
+                      </button>
+                      <div />
+
+                      <button
+                        type="button"
+                        style={s.moveAllArrowBtn}
+                        onClick={() => nudgeAllSelections(-moveAllStep, 0)}
+                        title="Mover todo hacia la izquierda"
+                        aria-label="Mover todo hacia la izquierda"
+                      >
+                        <ArrowLeft size={16} />
+                      </button>
+                      <div style={s.moveAllPadCenter}>
+                        <Move size={14} color="#64748b" />
+                      </div>
+                      <button
+                        type="button"
+                        style={s.moveAllArrowBtn}
+                        onClick={() => nudgeAllSelections(moveAllStep, 0)}
+                        title="Mover todo hacia la derecha"
+                        aria-label="Mover todo hacia la derecha"
+                      >
+                        <ArrowRight size={16} />
+                      </button>
+
+                      <div />
+                      <button
+                        type="button"
+                        style={s.moveAllArrowBtn}
+                        onClick={() => nudgeAllSelections(0, moveAllStep)}
+                        title="Mover todo hacia abajo"
+                        aria-label="Mover todo hacia abajo"
+                      >
+                        <ArrowDown size={16} />
+                      </button>
+                      <div />
+                    </div>
+
+                    <div style={s.moveAllScaleRow}>
+                      <span style={s.moveAllStepLabel}>Escala:</span>
+                      <button
+                        type="button"
+                        style={s.moveAllScaleBtn}
+                        onClick={() => scaleAllSelections(0.98)}
+                        title="Reducir escala de todas las selecciones (-2%)"
+                      >
+                        <Minus size={13} style={{ marginRight: '2px' }} /> 2%
+                      </button>
+                      <button
+                        type="button"
+                        style={s.moveAllScaleBtn}
+                        onClick={() => scaleAllSelections(1.02)}
+                        title="Aumentar escala de todas las selecciones (+2%)"
+                      >
+                        <Plus size={13} style={{ marginRight: '2px' }} /> 2%
+                      </button>
+                    </div>
+
+                    <p style={s.moveAllHintText}>
+                      Arrastra la placa libremente o usa las flechas para alinear todo en bloque.
+                    </p>
+                  </div>
+                )}
+
                 {selectedTool === 'zoom' && (
                   <button
                     type="button"
@@ -3330,6 +3704,133 @@ const MapasInteractivos: React.FC = () => {
         )}
       </main>
       {!isWorkspaceMode && <Footer />}
+
+      {showPlatePickerModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+          onClick={() => setShowPlatePickerModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '20px',
+              maxWidth: '780px',
+              width: '100%',
+              maxHeight: '85vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.35)',
+              border: '1px solid #e2e8f0',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2em', fontWeight: 800, color: '#0f172a' }}>
+                  Seleccionar placa para este mapa
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.85em', color: '#64748b' }}>
+                  {selectedTema?.nombre} {'›'} {selectedSubtema?.nombre} · Las selecciones y datos del mapa se conservarán
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPlatePickerModal(false)}
+                style={{
+                  border: 'none',
+                  background: '#f1f5f9',
+                  color: '#64748b',
+                  borderRadius: '50%',
+                  width: '34px',
+                  height: '34px',
+                  cursor: 'pointer',
+                  fontSize: '1.1em',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
+              {placas.map((p, idx) => {
+                const isCurrent = p.id === selectedPlaca?.id;
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => {
+                      setSelectedPlaca(p);
+                      setHasUnsavedMapChanges(true);
+                      setShowPlatePickerModal(false);
+                      setImageLoadError(false);
+                      setImageElement(null);
+                    }}
+                    style={{
+                      borderRadius: '14px',
+                      border: isCurrent ? '2.5px solid #2563eb' : '1.5px solid #e2e8f0',
+                      background: isCurrent ? '#eff6ff' : '#fff',
+                      padding: '10px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                      transition: 'all 0.15s ease',
+                      boxShadow: isCurrent ? '0 4px 14px rgba(37,99,235,0.18)' : '0 2px 6px rgba(0,0,0,0.04)',
+                    }}
+                  >
+                    <div style={{ height: '130px', borderRadius: '10px', overflow: 'hidden' }}>
+                      <ResilientPlacaThumb photoUrl={p.photo_url} alt={`Placa ${idx + 1}`} profile="thumb" draggable={false} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 800, fontSize: '0.86em', color: isCurrent ? '#1d4ed8' : '#0f172a' }}>
+                        Placa {idx + 1} {p.aumento ? `(${p.aumento})` : ''}
+                      </span>
+                      {isCurrent && (
+                        <span style={{ fontSize: '0.72em', fontWeight: 800, background: '#2563eb', color: '#fff', padding: '2px 8px', borderRadius: '999px' }}>
+                          Actual
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowPlatePickerModal(false)}
+                style={{
+                  border: '1px solid #cbd5e1',
+                  background: '#fff',
+                  color: '#475569',
+                  borderRadius: '10px',
+                  padding: '8px 18px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -3832,12 +4333,14 @@ const s: { [key: string]: React.CSSProperties } = {
   },
   workspaceLayout: {
     display: 'grid',
-    gridTemplateColumns: '1fr 64px',
+    gridTemplateColumns: 'minmax(0, 1fr) 64px',
     gap: '14px',
     alignItems: 'stretch',
     height: 'calc(100vh - 130px)',
     paddingRight: '10px',
     boxSizing: 'border-box',
+    minWidth: 0,
+    minHeight: 0,
   },
   canvasArea: {
     borderRadius: '16px',
@@ -3846,6 +4349,10 @@ const s: { [key: string]: React.CSSProperties } = {
     border: '1.5px solid #dbeafe',
     height: '100%',
     display: 'flex',
+    minWidth: 0,
+    minHeight: 0,
+    overflow: 'hidden',
+    boxSizing: 'border-box',
   },
   canvasFrame: {
     width: '100%',
@@ -3860,6 +4367,9 @@ const s: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     touchAction: 'none',
     cursor: 'default',
+    minWidth: 0,
+    minHeight: 0,
+    boxSizing: 'border-box',
   },
   perceptualNoiseOverlay: {
     position: 'absolute',
@@ -4376,6 +4886,131 @@ const s: { [key: string]: React.CSSProperties } = {
   selectionInfoSaveBtnDisabled: {
     opacity: 0.55,
     cursor: 'not-allowed',
+  },
+  moveAllContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    padding: '12px 10px',
+    borderRadius: '14px',
+    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+    border: '1.5px solid #cbd5e1',
+    boxShadow: '0 4px 14px rgba(15,23,42,0.06)',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+  moveAllHeader: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '2px',
+    borderBottom: '1px solid #e2e8f0',
+    paddingBottom: '6px',
+  },
+  moveAllTitle: {
+    fontSize: '0.86em',
+    fontWeight: 800,
+    color: '#0f172a',
+  },
+  moveAllSubtitle: {
+    fontSize: '0.72em',
+    fontWeight: 600,
+    color: '#64748b',
+  },
+  moveAllStepRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '4px',
+  },
+  moveAllStepLabel: {
+    fontSize: '0.74em',
+    fontWeight: 700,
+    color: '#475569',
+    minWidth: '34px',
+  },
+  moveAllStepBtn: {
+    flex: 1,
+    padding: '4px 2px',
+    borderRadius: '6px',
+    border: '1px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#334155',
+    fontSize: '0.72em',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textAlign: 'center',
+    transition: 'all 0.15s ease',
+  },
+  moveAllStepBtnActive: {
+    background: '#0ea5e9',
+    borderColor: '#0284c7',
+    color: '#ffffff',
+    boxShadow: '0 1px 4px rgba(14,165,233,0.3)',
+  },
+  moveAllPadGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 34px)',
+    gridTemplateRows: 'repeat(3, 34px)',
+    gap: '4px',
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: '2px auto',
+  },
+  moveAllArrowBtn: {
+    width: '34px',
+    height: '34px',
+    borderRadius: '8px',
+    border: '1.5px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#1e293b',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    padding: 0,
+    transition: 'all 0.12s ease',
+    boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
+  },
+  moveAllPadCenter: {
+    width: '34px',
+    height: '34px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '8px',
+    background: '#f1f5f9',
+  },
+  moveAllScaleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    borderTop: '1px solid #e2e8f0',
+    paddingTop: '6px',
+  },
+  moveAllScaleBtn: {
+    flex: 1,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '5px 4px',
+    borderRadius: '6px',
+    border: '1px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#334155',
+    fontSize: '0.72em',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.12s ease',
+  },
+  moveAllHintText: {
+    margin: 0,
+    fontSize: '0.68em',
+    color: '#64748b',
+    lineHeight: 1.35,
+    textAlign: 'center',
   },
 };
 

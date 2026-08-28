@@ -45,3 +45,46 @@ export const getCloudinaryImageUrl = (
 
   return `${R2_PUBLIC_DOMAIN}/${cleanKey}`;
 };
+
+export const getImageCandidateUrls = (
+  originalUrl: string,
+  profile?: CloudinaryImageProfile
+): string[] => {
+  if (!originalUrl || typeof originalUrl !== 'string') return [];
+  const list: string[] = [];
+  const trimmed = originalUrl.trim();
+
+  // 1. URL procesada Cloudflare R2 / WebP
+  const resolved = getCloudinaryImageUrl(trimmed, profile);
+  if (resolved) {
+    list.push(resolved);
+  }
+
+  // 2. URL directa original de la BD si es HTTP y diferente
+  if (/^https?:\/\//i.test(trimmed) && !list.includes(trimmed)) {
+    list.push(trimmed);
+  }
+
+  // 3. Fallback con extensión original en R2 si era jpg/png
+  if (trimmed.match(/\.(jpe?g|png|bmp|tiff?)$/i)) {
+    const extMatch = trimmed.match(/\.(jpe?g|png|bmp|tiff?)$/i);
+    if (extMatch && resolved.endsWith('.webp')) {
+      const originalExtUrl = resolved.replace(/\.webp$/, extMatch[0]);
+      if (!list.includes(originalExtUrl)) {
+        list.push(originalExtUrl);
+      }
+    }
+  }
+
+  // 4. Versión anti-caché con timestamp
+  const primary = list[0] || trimmed;
+  if (primary && primary.startsWith('http')) {
+    const sep = primary.includes('?') ? '&' : '?';
+    const timestamped = `${primary}${sep}t=${Date.now()}`;
+    if (!list.includes(timestamped)) {
+      list.push(timestamped);
+    }
+  }
+
+  return list;
+};

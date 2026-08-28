@@ -4,7 +4,7 @@ import { Stage, Layer, Image as KonvaImage, Line, Path, Text, Rect } from 'react
 import Konva from 'konva';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, type ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
-import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { getImageCandidateUrls } from '../services/cloudinaryImages';
 
 export interface InteractiveMapViewerSection {
   title: string;
@@ -589,23 +589,41 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
   }, []);
 
   useEffect(() => {
-    const target = getCloudinaryImageUrl(imageUrl, 'zoom');
-    const img = new window.Image();
-    img.onload = () => {
-      setImageElement(img);
-      setZoomScale(MIN_ZOOM);
-      setPanOffset({ x: 0, y: 0 });
-    };
-    img.onerror = () => {
-      const retryImg = new window.Image();
-      retryImg.onload = () => {
-        setImageElement(retryImg);
+    if (!imageUrl) {
+      setImageElement(null);
+      return;
+    }
+
+    let isEffectActive = true;
+    const candidateUrls = getImageCandidateUrls(imageUrl, 'zoom');
+    let candidateIndex = 0;
+
+    const tryNextCandidate = () => {
+      if (!isEffectActive || candidateIndex >= candidateUrls.length) {
+        return;
+      }
+      const currentUrl = candidateUrls[candidateIndex];
+      candidateIndex += 1;
+
+      const img = new window.Image();
+      img.onload = () => {
+        if (!isEffectActive) return;
+        setImageElement(img);
         setZoomScale(MIN_ZOOM);
         setPanOffset({ x: 0, y: 0 });
       };
-      retryImg.src = target;
+      img.onerror = () => {
+        if (!isEffectActive) return;
+        tryNextCandidate();
+      };
+      img.src = currentUrl;
     };
-    img.src = target;
+
+    tryNextCandidate();
+
+    return () => {
+      isEffectActive = false;
+    };
   }, [imageUrl]);
 
   useEffect(() => {

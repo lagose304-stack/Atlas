@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Move } from 'lucide-react';
 import BoldField from './BoldField';
 import TincionAccordionSelector from './TincionAccordionSelector';
+import AllSenaladosMoverModal from './AllSenaladosMoverModal';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
 
 interface MarkerLocation {
@@ -31,6 +33,7 @@ interface PlateEditorPanelProps {
   onTincionChange: (value: string) => void;
   senalados: string[];
   senaladosPos: Array<MarkerLocation | null>;
+  onSenaladosPosChange?: (newPos: Array<MarkerLocation | null>) => void;
   onSenaladoChange: (index: number, value: string) => void;
   onRemoveSenalado: (index: number) => void;
   onOpenSenaladoLocation: (index: number) => void;
@@ -203,6 +206,7 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
   onTincionChange,
   senalados,
   senaladosPos,
+  onSenaladosPosChange,
   onSenaladoChange,
   onRemoveSenalado,
   onOpenSenaladoLocation,
@@ -223,6 +227,7 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
     ...styles,
   };
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showMoveAllModal, setShowMoveAllModal] = useState(false);
 
   const groupedSenalados = useMemo(() => {
     const groups = new Map<string, { label: string; count: number; firstIndex: number; indices: number[]; representativeIndex: number; representativePos: MarkerLocation | null }>();
@@ -289,6 +294,8 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
     editLocation: labels?.editLocation ?? '📍 Editar ubicación',
     placeLocation: labels?.placeLocation ?? '📍 Ubicar',
   };
+
+  const hasPlacedMarkers = Boolean(imageSrc && senaladosPos.some(pos => pos !== null));
 
   return (
     <div
@@ -515,7 +522,34 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
             </div>
 
             <div style={mergedStyles.section}>
-              <label style={mergedStyles.label}>{texts.senalados}</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                <label style={mergedStyles.label}>{texts.senalados}</label>
+                {onSenaladosPosChange && hasPlacedMarkers && (
+                  <button
+                    type="button"
+                    style={{
+                      border: '1.5px solid #818cf8',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
+                      color: '#4338ca',
+                      fontFamily: 'inherit',
+                      fontWeight: 800,
+                      fontSize: '0.82em',
+                      cursor: 'pointer',
+                      padding: '6px 12px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 6px rgba(99, 102, 241, 0.15)',
+                    }}
+                    onClick={() => setShowMoveAllModal(true)}
+                    title="Desplazar o alinear todos los señalados a la vez"
+                  >
+                    <Move size={14} /> Mover todos a la vez
+                  </button>
+                )}
+              </div>
+
               {groupedSenalados.map((group, displayIndex) => {
                 const hasMarker = group.representativePos != null;
                 const idx = group.representativeIndex;
@@ -573,6 +607,26 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
               {onAddBorderSenalado && (
                 <button type="button" style={{ ...mergedStyles.addBtn, marginTop: '0px', borderColor: '#bbf7d0', background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', color: '#166534' }} onClick={onAddBorderSenalado}>
                   {texts.addBorderSenalado}
+                </button>
+              )}
+              {onSenaladosPosChange && hasPlacedMarkers && (
+                <button
+                  type="button"
+                  style={{
+                    ...mergedStyles.addBtn,
+                    marginTop: '0px',
+                    borderColor: '#818cf8',
+                    background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
+                    color: '#4338ca',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 2px 8px rgba(99, 102, 241, 0.15)',
+                  }}
+                  onClick={() => setShowMoveAllModal(true)}
+                >
+                  <Move size={16} /> Mover todos los señalados a la vez
                 </button>
               )}
             </div>
@@ -659,6 +713,21 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
           </div>
         </div>
       </div>
+
+      {imageSrc && showMoveAllModal && (
+        <AllSenaladosMoverModal
+          isOpen={showMoveAllModal}
+          imageSrc={imageSrc}
+          imageAlt={imageAlt}
+          senalados={senalados}
+          senaladosPos={senaladosPos}
+          onClose={() => setShowMoveAllModal(false)}
+          onSave={(updatedPos) => {
+            onSenaladosPosChange?.(updatedPos);
+            setShowMoveAllModal(false);
+          }}
+        />
+      )}
     </div>
   );
 };

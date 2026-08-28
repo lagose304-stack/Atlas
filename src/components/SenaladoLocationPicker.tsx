@@ -1,4 +1,6 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Move } from 'lucide-react';
+import AllSenaladosMoverModal from './AllSenaladosMoverModal';
 
 interface MarkerLocation {
   x: number;
@@ -160,6 +162,7 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
   const [draggingRegionPointIndex, setDraggingRegionPointIndex] = useState<number | null>(null);
   const [selectedRegionPointIndex, setSelectedRegionPointIndex] = useState<number | null>(null);
   const [selectedBatchRegionIndex, setSelectedBatchRegionIndex] = useState<number | null>(null);
+  const [showMoveAllModal, setShowMoveAllModal] = useState(false);
   const [isCoarsePointer, setIsCoarsePointer] = useState(() => window.matchMedia?.('(pointer: coarse)').matches ?? false);
   const effectiveBorderMode = borderMode || (batchMode && allowBatchBorders && batchBorderMode);
   const lastDirectPointerAtRef = useRef(0);
@@ -1085,23 +1088,47 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
               </>
             )}
             {batchMode ? (
-              <button
-                type="button"
-                onClick={() => setBatchLocations(prev => prev.slice(0, -1))}
-                disabled={batchLocations.length === 0}
-                style={{
-                  border: '1px solid #fecaca',
-                  background: batchLocations.length === 0 ? '#f8fafc' : '#fff1f2',
-                  color: batchLocations.length === 0 ? '#94a3b8' : '#be123c',
-                  borderRadius: '8px',
-                  padding: '8px 12px',
-                  fontWeight: 700,
-                  cursor: batchLocations.length === 0 ? 'not-allowed' : 'pointer',
-                  fontFamily: 'inherit',
-                }}
-              >
-                Quitar último ({batchLocations.length})
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setBatchLocations(prev => prev.slice(0, -1))}
+                  disabled={batchLocations.length === 0}
+                  style={{
+                    border: '1px solid #fecaca',
+                    background: batchLocations.length === 0 ? '#f8fafc' : '#fff1f2',
+                    color: batchLocations.length === 0 ? '#94a3b8' : '#be123c',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    fontWeight: 700,
+                    cursor: batchLocations.length === 0 ? 'not-allowed' : 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  Quitar último ({batchLocations.length})
+                </button>
+                {batchLocations.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowMoveAllModal(true)}
+                    style={{
+                      border: '1.5px solid #818cf8',
+                      background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
+                      color: '#4338ca',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                    title="Mover o alinear todas las ubicaciones del grupo a la vez"
+                  >
+                    <Move size={14} /> Mover todos ({batchLocations.length})
+                  </button>
+                )}
+              </>
             ) : onRemove ? (
               <button
                 type="button"
@@ -1238,6 +1265,20 @@ const SenaladoLocationPicker: React.FC<SenaladoLocationPickerProps> = ({
           </div>
         </div>
       </div>
+
+      {showMoveAllModal && (
+        <AllSenaladosMoverModal
+          isOpen={showMoveAllModal}
+          imageSrc={imageSrc}
+          senalados={batchLocations.map((_, i) => `${senaladoLabel} ${i + 1}`)}
+          senaladosPos={batchLocations}
+          onClose={() => setShowMoveAllModal(false)}
+          onSave={(updatedPos) => {
+            setBatchLocations(updatedPos.filter((p): p is MarkerLocation => p !== null));
+            setShowMoveAllModal(false);
+          }}
+        />
+      )}
     </div>
   );
 };
