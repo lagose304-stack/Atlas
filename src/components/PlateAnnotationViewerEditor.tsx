@@ -118,6 +118,14 @@ const ARROW_TAIL_DISTANCE_PX = 21;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
+export const isEditableTarget = (target: EventTarget | null): boolean => {
+  if (!target || !(target instanceof HTMLElement)) return false;
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return true;
+  if (target.isContentEditable || target.getAttribute('contenteditable') === 'true') return true;
+  if (target.closest('[contenteditable="true"], input, textarea, select')) return true;
+  return false;
+};
+
 // Ramer-Douglas-Peucker algorithm for silky smooth, lightweight freehand polygons
 const perpendicularDistance = (pt: { x: number; y: number }, lineStart: { x: number; y: number }, lineEnd: { x: number; y: number }) => {
   const dx = lineEnd.x - lineStart.x;
@@ -670,7 +678,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   // Keyboard navigation & shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      if (isEditableTarget(e.target)) {
         return;
       }
       if (e.code === 'Space' && !e.repeat) {
@@ -744,6 +752,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) {
+        return;
+      }
       if (e.code === 'Space') {
         setIsSpacePressed(false);
       }
@@ -959,51 +970,73 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Finalize Freehand Polygon Region
   const finalizeFreehandPolygon = useCallback((rawPoints: number[]) => {
-    if (rawPoints.length < 6) {
+    if (rawPoints.length < 4) {
       setDrawingPolygonPoints([]);
       return;
     }
 
-    const simplified = simplifyPoints(rawPoints, 0.0015);
-    if (simplified.length < 6) {
-      setDrawingPolygonPoints([]);
-      return;
+    let ptsToUse = rawPoints;
+    if (rawPoints.length === 4) {
+      const p1x = rawPoints[0], p1y = rawPoints[1];
+      const p2x = rawPoints[2], p2y = rawPoints[3];
+      const midX = (p1x + p2x) / 2;
+      const midY = (p1y + p2y) / 2;
+      const dx = p2x - p1x;
+      const dy = p2y - p1y;
+      ptsToUse = [
+        p1x, p1y,
+        midX - dy * 0.5, midY + dx * 0.5,
+        p2x, p2y,
+        midX + dy * 0.5, midY - dx * 0.5,
+      ];
     }
+
+    const simplified = simplifyPoints(ptsToUse, 0.0015);
+    const finalPoints = simplified.length >= 6 ? simplified : ptsToUse;
 
     pushHistory(markers);
-    const count = simplified.length / 2;
+    const count = finalPoints.length / 2;
     let sumX = 0;
     let sumY = 0;
-    for (let i = 0; i < simplified.length; i += 2) {
-      sumX += simplified[i];
-      sumY += simplified[i + 1];
+    for (let i = 0; i < finalPoints.length; i += 2) {
+      sumX += finalPoints[i];
+      sumY += finalPoints[i + 1];
     }
     const centroidX = sumX / count;
     const centroidY = sumY / count;
 
     // 1. ZONA DE EXCLUSIÓN / HUECO INTERIOR (DONA):
-    // Si hay un marcador con región actualmente SELECCIONADO para edición y el trazo nuevo se dibujó dentro de él
+    // Si hay un marcador con región actualmente SELECCIONADO para edición o si se dibujó dentro de un marcador existente
     const targetSelectedMarker = selectedMarkerId ? markers.find(m => m.id === selectedMarkerId) : null;
-    const isDrawnInsideSelected = Boolean(
-      targetSelectedMarker &&
-      targetSelectedMarker.regionPoints &&
-      targetSelectedMarker.regionPoints.length >= 6 &&
+    const isTargetWithRegion = Boolean(targetSelectedMarker && targetSelectedMarker.regionPoints && targetSelectedMarker.regionPoints.length >= 6);
+
+    const fallbackMarker = !isTargetWithRegion
+      ? markers.find(m => m.regionPoints && m.regionPoints.length >= 6 && pointInPolygon(centroidX, centroidY, m.regionPoints))
+      : null;
+
+    const candidateMarker = isTargetWithRegion ? targetSelectedMarker : fallbackMarker;
+
+    const isDrawnInsideCandidate = Boolean(
+      candidateMarker &&
+      candidateMarker.regionPoints &&
+      candidateMarker.regionPoints.length >= 6 &&
       (
-        pointInPolygon(centroidX, centroidY, targetSelectedMarker.regionPoints) ||
-        pointInPolygon(simplified[0], simplified[1], targetSelectedMarker.regionPoints) ||
-        simplified.some((_, i) => i % 2 === 0 && pointInPolygon(simplified[i], simplified[i + 1], targetSelectedMarker.regionPoints!))
+        pointInPolygon(centroidX, centroidY, candidateMarker.regionPoints) ||
+        pointInPolygon(finalPoints[0], finalPoints[1], candidateMarker.regionPoints) ||
+        finalPoints.some((_, i) => i % 2 === 0 && pointInPolygon(finalPoints[i], finalPoints[i + 1], candidateMarker.regionPoints!))
       )
     );
 
-    if (isDrawnInsideSelected && targetSelectedMarker) {
-      const existingHoles = targetSelectedMarker.regionHoles || [];
-      const updatedHoles = [...existingHoles, simplified];
+    if (isDrawnInsideCandidate && candidateMarker) {
+      const existingHoles = candidateMarker.regionHoles || [];
+      const updatedHoles = [...existingHoles, finalPoints];
 
-      setMarkers(prev => prev.map(m => m.id === targetSelectedMarker.id ? {
+      setMarkers(prev => prev.map(m => m.id === candidateMarker.id ? {
         ...m,
         regionHoles: updatedHoles,
       } : m));
 
+      setSelectedMarkerId(candidateMarker.id);
       setDrawingPolygonPoints([]);
       setHasUnsavedModifications(true);
       return;
@@ -1019,7 +1052,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         y: centroidY,
         startX: null,
         startY: null,
-        regionPoints: simplified,
+        regionPoints: finalPoints,
+        regionHoles: markers[0]?.regionHoles ?? null,
         regionColor: drawingPolygonColor,
         regionOpacity: drawingPolygonOpacity,
       };
@@ -1039,7 +1073,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           label: labelToUse,
           x: centroidX,
           y: centroidY,
-          regionPoints: simplified,
+          regionPoints: finalPoints,
+          regionHoles: null,
           regionColor: drawingPolygonColor,
           regionOpacity: drawingPolygonOpacity,
         } : m));
@@ -1050,7 +1085,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           label: labelToUse,
           x: centroidX,
           y: centroidY,
-          regionPoints: simplified,
+          regionPoints: finalPoints,
+          regionHoles: null,
           regionColor: drawingPolygonColor,
           regionOpacity: drawingPolygonOpacity,
         };
@@ -1069,7 +1105,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         label: labelToUse,
         x: centroidX,
         y: centroidY,
-        regionPoints: simplified,
+        regionPoints: finalPoints,
+        regionHoles: null,
         regionColor: drawingPolygonColor,
         regionOpacity: drawingPolygonOpacity,
       };
@@ -1085,6 +1122,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   // Unified Pointer Down for Canvas (Handles Freehand Drawing, Exclusion Holes, and Panning)
   const handleCanvasPointerDown = (e: React.PointerEvent | React.MouseEvent) => {
     if (
+      isDrawingFreehandRef.current ||
       isPinching ||
       isPinchingRef.current ||
       justPinchedRef.current ||
@@ -1156,8 +1194,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         const lastX = prev[prev.length - 2];
         const lastY = prev[prev.length - 1];
         const dist = Math.hypot(coords.x - lastX, coords.y - lastY);
-        // Continuous sampling when moved by at least ~3-4px
-        if (dist >= 0.003) {
+        // Continuous sampling when moved (smooth and captures fine cell details)
+        if (dist >= 0.0008) {
           const next = [...prev, coords.x, coords.y];
           drawingPolygonPointsRef.current = next;
           setDrawingPolygonPoints(next);
@@ -1201,7 +1239,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       const pointsToFinalize = drawingPolygonPointsRef.current;
       drawingPolygonPointsRef.current = [];
       setDrawingPolygonPoints([]);
-      if (pointsToFinalize.length >= 6) {
+      if (pointsToFinalize.length >= 4) {
         justDrawnRef.current = true;
         setTimeout(() => {
           justDrawnRef.current = false;
@@ -1275,6 +1313,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           startX: null,
           startY: null,
           regionPoints: null,
+          regionHoles: null,
         };
         setMarkers([updated]);
         setSelectedMarkerId(updated.id);
@@ -1570,7 +1609,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     // 1. Single Picker Mode
     if (singlePickerMode) {
       const placedMarker = (activeSelectedMarker && activeSelectedMarker.x != null)
-        ? activeSelectedMarker
+        ? (markersToSave.find(m => m.id === activeSelectedMarker.id) || activeSelectedMarker)
         : (markersToSave.find(m => m.x != null && m.y != null) || markersToSave[0]);
 
       if (placedMarker && placedMarker.x != null && placedMarker.y != null) {

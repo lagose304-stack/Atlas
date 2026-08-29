@@ -495,4 +495,78 @@ describe('PlateAnnotationViewerEditor', () => {
     expect(screen.queryByText(/Señalado 1/i)).toBeNull();
     expect(screen.getByText(/No hay señalados creados aún/i)).toBeInTheDocument();
   });
+
+  it('permite escribir espacios en el campo del nombre de señalado sin activar atajo de paneo', () => {
+    const { container } = render(
+      <PlateAnnotationViewerEditor
+        imageSrc="https://res.cloudinary.com/demo/image/upload/sample.jpg"
+        initialSenalados={[]}
+        initialSenaladosPos={[]}
+        onCancel={vi.fn()}
+      />
+    );
+
+    // Activar herramienta Individual
+    const pointerBtn = screen.getByRole('button', { name: /Individual/i });
+    fireEvent.click(pointerBtn);
+
+    const editableDiv = container.ownerDocument.querySelector('div[contenteditable="true"]') as HTMLDivElement;
+    expect(editableDiv).not.toBeNull();
+
+    // Enfocar el campo editable
+    editableDiv.focus();
+
+    // Disparar evento keydown con tecla Space sobre el campo editable
+    const spaceKeyDown = new KeyboardEvent('keydown', {
+      key: ' ',
+      code: 'Space',
+      bubbles: true,
+      cancelable: true,
+    });
+    editableDiv.dispatchEvent(spaceKeyDown);
+
+    // No debe haber cancelado el evento (preventDefault) para permitir escribir espacios
+    expect(spaceKeyDown.defaultPrevented).toBe(false);
+
+    // Escribir texto con espacios
+    editableDiv.innerHTML = 'Núcleo de célula parietal';
+    fireEvent.input(editableDiv);
+
+    expect(editableDiv.textContent).toBe('Núcleo de célula parietal');
+  });
+
+  it('preserva las zonas de exclusión (regionHoles) al guardar señalados recién creados', () => {
+    const handleSaveAll = vi.fn();
+
+    render(
+      <PlateAnnotationViewerEditor
+        imageSrc="https://res.cloudinary.com/demo/image/upload/sample.jpg"
+        initialSenalados={['Vaso sanguíneo']}
+        initialSenaladosPos={[
+          {
+            x: 0.5,
+            y: 0.5,
+            startX: null,
+            startY: null,
+            regionPoints: [0.2, 0.2, 0.8, 0.2, 0.8, 0.8, 0.2, 0.8],
+            regionHoles: [[0.4, 0.4, 0.6, 0.4, 0.6, 0.6, 0.4, 0.6]],
+            regionColor: '#22c55e',
+            regionOpacity: 0.28,
+          },
+        ]}
+        onSaveAll={handleSaveAll}
+        onCancel={vi.fn()}
+      />
+    );
+
+    // Guardar señalados
+    const saveButton = screen.getByRole('button', { name: /Guardar señalados/i });
+    fireEvent.click(saveButton);
+
+    expect(handleSaveAll).toHaveBeenCalledTimes(1);
+    const savedPos = handleSaveAll.mock.calls[0][1];
+    expect(savedPos[0].regionHoles).toEqual([
+      [0.4, 0.4, 0.6, 0.4, 0.6, 0.6, 0.4, 0.6],
+    ]);
+  });
 });

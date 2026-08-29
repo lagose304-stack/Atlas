@@ -48,6 +48,7 @@ interface SenaladoMetaItem {
   startX?: number | null;
   startY?: number | null;
   regionPoints?: number[] | null;
+  regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
 }

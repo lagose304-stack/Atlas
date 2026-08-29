@@ -6,12 +6,13 @@ import AllSenaladosMoverModal from './AllSenaladosMoverModal';
 import PlateAnnotationViewerEditor from './PlateAnnotationViewerEditor';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
 
-interface MarkerLocation {
+export interface MarkerLocation {
   x: number;
   y: number;
   startX?: number | null;
   startY?: number | null;
   regionPoints?: number[] | null;
+  regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
 }

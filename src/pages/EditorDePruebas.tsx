@@ -62,6 +62,10 @@ interface MarkerLocation {
   y: number;
   startX?: number | null;
   startY?: number | null;
+  regionPoints?: number[] | null;
+  regionHoles?: number[][] | null;
+  regionColor?: string | null;
+  regionOpacity?: number | null;
 }
 
 interface PreguntaRow {

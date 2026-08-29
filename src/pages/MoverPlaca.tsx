@@ -62,6 +62,7 @@ interface MarkerLocation {
   startX?: number | null;
   startY?: number | null;
   regionPoints?: number[] | null;
+  regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
 }
@@ -73,6 +74,7 @@ interface SenaladoMetaItem {
   startX?: number | null;
   startY?: number | null;
   regionPoints?: number[] | null;
+  regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
 }
@@ -112,6 +114,7 @@ const normalizeLocations = (values: Array<MarkerLocation | null>): Array<MarkerL
       startX,
       startY,
       regionPoints: Array.isArray(value.regionPoints) ? value.regionPoints : null,
+      regionHoles: Array.isArray(value.regionHoles) ? value.regionHoles : null,
       regionColor: value.regionColor ?? null,
       regionOpacity: value.regionOpacity ?? null,
     };
@@ -162,6 +165,7 @@ const buildSenaladosPayload = (
       startX: location?.startX ?? null,
       startY: location?.startY ?? null,
       regionPoints: location?.regionPoints ?? null,
+      regionHoles: location?.regionHoles ?? null,
       regionColor: location?.regionColor ?? null,
       regionOpacity: location?.regionOpacity ?? null,
     });
@@ -183,6 +187,7 @@ const deriveLocations = (
       startX: item.startX ?? null,
       startY: item.startY ?? null,
       regionPoints: item.regionPoints ?? null,
+      regionHoles: item.regionHoles ?? null,
       regionColor: item.regionColor ?? null,
       regionOpacity: item.regionOpacity ?? null,
     };
