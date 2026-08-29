@@ -270,16 +270,18 @@ const TemarioPublico: React.FC = () => {
 
     try {
       const data = await getCachedTemas();
-      setTemas(data as Tema[]);
-      setLoading(false);
+      if (data && data.length > 0) {
+        setTemas(data as Tema[]);
+        setLoading(false);
+        return;
+      }
+      throw new Error('No se recibieron temas del catálogo');
     } catch (lastError: any) {
-      if (isLikelyTransientNetworkError(lastError)) {
-        const fallbackResult = await fetchTemasViaRestFallback();
-        if (!fallbackResult.error && fallbackResult.data) {
-          setTemas(fallbackResult.data);
-          setLoading(false);
-          return;
-        }
+      const fallbackResult = await fetchTemasViaRestFallback();
+      if (!fallbackResult.error && fallbackResult.data && fallbackResult.data.length > 0) {
+        setTemas(fallbackResult.data);
+        setLoading(false);
+        return;
       }
 
       const technicalDetails = describeSupabaseError(lastError);

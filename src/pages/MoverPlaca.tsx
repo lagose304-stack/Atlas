@@ -303,6 +303,11 @@ const MoverPlaca: React.FC = () => {
       return true;
     } catch (err) {
       console.error('Error al cargar subtemas en mover placa:', err);
+      const fallback = getQuickSubtemas(temaId);
+      if (fallback && fallback.length > 0) {
+        setSubtemas(fallback);
+        return true;
+      }
       setSubtemas([]);
       setSubtemasLoadError('No se pudieron cargar los subtemas. Revisa tu conexión e inténtalo de nuevo.');
       return false;
@@ -378,6 +383,11 @@ const MoverPlaca: React.FC = () => {
       return true;
     } catch (err) {
       console.error('Error al cargar subtemas de edición:', err);
+      const fallback = getQuickSubtemas(temaId);
+      if (fallback && fallback.length > 0) {
+        setEditSubtemas(fallback);
+        return true;
+      }
       setEditSubtemas([]);
       setEditSubtemasLoadError('No se pudieron cargar los subtemas del tema seleccionado.');
       return false;

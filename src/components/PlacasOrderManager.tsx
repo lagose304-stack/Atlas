@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../services/supabase';
 import { useDraggableList } from '../hooks/useDraggableList';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { getCachedSubtemas, getQuickSubtemas } from '../services/catalogService';
 import LoadingToast from './LoadingToast';
 
 import EditorParcialAccordionPicker from './editor/EditorParcialAccordionPicker';
@@ -25,20 +26,19 @@ const PlacasOrderManager: React.FC = () => {
   const [mapIds, setMapIds] = useState<Set<number>>(new Set());
   const [temaId, setTemaId] = useState<number | null>(null);
   const [subtemaId, setSubtemaId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
   const [loadingTemas, setLoadingTemas] = useState(true);
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [changed, setChanged] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [changed, setChanged] = useState(false);
 
   useEffect(() => {
     setLoadingTemas(true);
     void supabase.from('temas').select('id, nombre, parcial, sort_order')
       .order('parcial').order('sort_order', { ascending: true })
       .then(({ data, error }) => {
-        if (error) setMessage('No se pudieron cargar los temas.');
-        setTemas((data ?? []) as Tema[]);
+        if (!error && data) setTemas(data as Tema[]);
         setLoadingTemas(false);
       });
   }, []);
@@ -46,11 +46,27 @@ const PlacasOrderManager: React.FC = () => {
   useEffect(() => {
     setSubtemaId(null); setPlacas([]); setMapIds(new Set()); setChanged(false); drag.resetDrag();
     if (!temaId) { setSubtemas([]); return; }
-    setLoadingSubtemas(true);
-    void supabase.from('subtemas').select('id, nombre, tema_id, sort_order').eq('tema_id', temaId)
-      .order('sort_order', { ascending: true }).then(({ data, error }) => {
-        setSubtemas((data ?? []) as Subtema[]);
-        if (error) setMessage('No se pudieron cargar los subtemas.');
+
+    const quick = getQuickSubtemas(temaId);
+    if (quick && quick.length > 0) {
+      setSubtemas(quick as unknown as Subtema[]);
+      setLoadingSubtemas(false);
+    } else {
+      setLoadingSubtemas(true);
+    }
+
+    void getCachedSubtemas(temaId)
+      .then((data) => {
+        setSubtemas((data ?? []) as unknown as Subtema[]);
+        setLoadingSubtemas(false);
+      })
+      .catch(() => {
+        const fallback = getQuickSubtemas(temaId);
+        if (fallback && fallback.length > 0) {
+          setSubtemas(fallback as unknown as Subtema[]);
+        } else {
+          setMessage('No se pudieron cargar los subtemas.');
+        }
         setLoadingSubtemas(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -20,6 +20,7 @@ import { describeSupabaseError, supabase } from '../services/supabase';
 import { uploadToCloudinary, slugify } from '../services/cloudinary';
 import { logPlateActivity } from '../services/plateActivityAudit';
 import { useAuth } from '../contexts/AuthContext';
+import { getCachedSubtemas, getQuickSubtemas } from '../services/catalogService';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import BackButton from '../components/BackButton';
@@ -207,23 +208,30 @@ const ReencontrarPlaca: React.FC = () => {
     setPlacas([]);
     setSelectedPlacaId(null);
 
-    if (!selectedTemaId) return;
+    const numTemaId = Number(selectedTemaId);
+    const quick = getQuickSubtemas(numTemaId);
+    if (quick && quick.length > 0) {
+      setSubtemas(quick as unknown as Subtema[]);
+      setSelectedSubtemaId(quick[0].id);
+      setLoadingSubtemas(false);
+    } else {
+      setLoadingSubtemas(true);
+    }
 
     const fetchSubtemas = async () => {
-      setLoadingSubtemas(true);
       try {
-        const { data, error } = await supabase
-          .from('subtemas')
-          .select('id, nombre, tema_id')
-          .eq('tema_id', selectedTemaId)
-          .order('sort_order', { ascending: true });
-        if (error) throw error;
-        setSubtemas(data || []);
+        const data = await getCachedSubtemas(numTemaId);
         if (data && data.length > 0) {
-          setSelectedSubtemaId(data[0].id);
+          setSubtemas(data as unknown as Subtema[]);
+          setSelectedSubtemaId((prev) => prev ?? data[0].id);
         }
       } catch (err) {
         console.error('Error cargando subtemas:', err);
+        const fallback = getQuickSubtemas(numTemaId);
+        if (fallback && fallback.length > 0) {
+          setSubtemas(fallback as unknown as Subtema[]);
+          setSelectedSubtemaId((prev) => prev ?? fallback[0].id);
+        }
       } finally {
         setLoadingSubtemas(false);
       }

@@ -9,7 +9,7 @@ import {
   isFeatureDisabled,
   isTemaDisabled,
 } from '../services/siteMaintenance';
-import { getCachedTemas, getCachedSubtemas } from '../services/catalogService';
+import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
 
 import logoFacultad from '../assets/logos/facultad.png';
 import microscopioHeader from '../assets/logos/laboratorio.png';
@@ -393,43 +393,52 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
     const loadSearchIndex = async () => {
       setSearchIndexLoading(true);
 
-      const [temasData, subtemasData, maintenanceStatus] = await Promise.all([
-        getCachedTemas(),
-        getCachedSubtemas(),
-        fetchSiteMaintenanceStatus(),
-      ]);
+      try {
+        const [temasRes, subtemasRes, maintenanceRes] = await Promise.allSettled([
+          getCachedTemas(),
+          getCachedSubtemas(),
+          fetchSiteMaintenanceStatus(),
+        ]);
 
-      const canBypass = canBypassMaintenance(user, isAuthenticated);
+        const temasData = temasRes.status === 'fulfilled' ? temasRes.value : (getQuickTemas() ?? []);
+        const subtemasData = subtemasRes.status === 'fulfilled' ? subtemasRes.value : (getQuickSubtemas() ?? []);
+        const maintenanceStatus = maintenanceRes.status === 'fulfilled' ? maintenanceRes.value : { enabled: false, disabledFeatures: [] };
 
-      if (
-        !canBypass &&
-        (maintenanceStatus.enabled ||
-          isFeatureDisabled('search', maintenanceStatus.disabledFeatures) ||
-          isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures))
-      ) {
-        setSearchTemas([]);
-        setSearchSubtemas([]);
-      } else {
-        let validTemas = (temasData ?? []) as Array<SearchTemaRecord & { parcial?: string }>;
-        if (!canBypass) {
-          validTemas = validTemas.filter((t) => !isTemaDisabled(t.id, t.parcial, maintenanceStatus.disabledFeatures));
+        const canBypass = canBypassMaintenance(user, isAuthenticated);
+
+        if (
+          !canBypass &&
+          (maintenanceStatus.enabled ||
+            isFeatureDisabled('search', maintenanceStatus.disabledFeatures) ||
+            isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures))
+        ) {
+          setSearchTemas([]);
+          setSearchSubtemas([]);
+        } else {
+          let validTemas = (temasData ?? []) as Array<SearchTemaRecord & { parcial?: string }>;
+          if (!canBypass) {
+            validTemas = validTemas.filter((t) => !isTemaDisabled(t.id, t.parcial, maintenanceStatus.disabledFeatures));
+          }
+          setSearchTemas(validTemas);
+
+          const validTemaMap = new Map(validTemas.map((t) => [t.id, t.nombre]));
+          const nextSubtemas = (subtemasData ?? [])
+            .filter((row) => canBypass || validTemaMap.has(row.tema_id))
+            .map((row) => ({
+              id: row.id,
+              nombre: row.nombre,
+              tema_id: row.tema_id,
+              tema_nombre: validTemaMap.get(row.tema_id) || '',
+            }));
+          setSearchSubtemas(nextSubtemas);
         }
-        setSearchTemas(validTemas);
 
-        const validTemaMap = new Map(validTemas.map((t) => [t.id, t.nombre]));
-        const nextSubtemas = (subtemasData ?? [])
-          .filter((row) => canBypass || validTemaMap.has(row.tema_id))
-          .map((row) => ({
-            id: row.id,
-            nombre: row.nombre,
-            tema_id: row.tema_id,
-            tema_nombre: validTemaMap.get(row.tema_id) || '',
-          }));
-        setSearchSubtemas(nextSubtemas);
+        setSearchIndexLoaded(true);
+      } catch (err) {
+        console.error('Error cargando índice de búsqueda en Header:', err);
+      } finally {
+        setSearchIndexLoading(false);
       }
-
-      setSearchIndexLoaded(true);
-      setSearchIndexLoading(false);
     };
 
     void loadSearchIndex();

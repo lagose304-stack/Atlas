@@ -89,6 +89,7 @@ const PlacasSubtema: React.FC = () => {
   const initialSubtema = getQuickSubtemaById(numSubtemaId);
   const initialPlacasBundle = getQuickPlacasForSubtema(numSubtemaId);
   const initialSiblingSubtemas = initialSubtema ? getQuickSubtemas(initialSubtema.tema_id) : null;
+  const hasCompleteInitialData = Boolean(initialSubtema && initialPlacasBundle && initialPlacasBundle.placas.length > 0);
 
   const [placas, setPlacas] = useState<Placa[]>((initialPlacasBundle?.placas as unknown as Placa[]) ?? []);
   const [subtema, setSubtema] = useState<SubtemaInfo | null>(
@@ -101,7 +102,7 @@ const PlacasSubtema: React.FC = () => {
         }
       : null
   );
-  const [loading, setLoading] = useState<boolean>(!initialPlacasBundle && !initialSubtema);
+  const [loading, setLoading] = useState<boolean>(!hasCompleteInitialData);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
@@ -114,7 +115,7 @@ const PlacasSubtema: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!subtemaId) return;
+    if (!numSubtemaId) return;
 
     let isMounted = true;
 
@@ -123,72 +124,94 @@ const PlacasSubtema: React.FC = () => {
       void logSubtemaView(numSubtemaId);
 
       try {
-        const [subtemaRes, maintenanceStatus, placasBundle, blocksRes] = await Promise.all([
+        const [subtemaRes, maintenanceRes, placasBundleRes, blocksRes] = await Promise.allSettled([
           supabase
             .from('subtemas')
             .select('id, nombre, tema_id, sort_order, temas(nombre, parcial)')
-            .eq('id', subtemaId)
+            .eq('id', numSubtemaId)
             .single(),
           fetchSiteMaintenanceStatus(),
           getCachedPlacasForSubtema(numSubtemaId),
-          getRenderableBlocks('placas_page', numSubtemaId).catch(() => []),
+          getRenderableBlocks('placas_page', numSubtemaId),
         ]);
 
         if (!isMounted) return;
 
-        const subtemaData = subtemaRes.data;
-        if (subtemaData) {
-          setSubtema(subtemaData as unknown as SubtemaInfo);
+        let subtemaData: SubtemaInfo | null = null;
+        if (subtemaRes.status === 'fulfilled' && subtemaRes.value.data) {
+          subtemaData = subtemaRes.value.data as unknown as SubtemaInfo;
+          setSubtema(subtemaData);
+        } else {
+          const fallback = getQuickSubtemaById(numSubtemaId);
+          if (fallback) {
+            subtemaData = {
+              id: fallback.id,
+              nombre: fallback.nombre,
+              tema_id: fallback.tema_id,
+              sort_order: fallback.sort_order,
+            };
+            setSubtema(subtemaData);
+          }
         }
 
-        const canBypass = canBypassMaintenance(user, isAuthenticated);
-        if (!canBypass) {
-          if (maintenanceStatus.enabled) {
-            setErrorMessage('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
-            setLoading(false);
-            return;
-          }
-          if (isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures)) {
-            setErrorMessage('El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.');
-            setLoading(false);
-            return;
-          }
-          if (subtemaData) {
-            const rawTemas = subtemaData.temas as { nombre?: string; parcial?: string } | { nombre?: string; parcial?: string }[] | null;
-            const temaParcial = Array.isArray(rawTemas) ? rawTemas[0]?.parcial : rawTemas?.parcial;
-            if (isTemaDisabled(subtemaData.tema_id, temaParcial, maintenanceStatus.disabledFeatures)) {
-              setErrorMessage('Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.');
+        if (maintenanceRes.status === 'fulfilled') {
+          const maintenanceStatus = maintenanceRes.value;
+          const canBypass = canBypassMaintenance(user, isAuthenticated);
+          if (!canBypass) {
+            if (maintenanceStatus.enabled) {
+              setErrorMessage('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
               setLoading(false);
               return;
             }
+            if (isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures)) {
+              setErrorMessage('El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.');
+              setLoading(false);
+              return;
+            }
+            if (subtemaData) {
+              const rawTemas = subtemaData.temas as { nombre?: string; parcial?: string } | { nombre?: string; parcial?: string }[] | null;
+              const temaParcial = Array.isArray(rawTemas) ? rawTemas[0]?.parcial : rawTemas?.parcial;
+              if (isTemaDisabled(subtemaData.tema_id, temaParcial, maintenanceStatus.disabledFeatures)) {
+                setErrorMessage('Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.');
+                setLoading(false);
+                return;
+              }
+            }
           }
         }
 
-        if (subtemaData?.tema_id) {
-          const siblingSubtemas = await getCachedSubtemas(subtemaData.tema_id);
-          if (isMounted) {
-            setAllSubtemas((siblingSubtemas ?? []) as unknown as SubtemaNav[]);
+        const targetTemaId = subtemaData?.tema_id;
+        if (targetTemaId) {
+          try {
+            const siblingSubtemas = await getCachedSubtemas(targetTemaId);
+            if (isMounted && siblingSubtemas) {
+              setAllSubtemas(siblingSubtemas as unknown as SubtemaNav[]);
+            }
+          } catch {}
+        }
+
+        if (placasBundleRes.status === 'fulfilled' && placasBundleRes.value) {
+          const bundle = placasBundleRes.value;
+          setPlacas(bundle.placas as unknown as Placa[]);
+          setPlacasConMapa(new Set(bundle.placasConMapa));
+        } else {
+          const fallbackBundle = getQuickPlacasForSubtema(numSubtemaId);
+          if (fallbackBundle) {
+            setPlacas(fallbackBundle.placas as unknown as Placa[]);
+            setPlacasConMapa(new Set(fallbackBundle.placasConMapa));
+          } else if (!subtemaData) {
+            setErrorMessage('No se pudo cargar la información de esta galería. Revisa tu conexión a internet.');
           }
         }
 
-        if (placasBundle) {
-          setPlacas(placasBundle.placas as unknown as Placa[]);
-          setPlacasConMapa(new Set(placasBundle.placasConMapa));
+        if (blocksRes.status === 'fulfilled' && Array.isArray(blocksRes.value)) {
+          setContentBlocks(blocksRes.value as ContentBlock[]);
         }
 
-        setContentBlocks((blocksRes ?? []) as ContentBlock[]);
         setLoading(false);
       } catch (err) {
         console.error('Error cargando placas del subtema:', err);
-        if (isMounted) {
-          setPlacas((prev) => {
-            if (prev.length === 0) {
-              setErrorMessage('No se pudieron cargar las placas en este momento.');
-            }
-            return prev;
-          });
-          setLoading(false);
-        }
+        setLoading(false);
       }
     };
 
@@ -197,7 +220,7 @@ const PlacasSubtema: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [subtemaId, user, isAuthenticated]);
+  }, [numSubtemaId, user, isAuthenticated]);
 
   const handleGoBack = useSmartBackNavigation('/');
 

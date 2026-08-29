@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ArrowLeft,
   BookOpen,
@@ -8,7 +8,6 @@ import {
   Layers,
   Microscope,
 } from 'lucide-react';
-import { supabase } from '../../services/supabase';
 import { getCloudinaryImageUrl } from '../../services/cloudinaryImages';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -19,6 +18,14 @@ import {
   isTemaDisabled,
   type SiteMaintenanceStatus,
 } from '../../services/siteMaintenance';
+import {
+  getCachedTemas,
+  getCachedSubtemas,
+  getCachedPlacasForSubtema,
+  getQuickTemas,
+  getQuickSubtemas,
+  getQuickPlacasForSubtema,
+} from '../../services/catalogService';
 
 export interface ComparadorPlacaItem {
   id: number;
@@ -49,29 +56,27 @@ interface PlatePickerModalProps {
   onClose: () => void;
   onSelectPlate: (plate: ComparadorPlacaItem) => void;
   targetLetter: 'A' | 'B';
+  initialParcial?: 'primer' | 'segundo' | 'tercer';
 }
 
-type ParcialKey = 'primer' | 'segundo' | 'tercer';
-
 interface ParcialOption {
-  key: ParcialKey;
+  key: 'primer' | 'segundo' | 'tercer';
   label: string;
   num: string;
   description: string;
 }
 
 const PARCIALES: ParcialOption[] = [
-  { key: 'primer', label: 'Primer Parcial', num: '1', description: 'Temas introductorios y tejidos básicos' },
-  { key: 'segundo', label: 'Segundo Parcial', num: '2', description: 'Órganos y sistemas del segundo período' },
-  { key: 'tercer', label: 'Tercer Parcial', num: '3', description: 'Sistemas avanzados y órganos especializados' },
+  { key: 'primer', label: 'Primer Parcial', num: '1', description: 'Tejido epitelial, conectivo, adiposo...' },
+  { key: 'segundo', label: 'Segundo Parcial', num: '2', description: 'Cartílago, hueso, sangre, muscular...' },
+  { key: 'tercer', label: 'Tercer Parcial', num: '3', description: 'Nervioso, cardiovascular, linfoide...' },
 ];
 
 interface TemaRow {
   id: number;
   nombre: string;
   logo_url?: string | null;
-  parcial: string;
-  sort_order: number | null;
+  parcial?: string | null;
 }
 
 interface SubtemaRow {
@@ -79,7 +84,6 @@ interface SubtemaRow {
   nombre: string;
   logo_url?: string | null;
   tema_id: number;
-  sort_order: number | null;
 }
 
 interface PlacaRow {
@@ -89,8 +93,16 @@ interface PlacaRow {
   tincion?: string | null;
   comentario?: string | null;
   senalados?: string[] | null;
-  senalados_meta?: any;
-  sort_order?: number | null;
+  senalados_meta?: Array<{
+    label: string;
+    x: number | null;
+    y: number | null;
+    startX?: number | null;
+    startY?: number | null;
+    regionPoints?: number[] | null;
+    regionColor?: string | null;
+    regionOpacity?: number | null;
+  }> | null;
 }
 
 export const PlatePickerModal: React.FC<PlatePickerModalProps> = ({
@@ -98,29 +110,33 @@ export const PlatePickerModal: React.FC<PlatePickerModalProps> = ({
   onClose,
   onSelectPlate,
   targetLetter,
+  initialParcial,
 }) => {
   const { user, isAuthenticated } = useAuth();
   const canBypass = canBypassMaintenance(user, isAuthenticated);
-  const [maintenanceStatus, setMaintenanceStatus] = useState<SiteMaintenanceStatus | null>(null);
 
-  // Navigation Steps: 'parcial' -> 'tema' -> 'subtema' -> 'placas'
   const [selectedParcial, setSelectedParcial] = useState<ParcialOption | null>(null);
   const [selectedTema, setSelectedTema] = useState<TemaRow | null>(null);
   const [selectedSubtema, setSelectedSubtema] = useState<SubtemaRow | null>(null);
 
-  // Data states
   const [temas, setTemas] = useState<TemaRow[]>([]);
   const [subtemas, setSubtemas] = useState<SubtemaRow[]>([]);
   const [placas, setPlacas] = useState<PlacaRow[]>([]);
 
-  // Loading & Error states
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [maintenanceStatus, setMaintenanceStatus] = useState<SiteMaintenanceStatus | null>(null);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
-  // Reset navigation when modal opens or closes
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen) return;
+    void fetchSiteMaintenanceStatus().then(setMaintenanceStatus);
+
+    if (initialParcial) {
+      const match = PARCIALES.find((p) => p.key === initialParcial) || PARCIALES[0];
+      setSelectedParcial(match);
+      void handleSelectParcial(match);
+    } else {
       setSelectedParcial(null);
       setSelectedTema(null);
       setSelectedSubtema(null);
@@ -129,33 +145,48 @@ export const PlatePickerModal: React.FC<PlatePickerModalProps> = ({
       setPlacas([]);
       setError(null);
       setFailedImages({});
-    } else {
-      void fetchSiteMaintenanceStatus().then(setMaintenanceStatus);
     }
-  }, [isOpen]);
+  }, [isOpen, initialParcial]);
 
-  const visibleParciales = React.useMemo(() => {
+  const visibleParciales = useMemo(() => {
     if (canBypass || !maintenanceStatus) return PARCIALES;
     return PARCIALES.filter((p) => !isParcialDisabled(p.key, maintenanceStatus.disabledFeatures));
   }, [canBypass, maintenanceStatus]);
 
-  // Step 2: Fetch Temas when Parcial is selected
+  const handleImageError = (key: string) => {
+    setFailedImages((prev) => ({ ...prev, [key]: true }));
+  };
+
   const handleSelectParcial = async (parcial: ParcialOption) => {
     setSelectedParcial(parcial);
     setSelectedTema(null);
     setSelectedSubtema(null);
-    setSubtemas([]);
     setPlacas([]);
-    setLoading(true);
     setError(null);
 
-    try {
-      const currentMaintenance = maintenanceStatus ?? (await fetchSiteMaintenanceStatus());
-      if (!maintenanceStatus) setMaintenanceStatus(currentMaintenance);
+    const quickTemas = getQuickTemas();
+    if (quickTemas && quickTemas.length > 0) {
+      const filteredQuick = quickTemas.filter((t) => {
+        const p = (t.parcial || '').toLowerCase();
+        return p.includes(parcial.key);
+      });
+      if (filteredQuick.length > 0) {
+        setTemas(filteredQuick as unknown as TemaRow[]);
+      }
+    } else {
+      setLoading(true);
+    }
 
+    try {
+      const currentMaintenance = await fetchSiteMaintenanceStatus();
       if (!canBypass) {
         if (currentMaintenance.enabled) {
-          setError('El catálogo de placas se encuentra temporalmente en mantenimiento.');
+          setError('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
+          setLoading(false);
+          return;
+        }
+        if (isParcialDisabled(parcial.key, currentMaintenance.disabledFeatures)) {
+          setError('Este parcial se encuentra temporalmente fuera de servicio por mantenimiento.');
           setLoading(false);
           return;
         }
@@ -166,91 +197,86 @@ export const PlatePickerModal: React.FC<PlatePickerModalProps> = ({
         }
       }
 
-      const { data, error: err } = await supabase
-        .from('temas')
-        .select('id, nombre, logo_url, parcial, sort_order')
-        .order('sort_order', { ascending: true });
-
-      if (err) throw err;
-
-      // Filter in memory to match any parcial string format and exclude disabled temas if not admin
-      const filtered = (data || []).filter((t: TemaRow) => {
+      const data = await getCachedTemas();
+      const filtered = (data || []).filter((t) => {
         const p = (t.parcial || '').toLowerCase();
         if (!p.includes(parcial.key)) return false;
         if (!canBypass && isTemaDisabled(t.id, t.parcial, currentMaintenance.disabledFeatures)) return false;
         return true;
       });
 
-      setTemas(filtered);
+      setTemas(filtered as unknown as TemaRow[]);
     } catch (err: any) {
       console.error('Error fetching temas:', err);
-      setError('No se pudieron cargar los temas de este parcial.');
+      const fallback = getQuickTemas();
+      if (fallback && fallback.length > 0) {
+        const filtered = fallback.filter((t) => (t.parcial || '').toLowerCase().includes(parcial.key));
+        setTemas(filtered as unknown as TemaRow[]);
+      } else {
+        setError('No se pudieron cargar los temas de este parcial.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Step 3: Fetch Subtemas when Tema is selected
   const handleSelectTema = async (tema: TemaRow) => {
     setSelectedTema(tema);
     setSelectedSubtema(null);
     setPlacas([]);
-    setLoading(true);
     setError(null);
 
+    const quick = getQuickSubtemas(tema.id);
+    if (quick && quick.length > 0) {
+      setSubtemas(quick as unknown as SubtemaRow[]);
+    } else {
+      setLoading(true);
+    }
+
     try {
-      const { data, error: err } = await supabase
-        .from('subtemas')
-        .select('id, nombre, logo_url, tema_id, sort_order')
-        .eq('tema_id', tema.id)
-        .order('sort_order', { ascending: true });
-
-      if (err) throw err;
-
-      setSubtemas(data || []);
+      const data = await getCachedSubtemas(tema.id);
+      setSubtemas((data || []) as unknown as SubtemaRow[]);
     } catch (err: any) {
       console.error('Error fetching subtemas:', err);
-      setError('No se pudieron cargar los subtemas de este tema.');
+      const fallback = getQuickSubtemas(tema.id);
+      if (fallback && fallback.length > 0) {
+        setSubtemas(fallback as unknown as SubtemaRow[]);
+      } else {
+        setError('No se pudieron cargar los subtemas de este tema.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Step 4: Fetch Placas when Subtema is selected
   const handleSelectSubtema = async (subtema: SubtemaRow) => {
     setSelectedSubtema(subtema);
-    setLoading(true);
     setError(null);
 
+    const subtemaIdNum = Number(subtema.id);
+    const quickBundle = getQuickPlacasForSubtema(subtemaIdNum);
+    if (quickBundle && quickBundle.placas && quickBundle.placas.length > 0) {
+      setPlacas(quickBundle.placas as unknown as PlacaRow[]);
+    } else {
+      setLoading(true);
+    }
+
     try {
-      const subtemaIdNum = Number(subtema.id);
-      const { data, error: err } = await supabase
-        .from('placas')
-        .select('id, photo_url, aumento, tincion, comentario, senalados, senalados_meta, sort_order')
-        .eq('subtema_id', subtemaIdNum)
-        .order('sort_order', { ascending: true });
-
-      if (err) {
-        // Fallback without sort_order if column is missing or ordering issue
-        const fallback = await supabase
-          .from('placas')
-          .select('id, photo_url, aumento, tincion, comentario, senalados, senalados_meta')
-          .eq('subtema_id', subtemaIdNum);
-
-        if (fallback.error) throw fallback.error;
-        setPlacas(fallback.data || []);
-      } else {
-        setPlacas(data || []);
-      }
+      const bundle = await getCachedPlacasForSubtema(subtemaIdNum);
+      setPlacas((bundle.placas || []) as unknown as PlacaRow[]);
     } catch (err: any) {
       console.error('Error fetching placas:', err);
-      setError('No se pudieron cargar las placas de este subtema.');
+      const fallback = getQuickPlacasForSubtema(subtemaIdNum);
+      if (fallback && fallback.placas && fallback.placas.length > 0) {
+        setPlacas(fallback.placas as unknown as PlacaRow[]);
+      } else {
+        setError('No se pudieron cargar las placas de este subtema.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Final Step: Choose plate
   const handlePickPlaca = (placa: PlacaRow) => {
     if (!selectedSubtema || !selectedTema || !selectedParcial) return;
 
@@ -285,10 +311,6 @@ export const PlatePickerModal: React.FC<PlatePickerModalProps> = ({
       setSelectedParcial(null);
       setTemas([]);
     }
-  };
-
-  const handleImageError = (key: string) => {
-    setFailedImages(prev => ({ ...prev, [key]: true }));
   };
 
   if (!isOpen) return null;

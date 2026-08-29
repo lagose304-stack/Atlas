@@ -248,29 +248,37 @@ const Evaluaciones: React.FC = () => {
     void fetchSiteMaintenanceStatus().then(setMaintenanceStatus);
   }, []);
 
+  const [reloadTick, setReloadTick] = React.useState(0);
+
   React.useEffect(() => {
     const loadPublicTests = async () => {
       setIsLoading(true);
       setError('');
 
-      const { data, error: queryError } = await supabase
-        .from('pruebas')
-        .select('id, nombre, instrucciones, scope, parcial_key, created_at, image_url, tema_id, subtema_id, tema:temas(id, nombre, logo_url), subtema:subtemas(id, nombre, logo_url)')
-        .eq('estado', 'publicada')
-        .order('created_at', { ascending: false });
+      try {
+        const { data, error: queryError } = await supabase
+          .from('pruebas')
+          .select('id, nombre, instrucciones, scope, parcial_key, created_at, image_url, tema_id, subtema_id, tema:temas(id, nombre, logo_url), subtema:subtemas(id, nombre, logo_url)')
+          .eq('estado', 'publicada')
+          .order('created_at', { ascending: false });
 
-      if (queryError) {
+        if (queryError) {
+          setPruebas([]);
+          setError('No se pudieron cargar las evaluaciones publicadas. Revisa tu conexión a internet.');
+        } else {
+          setPruebas((data ?? []) as unknown as PruebaPublica[]);
+        }
+      } catch (err) {
+        console.error('Error al cargar pruebas públicas:', err);
         setPruebas([]);
-        setError('No se pudieron cargar las evaluaciones publicadas.');
-      } else {
-        setPruebas((data ?? []) as unknown as PruebaPublica[]);
+        setError('No se pudieron cargar las evaluaciones en este momento.');
+      } finally {
+        setIsLoading(false);
       }
-
-      setIsLoading(false);
     };
 
     void loadPublicTests();
-  }, []);
+  }, [reloadTick]);
 
   const canBypass = canBypassMaintenance(user, isAuthenticated);
 
@@ -398,7 +406,30 @@ const Evaluaciones: React.FC = () => {
           {isLoading ? (
             <div style={s.statusBox}><span className="route-loading-spinner" /> <div style={s.statusCopy}><strong>Preparando evaluaciones</strong><span>Estamos organizando el contenido disponible.</span></div></div>
           ) : error ? (
-            <div style={{ ...s.statusBox, ...s.errorBox }}><div style={s.statusCopy}><strong>No pudimos cargar las evaluaciones</strong><span>{error}</span></div></div>
+            <div style={{ ...s.statusBox, ...s.errorBox }}>
+              <div style={s.statusCopy}>
+                <strong>No pudimos cargar las evaluaciones</strong>
+                <span>{error}</span>
+                <button
+                  type="button"
+                  onClick={() => setReloadTick((t) => t + 1)}
+                  style={{
+                    marginTop: '10px',
+                    padding: '8px 16px',
+                    background: '#0ea5e9',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    alignSelf: 'flex-start',
+                  }}
+                >
+                  Reintentar
+                </button>
+              </div>
+            </div>
           ) : !hasAnyPublishedTest ? (
             <div style={s.statusBox}><BookOpenCheck size={28} aria-hidden="true" /><div style={s.statusCopy}><strong>Aún no hay evaluaciones publicadas</strong><span>Cuando haya contenido disponible, aparecerá organizado en esta página.</span></div></div>
           ) : (

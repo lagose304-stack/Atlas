@@ -9,6 +9,7 @@ import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
 import { logAuditEvent } from '../services/unifiedAuditService';
+import { getCachedSubtemas, getQuickSubtemas } from '../services/catalogService';
 
 type TestScope = 'parcial' | 'tema' | 'subtema';
 
@@ -115,28 +116,31 @@ const Pruebas: React.FC = () => {
     setSubtemasLoadError('');
     setLoadingSubtemas(false);
 
-    if (scope !== 'subtema' || !selectedTemaId) {
-      return;
+    const numTemaId = Number(selectedTemaId);
+    const quick = getQuickSubtemas(numTemaId);
+    if (quick && quick.length > 0) {
+      setSubtemas(quick as unknown as Subtema[]);
+      setLoadingSubtemas(false);
+    } else {
+      setLoadingSubtemas(true);
     }
 
     const fetchSubtemas = async () => {
-      setLoadingSubtemas(true);
-      setSubtemasLoadError('');
-
-      const { data, error } = await supabase
-        .from('subtemas')
-        .select('id, nombre, tema_id, sort_order')
-        .eq('tema_id', selectedTemaId)
-        .order('sort_order', { ascending: true });
-
-      if (error) {
-        setSubtemas([]);
-        setSubtemasLoadError('No se pudieron cargar los subtemas.');
-      } else {
-        setSubtemas((data ?? []) as Subtema[]);
+      try {
+        const data = await getCachedSubtemas(numTemaId);
+        setSubtemas((data ?? []) as unknown as Subtema[]);
+      } catch (error) {
+        console.error('Error cargando subtemas en pruebas:', error);
+        const fallback = getQuickSubtemas(numTemaId);
+        if (fallback && fallback.length > 0) {
+          setSubtemas(fallback as unknown as Subtema[]);
+        } else {
+          setSubtemas([]);
+          setSubtemasLoadError('No se pudieron cargar los subtemas.');
+        }
+      } finally {
+        setLoadingSubtemas(false);
       }
-
-      setLoadingSubtemas(false);
     };
 
     void fetchSubtemas();

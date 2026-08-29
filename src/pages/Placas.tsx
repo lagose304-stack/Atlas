@@ -13,6 +13,7 @@ import PlateEditorPanel from '../components/PlateEditorPanel';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
 
 // --- Interfaces ---
 interface Tema {
@@ -356,59 +357,73 @@ const Placas: React.FC = () => {
   // Cargar temas desde la base de datos
   useEffect(() => {
     const fetchTemas = async () => {
-      setLoadingTemas(true);
-      setTemasLoadError(null);
-      const { data, error } = await supabase
-        .from('temas')
-        .select('id, nombre, parcial, sort_order')
-        .order('parcial')
-        .order('sort_order', { ascending: true });
-
-      if (error) {
-        console.error('Error al cargar temas:', error);
-        setTemas([]);
-        setTemasLoadError('No se pudieron cargar los temas. Revisa tu conexión e inténtalo de nuevo.');
+      const quick = getQuickTemas();
+      if (quick && quick.length > 0) {
+        setTemas(quick as unknown as Tema[]);
         setLoadingTemas(false);
-        return;
+      } else {
+        setLoadingTemas(true);
       }
+      setTemasLoadError(null);
 
-      setTemas(data ?? []);
-      setLoadingTemas(false);
+      try {
+        const data = await getCachedTemas({ forceRefresh: temasReloadTick > 0 });
+        setTemas(data as unknown as Tema[]);
+      } catch (error) {
+        console.error('Error al cargar temas:', error);
+        const fallback = getQuickTemas();
+        if (fallback && fallback.length > 0) {
+          setTemas(fallback as unknown as Tema[]);
+        } else {
+          setTemas([]);
+          setTemasLoadError('No se pudieron cargar los temas. Revisa tu conexión e inténtalo de nuevo.');
+        }
+      } finally {
+        setLoadingTemas(false);
+      }
     };
 
-    fetchTemas();
+    void fetchTemas();
   }, [temasReloadTick]);
 
   // Cargar subtemas cuando se selecciona un tema
   useEffect(() => {
-    const fetchSubtemas = async () => {
-      if (selectedTema) {
-        setLoadingSubtemas(true);
-        setSubtemasLoadError(null);
-        const { data, error } = await supabase
-          .from('subtemas')
-          .select('*')
-          .eq('tema_id', selectedTema)
-          .order('sort_order', { ascending: true });
+    const numTemaId = Number(selectedTema || 0);
+    if (!numTemaId) {
+      setSubtemas([]);
+      setSubtemasLoadError(null);
+      setLoadingSubtemas(false);
+      return;
+    }
 
-        if (error) {
-          console.error('Error al cargar subtemas:', error);
+    const quick = getQuickSubtemas(numTemaId);
+    if (quick && quick.length > 0) {
+      setSubtemas(quick as unknown as Subtema[]);
+      setLoadingSubtemas(false);
+    } else {
+      setLoadingSubtemas(true);
+    }
+    setSubtemasLoadError(null);
+
+    const fetchSubtemas = async () => {
+      try {
+        const data = await getCachedSubtemas(numTemaId, { forceRefresh: subtemasReloadTick > 0 });
+        setSubtemas(data as unknown as Subtema[]);
+      } catch (error) {
+        console.error('Error al cargar subtemas:', error);
+        const fallback = getQuickSubtemas(numTemaId);
+        if (fallback && fallback.length > 0) {
+          setSubtemas(fallback as unknown as Subtema[]);
+        } else {
           setSubtemas([]);
           setSubtemasLoadError('No se pudieron cargar los subtemas. Revisa tu conexión e inténtalo de nuevo.');
-          setLoadingSubtemas(false);
-          return;
         }
-
-        setSubtemas(data ?? []);
-        setLoadingSubtemas(false);
-      } else {
-        setSubtemas([]);
-        setSubtemasLoadError(null);
+      } finally {
         setLoadingSubtemas(false);
       }
     };
 
-    fetchSubtemas();
+    void fetchSubtemas();
   }, [selectedTema, subtemasReloadTick]);
 
   useEffect(() => {

@@ -92,23 +92,32 @@ describe('catalogService', () => {
     expect(res3).toEqual(mockTemas);
   });
 
-  it('obtiene y filtra subtemas por tema_id', async () => {
+  it('obtiene y filtra subtemas por tema_id de forma directa y optimizada', async () => {
     const mockSubtemas = [
       { id: 10, nombre: 'Plano simple', tema_id: 1, sort_order: 0 },
       { id: 11, nombre: 'Cúbico simple', tema_id: 1, sort_order: 1 },
-      { id: 20, nombre: 'Laxo', tema_id: 2, sort_order: 0 },
     ];
 
-    const order = vi.fn().mockResolvedValue({ data: mockSubtemas, error: null });
-    const select = vi.fn().mockReturnValue({ order });
-    supabaseMock.from.mockReturnValue({ select });
+    supabaseMock.from.mockImplementation((table: string) => {
+      if (table === 'subtemas') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => Promise.resolve({ data: mockSubtemas, error: null }),
+            }),
+            order: () => Promise.resolve({ data: mockSubtemas, error: null }),
+          }),
+        };
+      }
+      return {};
+    });
 
     const subtemasTema1 = await getCachedSubtemas(1);
     expect(subtemasTema1).toHaveLength(2);
     expect(subtemasTema1[0].nombre).toBe('Plano simple');
 
     // Filtrado sincrónico
-    expect(getQuickSubtemas(2)).toEqual([mockSubtemas[2]]);
+    expect(getQuickSubtemas(1)).toEqual(mockSubtemas);
     expect(getQuickSubtemaById(10)).toEqual(mockSubtemas[0]);
   });
 

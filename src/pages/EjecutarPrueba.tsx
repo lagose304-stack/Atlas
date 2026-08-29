@@ -193,6 +193,7 @@ const EjecutarPrueba: React.FC = () => {
   const [reviewedQuestions, setReviewedQuestions] = useState<Record<string, boolean>>({});
   const [gradingQuestionId, setGradingQuestionId] = useState<string | null>(null);
   const [usesLocalGrading, setUsesLocalGrading] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const loadPrueba = async () => {
@@ -205,126 +206,131 @@ const EjecutarPrueba: React.FC = () => {
       setIsLoading(true);
       setError('');
 
-      const canBypass = canBypassMaintenance(user, isAuthenticated);
-      const isManagementPreview = location.pathname.startsWith('/pruebas/ejecutar/');
+      try {
+        const canBypass = canBypassMaintenance(user, isAuthenticated);
+        const isManagementPreview = location.pathname.startsWith('/pruebas/ejecutar/');
 
-      if (!canBypass && !isManagementPreview) {
-        const maintenanceStatus = await fetchSiteMaintenanceStatus();
-        if (maintenanceStatus.enabled) {
-          setError('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
-          setIsLoading(false);
-          return;
-        }
-        if (isFeatureDisabled('evaluations', maintenanceStatus.disabledFeatures)) {
-          setError('El módulo de evaluaciones se encuentra temporalmente deshabilitado por mantenimiento.');
-          setIsLoading(false);
-          return;
-        }
-
-        // Consultar metadatos de la prueba para verificar tema y parcial
-        const { data: testMeta } = await supabase
-          .from('pruebas')
-          .select('tema_id, parcial_key')
-          .eq('id', pruebaId)
-          .maybeSingle();
-
-        if (testMeta) {
-          if (
-            isParcialDisabled(testMeta.parcial_key, maintenanceStatus.disabledFeatures) ||
-            isTemaDisabled(testMeta.tema_id, testMeta.parcial_key, maintenanceStatus.disabledFeatures)
-          ) {
-            setError('Esta evaluación no se encuentra disponible temporalmente por mantenimiento del tema o parcial correspondiente.');
+        if (!canBypass && !isManagementPreview) {
+          const maintenanceStatus = await fetchSiteMaintenanceStatus();
+          if (maintenanceStatus.enabled) {
+            setError('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
             setIsLoading(false);
             return;
           }
+          if (isFeatureDisabled('evaluations', maintenanceStatus.disabledFeatures)) {
+            setError('El módulo de evaluaciones se encuentra temporalmente deshabilitado por mantenimiento.');
+            setIsLoading(false);
+            return;
+          }
+
+          // Consultar metadatos de la prueba para verificar tema y parcial
+          const { data: testMeta } = await supabase
+            .from('pruebas')
+            .select('tema_id, parcial_key')
+            .eq('id', pruebaId)
+            .maybeSingle();
+
+          if (testMeta) {
+            if (
+              isParcialDisabled(testMeta.parcial_key, maintenanceStatus.disabledFeatures) ||
+              isTemaDisabled(testMeta.tema_id, testMeta.parcial_key, maintenanceStatus.disabledFeatures)
+            ) {
+              setError('Esta evaluación no se encuentra disponible temporalmente por mantenimiento del tema o parcial correspondiente.');
+              setIsLoading(false);
+              return;
+            }
+          }
         }
-      }
 
-      const { data, error: pruebaError } = await supabase.rpc('atlas_get_public_test', {
-        p_prueba_id: pruebaId,
-      });
-      const payload = data as PublicTestPayload | null;
+        const { data, error: pruebaError } = await supabase.rpc('atlas_get_public_test', {
+          p_prueba_id: pruebaId,
+        });
+        const payload = data as PublicTestPayload | null;
 
-      if (!pruebaError && payload?.test) {
-        setPrueba(payload.test);
-        setUsesLocalGrading(false);
-        setQuestions(payload.questions.map((pregunta) => ({
-          id: pregunta.id,
-          sortOrder: pregunta.sort_order,
-          title: pregunta.titulo,
-          retroalimentacion: '',
-          required: pregunta.required,
-          options: pregunta.options.map((opcion) => ({
-            id: opcion.id,
-            text: opcion.texto,
-            isCorrect: false,
-            sortOrder: opcion.sort_order,
-          })),
-          referencePhotoUrl: pregunta.reference_photo_url,
-          referenceTemaName: pregunta.reference_tema_name ?? '',
-          referenceSubtemaName: pregunta.reference_subtema_name ?? '',
-          referenceSenaladoLocation:
-            pregunta.reference_senalado_x != null &&
-            pregunta.reference_senalado_y != null
-              ? {
-                  x: pregunta.reference_senalado_x,
-                  y: pregunta.reference_senalado_y,
-                  startX: pregunta.reference_senalado_start_x,
-                  startY: pregunta.reference_senalado_start_y,
-                }
-              : null,
-        })));
-      } else if (isManagementPreview) {
-        const previewPayload = await loadPrivateTestPreview(pruebaId);
-        if (!previewPayload) {
-          setError('No se pudo cargar la prueba guardada para vista previa.');
+        if (!pruebaError && payload?.test) {
+          setPrueba(payload.test);
+          setUsesLocalGrading(false);
+          setQuestions(payload.questions.map((pregunta) => ({
+            id: pregunta.id,
+            sortOrder: pregunta.sort_order,
+            title: pregunta.titulo,
+            retroalimentacion: '',
+            required: pregunta.required,
+            options: pregunta.options.map((opcion) => ({
+              id: opcion.id,
+              text: opcion.texto,
+              isCorrect: false,
+              sortOrder: opcion.sort_order,
+            })),
+            referencePhotoUrl: pregunta.reference_photo_url,
+            referenceTemaName: pregunta.reference_tema_name ?? '',
+            referenceSubtemaName: pregunta.reference_subtema_name ?? '',
+            referenceSenaladoLocation:
+              pregunta.reference_senalado_x != null &&
+              pregunta.reference_senalado_y != null
+                ? {
+                    x: pregunta.reference_senalado_x,
+                    y: pregunta.reference_senalado_y,
+                    startX: pregunta.reference_senalado_start_x,
+                    startY: pregunta.reference_senalado_start_y,
+                  }
+                : null,
+          })));
+        } else if (isManagementPreview) {
+          const previewPayload = await loadPrivateTestPreview(pruebaId);
+          if (!previewPayload) {
+            setError('No se pudo cargar la prueba guardada para vista previa.');
+            setIsLoading(false);
+            return;
+          }
+
+          setPrueba(previewPayload.test);
+          setUsesLocalGrading(true);
+          setQuestions(previewPayload.questions.map((pregunta) => ({
+            id: pregunta.id,
+            sortOrder: pregunta.sort_order,
+            title: pregunta.titulo,
+            retroalimentacion: pregunta.retroalimentacion ?? '',
+            required: pregunta.required,
+            options: pregunta.options.map((opcion) => ({
+              id: opcion.id,
+              text: opcion.texto,
+              isCorrect: opcion.is_correct,
+              sortOrder: opcion.sort_order,
+            })),
+            referencePhotoUrl: pregunta.reference_photo_url,
+            referenceTemaName: pregunta.reference_tema_name ?? '',
+            referenceSubtemaName: pregunta.reference_subtema_name ?? '',
+            referenceSenaladoLocation:
+              pregunta.reference_senalado_x != null && pregunta.reference_senalado_y != null
+                ? {
+                    x: pregunta.reference_senalado_x,
+                    y: pregunta.reference_senalado_y,
+                    startX: pregunta.reference_senalado_start_x,
+                    startY: pregunta.reference_senalado_start_y,
+                  }
+                : null,
+          })));
+        } else {
+          setError('Esta prueba todavía no está publicada.');
           setIsLoading(false);
           return;
         }
 
-        setPrueba(previewPayload.test);
-        setUsesLocalGrading(true);
-        setQuestions(previewPayload.questions.map((pregunta) => ({
-          id: pregunta.id,
-          sortOrder: pregunta.sort_order,
-          title: pregunta.titulo,
-          retroalimentacion: pregunta.retroalimentacion ?? '',
-          required: pregunta.required,
-          options: pregunta.options.map((opcion) => ({
-            id: opcion.id,
-            text: opcion.texto,
-            isCorrect: opcion.is_correct,
-            sortOrder: opcion.sort_order,
-          })),
-          referencePhotoUrl: pregunta.reference_photo_url,
-          referenceTemaName: pregunta.reference_tema_name ?? '',
-          referenceSubtemaName: pregunta.reference_subtema_name ?? '',
-          referenceSenaladoLocation:
-            pregunta.reference_senalado_x != null && pregunta.reference_senalado_y != null
-              ? {
-                  x: pregunta.reference_senalado_x,
-                  y: pregunta.reference_senalado_y,
-                  startX: pregunta.reference_senalado_start_x,
-                  startY: pregunta.reference_senalado_start_y,
-                }
-              : null,
-        })));
-      } else {
-        setError('Esta prueba todavía no está publicada.');
+        setCurrentQuestionIndex(0);
+        setIsGraded(false);
+        setShowReviewSummary(false);
+        setReviewedQuestions({});
+      } catch (err) {
+        console.error('Error al cargar la prueba:', err);
+        setError('Ocurrió un problema de conexión al cargar la evaluación. Revisa tu conexión.');
+      } finally {
         setIsLoading(false);
-        return;
       }
-
-      setCurrentQuestionIndex(0);
-      setIsGraded(false);
-      setShowReviewSummary(false);
-      setReviewedQuestions({});
-
-      setIsLoading(false);
     };
 
     void loadPrueba();
-  }, [pruebaId, location.pathname]);
+  }, [pruebaId, location.pathname, reloadKey]);
 
   const parcialLabel = prueba
     ? parciales.find(item => item.key === prueba.parcial_key)?.label ?? prueba.parcial_key
@@ -458,7 +464,24 @@ const EjecutarPrueba: React.FC = () => {
           <section style={s.card} className="edicion-card">
             <div style={s.emptyState}>
               <p style={s.emptyTitle}>{error}</p>
-              <Link to={backTarget} style={s.secondaryButton}>Volver</Link>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '14px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((k) => k + 1)}
+                  style={{
+                    padding: '9px 18px',
+                    borderRadius: '10px',
+                    background: '#0284c7',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Reintentar
+                </button>
+                <Link to={backTarget} style={s.secondaryButton}>Volver</Link>
+              </div>
             </div>
           </section>
         ) : (

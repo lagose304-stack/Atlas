@@ -15,6 +15,7 @@ import {
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
+import { getCachedSubtemas, getQuickSubtemas } from '../services/catalogService';
 
 type TestScope = 'parcial' | 'tema' | 'subtema';
 
@@ -814,20 +815,27 @@ const EditorDePruebas: React.FC = () => {
   };
 
   const loadSubtemasForTema = async (temaId: number) => {
-    setReferencePicker(prev => (prev ? { ...prev, loading: true, error: '' } : prev));
-    const { data, error: fetchError } = await supabase
-      .from('subtemas')
-      .select('id, nombre, tema_id, sort_order')
-      .eq('tema_id', temaId)
-      .order('sort_order', { ascending: true });
-
-    if (fetchError) {
-      setReferencePicker(prev => (prev ? { ...prev, loading: false, error: 'No se pudieron cargar los subtemas.' } : prev));
-      return;
+    const quick = getQuickSubtemas(temaId);
+    if (quick && quick.length > 0) {
+      setPickerSubtemas(quick as unknown as SubtemaRow[]);
+      setReferencePicker(prev => (prev ? { ...prev, loading: false, error: '', step: 'subtema' } : prev));
+    } else {
+      setReferencePicker(prev => (prev ? { ...prev, loading: true, error: '' } : prev));
     }
 
-    setPickerSubtemas((data ?? []) as SubtemaRow[]);
-    setReferencePicker(prev => (prev ? { ...prev, loading: false, error: '', step: 'subtema' } : prev));
+    try {
+      const data = await getCachedSubtemas(temaId);
+      setPickerSubtemas((data ?? []) as unknown as SubtemaRow[]);
+      setReferencePicker(prev => (prev ? { ...prev, loading: false, error: '', step: 'subtema' } : prev));
+    } catch (fetchError) {
+      const fallback = getQuickSubtemas(temaId);
+      if (fallback && fallback.length > 0) {
+        setPickerSubtemas(fallback as unknown as SubtemaRow[]);
+        setReferencePicker(prev => (prev ? { ...prev, loading: false, error: '', step: 'subtema' } : prev));
+      } else {
+        setReferencePicker(prev => (prev ? { ...prev, loading: false, error: 'No se pudieron cargar los subtemas.' } : prev));
+      }
+    }
   };
 
   const loadPlacasForSubtema = async (subtemaId: number) => {

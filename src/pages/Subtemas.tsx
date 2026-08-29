@@ -63,10 +63,11 @@ const StandardSubtemas: React.FC = () => {
   const initialTema = getQuickTemaById(currentTemaId);
   const initialSubtemas = getQuickSubtemas(currentTemaId);
   const initialAllTemas = getQuickTemas();
+  const hasCompleteInitialData = Boolean(initialTema && initialSubtemas && initialSubtemas.length > 0);
 
   const [tema, setTema] = useState<Tema | null>((initialTema as unknown as Tema) ?? null);
   const [subtemas, setSubtemas] = useState<Subtema[]>((initialSubtemas as unknown as Subtema[]) ?? []);
-  const [loading, setLoading] = useState<boolean>(!initialTema && (!initialSubtemas || initialSubtemas.length === 0));
+  const [loading, setLoading] = useState<boolean>(!hasCompleteInitialData);
   const [hoveredSubtema, setHoveredSubtema] = useState<number | null>(null);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [temaLogoFailed, setTemaLogoFailed] = useState(false);
@@ -76,7 +77,7 @@ const StandardSubtemas: React.FC = () => {
   const [allTemas, setAllTemas] = useState<Tema[]>((initialAllTemas as unknown as Tema[]) ?? []);
 
   const fetchData = useCallback(async () => {
-    if (!temaId) {
+    if (!currentTemaId) {
       setTema(null);
       setSubtemas([]);
       setLoadError('No se recibio un tema valido para mostrar.');
@@ -85,69 +86,78 @@ const StandardSubtemas: React.FC = () => {
     }
 
     setLoadError(null);
-    void logTemaView(Number(temaId));
+    void logTemaView(currentTemaId);
 
     try {
-      const [temaRes, maintenanceStatus, subtemasRes, allTemasRes, blocksRes] = await Promise.all([
-        supabase.from('temas').select('*').eq('id', temaId).single(),
-        fetchSiteMaintenanceStatus(),
-        getCachedSubtemas(Number(temaId)),
+      const [temaResult, subtemasResult, allTemasResult, maintenanceResult, blocksResult] = await Promise.allSettled([
+        supabase.from('temas').select('*').eq('id', currentTemaId).single(),
+        getCachedSubtemas(currentTemaId),
         getCachedTemas(),
-        getRenderableBlocks('subtemas_page', Number(temaId)).catch(() => []),
+        fetchSiteMaintenanceStatus(),
+        getRenderableBlocks('subtemas_page', currentTemaId),
       ]);
 
-      const temaData = temaRes.data;
-      if (temaData) {
+      let temaData: Tema | null = null;
+      if (temaResult.status === 'fulfilled' && temaResult.value.data) {
+        temaData = temaResult.value.data as Tema;
         setTema(temaData);
-      }
-
-      if (temaRes.error && !temaData) {
-        console.error('Error fetching tema:', temaRes.error);
-        setLoadError('No se pudo cargar la informacion del tema en este momento.');
-        setLoading(false);
-        return;
-      }
-
-      if (!temaData) {
-        setLoadError('El tema solicitado no existe o ya no esta disponible.');
-        setLoading(false);
-        return;
-      }
-
-      const canBypass = canBypassMaintenance(user, isAuthenticated);
-      if (!canBypass) {
-        if (maintenanceStatus.enabled) {
-          setLoadError('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
-          setLoading(false);
-          return;
-        }
-        if (isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures)) {
-          setLoadError('El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.');
-          setLoading(false);
-          return;
-        }
-        if (isTemaDisabled(temaData.id, temaData.parcial, maintenanceStatus.disabledFeatures)) {
-          setLoadError('Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.');
-          setLoading(false);
-          return;
+      } else {
+        const fallbackTema = getQuickTemaById(currentTemaId);
+        if (fallbackTema) {
+          temaData = fallbackTema as unknown as Tema;
+          setTema(temaData);
         }
       }
 
-      setSubtemas((subtemasRes ?? []) as unknown as Subtema[]);
-      setAllTemas((allTemasRes ?? []) as unknown as Tema[]);
-      setContentBlocks((blocksRes ?? []) as ContentBlock[]);
+      if (maintenanceResult.status === 'fulfilled') {
+        const maintenanceStatus = maintenanceResult.value;
+        const canBypass = canBypassMaintenance(user, isAuthenticated);
+        if (!canBypass && temaData) {
+          if (maintenanceStatus.enabled) {
+            setLoadError('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
+            setLoading(false);
+            return;
+          }
+          if (isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures)) {
+            setLoadError('El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.');
+            setLoading(false);
+            return;
+          }
+          if (isTemaDisabled(temaData.id, temaData.parcial, maintenanceStatus.disabledFeatures)) {
+            setLoadError('Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.');
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      if (subtemasResult.status === 'fulfilled' && Array.isArray(subtemasResult.value)) {
+        setSubtemas(subtemasResult.value as unknown as Subtema[]);
+      } else {
+        const fallbackSubtemas = getQuickSubtemas(currentTemaId);
+        if (fallbackSubtemas && fallbackSubtemas.length > 0) {
+          setSubtemas(fallbackSubtemas as unknown as Subtema[]);
+        }
+      }
+
+      if (allTemasResult.status === 'fulfilled' && Array.isArray(allTemasResult.value)) {
+        setAllTemas(allTemasResult.value as unknown as Tema[]);
+      }
+
+      if (blocksResult.status === 'fulfilled' && Array.isArray(blocksResult.value)) {
+        setContentBlocks(blocksResult.value as ContentBlock[]);
+      }
+
+      if (!temaData && (!initialSubtemas || initialSubtemas.length === 0)) {
+        setLoadError('No se pudo cargar la información de este tema. Revisa tu conexión a internet.');
+      }
+
       setLoading(false);
     } catch (err) {
       console.error('Error general cargando subtemas:', err);
-      setSubtemas((prev) => {
-        if (prev.length === 0) {
-          setLoadError('No se pudo cargar el listado de subtemas en este momento.');
-        }
-        return prev;
-      });
       setLoading(false);
     }
-  }, [temaId, user, isAuthenticated]);
+  }, [currentTemaId, user, isAuthenticated, initialSubtemas]);
 
   useEffect(() => {
     void fetchData();

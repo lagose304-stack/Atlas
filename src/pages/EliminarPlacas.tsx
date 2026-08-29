@@ -10,6 +10,7 @@ import LoadingToast from '../components/LoadingToast';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import { getCachedSubtemas, getQuickSubtemas } from '../services/catalogService';
 
 interface Tema {
   id: number;
@@ -148,23 +149,26 @@ const EliminarPlacas: React.FC = () => {
   }, []);
 
   const fetchSubtemas = useCallback(async (temaId: number): Promise<boolean> => {
-    setLoadingSubtemas(true);
+    const quick = getQuickSubtemas(temaId);
+    if (quick && quick.length > 0) {
+      setSubtemas(quick as unknown as Subtema[]);
+      setLoadingSubtemas(false);
+    } else {
+      setLoadingSubtemas(true);
+    }
     setSubtemasLoadError(null);
+
     try {
-      const { data, error } = await supabase
-        .from('subtemas')
-        .select('id, nombre, tema_id, logo_url')
-        .eq('tema_id', temaId)
-        .order('sort_order', { ascending: true });
-
-      if (error) {
-        throw error;
-      }
-
-      setSubtemas(data ?? []);
+      const data = await getCachedSubtemas(temaId);
+      setSubtemas(data as unknown as Subtema[]);
       return true;
     } catch (err) {
       console.error('Error al cargar subtemas en eliminar placas:', err);
+      const fallback = getQuickSubtemas(temaId);
+      if (fallback && fallback.length > 0) {
+        setSubtemas(fallback as unknown as Subtema[]);
+        return true;
+      }
       setSubtemas([]);
       setSubtemasLoadError('No se pudieron cargar los subtemas. Revisa tu conexión e inténtalo de nuevo.');
       return false;

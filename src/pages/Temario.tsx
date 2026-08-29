@@ -16,7 +16,7 @@ import { uploadToCloudinary, deleteFromCloudinary, getCloudinaryPublicId } from 
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { useAuth } from '../contexts/AuthContext';
 import { logAuditEvent } from '../services/unifiedAuditService';
-import { invalidateCatalogCache } from '../services/catalogService';
+import { invalidateCatalogCache, getCachedSubtemas, getQuickSubtemas } from '../services/catalogService';
 
 // --- Interfaces ---
 interface Tema {
@@ -204,27 +204,32 @@ const Temario: React.FC = () => {
     const fetchSubtemas = async () => {
       const temaId = isEditingSubtema ? selectedTemaId : (isDeletingSubtema ? deletingTemaId : null);
       if (temaId) {
-        setSubtemasLoadError(null);
-        const { data, error } = await supabase
-          .from('subtemas')
-          .select('*')
-          .eq('tema_id', temaId)
-          .order('sort_order', { ascending: true });
-
-        if (error) {
-          console.error('Error fetching subtemas:', error);
-          setSubtemasOfSelectedTema([]);
-          setSubtemasLoadError('No se pudieron cargar los subtemas del tema seleccionado.');
-          return;
+        const numTemaId = Number(temaId);
+        const quick = getQuickSubtemas(numTemaId);
+        if (quick && quick.length > 0) {
+          setSubtemasOfSelectedTema(quick as unknown as Subtema[]);
         }
+        setSubtemasLoadError(null);
 
-        setSubtemasOfSelectedTema(data || []);
-        if (isEditingSubtema) {
+        try {
+          const data = await getCachedSubtemas(numTemaId, { forceRefresh: subtemasReloadTick > 0 });
+          setSubtemasOfSelectedTema((data ?? []) as unknown as Subtema[]);
+          if (isEditingSubtema) {
             setEditingSubtemaId('');
             setEditingSubtemaNombre('');
-        }
-        if (isDeletingSubtema) {
+          }
+          if (isDeletingSubtema) {
             setDeletingSubtemaId('');
+          }
+        } catch (error) {
+          console.error('Error fetching subtemas:', error);
+          const fallback = getQuickSubtemas(numTemaId);
+          if (fallback && fallback.length > 0) {
+            setSubtemasOfSelectedTema(fallback as unknown as Subtema[]);
+          } else {
+            setSubtemasOfSelectedTema([]);
+            setSubtemasLoadError('No se pudieron cargar los subtemas del tema seleccionado.');
+          }
         }
       } else {
         setSubtemasOfSelectedTema([]);
@@ -232,7 +237,7 @@ const Temario: React.FC = () => {
       }
     };
     if (isEditingSubtema || isDeletingSubtema) {
-        void fetchSubtemas();
+      void fetchSubtemas();
     }
   }, [selectedTemaId, deletingTemaId, isEditingSubtema, isDeletingSubtema, subtemasReloadTick]);
 
