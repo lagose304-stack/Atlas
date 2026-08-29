@@ -80,7 +80,7 @@ const parseAumentoSortValue = (aumento: string): number => {
 
 const normalizeAumentoLabel = (aumento: string): string => aumento.trim().replace(/\s+/g, '').toUpperCase();
 
-const PlacasSubtema: React.FC = () => {
+const PlacasSubtemaContent: React.FC = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const { subtemaId } = useParams<{ subtemaId: string }>();
@@ -876,6 +876,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 800,
     lineHeight: 1.25,
   },
+};
+
+const PlacasSubtema: React.FC = () => {
+  const { subtemaId } = useParams<{ subtemaId: string }>();
+  return <PlacasSubtemaContent key={subtemaId} />;
 };
 
 export default PlacasSubtema;

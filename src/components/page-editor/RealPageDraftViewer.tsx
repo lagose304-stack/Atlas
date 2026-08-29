@@ -129,7 +129,7 @@ const RealPageDraftViewer: React.FC<RealPageDraftViewerProps> = ({
         } else if (selection.kind === 'tema') {
           const { data } = await supabase
             .from('subtemas')
-            .select('id, nombre, descripcion, logo_url')
+            .select('id, nombre, logo_url')
             .eq('tema_id', selection.id)
             .order('sort_order', { ascending: true });
           if (!isCancelled) setSubtemas((data ?? []) as SubtemaCardItem[]);

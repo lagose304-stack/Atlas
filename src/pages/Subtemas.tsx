@@ -106,6 +106,12 @@ const StandardSubtemas: React.FC = () => {
         if (fallbackTema) {
           temaData = fallbackTema as unknown as Tema;
           setTema(temaData);
+        } else if (allTemasResult.status === 'fulfilled' && Array.isArray(allTemasResult.value)) {
+          const fromAll = allTemasResult.value.find((t) => Number(t.id) === currentTemaId);
+          if (fromAll) {
+            temaData = fromAll as unknown as Tema;
+            setTema(temaData);
+          }
         }
       }
 
@@ -131,7 +137,7 @@ const StandardSubtemas: React.FC = () => {
         }
       }
 
-      if (subtemasResult.status === 'fulfilled' && Array.isArray(subtemasResult.value)) {
+      if (subtemasResult.status === 'fulfilled' && Array.isArray(subtemasResult.value) && subtemasResult.value.length > 0) {
         setSubtemas(subtemasResult.value as unknown as Subtema[]);
       } else {
         const fallbackSubtemas = getQuickSubtemas(currentTemaId);
@@ -140,15 +146,20 @@ const StandardSubtemas: React.FC = () => {
         }
       }
 
-      if (allTemasResult.status === 'fulfilled' && Array.isArray(allTemasResult.value)) {
+      if (allTemasResult.status === 'fulfilled' && Array.isArray(allTemasResult.value) && allTemasResult.value.length > 0) {
         setAllTemas(allTemasResult.value as unknown as Tema[]);
+      } else {
+        const fallbackAll = getQuickTemas();
+        if (fallbackAll && fallbackAll.length > 0) {
+          setAllTemas(fallbackAll as unknown as Tema[]);
+        }
       }
 
       if (blocksResult.status === 'fulfilled' && Array.isArray(blocksResult.value)) {
         setContentBlocks(blocksResult.value as ContentBlock[]);
       }
 
-      if (!temaData && (!initialSubtemas || initialSubtemas.length === 0)) {
+      if (!temaData && !initialTema) {
         setLoadError('No se pudo cargar la información de este tema. Revisa tu conexión a internet.');
       }
 
@@ -157,7 +168,7 @@ const StandardSubtemas: React.FC = () => {
       console.error('Error general cargando subtemas:', err);
       setLoading(false);
     }
-  }, [currentTemaId, user, isAuthenticated, initialSubtemas]);
+  }, [currentTemaId, user, isAuthenticated, initialTema]);
 
   useEffect(() => {
     void fetchData();
@@ -434,10 +445,10 @@ const Subtemas: React.FC = () => {
   const { temaId } = useParams<{ temaId: string }>();
 
   if (Number(temaId) === MICROSCOPY_TOPIC_ID) {
-    return <MicroscopyTopicExperience temaId={MICROSCOPY_TOPIC_ID} />;
+    return <MicroscopyTopicExperience key={temaId} temaId={MICROSCOPY_TOPIC_ID} />;
   }
 
-  return <StandardSubtemas />;
+  return <StandardSubtemas key={temaId} />;
 };
 
 const styles: { [key: string]: React.CSSProperties } = {

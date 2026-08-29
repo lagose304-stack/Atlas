@@ -78,14 +78,20 @@ const readLocalStorage = <T>(key: string, checkTtl = true): T | null => {
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as CacheState<T>;
-    if (!parsed || parsed.data === undefined || parsed.data === null) {
+    const parsed = JSON.parse(raw);
+    if (parsed === null || parsed === undefined) {
       return null;
     }
-    if (checkTtl && parsed.timestamp && Date.now() - parsed.timestamp > DEFAULT_TTL_MS) {
-      return null;
+    // Si viene en formato envoltorio { data: T, timestamp: number }
+    if (typeof parsed === 'object' && parsed !== null && 'data' in parsed && !Array.isArray(parsed)) {
+      const wrapper = parsed as CacheState<T>;
+      if (checkTtl && wrapper.timestamp && Date.now() - wrapper.timestamp > DEFAULT_TTL_MS) {
+        return null;
+      }
+      return wrapper.data;
     }
-    return parsed.data;
+    // Si viene directamente como T (ej. Array o estructura directa)
+    return parsed as T;
   } catch {
     return null;
   }
@@ -150,26 +156,35 @@ export const getQuickSubtemas = (temaId?: number | null): CatalogSubtema[] | nul
       });
       return fromStorage;
     }
-  }
 
-  // Si no está en la caché por tema, intentar desde la caché global
-  let allSubtemas = allSubtemasInMemory.data;
-  if (!allSubtemas || allSubtemas.length === 0) {
-    allSubtemas = readLocalStorage<CatalogSubtema[]>(ALL_SUBTEMAS_CACHE_KEY);
-    if (allSubtemas && allSubtemas.length > 0) {
-      allSubtemasInMemory = {
-        data: allSubtemas,
-        timestamp: Date.now(),
-      };
+    // Buscar en todos los subtemas cacheados globales
+    const all = getQuickSubtemas();
+    if (all && all.length > 0) {
+      const filtered = all.filter((s) => Number(s.tema_id) === numTemaId);
+      if (filtered.length > 0) {
+        subtemasByTemaInMemory.set(numTemaId, {
+          data: filtered,
+          timestamp: Date.now(),
+        });
+        return filtered;
+      }
     }
+    return null;
   }
 
-  if (!allSubtemas) return null;
-  if (temaId !== undefined && temaId !== null) {
-    const filtered = allSubtemas.filter((s) => Number(s.tema_id) === Number(temaId));
-    return filtered.length > 0 ? filtered : null;
+  // Si no se especifica temaId, buscar en la caché global de subtemas
+  if (allSubtemasInMemory.data && allSubtemasInMemory.data.length > 0) {
+    return allSubtemasInMemory.data;
   }
-  return allSubtemas;
+  const allFromStorage = readLocalStorage<CatalogSubtema[]>(ALL_SUBTEMAS_CACHE_KEY);
+  if (allFromStorage && allFromStorage.length > 0) {
+    allSubtemasInMemory = {
+      data: allFromStorage,
+      timestamp: Date.now(),
+    };
+    return allFromStorage;
+  }
+  return null;
 };
 
 /**
@@ -289,7 +304,7 @@ export const getCachedSubtemas = async (
       try {
         const { data, error } = await supabase
           .from('subtemas')
-          .select('id, nombre, descripcion, tema_id, sort_order, logo_url')
+          .select('id, nombre, tema_id, sort_order, logo_url')
           .eq('tema_id', numTemaId)
           .order('sort_order', { ascending: true });
 
@@ -298,16 +313,30 @@ export const getCachedSubtemas = async (
         }
 
         const list = (data ?? []) as CatalogSubtema[];
-        subtemasByTemaInMemory.set(numTemaId, {
-          data: list,
-          timestamp: Date.now(),
-        });
-        writeLocalStorage(`${SUBTEMA_PER_TEMA_PREFIX}${numTemaId}`, list);
+        if (list.length > 0) {
+          subtemasByTemaInMemory.set(numTemaId, {
+            data: list,
+            timestamp: Date.now(),
+          });
+          writeLocalStorage(`${SUBTEMA_PER_TEMA_PREFIX}${numTemaId}`, list);
+          return list;
+        }
+
+        // Si la consulta por tema_id devolvió vacío, verificar si los subtemas existen en la caché global
+        const fromGlobal = getQuickSubtemas(numTemaId);
+        if (fromGlobal && fromGlobal.length > 0) {
+          subtemasByTemaInMemory.set(numTemaId, {
+            data: fromGlobal,
+            timestamp: Date.now(),
+          });
+          return fromGlobal;
+        }
+
         return list;
       } catch (err) {
         console.warn(`Advertencia al consultar subtemas del tema ${numTemaId}:`, err);
         const fallback = getQuickSubtemas(numTemaId) ?? readLocalStorage<CatalogSubtema[]>(`${SUBTEMA_PER_TEMA_PREFIX}${numTemaId}`, false);
-        if (fallback) return fallback;
+        if (fallback && fallback.length > 0) return fallback;
         throw err;
       } finally {
         subtemasInFlightPromises.delete(numTemaId);
@@ -333,7 +362,7 @@ export const getCachedSubtemas = async (
     try {
       const { data, error } = await supabase
         .from('subtemas')
-        .select('id, nombre, descripcion, tema_id, sort_order, logo_url')
+        .select('id, nombre, tema_id, sort_order, logo_url')
         .order('sort_order', { ascending: true });
 
       if (error) {
@@ -347,6 +376,22 @@ export const getCachedSubtemas = async (
           timestamp: Date.now(),
         };
         writeLocalStorage(ALL_SUBTEMAS_CACHE_KEY, list);
+
+        // Indexar por cada tema individual para acceso inmediato (0 ms)
+        const byTema = new Map<number, CatalogSubtema[]>();
+        list.forEach((sub) => {
+          const tId = Number(sub.tema_id);
+          const current = byTema.get(tId) ?? [];
+          current.push(sub);
+          byTema.set(tId, current);
+        });
+        byTema.forEach((subs, tId) => {
+          subtemasByTemaInMemory.set(tId, {
+            data: subs,
+            timestamp: Date.now(),
+          });
+          writeLocalStorage(`${SUBTEMA_PER_TEMA_PREFIX}${tId}`, subs);
+        });
       }
       return list;
     } catch (err) {
