@@ -572,6 +572,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
   const [isPinching, setIsPinching] = useState(false);
+  const isPinchingRef = useRef(false);
+  const justPinchedRef = useRef(false);
+  const activeTouchesCountRef = useRef(0);
+  const pinchCooldownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dragStartMouse, setDragStartMouse] = useState<{ x: number; y: number } | null>(null);
   const [dragStartPosition, setDragStartPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -1080,7 +1084,15 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Unified Pointer Down for Canvas (Handles Freehand Drawing, Exclusion Holes, and Panning)
   const handleCanvasPointerDown = (e: React.PointerEvent | React.MouseEvent) => {
-    if (isPinching) return;
+    if (
+      isPinching ||
+      isPinchingRef.current ||
+      justPinchedRef.current ||
+      activeTouchesCountRef.current >= 2 ||
+      ('touches' in e && (e as any).touches?.length >= 2)
+    ) {
+      return;
+    }
 
     if (e.button === 1 || isSpacePressed) {
       e.preventDefault();
@@ -1117,6 +1129,21 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Unified Pointer Move for Canvas
   const handleCanvasPointerMove = (e: React.PointerEvent | React.MouseEvent) => {
+    if (
+      isPinching ||
+      isPinchingRef.current ||
+      justPinchedRef.current ||
+      activeTouchesCountRef.current >= 2
+    ) {
+      if (isDrawingFreehandRef.current) {
+        isDrawingFreehandRef.current = false;
+        setIsDrawingFreehand(false);
+        drawingPolygonPointsRef.current = [];
+        setDrawingPolygonPoints([]);
+      }
+      return;
+    }
+
     const coords = clientToImageCoords(e.clientX, e.clientY);
     if (coords) setCursorImagePos(coords);
 
@@ -1151,6 +1178,23 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Unified Pointer Up for Canvas
   const handleCanvasPointerUp = () => {
+    if (
+      isPinching ||
+      isPinchingRef.current ||
+      justPinchedRef.current ||
+      activeTouchesCountRef.current >= 2
+    ) {
+      if (isDrawingFreehandRef.current) {
+        isDrawingFreehandRef.current = false;
+        setIsDrawingFreehand(false);
+        drawingPolygonPointsRef.current = [];
+        setDrawingPolygonPoints([]);
+      }
+      setIsDraggingCanvas(false);
+      setDragStartMouse(null);
+      return;
+    }
+
     if (isDrawingFreehandRef.current) {
       isDrawingFreehandRef.current = false;
       setIsDrawingFreehand(false);
@@ -1182,7 +1226,19 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Click on image canvas (For Pointer, Batch or Reassigning Tip)
   const handleCanvasClick = (event: React.MouseEvent) => {
-    if (isDraggingCanvas || isSpacePressed || isDrawingFreehand || justDrawnRef.current) return;
+    if (
+      isDraggingCanvas ||
+      isSpacePressed ||
+      isDrawingFreehand ||
+      isDrawingFreehandRef.current ||
+      isPinching ||
+      isPinchingRef.current ||
+      justPinchedRef.current ||
+      activeTouchesCountRef.current >= 2 ||
+      justDrawnRef.current
+    ) {
+      return;
+    }
 
     const coords = clientToImageCoords(event.clientX, event.clientY);
     if (!coords) return;
@@ -1377,14 +1433,22 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Touch Pinch Handlers for 2-finger zoom and pan
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      if (isDrawingFreehand) {
-        setIsDrawingFreehand(false);
-        setDrawingPolygonPoints([]);
-      }
+    activeTouchesCountRef.current = e.touches.length;
+    if (e.touches.length >= 2) {
+      isPinchingRef.current = true;
+      setIsPinching(true);
+      justPinchedRef.current = true;
+      if (pinchCooldownTimeoutRef.current) clearTimeout(pinchCooldownTimeoutRef.current);
+
+      // Cancel any in-progress drawing immediately so multi-touch never leaves stray markers
+      isDrawingFreehandRef.current = false;
+      setIsDrawingFreehand(false);
+      drawingPolygonPointsRef.current = [];
+      setDrawingPolygonPoints([]);
+
       setIsDraggingCanvas(false);
       setDragStartMouse(null);
-      setIsPinching(true);
+      setDraggingHandle(null);
 
       const t1 = e.touches[0];
       const t2 = e.touches[1];
@@ -1400,39 +1464,57 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 2 && pinchRef.current) {
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
-      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-      const currentMidX = (t1.clientX + t2.clientX) / 2;
-      const currentMidY = (t1.clientY + t2.clientY) / 2;
-
-      const scale = dist / pinchRef.current.dist;
-      const nextZoom = clamp(Number((pinchRef.current.startZoom * scale).toFixed(3)), ZOOM_MIN, ZOOM_MAX);
-
-      const container = containerRef.current;
-      if (container) {
-        const rect = container.getBoundingClientRect();
-        const initialMidRelX = pinchRef.current.midX - rect.left - rect.width / 2;
-        const initialMidRelY = pinchRef.current.midY - rect.top - rect.height / 2;
-        const currentMidRelX = currentMidX - rect.left - rect.width / 2;
-        const currentMidRelY = currentMidY - rect.top - rect.height / 2;
-
-        const scaleRatio = nextZoom / pinchRef.current.startZoom;
-        const nextPosX = currentMidRelX - (initialMidRelX - pinchRef.current.startPos.x) * scaleRatio;
-        const nextPosY = currentMidRelY - (initialMidRelY - pinchRef.current.startPos.y) * scaleRatio;
-
-        setPosition({ x: Math.round(nextPosX), y: Math.round(nextPosY) });
+    activeTouchesCountRef.current = e.touches.length;
+    if (e.touches.length >= 2) {
+      // Ensure drawing is completely blocked during multi-finger gestures
+      if (isDrawingFreehandRef.current) {
+        isDrawingFreehandRef.current = false;
+        setIsDrawingFreehand(false);
+        drawingPolygonPointsRef.current = [];
+        setDrawingPolygonPoints([]);
       }
 
-      setZoomLevel(nextZoom);
+      if (pinchRef.current) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const currentMidX = (t1.clientX + t2.clientX) / 2;
+        const currentMidY = (t1.clientY + t2.clientY) / 2;
+
+        const scale = dist / pinchRef.current.dist;
+        const nextZoom = clamp(Number((pinchRef.current.startZoom * scale).toFixed(3)), ZOOM_MIN, ZOOM_MAX);
+
+        const container = containerRef.current;
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          const initialMidRelX = pinchRef.current.midX - rect.left - rect.width / 2;
+          const initialMidRelY = pinchRef.current.midY - rect.top - rect.height / 2;
+          const currentMidRelX = currentMidX - rect.left - rect.width / 2;
+          const currentMidRelY = currentMidY - rect.top - rect.height / 2;
+
+          const scaleRatio = nextZoom / pinchRef.current.startZoom;
+          const nextPosX = currentMidRelX - (initialMidRelX - pinchRef.current.startPos.x) * scaleRatio;
+          const nextPosY = currentMidRelY - (initialMidRelY - pinchRef.current.startPos.y) * scaleRatio;
+
+          setPosition({ x: Math.round(nextPosX), y: Math.round(nextPosY) });
+        }
+
+        setZoomLevel(nextZoom);
+      }
     }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    activeTouchesCountRef.current = e.touches.length;
     if (e.touches.length < 2) {
       pinchRef.current = null;
+      isPinchingRef.current = false;
       setIsPinching(false);
+      justPinchedRef.current = true;
+      if (pinchCooldownTimeoutRef.current) clearTimeout(pinchCooldownTimeoutRef.current);
+      pinchCooldownTimeoutRef.current = setTimeout(() => {
+        justPinchedRef.current = false;
+      }, 400);
     }
   };
 
@@ -1712,32 +1794,34 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           </div>
         )}
 
-        {/* VERTICAL STUDIO TOOLBAR (Lado Izquierdo, de gran altura y proporción) */}
+        {/* VERTICAL STUDIO TOOLBAR (Lado Izquierdo, responsivo y autocontenido sin desbordamiento) */}
         <div
           style={{
             position: 'absolute',
             top: '50%',
-            left: 18,
+            left: 14,
             transform: 'translateY(-50%)',
-            height: 'calc(100% - 36px)',
-            maxHeight: '840px',
-            width: '56px',
+            maxHeight: 'calc(100% - 24px)',
+            width: '52px',
             zIndex: 30,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            gap: '4px',
             background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%)',
             border: '1.5px solid #cbd5e1',
-            borderRadius: '20px',
-            padding: '12px 6px',
+            borderRadius: '18px',
+            padding: '7px 4px',
             backdropFilter: 'blur(16px)',
             boxShadow: '0 12px 36px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.05)',
             boxSizing: 'border-box',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            scrollbarWidth: 'none',
           }}
         >
           {/* Top Section: Tool Switchers */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', background: '#f1f5f9', borderRadius: '14px', padding: '4px', width: '100%', alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', background: '#f1f5f9', borderRadius: '12px', padding: '3px', width: '100%', alignItems: 'center' }}>
             <button
               type="button"
               aria-label="Mano"
@@ -1747,9 +1831,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 border: 'none',
                 background: activeTool === 'pan' && !reassigningTipMarkerId ? 'linear-gradient(135deg, #0284c7, #2563eb)' : 'transparent',
                 color: activeTool === 'pan' && !reassigningTipMarkerId ? '#fff' : '#475569',
-                borderRadius: '10px',
-                width: '42px',
-                height: '40px',
+                borderRadius: '8px',
+                width: '40px',
+                height: '34px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -1757,7 +1841,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 transition: 'all 0.15s ease',
               }}
             >
-              <Hand size={19} />
+              <Hand size={17} />
             </button>
 
             <button
@@ -1769,9 +1853,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 border: 'none',
                 background: activeTool === 'pointer' ? 'linear-gradient(135deg, #0ea5e9, #6366f1)' : 'transparent',
                 color: activeTool === 'pointer' ? '#fff' : '#475569',
-                borderRadius: '10px',
-                width: '42px',
-                height: '40px',
+                borderRadius: '8px',
+                width: '40px',
+                height: '34px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -1779,7 +1863,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 transition: 'all 0.15s ease',
               }}
             >
-              <MousePointer size={19} />
+              <MousePointer size={17} />
             </button>
 
             <button
@@ -1791,9 +1875,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 border: 'none',
                 background: activeTool === 'batch' ? 'linear-gradient(135deg, #0ea5e9, #6366f1)' : 'transparent',
                 color: activeTool === 'batch' ? '#fff' : '#475569',
-                borderRadius: '10px',
-                width: '42px',
-                height: '40px',
+                borderRadius: '8px',
+                width: '40px',
+                height: '34px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -1801,7 +1885,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 transition: 'all 0.15s ease',
               }}
             >
-              <Layers size={19} />
+              <Layers size={17} />
             </button>
 
             <button
@@ -1813,9 +1897,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 border: 'none',
                 background: activeTool === 'border' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
                 color: activeTool === 'border' ? '#fff' : '#475569',
-                borderRadius: '10px',
-                width: '42px',
-                height: '40px',
+                borderRadius: '8px',
+                width: '40px',
+                height: '34px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -1823,7 +1907,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 transition: 'all 0.15s ease',
               }}
             >
-              <PenTool size={19} />
+              <PenTool size={17} />
             </button>
 
             <button
@@ -1835,9 +1919,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 border: 'none',
                 background: activeTool === 'batch-border' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
                 color: activeTool === 'batch-border' ? '#fff' : '#475569',
-                borderRadius: '10px',
-                width: '42px',
-                height: '40px',
+                borderRadius: '8px',
+                width: '40px',
+                height: '34px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -1845,14 +1929,14 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 transition: 'all 0.15s ease',
               }}
             >
-              <Layers size={19} style={{ color: activeTool === 'batch-border' ? '#fff' : '#059669' }} />
+              <Layers size={17} style={{ color: activeTool === 'batch-border' ? '#fff' : '#059669' }} />
             </button>
           </div>
 
-          <div style={{ width: '32px', height: '1px', background: '#cbd5e1' }} />
+          <div style={{ width: '28px', height: '1px', background: '#cbd5e1', margin: '1px 0' }} />
 
           {/* Middle Section: Visual Style & Colors */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
             <button
               type="button"
               title={markerVisualMode === 'pointer' ? 'Estilo: Aguja (Clic para Flecha)' : 'Estilo: Flecha (Clic para Aguja)'}
@@ -1860,10 +1944,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
               style={{
                 border: '1px solid #cbd5e1',
                 background: '#f8fafc',
-                borderRadius: '10px',
-                width: '40px',
-                height: '36px',
-                fontSize: '1.1em',
+                borderRadius: '8px',
+                width: '38px',
+                height: '28px',
+                fontSize: '0.95em',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -1873,16 +1957,18 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
               {markerVisualMode === 'pointer' ? '📍' : '🏹'}
             </button>
 
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-              {MARKER_COLOR_OPTIONS.map(c => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 17px)', gap: '4px', justifyContent: 'center', marginTop: '2px' }}>
+              {MARKER_COLOR_OPTIONS.map((c, idx) => (
                 <button
                   key={c.key}
                   type="button"
                   title={`Color: ${c.label}`}
                   onClick={() => setMarkerColorKey(c.key)}
                   style={{
-                    width: '20px',
-                    height: '20px',
+                    gridColumn: idx === MARKER_COLOR_OPTIONS.length - 1 && MARKER_COLOR_OPTIONS.length % 2 === 1 ? '1 / -1' : undefined,
+                    justifySelf: 'center',
+                    width: '17px',
+                    height: '17px',
                     borderRadius: '999px',
                     background: c.fill,
                     border: markerColorKey === c.key ? '2.5px solid #0ea5e9' : `1.5px solid #94a3b8`,
@@ -1895,10 +1981,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
             </div>
           </div>
 
-          <div style={{ width: '32px', height: '1px', background: '#cbd5e1' }} />
+          <div style={{ width: '28px', height: '1px', background: '#cbd5e1', margin: '1px 0' }} />
 
           {/* Zoom Section */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
             <button
               type="button"
               title="Acercar (+)"
@@ -1908,26 +1994,26 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 background: 'transparent',
                 color: '#334155',
                 width: '36px',
-                height: '30px',
-                borderRadius: '8px',
+                height: '26px',
+                borderRadius: '6px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <ZoomIn size={18} />
+              <ZoomIn size={16} />
             </button>
             <span
               onClick={() => { setZoomLevel(1); setPosition({ x: 0, y: 0 }); }}
               title="Restablecer zoom a 100%"
               style={{
-                fontSize: '0.72em',
+                fontSize: '0.68em',
                 fontWeight: 800,
                 color: '#0284c7',
                 textAlign: 'center',
                 cursor: 'pointer',
-                padding: '2px 0',
+                padding: '1px 0',
               }}
             >
               {Math.round(zoomLevel * 100)}%
@@ -1941,22 +2027,22 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 background: 'transparent',
                 color: '#334155',
                 width: '36px',
-                height: '30px',
-                borderRadius: '8px',
+                height: '26px',
+                borderRadius: '6px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <ZoomOut size={18} />
+              <ZoomOut size={16} />
             </button>
           </div>
 
-          <div style={{ width: '32px', height: '1px', background: '#cbd5e1' }} />
+          <div style={{ width: '28px', height: '1px', background: '#cbd5e1', margin: '1px 0' }} />
 
           {/* Bottom Section: Canvas Actions */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
             <button
               type="button"
               title="Rotar 90°"
@@ -1966,15 +2052,15 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 background: 'transparent',
                 color: '#334155',
                 width: '36px',
-                height: '32px',
-                borderRadius: '8px',
+                height: '26px',
+                borderRadius: '6px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <RotateCw size={17} />
+              <RotateCw size={16} />
             </button>
 
             <button
@@ -1986,15 +2072,15 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 background: showAllMarkers ? 'transparent' : '#fee2e2',
                 color: showAllMarkers ? '#334155' : '#dc2626',
                 width: '36px',
-                height: '32px',
-                borderRadius: '8px',
+                height: '26px',
+                borderRadius: '6px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              {showAllMarkers ? <Eye size={17} /> : <EyeOff size={17} />}
+              {showAllMarkers ? <Eye size={16} /> : <EyeOff size={16} />}
             </button>
 
             <button
@@ -2006,15 +2092,15 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 background: 'transparent',
                 color: '#4f46e5',
                 width: '36px',
-                height: '32px',
-                borderRadius: '8px',
+                height: '26px',
+                borderRadius: '6px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Move size={17} />
+              <Move size={16} />
             </button>
 
             <button
@@ -2027,15 +2113,15 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 background: 'transparent',
                 color: (historyStack.length > 0 || drawingPolygonPoints.length > 0) ? '#334155' : '#94a3b8',
                 width: '36px',
-                height: '32px',
-                borderRadius: '8px',
+                height: '26px',
+                borderRadius: '6px',
                 cursor: (historyStack.length > 0 || drawingPolygonPoints.length > 0) ? 'pointer' : 'default',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Undo size={17} />
+              <Undo size={16} />
             </button>
           </div>
         </div>
@@ -2114,6 +2200,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                         style={{ cursor: isSelected ? 'crosshair' : 'pointer', pointerEvents: isSelected ? 'none' : 'auto' }}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                           setSelectedMarkerId(marker.id);
                         }}
                       />
@@ -2133,6 +2220,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                               style={{ cursor: 'move' }}
                               onPointerDown={(e) => {
                                 e.stopPropagation();
+                                if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                                 (e.target as Element).setPointerCapture?.(e.pointerId);
                                 setSelectedVertex({ vertexIndex: vIdx });
                                 setDraggingHandle({ markerId: marker.id, type: 'vertex', vertexIndex: vIdx });
@@ -2150,6 +2238,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                                   style={{ cursor: 'copy' }}
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                                     insertVertexOnEdge(marker.id, vIdx, e.clientX, e.clientY);
                                   }}
                                 >
@@ -2201,6 +2290,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                               style={{ cursor: 'pointer' }}
                               onClick={(e) => {
                                 e.stopPropagation();
+                                if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                                 setSelectedHoleIndex(hIdx);
                                 setSelectedVertex(null);
                               }}
@@ -2215,6 +2305,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                                 style={{ cursor: 'pointer' }}
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                                   handleDeleteHole(marker.id, hIdx);
                                 }}
                               >
@@ -2262,6 +2353,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                                     style={{ cursor: 'move' }}
                                     onPointerDown={(e) => {
                                       e.stopPropagation();
+                                      if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                                       (e.target as Element).setPointerCapture?.(e.pointerId);
                                       setSelectedVertex({ vertexIndex: vIdx, holeIndex: hIdx });
                                       setSelectedHoleIndex(hIdx);
@@ -2276,6 +2368,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                                     style={{ cursor: 'copy' }}
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                                       insertVertexOnEdge(marker.id, vIdx, e.clientX, e.clientY, hIdx);
                                     }}
                                   >
@@ -2367,6 +2460,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                       key={marker.id}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                         setSelectedMarkerId(marker.id);
                       }}
                       onDoubleClick={(e) => {
@@ -2450,6 +2544,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                               style={{ cursor: 'move' }}
                               onPointerDown={(e) => {
                                 e.stopPropagation();
+                                if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                                 (e.target as Element).setPointerCapture?.(e.pointerId);
                                 setDraggingHandle({ markerId: marker.id, type: 'start' });
                               }}
@@ -2490,6 +2585,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                               style={{ cursor: 'move' }}
                               onPointerDown={(e) => {
                                 e.stopPropagation();
+                                if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                                 (e.target as Element).setPointerCapture?.(e.pointerId);
                                 setDraggingHandle({ markerId: marker.id, type: 'tip' });
                               }}

@@ -436,4 +436,63 @@ describe('PlateAnnotationViewerEditor', () => {
     // La zona de exclusión debe crearse inmediatamente al soltar el trazo
     expect(screen.getByText(/Hueco interior #1/i)).toBeInTheDocument();
   });
+
+  it('bloquea la creación accidental de señalados o regiones al hacer zoom/paneo con dos dedos (multi-touch)', () => {
+    render(
+      <PlateAnnotationViewerEditor
+        imageSrc="https://res.cloudinary.com/demo/image/upload/sample.jpg"
+        initialSenalados={[]}
+        initialSenaladosPos={[]}
+        onCancel={vi.fn()}
+      />
+    );
+
+    // Simular carga de imagen
+    const img = screen.getByAltText(/Placa histológica de alta calidad/i);
+    Object.defineProperty(img, 'naturalWidth', { value: 1000 });
+    Object.defineProperty(img, 'naturalHeight', { value: 800 });
+    Object.defineProperty(img, 'clientWidth', { value: 1000 });
+    Object.defineProperty(img, 'clientHeight', { value: 800 });
+    Object.defineProperty(img, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 1000, height: 800, right: 1000, bottom: 800 }),
+    });
+    fireEvent.load(img);
+
+    // Activar herramienta de Borde
+    const borderBtn = screen.getByRole('button', { name: /^Borde$/i });
+    fireEvent.click(borderBtn);
+
+    const container = img.parentElement!.parentElement!;
+
+    // Simular gesto de pellizco con 2 dedos (touchStart, touchMove, touchEnd)
+    fireEvent.touchStart(container, {
+      touches: [
+        { clientX: 300, clientY: 300 },
+        { clientX: 600, clientY: 600 },
+      ],
+    });
+
+    fireEvent.touchMove(container, {
+      touches: [
+        { clientX: 250, clientY: 250 },
+        { clientX: 650, clientY: 650 },
+      ],
+    });
+
+    // Simular que el navegador envió eventos pointer mientras ocurría el gesto táctil
+    fireEvent.pointerDown(container, { clientX: 250, clientY: 250, button: 0 });
+    fireEvent.pointerMove(container, { clientX: 350, clientY: 350 });
+
+    // No debe haber iniciado ningún trazo de región ni indicador de dibujo
+    expect(screen.queryByText(/✂️ Excluyendo/i)).toBeNull();
+
+    fireEvent.touchEnd(container, { touches: [] });
+    fireEvent.pointerUp(container, { clientX: 350, clientY: 350 });
+    fireEvent.click(container, { clientX: 350, clientY: 350 });
+
+    // No debe haberse creado ningún señalado o polígono
+    expect(screen.queryByText(/Región 1/i)).toBeNull();
+    expect(screen.queryByText(/Señalado 1/i)).toBeNull();
+    expect(screen.getByText(/No hay señalados creados aún/i)).toBeInTheDocument();
+  });
 });
