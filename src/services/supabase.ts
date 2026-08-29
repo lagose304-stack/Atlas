@@ -61,15 +61,28 @@ const wait = (ms: number): Promise<void> =>
 		window.setTimeout(resolve, ms);
 	});
 
+export const isAbortError = (error: unknown): boolean => {
+	if (!error) return false;
+	if (typeof error === 'object') {
+		const err = error as { name?: string; message?: string; code?: string };
+		if (err.name === 'AbortError') return true;
+		const msg = `${err.code ?? ''} ${err.message ?? ''}`.toLowerCase();
+		if (msg.includes('aborterror') || msg.includes('operation was aborted') || msg.includes('the user aborted a request')) {
+			return true;
+		}
+	}
+	return false;
+};
+
 export const isLikelyTransientNetworkError = (error: SupabaseQueryError | null | undefined): boolean => {
+	if (isAbortError(error)) {
+		return false;
+	}
 	const blob = `${error?.code ?? ''} ${error?.message ?? ''} ${error?.details ?? ''}`.toLowerCase();
 	return (
 		blob.includes('failed to fetch')
 		|| blob.includes('networkerror')
 		|| blob.includes('network request failed')
-		|| blob.includes('aborterror')
-		|| blob.includes('operation was aborted')
-		|| blob.includes('the user aborted a request')
 		|| blob.includes('load failed')
 		|| blob.includes('fetch failed')
 		|| blob.includes('etimedout')
@@ -148,6 +161,10 @@ const fetchWithRetry: typeof fetch = async (input, init) => {
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
 			const requestInit = { ...(init || {}) };
+			if (requestInit.signal?.aborted) {
+				throw new DOMException('The user aborted a request.', 'AbortError');
+			}
+
 			const headers = new Headers(requestInit.headers || {});
 			const sessionToken = getAtlasSessionToken();
 			if (sessionToken && !headers.has('X-Atlas-Session')) {
@@ -155,19 +172,18 @@ const fetchWithRetry: typeof fetch = async (input, init) => {
 			}
 			requestInit.headers = headers;
 
+			const response = await fetch(input, requestInit);
 			const canRetry = attempt < maxAttempts;
-			const requestSignal = requestInit.signal;
-			const { signal: _unusedSignal, ...initWithoutSignal } = requestInit;
-
-			const nextInit = canRetry && attempt > 1 && requestSignal ? initWithoutSignal : requestInit;
-			const response = await fetch(input, nextInit);
-			if (canRetry && attempt < maxAttempts && isRetryableHttpStatus(response.status)) {
+			if (canRetry && isRetryableHttpStatus(response.status) && !requestInit.signal?.aborted) {
 				await wait(350 * attempt);
 				continue;
 			}
 			return response;
 		} catch (error) {
 			lastError = error;
+			if (isAbortError(error) || (init && (init as RequestInit).signal?.aborted)) {
+				throw error;
+			}
 			const retryable = attempt < maxAttempts && isLikelyTransientNetworkError(error as SupabaseQueryError);
 			if (!retryable) {
 				throw error;

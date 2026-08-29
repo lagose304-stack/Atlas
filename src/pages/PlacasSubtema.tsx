@@ -19,6 +19,14 @@ import {
   isFeatureDisabled,
   isTemaDisabled,
 } from '../services/siteMaintenance';
+import {
+  getCachedPlacasForSubtema,
+  getCachedSubtemas,
+  getQuickPlacasForSubtema,
+  getQuickSubtemaById,
+  getQuickSubtemas,
+  prefetchSubtemaPlacas,
+} from '../services/catalogService';
 
 interface Placa {
   id: number;
@@ -54,11 +62,6 @@ interface SubtemaNav {
   sort_order?: number | null;
 }
 
-interface InteractiveMapRow {
-  placa_id: number;
-  sections: unknown[] | null;
-}
-
 interface PlacaGroupByAumento {
   key: string;
   title: string;
@@ -81,129 +84,120 @@ const PlacasSubtema: React.FC = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const { subtemaId } = useParams<{ subtemaId: string }>();
-  const [placas, setPlacas] = useState<Placa[]>([]);
-  const [subtema, setSubtema] = useState<SubtemaInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  const numSubtemaId = Number(subtemaId ?? 0);
+
+  const initialSubtema = getQuickSubtemaById(numSubtemaId);
+  const initialPlacasBundle = getQuickPlacasForSubtema(numSubtemaId);
+  const initialSiblingSubtemas = initialSubtema ? getQuickSubtemas(initialSubtema.tema_id) : null;
+
+  const [placas, setPlacas] = useState<Placa[]>((initialPlacasBundle?.placas as unknown as Placa[]) ?? []);
+  const [subtema, setSubtema] = useState<SubtemaInfo | null>(
+    initialSubtema
+      ? {
+          id: initialSubtema.id,
+          nombre: initialSubtema.nombre,
+          tema_id: initialSubtema.tema_id,
+          sort_order: initialSubtema.sort_order,
+        }
+      : null
+  );
+  const [loading, setLoading] = useState<boolean>(!initialPlacasBundle && !initialSubtema);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
-  const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
-  const [allSubtemas, setAllSubtemas] = useState<SubtemaNav[]>([]);
+  const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(
+    new Set(initialPlacasBundle?.placasConMapa ?? [])
+  );
+  const [allSubtemas, setAllSubtemas] = useState<SubtemaNav[]>(
+    (initialSiblingSubtemas as unknown as SubtemaNav[]) ?? []
+  );
 
   useEffect(() => {
     if (!subtemaId) return;
 
+    let isMounted = true;
+
     const fetchData = async () => {
-      setLoading(true);
       setErrorMessage(null);
+      void logSubtemaView(numSubtemaId);
 
-      const canBypass = canBypassMaintenance(user, isAuthenticated);
-      const maintenanceStatus = await fetchSiteMaintenanceStatus();
-
-      if (!canBypass) {
-        if (maintenanceStatus.enabled) {
-          setErrorMessage('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
-          setLoading(false);
-          return;
-        }
-        if (isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures)) {
-          setErrorMessage('El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.');
-          setLoading(false);
-          return;
-        }
-      }
-
-      void logSubtemaView(Number(subtemaId));
-
-      // Cargar info del subtema (con nombre del tema padre)
-      const { data: subtemaData, error: subtemaError } = await supabase
-        .from('subtemas')
-        .select('id, nombre, tema_id, temas(nombre, parcial)')
-        .eq('id', subtemaId)
-        .single();
-
-      if (subtemaError) console.error('Error fetching subtema:', subtemaError);
-      if (subtemaData) {
-        setSubtema(subtemaData as unknown as SubtemaInfo);
-
-        const rawTemas = subtemaData.temas as { nombre?: string; parcial?: string } | { nombre?: string; parcial?: string }[] | null;
-        const temaParcial = Array.isArray(rawTemas) ? rawTemas[0]?.parcial : rawTemas?.parcial;
-
-        if (!canBypass && isTemaDisabled(subtemaData.tema_id, temaParcial, maintenanceStatus.disabledFeatures)) {
-          setErrorMessage('Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.');
-          setLoading(false);
-          return;
-        }
-      }
-
-      if (subtemaData?.tema_id) {
-        const { data: subtemasListData, error: subtemasListError } = await supabase
-          .from('subtemas')
-          .select('id, nombre, tema_id, sort_order')
-          .eq('tema_id', subtemaData.tema_id)
-          .order('sort_order', { ascending: true });
-
-        if (subtemasListError) {
-          console.error('Error fetching subtemas for navigation:', subtemasListError);
-          setAllSubtemas([]);
-        } else {
-          setAllSubtemas((subtemasListData ?? []) as SubtemaNav[]);
-        }
-      } else {
-        setAllSubtemas([]);
-      }
-
-      // Cargar placas de este subtema
-      const { data: placasData, error: placasError } = await supabase
-        .from('placas')
-        .select('id, photo_url, aumento, senalados, senalados_meta, comentario, tincion')
-        .eq('subtema_id', subtemaId)
-        .order('sort_order', { ascending: true });
-
-      if (placasError) console.error('Error fetching placas:', placasError);
-      if (placasData) {
-        setPlacas(placasData);
-        const placaIds = placasData
-          .map((placa: Placa) => placa.id)
-          .filter((id): id is number => typeof id === 'number');
-
-        if (placaIds.length > 0) {
-          const { data: interactiveMapsData, error: interactiveMapsError } = await supabase
-            .from('interactive_maps')
-            .select('placa_id, sections')
-            .in('placa_id', placaIds);
-
-          if (interactiveMapsError) {
-            console.error('Error fetching interactive maps by placa:', interactiveMapsError);
-            setPlacasConMapa(new Set());
-          } else {
-            const placaIdsConMapa = (interactiveMapsData ?? [])
-              .filter((row: InteractiveMapRow) => Array.isArray(row.sections) && row.sections.length > 0)
-              .map((row: InteractiveMapRow) => row.placa_id)
-              .filter((id): id is number => typeof id === 'number');
-            setPlacasConMapa(new Set(placaIdsConMapa));
-          }
-        } else {
-          setPlacasConMapa(new Set());
-        }
-      } else {
-        setPlacasConMapa(new Set());
-      }
-
-      // Cargar bloques de contenido editorial
       try {
-        const blocks = await getRenderableBlocks('placas_page', Number(subtemaId));
-        setContentBlocks(blocks as ContentBlock[]);
-      } catch (error) {
-        console.error('Error fetching content blocks:', error);
-      }
+        const [subtemaRes, maintenanceStatus, placasBundle, blocksRes] = await Promise.all([
+          supabase
+            .from('subtemas')
+            .select('id, nombre, tema_id, sort_order, temas(nombre, parcial)')
+            .eq('id', subtemaId)
+            .single(),
+          fetchSiteMaintenanceStatus(),
+          getCachedPlacasForSubtema(numSubtemaId),
+          getRenderableBlocks('placas_page', numSubtemaId).catch(() => []),
+        ]);
 
-      setLoading(false);
+        if (!isMounted) return;
+
+        const subtemaData = subtemaRes.data;
+        if (subtemaData) {
+          setSubtema(subtemaData as unknown as SubtemaInfo);
+        }
+
+        const canBypass = canBypassMaintenance(user, isAuthenticated);
+        if (!canBypass) {
+          if (maintenanceStatus.enabled) {
+            setErrorMessage('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
+            setLoading(false);
+            return;
+          }
+          if (isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures)) {
+            setErrorMessage('El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.');
+            setLoading(false);
+            return;
+          }
+          if (subtemaData) {
+            const rawTemas = subtemaData.temas as { nombre?: string; parcial?: string } | { nombre?: string; parcial?: string }[] | null;
+            const temaParcial = Array.isArray(rawTemas) ? rawTemas[0]?.parcial : rawTemas?.parcial;
+            if (isTemaDisabled(subtemaData.tema_id, temaParcial, maintenanceStatus.disabledFeatures)) {
+              setErrorMessage('Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.');
+              setLoading(false);
+              return;
+            }
+          }
+        }
+
+        if (subtemaData?.tema_id) {
+          const siblingSubtemas = await getCachedSubtemas(subtemaData.tema_id);
+          if (isMounted) {
+            setAllSubtemas((siblingSubtemas ?? []) as unknown as SubtemaNav[]);
+          }
+        }
+
+        if (placasBundle) {
+          setPlacas(placasBundle.placas as unknown as Placa[]);
+          setPlacasConMapa(new Set(placasBundle.placasConMapa));
+        }
+
+        setContentBlocks((blocksRes ?? []) as ContentBlock[]);
+        setLoading(false);
+      } catch (err) {
+        console.error('Error cargando placas del subtema:', err);
+        if (isMounted) {
+          setPlacas((prev) => {
+            if (prev.length === 0) {
+              setErrorMessage('No se pudieron cargar las placas en este momento.');
+            }
+            return prev;
+          });
+          setLoading(false);
+        }
+      }
     };
 
     fetchData();
-  }, [subtemaId]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [subtemaId, user, isAuthenticated]);
 
   const handleGoBack = useSmartBackNavigation('/');
 
@@ -235,6 +229,7 @@ const PlacasSubtema: React.FC = () => {
   const navAnterior = useMemo(() => {
     if (subtemaAnterior) {
       return {
+        targetId: subtemaAnterior.id,
         label: `← Subtema anterior: ${subtemaAnterior.nombre}`,
         onClick: () => navigate(`/ver-placas/${subtemaAnterior.id}`),
       };
@@ -246,6 +241,7 @@ const PlacasSubtema: React.FC = () => {
   const navSiguiente = useMemo(() => {
     if (subtemaSiguiente) {
       return {
+        targetId: subtemaSiguiente.id,
         label: `Siguiente subtema: ${subtemaSiguiente.nombre} →`,
         onClick: () => navigate(`/ver-placas/${subtemaSiguiente.id}`),
       };
@@ -253,6 +249,16 @@ const PlacasSubtema: React.FC = () => {
 
     return null;
   }, [subtemaSiguiente, navigate]);
+
+  // Precarga automática en segundo plano de subtemas adyacentes para que al dar clic el cambio sea a 0 ms
+  useEffect(() => {
+    if (subtemaAnterior) {
+      prefetchSubtemaPlacas(subtemaAnterior.id);
+    }
+    if (subtemaSiguiente) {
+      prefetchSubtemaPlacas(subtemaSiguiente.id);
+    }
+  }, [subtemaAnterior?.id, subtemaSiguiente?.id]);
 
   const interactivePlacas = useMemo(() => {
     return placas.filter((placa) => placasConMapa.has(placa.id));
@@ -452,6 +458,8 @@ const PlacasSubtema: React.FC = () => {
                   <button
                     type="button"
                     style={{ ...styles.navigationButton, ...styles.navigationButtonPrevious }}
+                    onMouseEnter={() => prefetchSubtemaPlacas(navAnterior.targetId)}
+                    onTouchStart={() => prefetchSubtemaPlacas(navAnterior.targetId)}
                     onClick={() => {
                       navAnterior.onClick();
                     }}
@@ -470,6 +478,8 @@ const PlacasSubtema: React.FC = () => {
                   <button
                     type="button"
                     style={{ ...styles.navigationButton, ...styles.navigationButtonNext }}
+                    onMouseEnter={() => prefetchSubtemaPlacas(navSiguiente.targetId)}
+                    onTouchStart={() => prefetchSubtemaPlacas(navSiguiente.targetId)}
                     onClick={() => {
                       navSiguiente.onClick();
                     }}

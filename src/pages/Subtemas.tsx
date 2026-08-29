@@ -20,6 +20,15 @@ import {
   isFeatureDisabled,
   isTemaDisabled,
 } from '../services/siteMaintenance';
+import {
+  getCachedSubtemas,
+  getCachedTemas,
+  getQuickSubtemas,
+  getQuickTemaById,
+  getQuickTemas,
+  prefetchSubtemaPlacas,
+  prefetchTema,
+} from '../services/catalogService';
 
 interface Tema {
   id: number;
@@ -47,23 +56,26 @@ const normalizeParcial = (parcial: string | null | undefined): string => {
 
 const StandardSubtemas: React.FC = () => {
   const { temaId } = useParams<{ temaId: string }>();
+  const currentTemaId = Number(temaId ?? 0);
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
-  const [tema, setTema] = useState<Tema | null>(null);
-  const [subtemas, setSubtemas] = useState<Subtema[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const initialTema = getQuickTemaById(currentTemaId);
+  const initialSubtemas = getQuickSubtemas(currentTemaId);
+  const initialAllTemas = getQuickTemas();
+
+  const [tema, setTema] = useState<Tema | null>((initialTema as unknown as Tema) ?? null);
+  const [subtemas, setSubtemas] = useState<Subtema[]>((initialSubtemas as unknown as Subtema[]) ?? []);
+  const [loading, setLoading] = useState<boolean>(!initialTema && (!initialSubtemas || initialSubtemas.length === 0));
   const [hoveredSubtema, setHoveredSubtema] = useState<number | null>(null);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [temaLogoFailed, setTemaLogoFailed] = useState(false);
   const [temaLogoSrc, setTemaLogoSrc] = useState('');
   const [failedSubtemaLogos, setFailedSubtemaLogos] = useState<Record<number, boolean>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [allTemas, setAllTemas] = useState<Tema[]>([]);
+  const [allTemas, setAllTemas] = useState<Tema[]>((initialAllTemas as unknown as Tema[]) ?? []);
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-
     if (!temaId) {
       setTema(null);
       setSubtemas([]);
@@ -72,91 +84,70 @@ const StandardSubtemas: React.FC = () => {
       return;
     }
 
+    setLoadError(null);
     void logTemaView(Number(temaId));
 
-    let nextError: string | null = null;
+    try {
+      const [temaRes, maintenanceStatus, subtemasRes, allTemasRes, blocksRes] = await Promise.all([
+        supabase.from('temas').select('*').eq('id', temaId).single(),
+        fetchSiteMaintenanceStatus(),
+        getCachedSubtemas(Number(temaId)),
+        getCachedTemas(),
+        getRenderableBlocks('subtemas_page', Number(temaId)).catch(() => []),
+      ]);
 
-    const { data: temaData, error: temaError } = await supabase
-      .from('temas')
-      .select('*')
-      .eq('id', temaId)
-      .single();
+      const temaData = temaRes.data;
+      if (temaData) {
+        setTema(temaData);
+      }
 
-    if (temaData) {
-      setTema(temaData);
-    } else {
-      setTema(null);
-    }
+      if (temaRes.error && !temaData) {
+        console.error('Error fetching tema:', temaRes.error);
+        setLoadError('No se pudo cargar la informacion del tema en este momento.');
+        setLoading(false);
+        return;
+      }
 
-    if (temaError) {
-      console.error('Error fetching tema:', temaError);
-      nextError = 'No se pudo cargar la informacion del tema en este momento.';
-    } else if (!temaData) {
-      nextError = 'El tema solicitado no existe o ya no esta disponible.';
-    } else {
-      const maintenanceStatus = await fetchSiteMaintenanceStatus();
+      if (!temaData) {
+        setLoadError('El tema solicitado no existe o ya no esta disponible.');
+        setLoading(false);
+        return;
+      }
+
       const canBypass = canBypassMaintenance(user, isAuthenticated);
       if (!canBypass) {
         if (maintenanceStatus.enabled) {
-          nextError = 'El sitio se encuentra temporalmente fuera de servicio por mantenimiento.';
-        } else if (isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures)) {
-          nextError = 'El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.';
-        } else if (isTemaDisabled(temaData.id, temaData.parcial, maintenanceStatus.disabledFeatures)) {
-          nextError = 'Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.';
+          setLoadError('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
+          setLoading(false);
+          return;
+        }
+        if (isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures)) {
+          setLoadError('El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.');
+          setLoading(false);
+          return;
+        }
+        if (isTemaDisabled(temaData.id, temaData.parcial, maintenanceStatus.disabledFeatures)) {
+          setLoadError('Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.');
+          setLoading(false);
+          return;
         }
       }
-    }
 
-    if (nextError) {
-      setSubtemas([]);
-      setAllTemas([]);
-      setLoadError(nextError);
+      setSubtemas((subtemasRes ?? []) as unknown as Subtema[]);
+      setAllTemas((allTemasRes ?? []) as unknown as Tema[]);
+      setContentBlocks((blocksRes ?? []) as ContentBlock[]);
       setLoading(false);
-      return;
+    } catch (err) {
+      console.error('Error general cargando subtemas:', err);
+      setSubtemas((prev) => {
+        if (prev.length === 0) {
+          setLoadError('No se pudo cargar el listado de subtemas en este momento.');
+        }
+        return prev;
+      });
+      setLoading(false);
     }
-
-    const { data: subtemasData, error: subtemasError } = await supabase
-      .from('subtemas')
-      .select('*')
-      .eq('tema_id', temaId)
-      .order('sort_order', { ascending: true });
-
-    if (subtemasError) {
-      console.error('Error fetching subtemas:', subtemasError);
-      setSubtemas([]);
-      nextError = nextError
-        ? `${nextError} Tampoco fue posible cargar el listado de subtemas.`
-        : 'No se pudo cargar el listado de subtemas en este momento.';
-    } else {
-      setSubtemas(subtemasData ?? []);
-    }
-
-    const { data: temasData, error: temasError } = await supabase
-      .from('temas')
-      .select('id, nombre, parcial, sort_order')
-      .order('sort_order', { ascending: true });
-
-    if (temasError) {
-      console.error('Error fetching temas for navigation:', temasError);
-      setAllTemas([]);
-      nextError = nextError
-        ? `${nextError} No fue posible preparar la navegacion entre temas.`
-        : 'No se pudo preparar la navegacion entre temas en este momento.';
-    } else {
-      setAllTemas((temasData ?? []) as Tema[]);
-    }
-
-    // Cargar bloques de contenido editorial
-    try {
-      const blocks = await getRenderableBlocks('subtemas_page', Number(temaId));
-      setContentBlocks(blocks as ContentBlock[]);
-    } catch (error) {
-      console.error('Error fetching content blocks:', error);
-    }
-
-    setLoadError(nextError);
-    setLoading(false);
-  }, [temaId]);
+  }, [temaId, user, isAuthenticated]);
 
   useEffect(() => {
     void fetchData();
@@ -176,8 +167,6 @@ const StandardSubtemas: React.FC = () => {
       return a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
     });
   }, [allTemas]);
-
-  const currentTemaId = Number(temaId ?? 0);
 
   const currentTemaParcial = useMemo(() => {
     const fromSelectedTema = orderedTemas.find((item) => item.id === currentTemaId)?.parcial;
@@ -307,8 +296,12 @@ const StandardSubtemas: React.FC = () => {
                         cursor: 'pointer',
                         fontFamily: 'inherit',
                       }}
-                      onMouseEnter={() => setHoveredSubtema(subtema.id)}
+                      onMouseEnter={() => {
+                        setHoveredSubtema(subtema.id);
+                        prefetchSubtemaPlacas(subtema.id);
+                      }}
                       onMouseLeave={() => setHoveredSubtema(null)}
+                      onTouchStart={() => prefetchSubtemaPlacas(subtema.id)}
                       onClick={() => navigate(`/ver-placas/${subtema.id}`)}
                     >
                       <div style={styles.subtemaAccent} />
@@ -351,6 +344,8 @@ const StandardSubtemas: React.FC = () => {
                     <button
                       type="button"
                       style={{ ...styles.navigationButton, ...styles.navigationButtonPrevious }}
+                      onMouseEnter={() => prefetchTema(navAnterior.targetId)}
+                      onTouchStart={() => prefetchTema(navAnterior.targetId)}
                       onClick={() => {
                         navigate(`/subtemas/${navAnterior.targetId}`);
                       }}
@@ -369,6 +364,8 @@ const StandardSubtemas: React.FC = () => {
                     <button
                       type="button"
                       style={{ ...styles.navigationButton, ...styles.navigationButtonNext }}
+                      onMouseEnter={() => prefetchTema(navSiguiente.targetId)}
+                      onTouchStart={() => prefetchTema(navSiguiente.targetId)}
                       onClick={() => {
                         navigate(`/subtemas/${navSiguiente.targetId}`);
                       }}

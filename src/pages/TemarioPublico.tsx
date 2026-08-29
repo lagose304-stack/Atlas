@@ -7,7 +7,6 @@ import {
   formatClientRuntimeContext,
   getClientRuntimeContext,
   isLikelyTransientNetworkError,
-  supabase,
   type SupabaseQueryError,
 } from '../services/supabase';
 import Header from '../components/Header';
@@ -25,6 +24,12 @@ import {
   isTemaDisabled,
   type SiteMaintenanceStatus,
 } from '../services/siteMaintenance';
+import {
+  getCachedTemas,
+  getQuickTemas,
+  prefetchCatalog,
+  prefetchTema,
+} from '../services/catalogService';
 
 interface Tema {
   id: number;
@@ -123,6 +128,11 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void; isDisabled?: boolean
     setLogoFailed(false);
   }, [tema.logo_url]);
 
+  const handleMouseEnter = () => {
+    setHovered(true);
+    prefetchTema(tema.id);
+  };
+
   return (
     <button
       type="button"
@@ -155,8 +165,9 @@ const TemaCard: React.FC<{ tema: Tema; onClick: () => void; isDisabled?: boolean
         filter: hovered && !isDisabled ? 'saturate(1.02)' : 'none',
       }}
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setHovered(false)}
+      onTouchStart={() => prefetchTema(tema.id)}
     >
       {isDisabled && (
         <div
@@ -244,67 +255,59 @@ const TemarioPublico: React.FC = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const canBypass = canBypassMaintenance(user, isAuthenticated);
-  const [temas, setTemas] = useState<Tema[]>([]);
+  const initialTemas = getQuickTemas();
+  const [temas, setTemas] = useState<Tema[]>((initialTemas as Tema[]) ?? []);
   const [maintenanceStatus, setMaintenanceStatus] = useState<SiteMaintenanceStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialTemas || initialTemas.length === 0);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
   const [temasLoadDebug, setTemasLoadDebug] = useState<string | null>(null);
   const [selectedParcial, setSelectedParcial] = useState<(typeof PARCIALES)[number]['key']>('primer');
 
   const fetchTemas = useCallback(async () => {
-    setLoading(true);
     setTemasLoadError(null);
     setTemasLoadDebug(null);
 
-    let lastError: SupabaseQueryError | null = null;
-    let fallbackErrorDetails: string | null = null;
-
-    for (let attempt = 1; attempt <= 2; attempt += 1) {
-      const { data, error } = await supabase.from('temas').select('*').order('sort_order', { ascending: true });
-      if (!error) {
-        setTemas(data ?? []);
-        setLoading(false);
-        return;
+    try {
+      const data = await getCachedTemas();
+      setTemas(data as Tema[]);
+      setLoading(false);
+    } catch (lastError: any) {
+      if (isLikelyTransientNetworkError(lastError)) {
+        const fallbackResult = await fetchTemasViaRestFallback();
+        if (!fallbackResult.error && fallbackResult.data) {
+          setTemas(fallbackResult.data);
+          setLoading(false);
+          return;
+        }
       }
 
-      lastError = error as SupabaseQueryError;
-      const shouldRetry = attempt < 2 && isLikelyTransientNetworkError(lastError);
-      if (!shouldRetry) {
-        break;
-      }
+      const technicalDetails = describeSupabaseError(lastError);
+      const runtimeContext = getClientRuntimeContext();
+      const contextDetails = formatClientRuntimeContext(runtimeContext);
+      const combinedDetails = `${technicalDetails} || contexto: ${contextDetails}`;
 
-      await wait(450 * attempt);
+      console.error('Error fetching temas:', {
+        error: lastError,
+        technicalDetails,
+        runtimeContext,
+      });
+
+      // Solo si no tenemos datos en memoria mostramos el estado de error
+      setTemas((prev) => {
+        if (prev.length === 0) {
+          setTemasLoadError(buildTemasLoadError(lastError));
+          setTemasLoadDebug(combinedDetails);
+        }
+        return prev;
+      });
+      setLoading(false);
     }
-
-    if (lastError && isLikelyTransientNetworkError(lastError)) {
-      const fallbackResult = await fetchTemasViaRestFallback();
-      if (!fallbackResult.error) {
-        setTemas(fallbackResult.data ?? []);
-        setLoading(false);
-        return;
-      }
-      fallbackErrorDetails = describeSupabaseError(fallbackResult.error);
-    }
-
-    const technicalDetails = describeSupabaseError(lastError);
-    const runtimeContext = getClientRuntimeContext();
-    const contextDetails = formatClientRuntimeContext(runtimeContext);
-    const fallbackDetails = fallbackErrorDetails ? ` || fallback: ${fallbackErrorDetails}` : '';
-    const combinedDetails = `${technicalDetails}${fallbackDetails} || contexto: ${contextDetails}`;
-
-    console.error('Error fetching temas:', {
-      error: lastError,
-      technicalDetails,
-      runtimeContext,
-    });
-    setTemas([]);
-    setTemasLoadError(buildTemasLoadError(lastError));
-    setTemasLoadDebug(combinedDetails);
-    setLoading(false);
   }, []);
 
   useEffect(() => {
+    prefetchCatalog();
+
     const fetchBlocks = async () => {
       try {
         const blocks = await getRenderableBlocks('subtemas_page', 0);

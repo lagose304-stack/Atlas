@@ -14,6 +14,34 @@ export interface CatalogSubtema {
   tema_id: number;
   sort_order?: number | null;
   logo_url?: string | null;
+  descripcion?: string | null;
+}
+
+export interface CatalogPlaca {
+  id: number;
+  photo_url: string;
+  subtema_id?: number | null;
+  tema_id?: number | null;
+  sort_order?: number | null;
+  aumento?: string | null;
+  senalados?: string[] | null;
+  senalados_meta?: Array<{
+    label: string;
+    x: number | null;
+    y: number | null;
+    startX?: number | null;
+    startY?: number | null;
+    regionPoints?: number[] | null;
+    regionColor?: string | null;
+    regionOpacity?: number | null;
+  }> | null;
+  comentario?: string | null;
+  tincion?: string | null;
+}
+
+export interface SubtemaPlacasBundle {
+  placas: CatalogPlaca[];
+  placasConMapa: number[];
 }
 
 interface CacheState<T> {
@@ -23,6 +51,7 @@ interface CacheState<T> {
 
 const TEMAS_CACHE_KEY = 'atlas_cached_temas_v1';
 const SUBTEMAS_CACHE_KEY = 'atlas_cached_subtemas_v1';
+const PLACAS_CACHE_PREFIX = 'atlas_cached_placas_subtema_';
 const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minutos
 
 let temasInMemory: CacheState<CatalogTema[]> = {
@@ -35,8 +64,11 @@ let subtemasInMemory: CacheState<CatalogSubtema[]> = {
   timestamp: 0,
 };
 
+const placasInMemory = new Map<number, CacheState<SubtemaPlacasBundle>>();
+
 let temasInFlightPromise: Promise<CatalogTema[]> | null = null;
 let subtemasInFlightPromise: Promise<CatalogSubtema[]> | null = null;
+const placasInFlightPromises = new Map<number, Promise<SubtemaPlacasBundle>>();
 
 const readLocalStorage = <T>(key: string): T | null => {
   if (typeof window === 'undefined' || !window.localStorage) return null;
@@ -44,7 +76,7 @@ const readLocalStorage = <T>(key: string): T | null => {
     const raw = window.localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CacheState<T>;
-    if (parsed && Array.isArray(parsed.data)) {
+    if (parsed && parsed.data !== undefined && parsed.data !== null) {
       return parsed.data;
     }
     return null;
@@ -86,6 +118,15 @@ export const getQuickTemas = (): CatalogTema[] | null => {
 };
 
 /**
+ * Obtiene un tema sincrónicamente por su ID desde la caché en memoria/local (0 ms).
+ */
+export const getQuickTemaById = (temaId: number): CatalogTema | null => {
+  const temas = getQuickTemas();
+  if (!temas) return null;
+  return temas.find((t) => t.id === temaId) ?? null;
+};
+
+/**
  * Obtiene los subtemas sincrónicamente desde la caché (memoria o localStorage).
  */
 export const getQuickSubtemas = (temaId?: number | null): CatalogSubtema[] | null => {
@@ -105,6 +146,34 @@ export const getQuickSubtemas = (temaId?: number | null): CatalogSubtema[] | nul
     return allSubtemas.filter((s) => s.tema_id === temaId);
   }
   return allSubtemas;
+};
+
+/**
+ * Obtiene un subtema sincrónicamente por su ID desde la caché (0 ms).
+ */
+export const getQuickSubtemaById = (subtemaId: number): CatalogSubtema | null => {
+  const subtemas = getQuickSubtemas();
+  if (!subtemas) return null;
+  return subtemas.find((s) => s.id === subtemaId) ?? null;
+};
+
+/**
+ * Obtiene las placas y mapas interactivos de un subtema sincrónicamente de la caché (0 ms).
+ */
+export const getQuickPlacasForSubtema = (subtemaId: number): SubtemaPlacasBundle | null => {
+  const inMem = placasInMemory.get(subtemaId);
+  if (inMem && inMem.data) {
+    return inMem.data;
+  }
+  const fromStorage = readLocalStorage<SubtemaPlacasBundle>(`${PLACAS_CACHE_PREFIX}${subtemaId}`);
+  if (fromStorage) {
+    placasInMemory.set(subtemaId, {
+      data: fromStorage,
+      timestamp: Date.now(),
+    });
+    return fromStorage;
+  }
+  return null;
 };
 
 /**
@@ -147,7 +216,6 @@ export const getCachedTemas = async (options?: { forceRefresh?: boolean }): Prom
       return temas;
     } catch (err) {
       console.warn('Advertencia al consultar temas de la base de datos:', err);
-      // Fallback a caché local si la red falla
       const fallback = getQuickTemas();
       if (fallback) return fallback;
       throw err;
@@ -180,7 +248,7 @@ export const getCachedSubtemas = async (
       try {
         const { data, error } = await supabase
           .from('subtemas')
-          .select('id, nombre, tema_id, sort_order, logo_url')
+          .select('id, nombre, descripcion, tema_id, sort_order, logo_url')
           .order('sort_order', { ascending: true });
 
         if (error) {
@@ -214,12 +282,101 @@ export const getCachedSubtemas = async (
 };
 
 /**
- * Precarga en segundo plano tanto temas como subtemas para que cualquier página posterior
- * responda a 0 ms.
+ * Carga las placas y mapas interactivos de un subtema con caché SWR en memoria y storage.
+ */
+export const getCachedPlacasForSubtema = async (
+  subtemaId: number,
+  options?: { forceRefresh?: boolean }
+): Promise<SubtemaPlacasBundle> => {
+  const force = options?.forceRefresh === true;
+  const inMem = placasInMemory.get(subtemaId);
+  const isFresh = !force && inMem?.data && Date.now() - inMem.timestamp < DEFAULT_TTL_MS;
+
+  if (isFresh && inMem?.data) {
+    return inMem.data;
+  }
+
+  const existingInFlight = placasInFlightPromises.get(subtemaId);
+  if (existingInFlight) {
+    return existingInFlight;
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const { data: placasData, error: placasError } = await supabase
+        .from('placas')
+        .select('id, photo_url, aumento, senalados, senalados_meta, comentario, tincion, subtema_id, sort_order')
+        .eq('subtema_id', subtemaId)
+        .order('sort_order', { ascending: true });
+
+      if (placasError) {
+        throw placasError;
+      }
+
+      const placas = (placasData ?? []) as CatalogPlaca[];
+      const placaIds = placas.map((p) => p.id).filter((id): id is number => typeof id === 'number');
+
+      let placasConMapa: number[] = [];
+      if (placaIds.length > 0) {
+        const { data: mapsData, error: mapsError } = await supabase
+          .from('interactive_maps')
+          .select('placa_id, sections')
+          .in('placa_id', placaIds);
+
+        if (!mapsError && mapsData) {
+          placasConMapa = (mapsData as Array<{ placa_id: number; sections: unknown[] | null }>)
+            .filter((m) => Array.isArray(m.sections) && m.sections.length > 0)
+            .map((m) => m.placa_id);
+        }
+      }
+
+      const bundle: SubtemaPlacasBundle = {
+        placas,
+        placasConMapa,
+      };
+
+      placasInMemory.set(subtemaId, {
+        data: bundle,
+        timestamp: Date.now(),
+      });
+      writeLocalStorage(`${PLACAS_CACHE_PREFIX}${subtemaId}`, bundle);
+
+      return bundle;
+    } catch (err) {
+      console.warn(`Advertencia al consultar placas del subtema ${subtemaId}:`, err);
+      const fallback = getQuickPlacasForSubtema(subtemaId);
+      if (fallback) return fallback;
+      throw err;
+    } finally {
+      placasInFlightPromises.delete(subtemaId);
+    }
+  })();
+
+  placasInFlightPromises.set(subtemaId, fetchPromise);
+  return fetchPromise;
+};
+
+/**
+ * Precarga en segundo plano tanto temas como subtemas.
  */
 export const prefetchCatalog = (): void => {
   void getCachedTemas();
   void getCachedSubtemas();
+};
+
+/**
+ * Precarga anticipada de un tema específico y sus subtemas al hacer hover.
+ */
+export const prefetchTema = (temaId: number): void => {
+  void getCachedTemas();
+  void getCachedSubtemas(temaId);
+};
+
+/**
+ * Precarga anticipada de un subtema y sus placas al hacer hover sobre su tarjeta.
+ */
+export const prefetchSubtemaPlacas = (subtemaId: number): void => {
+  void getCachedPlacasForSubtema(subtemaId);
 };
 
 /**
@@ -229,12 +386,44 @@ export const prefetchCatalog = (): void => {
 export const invalidateCatalogCache = (): void => {
   temasInMemory = { data: null, timestamp: 0 };
   subtemasInMemory = { data: null, timestamp: 0 };
+  placasInMemory.clear();
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       window.localStorage.removeItem(TEMAS_CACHE_KEY);
       window.localStorage.removeItem(SUBTEMAS_CACHE_KEY);
+      // Limpiar placas cacheadas
+      Object.keys(window.localStorage).forEach((key) => {
+        if (key.startsWith(PLACAS_CACHE_PREFIX)) {
+          window.localStorage.removeItem(key);
+        }
+      });
     } catch {
       // Ignorar errores en entornos aislados
+    }
+  }
+};
+
+/**
+ * Invalida la caché de placas para un subtema específico.
+ */
+export const invalidatePlacasCache = (subtemaId?: number): void => {
+  if (subtemaId !== undefined) {
+    placasInMemory.delete(subtemaId);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.removeItem(`${PLACAS_CACHE_PREFIX}${subtemaId}`);
+      } catch {}
+    }
+  } else {
+    placasInMemory.clear();
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        Object.keys(window.localStorage).forEach((key) => {
+          if (key.startsWith(PLACAS_CACHE_PREFIX)) {
+            window.localStorage.removeItem(key);
+          }
+        });
+      } catch {}
     }
   }
 };

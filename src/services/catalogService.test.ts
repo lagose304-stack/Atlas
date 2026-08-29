@@ -9,9 +9,14 @@ vi.mock('./supabase', () => ({ supabase: supabaseMock }));
 import {
   getCachedTemas,
   getCachedSubtemas,
+  getCachedPlacasForSubtema,
   getQuickTemas,
+  getQuickTemaById,
   getQuickSubtemas,
+  getQuickSubtemaById,
+  getQuickPlacasForSubtema,
   invalidateCatalogCache,
+  invalidatePlacasCache,
 } from './catalogService';
 
 describe('catalogService', () => {
@@ -55,6 +60,7 @@ describe('catalogService', () => {
 
     // getQuickTemas sincrónico debe entregar los mismos datos a 0 ms
     expect(getQuickTemas()).toEqual(mockTemas);
+    expect(getQuickTemaById(1)).toEqual(mockTemas[0]);
   });
 
   it('deduplica peticiones en vuelo concurrentes de temas', async () => {
@@ -103,6 +109,49 @@ describe('catalogService', () => {
 
     // Filtrado sincrónico
     expect(getQuickSubtemas(2)).toEqual([mockSubtemas[2]]);
+    expect(getQuickSubtemaById(10)).toEqual(mockSubtemas[0]);
+  });
+
+  it('obtiene y almacena en caché placas y mapas interactivos de un subtema', async () => {
+    const mockPlacas = [
+      { id: 100, photo_url: 'img1.webp', subtema_id: 10, sort_order: 0, aumento: '40x' },
+      { id: 101, photo_url: 'img2.webp', subtema_id: 10, sort_order: 1, aumento: '10x' },
+    ];
+    const mockMaps = [
+      { placa_id: 100, sections: [{ title: 'Zona 1' }] },
+    ];
+
+    supabaseMock.from.mockImplementation((table: string) => {
+      if (table === 'placas') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => Promise.resolve({ data: mockPlacas, error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === 'interactive_maps') {
+        return {
+          select: () => ({
+            in: () => Promise.resolve({ data: mockMaps, error: null }),
+          }),
+        };
+      }
+      return {};
+    });
+
+    const bundle = await getCachedPlacasForSubtema(10);
+    expect(bundle.placas).toEqual(mockPlacas);
+    expect(bundle.placasConMapa).toEqual([100]);
+
+    // Recuperación sincrónica a 0 ms
+    const quick = getQuickPlacasForSubtema(10);
+    expect(quick).toEqual(bundle);
+
+    // Invalidación
+    invalidatePlacasCache(10);
+    expect(getQuickPlacasForSubtema(10)).toBeNull();
   });
 
   it('invalida la caché correctamente', async () => {
