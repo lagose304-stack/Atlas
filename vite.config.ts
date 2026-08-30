@@ -72,7 +72,7 @@ function r2DevServerPlugin(): Plugin {
 
         // Upload endpoint: /api/images/upload o /api/images-upload
         if ((pathname === '/api/images/upload' || pathname === '/api/images-upload') && req.method === 'POST') {
-          upload.single('file')(req, res, async (err: any) => {
+          upload.any()(req, res, async (err: any) => {
             if (err) {
               res.statusCode = 400;
               res.setHeader('Content-Type', 'application/json');
@@ -80,7 +80,10 @@ function r2DevServerPlugin(): Plugin {
               return;
             }
 
-            if (!req.file) {
+            const mainFile = req.file || (req.files && req.files.find((f: any) => f.fieldname === 'file')) || req.files?.[0];
+            const thumbUploadFile = req.files && req.files.find((f: any) => f.fieldname === 'thumb');
+
+            if (!mainFile) {
               res.statusCode = 400;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ message: 'No se envió ningún archivo de imagen' }));
@@ -95,25 +98,33 @@ function r2DevServerPlugin(): Plugin {
             }
 
             try {
-              const folder = (req.body?.folder || 'general').replace(/^\/+|\/+$/g, '');
-              const originalName = req.file.originalname || 'image.webp';
-              const cleanName = sanitizeFileName(originalName);
-              const timestamp = Date.now();
-              const uniqueKey = `${folder}/${timestamp}_${cleanName}`;
-              const contentType = req.file.mimetype || 'image/webp';
+              const explicitTargetKey = (req.body?.targetKey || req.body?.target_key || '').trim().replace(/^\/+/, '');
+              let uniqueKey = '';
+
+              if (explicitTargetKey) {
+                uniqueKey = explicitTargetKey;
+              } else {
+                const folder = (req.body?.folder || 'general').replace(/^\/+|\/+$/g, '');
+                const originalName = mainFile.originalname || 'image.webp';
+                const cleanName = sanitizeFileName(originalName);
+                const timestamp = Date.now();
+                uniqueKey = `${folder}/${timestamp}_${cleanName}`;
+              }
+
+              const contentType = mainFile.mimetype || 'image/webp';
 
               await r2Client.send(new PutObjectCommand({
                 Bucket: r2BucketName,
                 Key: uniqueKey,
-                Body: req.file.buffer,
+                Body: mainFile.buffer,
                 ContentType: contentType,
-                CacheControl: 'public, max-age=31536000, immutable',
+                CacheControl: explicitTargetKey ? 'public, max-age=60, s-maxage=300, must-revalidate' : 'public, max-age=31536000, immutable',
               }));
 
-              // Generar y subir miniatura optimizada _thumb.webp
+              // Generar y subir miniatura optimizada _thumb.webp (usando el buffer del cliente o sharp)
               try {
                 const thumbKey = uniqueKey.replace(/\.[^.]+$/, '') + '_thumb.webp';
-                const thumbBuffer = await sharp(req.file.buffer)
+                const thumbBuffer = thumbUploadFile?.buffer || await sharp(mainFile.buffer)
                   .resize({ width: 480, withoutEnlargement: true })
                   .webp({ quality: 78, effort: 4 })
                   .toBuffer();
@@ -123,7 +134,7 @@ function r2DevServerPlugin(): Plugin {
                   Key: thumbKey,
                   Body: thumbBuffer,
                   ContentType: 'image/webp',
-                  CacheControl: 'public, max-age=31536000, immutable',
+                  CacheControl: explicitTargetKey ? 'public, max-age=60, s-maxage=300, must-revalidate' : 'public, max-age=31536000, immutable',
                 }));
                 console.log(`[Vite Dev R2 Upload] Miniatura generada con éxito: ${thumbKey}`);
               } catch (thumbErr: any) {
@@ -138,7 +149,7 @@ function r2DevServerPlugin(): Plugin {
                 secure_url: secureUrl,
                 public_id: uniqueKey,
                 format: contentType.split('/')[1] || 'webp',
-                bytes: req.file.size,
+                bytes: mainFile.size,
               }));
             } catch (error: any) {
               console.error('[Vite Dev R2 Error]:', error);
@@ -163,11 +174,17 @@ function r2DevServerPlugin(): Plugin {
           }
 
           if (r2Client) {
-            r2Client.send(new DeleteObjectCommand({
-              Bucket: r2BucketName,
-              Key: key,
-            })).then(() => {
-              console.log(`[Vite Dev R2 Delete] Objeto eliminado: ${key}`);
+            Promise.allSettled([
+              r2Client.send(new DeleteObjectCommand({
+                Bucket: r2BucketName,
+                Key: key,
+              })),
+              r2Client.send(new DeleteObjectCommand({
+                Bucket: r2BucketName,
+                Key: key.replace(/\.[^.]+$/, '') + '_thumb.webp',
+              })),
+            ]).then(() => {
+              console.log(`[Vite Dev R2 Delete] Objeto y miniatura eliminados: ${key}`);
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ message: 'Operación de eliminación procesada con éxito.', success: true }));
             }).catch((r2Error: any) => {

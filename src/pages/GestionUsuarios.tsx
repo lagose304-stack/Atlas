@@ -5,6 +5,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { logAuditEvent } from '../services/unifiedAuditService';
+import { usePreservedParam } from '../hooks/usePreservedParam';
 
 type Rol = 'Instructor' | 'Microscopía' | 'Administrador';
 
@@ -30,7 +31,7 @@ const panelColor: Record<NonNullable<Panel>, string> = {
 };
 
 const GestionUsuarios: React.FC = () => {
-  const [activePanel, setActivePanel] = useState<Panel>(null);
+  const [activePanel, setActivePanel] = usePreservedParam<Panel>('panel', null);
   const [toast, setToast]   = useState<{ msg: string; ok: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const [supportsSecurityColumns, setSupportsSecurityColumns] = useState<boolean | null>(null);

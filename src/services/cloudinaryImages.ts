@@ -5,6 +5,57 @@ const R2_PUBLIC_DOMAIN = (
   'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev'
 ).replace(/\/+$/, '');
 
+// ── Registro de versiones / Cache-busting para imágenes reemplazadas ──
+const IMAGE_VERSION_CACHE_KEY = 'atlas_image_versions_v1';
+
+const getStoredImageVersions = (): Record<string, number> => {
+  if (typeof window === 'undefined' || !window.localStorage) return {};
+  try {
+    const raw = window.localStorage.getItem(IMAGE_VERSION_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+const memoryImageVersions: Record<string, number> = getStoredImageVersions();
+
+/**
+ * Invalida la memoria y caché local del navegador para una placa o imagen específica,
+ * forzando a que cualquier componente (miniaturas, visor público, editor) cargue la nueva versión de inmediato.
+ */
+export const invalidateImageCache = (photoUrlOrStorageKey: string): void => {
+  if (!photoUrlOrStorageKey) return;
+  const now = Date.now();
+  const trimmed = photoUrlOrStorageKey.trim();
+  memoryImageVersions[trimmed] = now;
+
+  // Extraer también versión normalizada/limpia para asegurar matching
+  const clean = trimmed
+    .replace(/^https?:\/\/[^/]+\//, '')
+    .replace(/^atlas-media\//i, '')
+    .replace(/^\/+/, '');
+  if (clean) {
+    memoryImageVersions[clean] = now;
+  }
+
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const stored = getStoredImageVersions();
+      stored[trimmed] = now;
+      if (clean) stored[clean] = now;
+      window.localStorage.setItem(IMAGE_VERSION_CACHE_KEY, JSON.stringify(stored));
+    } catch {
+      // Ignorar errores de quota en localStorage
+    }
+  }
+
+  // Notificar a componentes en otras pestañas o componentes activos
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('atlas:image-invalidated', { detail: { url: trimmed, timestamp: now } }));
+  }
+};
+
 export const getCloudinaryImageUrl = (
   originalUrl: string,
   profile?: CloudinaryImageProfile
@@ -12,6 +63,16 @@ export const getCloudinaryImageUrl = (
   if (!originalUrl || typeof originalUrl !== 'string') return '';
 
   const trimmed = originalUrl.trim();
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+
+  // Detectar si la URL ya tiene o requiere versión de cache-busting
+  const cleanOriginal = trimmed
+    .replace(/^https?:\/\/[^/]+\//, '')
+    .replace(/^atlas-media\//i, '')
+    .replace(/^\/+/, '');
+  const version = memoryImageVersions[trimmed] || memoryImageVersions[cleanOriginal] || null;
 
   let path = trimmed;
   if (trimmed.includes('res.cloudinary.com')) {
@@ -20,6 +81,10 @@ export const getCloudinaryImageUrl = (
   } else if (trimmed.startsWith(R2_PUBLIC_DOMAIN)) {
     path = trimmed.slice(R2_PUBLIC_DOMAIN.length);
   } else if (/^https?:\/\//i.test(trimmed) && !trimmed.includes('.r2.dev')) {
+    if (version) {
+      const sep = trimmed.includes('?') ? '&' : '?';
+      return `${trimmed}${sep}v=${version}`;
+    }
     return trimmed;
   }
 
@@ -54,7 +119,12 @@ export const getCloudinaryImageUrl = (
     cleanKey = cleanKey.replace(/_thumb\.webp$/i, '.webp');
   }
 
-  return `${R2_PUBLIC_DOMAIN}/${cleanKey}`;
+  const finalUrl = `${R2_PUBLIC_DOMAIN}/${cleanKey}`;
+  if (version) {
+    return `${finalUrl}?v=${version}`;
+  }
+
+  return finalUrl;
 };
 
 export const getImageCandidateUrls = (

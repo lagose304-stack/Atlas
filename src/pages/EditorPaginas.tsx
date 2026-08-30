@@ -36,6 +36,7 @@ import {
   type PageVersionRow,
 } from '../services/pageVersionsService';
 import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
+import { getPreservedSearchParam, syncUrlSearchParam } from '../services/navigationStateKeeper';
 
 type WorkspaceMode = 'edit' | 'preview';
 type ViewMode = 'versions_hub' | 'editor';
@@ -134,6 +135,46 @@ const EditorPaginas: React.FC = () => {
     };
     void loadPages();
   }, []);
+
+  // Restaurar página seleccionada al recargar desde parámetros preservados
+  useEffect(() => {
+    if (!selection && (temas.length > 0 || subtemas.length > 0)) {
+      const tipo = getPreservedSearchParam('tipo') || getPreservedSearchParam('pagina');
+      const idRaw = getPreservedSearchParam('id');
+      const id = idRaw ? Number(idRaw) : null;
+
+      if (tipo === 'credits' && isAdministrator) {
+        setSelection({ kind: 'credits', label: 'Créditos' });
+      } else if (tipo === 'home') {
+        setSelection({ kind: 'home', label: 'Inicio' });
+      } else if (tipo === 'temario') {
+        setSelection({ kind: 'temario', label: 'Temario' });
+      } else if (tipo === 'tema' && id) {
+        const t = temas.find((item) => item.id === id);
+        if (t) setSelection({ kind: 'tema', id: t.id, label: t.nombre });
+      } else if (tipo === 'subtema' && id) {
+        const s = subtemas.find((item) => item.id === id);
+        if (s) {
+          const parent = temas.find((t) => t.id === s.tema_id);
+          setSelection({
+            kind: 'subtema',
+            id: s.id,
+            temaId: s.tema_id,
+            label: s.nombre,
+            parentLabel: parent?.nombre ?? '',
+          });
+        }
+      }
+    }
+  }, [selection, temas, subtemas, isAdministrator]);
+
+  // Sincronizar selección en la URL para que no se pierda al recargar
+  useEffect(() => {
+    if (selection) {
+      syncUrlSearchParam('tipo', selection.kind);
+      syncUrlSearchParam('id', 'id' in selection ? selection.id : null);
+    }
+  }, [selection]);
 
   // Carga del historial de versiones para la página seleccionada
   const loadVersions = useCallback(async () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { MousePointerClick } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { deleteFromCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
@@ -11,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { getCachedSubtemas, getQuickSubtemas } from '../services/catalogService';
+import { usePreservedParam } from '../hooks/usePreservedParam';
 
 interface Tema {
   id: number;
@@ -103,8 +104,9 @@ const EliminarPlacas: React.FC = () => {
   const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-  const [selectedTemaId,    setSelectedTemaId]    = useState<number | null>(null);
-  const [selectedSubtemaId, setSelectedSubtemaId] = useState<number | null>(null);
+  const [selectedTemaId,    setSelectedTemaId]    = usePreservedParam<number | null>('tema', null);
+  const [selectedSubtemaId, setSelectedSubtemaId] = usePreservedParam<number | null>('subtema', null);
+  const prevTemaRef = useRef<number | null>(selectedTemaId);
 
   const [loadingTemas,    setLoadingTemas]    = useState(true);
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
@@ -237,17 +239,22 @@ const EliminarPlacas: React.FC = () => {
 
   // Cargar subtemas cuando cambia el tema
   useEffect(() => {
+    if (prevTemaRef.current !== selectedTemaId) {
+      if (prevTemaRef.current !== null) {
+        setSelectedSubtemaId(null);
+      }
+      prevTemaRef.current = selectedTemaId;
+    }
     setSubtemas([]);
     setPlacas([]);
     setPlacasConMapa(new Set());
-    setSelectedSubtemaId(null);
     setSelectedIds(new Set());
     setSubtemasLoadError(null);
     setPlacasLoadError(null);
     setPlacasReloadTick(0);
     if (!selectedTemaId) return;
     void fetchSubtemas(selectedTemaId);
-  }, [selectedTemaId, subtemasReloadTick, fetchSubtemas]);
+  }, [selectedTemaId, subtemasReloadTick, fetchSubtemas, setSelectedSubtemaId]);
 
   // Cargar placas cuando cambia el subtema
   useEffect(() => {

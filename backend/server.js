@@ -112,8 +112,11 @@ const sanitizeFileName = (name) => {
 };
 
 // 1. Ruta para SUBIR imagen a Cloudflare R2 con generación de miniatura _thumb.webp
-app.post('/api/images/upload', upload.single('file'), async (req, res) => {
-  if (!req.file) {
+app.post('/api/images/upload', upload.any(), async (req, res) => {
+  const mainFile = req.file || (req.files && req.files.find(f => f.fieldname === 'file')) || (req.files && req.files[0]);
+  const thumbUploadFile = req.files && req.files.find(f => f.fieldname === 'thumb');
+
+  if (!mainFile) {
     return res.status(400).json({ message: 'No se envió ningún archivo de imagen' });
   }
 
@@ -122,27 +125,34 @@ app.post('/api/images/upload', upload.single('file'), async (req, res) => {
   }
 
   try {
-    const folder = (req.body.folder || 'general').replace(/^\/+|\/+$/g, '');
-    const originalName = req.file.originalname || 'image.webp';
-    const cleanName = sanitizeFileName(originalName);
-    const timestamp = Date.now();
-    const uniqueKey = `${folder}/${timestamp}_${cleanName}`;
+    const explicitTargetKey = (req.body.targetKey || req.body.target_key || '').trim().replace(/^\/+/, '');
+    let uniqueKey = '';
 
-    const contentType = req.file.mimetype || 'image/webp';
+    if (explicitTargetKey) {
+      uniqueKey = explicitTargetKey;
+    } else {
+      const folder = (req.body.folder || 'general').replace(/^\/+|\/+$/g, '');
+      const originalName = mainFile.originalname || 'image.webp';
+      const cleanName = sanitizeFileName(originalName);
+      const timestamp = Date.now();
+      uniqueKey = `${folder}/${timestamp}_${cleanName}`;
+    }
+
+    const contentType = mainFile.mimetype || 'image/webp';
 
     // Subir imagen original principal
     await r2Client.send(new PutObjectCommand({
       Bucket: r2BucketName,
       Key: uniqueKey,
-      Body: req.file.buffer,
+      Body: mainFile.buffer,
       ContentType: contentType,
-      CacheControl: 'public, max-age=31536000, immutable',
+      CacheControl: explicitTargetKey ? 'public, max-age=60, s-maxage=300, must-revalidate' : 'public, max-age=31536000, immutable',
     }));
 
     // Generar y subir miniatura optimizada _thumb.webp
     try {
       const thumbKey = uniqueKey.replace(/\.[^.]+$/, '') + '_thumb.webp';
-      const thumbBuffer = await sharp(req.file.buffer)
+      const thumbBuffer = thumbUploadFile?.buffer || await sharp(mainFile.buffer)
         .resize({ width: 480, withoutEnlargement: true })
         .webp({ quality: 78, effort: 4 })
         .toBuffer();
@@ -152,7 +162,7 @@ app.post('/api/images/upload', upload.single('file'), async (req, res) => {
         Key: thumbKey,
         Body: thumbBuffer,
         ContentType: 'image/webp',
-        CacheControl: 'public, max-age=31536000, immutable',
+        CacheControl: explicitTargetKey ? 'public, max-age=60, s-maxage=300, must-revalidate' : 'public, max-age=31536000, immutable',
       }));
       console.log(`[R2 Upload] Miniatura generada con éxito: ${thumbKey}`);
     } catch (thumbErr) {
@@ -163,11 +173,11 @@ app.post('/api/images/upload', upload.single('file'), async (req, res) => {
 
     console.log(`[R2 Upload] Archivo subido con éxito: ${uniqueKey}`);
 
-    res.status(200).json({
+    return res.status(200).json({
       secure_url: secureUrl,
       public_id: uniqueKey,
       format: contentType.split('/')[1] || 'webp',
-      bytes: req.file.size,
+      bytes: mainFile.size,
     });
   } catch (error) {
     console.error('Error al subir imagen a R2:', error);

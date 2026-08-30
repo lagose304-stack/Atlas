@@ -569,4 +569,58 @@ describe('PlateAnnotationViewerEditor', () => {
       [0.4, 0.4, 0.6, 0.4, 0.6, 0.6, 0.4, 0.6],
     ]);
   });
+
+  it('finaliza y refleja correctamente el dibujo de Borde Individual en dispositivos táctiles', () => {
+    const handleSaveAll = vi.fn();
+
+    render(
+      <PlateAnnotationViewerEditor
+        imageSrc="https://res.cloudinary.com/demo/image/upload/sample.jpg"
+        initialSenalados={[]}
+        initialSenaladosPos={[]}
+        onSaveAll={handleSaveAll}
+        onCancel={vi.fn()}
+      />
+    );
+
+    // 1. Seleccionar herramienta Borde
+    const borderBtn = screen.getByRole('button', { name: /^Borde$/i });
+    fireEvent.click(borderBtn);
+
+    const img = screen.getByAltText(/Placa histológica de alta calidad/i);
+    Object.defineProperty(img, 'naturalWidth', { value: 1000 });
+    Object.defineProperty(img, 'naturalHeight', { value: 800 });
+    Object.defineProperty(img, 'clientWidth', { value: 1000 });
+    Object.defineProperty(img, 'clientHeight', { value: 800 });
+    Object.defineProperty(img, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 1000, height: 800, right: 1000, bottom: 800 }),
+    });
+    fireEvent.load(img);
+
+    const canvas = screen.getByTestId('annotation-editor-canvas');
+    expect(canvas).toBeInTheDocument();
+
+    // 2. Tocar para empezar a dibujar con 1 dedo
+    fireEvent.touchStart(canvas, { touches: [{ clientX: 100, clientY: 100 }] });
+    fireEvent.mouseDown(canvas, { clientX: 100, clientY: 100, button: 0 });
+
+    // 3. Mover el dedo para trazar el contorno
+    fireEvent.touchMove(canvas, { touches: [{ clientX: 150, clientY: 100 }] });
+    fireEvent.touchMove(canvas, { touches: [{ clientX: 150, clientY: 150 }] });
+    fireEvent.touchMove(canvas, { touches: [{ clientX: 100, clientY: 150 }] });
+    fireEvent.touchMove(canvas, { touches: [{ clientX: 100, clientY: 100 }] });
+
+    // 4. Levantar el dedo (touchend en dispositivos táctiles)
+    fireEvent.touchEnd(canvas, { touches: [] });
+
+    // 5. Guardar señalados
+    const saveButton = screen.getByRole('button', { name: /Guardar señalados/i });
+    fireEvent.click(saveButton);
+
+    expect(handleSaveAll).toHaveBeenCalledTimes(1);
+    const savedPos = handleSaveAll.mock.calls[0][1];
+    expect(savedPos.length).toBe(1);
+    expect(savedPos[0].regionPoints).toBeDefined();
+    expect(savedPos[0].regionPoints.length).toBeGreaterThanOrEqual(6);
+  });
 });

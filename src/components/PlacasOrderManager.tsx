@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import { useDraggableList } from '../hooks/useDraggableList';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { getCachedSubtemas, getQuickSubtemas } from '../services/catalogService';
+import { usePreservedParam } from '../hooks/usePreservedParam';
 import LoadingToast from './LoadingToast';
 
 import EditorParcialAccordionPicker from './editor/EditorParcialAccordionPicker';
@@ -24,8 +25,9 @@ const PlacasOrderManager: React.FC = () => {
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [placas, setPlacas] = useState<Placa[]>([]);
   const [mapIds, setMapIds] = useState<Set<number>>(new Set());
-  const [temaId, setTemaId] = useState<number | null>(null);
-  const [subtemaId, setSubtemaId] = useState<number | null>(null);
+  const [temaId, setTemaId] = usePreservedParam<number | null>('tema', null);
+  const [subtemaId, setSubtemaId] = usePreservedParam<number | null>('subtema', null);
+  const prevTemaRef = useRef<number | null>(temaId);
   const [loading, setLoading] = useState(false);
   const [loadingTemas, setLoadingTemas] = useState(true);
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
@@ -44,7 +46,13 @@ const PlacasOrderManager: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    setSubtemaId(null); setPlacas([]); setMapIds(new Set()); setChanged(false); drag.resetDrag();
+    if (prevTemaRef.current !== temaId) {
+      if (prevTemaRef.current !== null) {
+        setSubtemaId(null);
+      }
+      prevTemaRef.current = temaId;
+    }
+    setPlacas([]); setMapIds(new Set()); setChanged(false); drag.resetDrag();
     if (!temaId) { setSubtemas([]); return; }
 
     const quick = getQuickSubtemas(temaId);

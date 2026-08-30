@@ -30,6 +30,7 @@ import {
   prefetchCatalog,
   prefetchTema,
 } from '../services/catalogService';
+import { usePreservedParam } from '../hooks/usePreservedParam';
 
 interface Tema {
   id: number;
@@ -262,7 +263,7 @@ const TemarioPublico: React.FC = () => {
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
   const [temasLoadDebug, setTemasLoadDebug] = useState<string | null>(null);
-  const [selectedParcial, setSelectedParcial] = useState<(typeof PARCIALES)[number]['key']>('primer');
+  const [selectedParcial, setSelectedParcial] = usePreservedParam<(typeof PARCIALES)[number]['key']>('parcial', 'primer');
 
   const fetchTemas = useCallback(async () => {
     setTemasLoadError(null);

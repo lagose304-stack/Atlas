@@ -38,14 +38,22 @@ export async function onRequest(context: { request: Request; env: Record<string,
       return json(400, { message: 'No file provided in form data' });
     }
 
-    const originalName = file.name || 'image.webp';
-    const cleanName = originalName
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9._-]/g, '_');
-    const timestamp = Date.now();
-    const uniqueKey = `${folder}/${timestamp}_${cleanName}`;
+    const explicitTargetKey = (((formData.get('targetKey') || formData.get('target_key')) as string) || '').trim().replace(/^\/+/, '');
+    const thumbFile = formData.get('thumb') as File | null;
+    let uniqueKey = '';
+
+    if (explicitTargetKey) {
+      uniqueKey = explicitTargetKey;
+    } else {
+      const originalName = file.name || 'image.webp';
+      const cleanName = originalName
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9._-]/g, '_');
+      const timestamp = Date.now();
+      uniqueKey = `${folder}/${timestamp}_${cleanName}`;
+    }
 
     const r2Bucket = env.R2_BUCKET;
     const r2PublicDomain = (env.R2_PUBLIC_DOMAIN || 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev').replace(/\/+$/, '');
@@ -56,9 +64,25 @@ export async function onRequest(context: { request: Request; env: Record<string,
       await r2Bucket.put(uniqueKey, buffer, {
         httpMetadata: {
           contentType: file.type || 'image/webp',
-          cacheControl: 'public, max-age=31536000, immutable',
+          cacheControl: explicitTargetKey ? 'public, max-age=60, s-maxage=300, must-revalidate' : 'public, max-age=31536000, immutable',
         },
       });
+
+      // Si se envió la miniatura procesada
+      if (thumbFile) {
+        try {
+          const thumbKey = uniqueKey.replace(/\.[^.]+$/, '') + '_thumb.webp';
+          const thumbBuffer = await thumbFile.arrayBuffer();
+          await r2Bucket.put(thumbKey, thumbBuffer, {
+            httpMetadata: {
+              contentType: 'image/webp',
+              cacheControl: explicitTargetKey ? 'public, max-age=60, s-maxage=300, must-revalidate' : 'public, max-age=31536000, immutable',
+            },
+          });
+        } catch (thumbErr) {
+          console.warn('Error subiendo miniatura en Cloudflare function:', thumbErr);
+        }
+      }
 
       return json(200, {
         secure_url: `${r2PublicDomain}/${uniqueKey}`,

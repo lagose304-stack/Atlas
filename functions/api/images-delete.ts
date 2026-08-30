@@ -28,6 +28,13 @@ export async function onRequest(context: { request: Request; env: Record<string,
     const r2Bucket = env.R2_BUCKET;
     if (r2Bucket && typeof r2Bucket.delete === 'function') {
       await r2Bucket.delete(publicId);
+
+      // Eliminar también la miniatura asociada _thumb.webp
+      try {
+        const thumbKey = publicId.replace(/\.[^.]+$/, '') + '_thumb.webp';
+        await r2Bucket.delete(thumbKey);
+      } catch (_) {}
+
       return json(200, { message: 'Image deleted successfully from Cloudflare R2.', success: true });
     }
 

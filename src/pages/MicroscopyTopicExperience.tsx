@@ -35,6 +35,7 @@ import {
   isFeatureDisabled,
   isTemaDisabled,
 } from '../services/siteMaintenance';
+import { getPreservedSearchParam, syncUrlSearchParam } from '../services/navigationStateKeeper';
 import '../styles/microscopy-topic.css';
 
 interface MicroscopyTopicExperienceProps {
@@ -438,6 +439,45 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
   const [quizFinished, setQuizFinished] = useState(false);
   const handleGoBack = useSmartBackNavigation('/temario');
 
+  // Restaurar placa seleccionada al recargar
+  useEffect(() => {
+    if (!selectedPlaca && placas.length > 0) {
+      const placaParam = getPreservedSearchParam('placa');
+      if (placaParam) {
+        const id = Number(placaParam);
+        const match = placas.find((p) => p.id === id);
+        if (match) setSelectedPlaca(match);
+      }
+    }
+  }, [placas, selectedPlaca]);
+
+  // Restaurar estación activa al recargar
+  useEffect(() => {
+    if (subtemas.length > 0) {
+      const stationParam = getPreservedSearchParam('estacion');
+      if (stationParam) {
+        const id = Number(stationParam);
+        const match = subtemas.find((s) => s.id === id);
+        if (match && activeStationId !== match.id) {
+          setActiveStationId(match.id);
+        }
+      }
+    }
+  }, [subtemas, activeStationId]);
+
+  // Restaurar muestra de objetivo al recargar
+  useEffect(() => {
+    if (!selectedObjectiveSample && Object.keys(objectiveSamples).length > 0) {
+      const muestraParam = getPreservedSearchParam('muestra');
+      if (muestraParam) {
+        const mag = Number(muestraParam);
+        if (objectiveSamples[mag]) {
+          setSelectedObjectiveSample(objectiveSamples[mag]);
+        }
+      }
+    }
+  }, [objectiveSamples, selectedObjectiveSample]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -519,7 +559,9 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
       } else {
         setObjectiveSamples(selectObjectiveSamples((objectiveSamplesResult.data ?? []) as unknown as ObjectiveSampleRow[]));
       }
-      setActiveStationId((current) => current ?? nextSubtemas[0]?.id ?? null);
+      const preservedStation = Number(getPreservedSearchParam('estacion'));
+      const initialStation = (Number.isFinite(preservedStation) && nextSubtemas.find(s => s.id === preservedStation)?.id) || nextSubtemas[0]?.id || null;
+      setActiveStationId((current) => current ?? initialStation);
       setLoading(false);
     };
 
@@ -964,7 +1006,10 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
                   className={isActive ? 'is-active' : ''}
                   style={{ '--station-accent': meta.accent } as React.CSSProperties}
                   key={subtema.id}
-                  onClick={() => setActiveStationId(subtema.id)}
+                  onClick={() => {
+                    syncUrlSearchParam('estacion', subtema.id);
+                    setActiveStationId(subtema.id);
+                  }}
                 >
                   <span>{String(index + 1).padStart(2, '0')}</span>
                   <i>{meta.icon}</i>
@@ -1015,7 +1060,15 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
                     <span>{activeStationPlates.length} {activeStationPlates.length === 1 ? 'fotografía disponible' : 'fotografías disponibles'}</span>
                     <div>
                       {activeStationPlates.map((placa) => (
-                        <button type="button" key={placa.id} onClick={() => setSelectedPlaca(placa)} aria-label="Abrir fotografía">
+                        <button
+                          type="button"
+                          key={placa.id}
+                          onClick={() => {
+                            syncUrlSearchParam('placa', placa.id);
+                            setSelectedPlaca(placa);
+                          }}
+                          aria-label="Abrir fotografía"
+                        >
                           <img src={getCloudinaryImageUrl(placa.photo_url, 'thumbSmall')} alt="" />
                         </button>
                       ))}
@@ -1052,7 +1105,14 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
             <div className="microscopy-objective-result">
               <div className="microscopy-objective-photo">
                 {objectiveImage ? (
-                  <button type="button" onClick={() => setSelectedPlaca(objectiveImage)} aria-label="Ampliar fotografía de objetivos">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      syncUrlSearchParam('placa', objectiveImage.id);
+                      setSelectedPlaca(objectiveImage);
+                    }}
+                    aria-label="Ampliar fotografía de objetivos"
+                  >
                     <img src={getCloudinaryImageUrl(objectiveImage.photo_url, 'view')} alt="Lentes objetivos del microscopio" />
                     <span><Images size={16} /> Ampliar fotografía</span>
                   </button>
@@ -1077,7 +1137,10 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
                   <button
                     type="button"
                     className="microscopy-objective-sample"
-                    onClick={() => setSelectedObjectiveSample(activeObjectiveSample)}
+                    onClick={() => {
+                      syncUrlSearchParam('muestra', activeObjectiveSample.magnification);
+                      setSelectedObjectiveSample(activeObjectiveSample);
+                    }}
                   >
                     <span className="microscopy-objective-sample-image">
                       <img
@@ -1213,7 +1276,14 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
             {placas.map((placa) => {
               const subtema = subtemas.find((item) => item.id === placa.subtema_id);
               return (
-                <button type="button" key={placa.id} onClick={() => setSelectedPlaca(placa)}>
+                <button
+                  type="button"
+                  key={placa.id}
+                  onClick={() => {
+                    syncUrlSearchParam('placa', placa.id);
+                    setSelectedPlaca(placa);
+                  }}
+                >
                   <img src={getCloudinaryImageUrl(placa.photo_url, 'cardWideSmall')} alt={subtema?.nombre ?? 'Microscopía'} loading="lazy" />
                   <span>
                     <small>{subtema?.nombre ?? 'Microscopía'}</small>
@@ -1233,11 +1303,16 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
         <ImageViewerModal
           src={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
           srcZoom={getCloudinaryImageUrl(selectedPlaca.photo_url, 'zoom')}
-          onClose={() => setSelectedPlaca(null)}
+          onClose={() => {
+            syncUrlSearchParam('placa', null);
+            setSelectedPlaca(null);
+          }}
           placaId={selectedPlaca.id}
           hasInteractiveMapHint={mapPlateIds.has(selectedPlaca.id)}
           temaNombre={tema.nombre}
           subtemaNombre={selectedPlacaSubtema?.nombre}
+          temaId={tema.id}
+          subtemaId={selectedPlacaSubtema?.id}
           aumento={selectedPlaca.aumento}
           senalados={selectedPlaca.senalados}
           senaladosMeta={selectedPlaca.senalados_meta}
@@ -1245,8 +1320,16 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
           tincion={selectedPlaca.tincion}
           platePosition={selectedPlacaIndex + 1}
           plateCount={placas.length}
-          onPreviousPlate={selectedPlacaIndex > 0 ? () => setSelectedPlaca(placas[selectedPlacaIndex - 1]) : undefined}
-          onNextPlate={selectedPlacaIndex >= 0 && selectedPlacaIndex < placas.length - 1 ? () => setSelectedPlaca(placas[selectedPlacaIndex + 1]) : undefined}
+          onPreviousPlate={selectedPlacaIndex > 0 ? () => {
+            const target = placas[selectedPlacaIndex - 1];
+            syncUrlSearchParam('placa', target.id);
+            setSelectedPlaca(target);
+          } : undefined}
+          onNextPlate={selectedPlacaIndex >= 0 && selectedPlacaIndex < placas.length - 1 ? () => {
+            const target = placas[selectedPlacaIndex + 1];
+            syncUrlSearchParam('placa', target.id);
+            setSelectedPlaca(target);
+          } : undefined}
         />
       )}
 
@@ -1254,7 +1337,10 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
         <ImageViewerModal
           src={getCloudinaryImageUrl(selectedObjectiveSample.photoUrl, 'view')}
           srcZoom={getCloudinaryImageUrl(selectedObjectiveSample.photoUrl, 'zoom')}
-          onClose={() => setSelectedObjectiveSample(null)}
+          onClose={() => {
+            syncUrlSearchParam('muestra', null);
+            setSelectedObjectiveSample(null);
+          }}
           placaId={selectedObjectiveSample.id}
           temaNombre={selectedObjectiveSample.temaNombre}
           subtemaNombre={selectedObjectiveSample.subtemaNombre}

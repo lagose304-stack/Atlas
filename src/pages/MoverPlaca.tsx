@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { MousePointerClick } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { describeSupabaseError, supabase } from '../services/supabase';
-import { moveCloudinaryImage, getCloudinaryPublicId, buildPlacaStorageKey } from '../services/cloudinary';
+import { moveCloudinaryImage, replaceCloudinaryImage, getCloudinaryPublicId, buildPlacaStorageKey } from '../services/cloudinary';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -10,12 +10,13 @@ import LoadingToast from '../components/LoadingToast';
 import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
 import RequiredTextPromptModal from '../components/RequiredTextPromptModal';
 import PlateEditorPanel from '../components/PlateEditorPanel';
-import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { getCloudinaryImageUrl, invalidateImageCache } from '../services/cloudinaryImages';
 import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
-import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
+import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas, invalidatePlacasCache } from '../services/catalogService';
+import { syncUrlSearchParam } from '../services/navigationStateKeeper';
 
 interface Tema {
   id: number;
@@ -196,6 +197,11 @@ const deriveLocations = (
 
 const MoverPlaca: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialPlacaIdParam = searchParams.get('placaId') ? Number(searchParams.get('placaId')) : null;
+  const initialSubtemaIdParam = searchParams.get('subtemaId') ? Number(searchParams.get('subtemaId')) : null;
+  const initialTemaIdParam = searchParams.get('temaId') ? Number(searchParams.get('temaId')) : null;
+
   const { user } = useAuth();
 
   // ── Selección de contexto (tema/subtema de búsqueda) ──────────────────
@@ -205,8 +211,8 @@ const MoverPlaca: React.FC = () => {
   const [placas,   setPlacas]   = useState<Placa[]>([]);
   const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
 
-  const [selectedTemaId,    setSelectedTemaId]    = useState<number | null>(null);
-  const [selectedSubtemaId, setSelectedSubtemaId] = useState<number | null>(null);
+  const [selectedTemaId,    setSelectedTemaId]    = useState<number | null>(initialTemaIdParam);
+  const [selectedSubtemaId, setSelectedSubtemaId] = useState<number | null>(initialSubtemaIdParam);
 
   const [loadingTemas,    setLoadingTemas]    = useState(initialTemas.length === 0);
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
@@ -224,6 +230,28 @@ const MoverPlaca: React.FC = () => {
 
   // ── Placa seleccionada para editar ────────────────────────────────────
   const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(null);
+  const editPanelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (selectedPlaca) {
+      setTimeout(() => {
+        editPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [selectedPlaca?.id]);
+
+  // Sincronizar contexto y placa seleccionada para no perderlos al recargar
+  useEffect(() => {
+    syncUrlSearchParam('temaId', selectedTemaId);
+  }, [selectedTemaId]);
+
+  useEffect(() => {
+    syncUrlSearchParam('subtemaId', selectedSubtemaId);
+  }, [selectedSubtemaId]);
+
+  useEffect(() => {
+    syncUrlSearchParam('placaId', selectedPlaca?.id ?? null);
+  }, [selectedPlaca]);
 
   // ── Selectores del panel de edición ──────────────────────────────────
   const [editTemas,    setEditTemas]    = useState<Tema[]>(initialTemas);
@@ -252,6 +280,10 @@ const MoverPlaca: React.FC = () => {
   const [showEditComentario, setShowEditComentario] = useState(false);
   const [editTincion,       setEditTincion]       = useState('');
   const [showEditTincion,   setShowEditTincion]   = useState(false);
+
+  // ── Imagen pendiente de reemplazo (Solo Administrador) ───────────────
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [pendingImagePreviewUrl, setPendingImagePreviewUrl] = useState<string | null>(null);
 
   const [isSaving,    setIsSaving]    = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -406,8 +438,72 @@ const MoverPlaca: React.FC = () => {
     void fetchTemas();
   }, [fetchTemas, temasReloadTick]);
 
-  // ── Cargar subtemas de contexto cuando cambia el tema ─────────────────
+  // ── Auto-cargar y seleccionar placa si se pasa por parámetros de URL ──
+  const initialParamsHandledRef = useRef(false);
   useEffect(() => {
+    if (initialParamsHandledRef.current) return;
+    if (!initialPlacaIdParam && !initialSubtemaIdParam && !initialTemaIdParam) {
+      initialParamsHandledRef.current = true;
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadInitialFromParams = async () => {
+      try {
+        let targetTemaId = initialTemaIdParam;
+        let targetSubtemaId = initialSubtemaIdParam;
+        let targetPlaca: Placa | null = null;
+
+        // Si tenemos placaId, consultarla directamente en Supabase si faltan datos
+        if (initialPlacaIdParam) {
+          const { data, error } = await supabase
+            .from('placas')
+            .select('id, photo_url, sort_order, tema_id, subtema_id, aumento, senalados, senalados_meta, comentario, tincion')
+            .eq('id', initialPlacaIdParam)
+            .single();
+
+          if (!error && data) {
+            targetPlaca = data as Placa;
+            targetTemaId = targetPlaca.tema_id;
+            targetSubtemaId = targetPlaca.subtema_id;
+          }
+        }
+
+        if (!isMounted) return;
+
+        if (targetTemaId) {
+          setSelectedTemaId(targetTemaId);
+          await fetchSubtemas(targetTemaId);
+        }
+
+        if (targetSubtemaId) {
+          setSelectedSubtemaId(targetSubtemaId);
+          await fetchPlacas(targetSubtemaId);
+        }
+
+        if (targetPlaca && isMounted) {
+          setSelectedPlaca(targetPlaca);
+        }
+      } catch (err) {
+        console.error('Error al pre-cargar placa desde parámetros:', err);
+      } finally {
+        if (isMounted) {
+          initialParamsHandledRef.current = true;
+        }
+      }
+    };
+
+    void loadInitialFromParams();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initialPlacaIdParam, initialSubtemaIdParam, initialTemaIdParam, fetchSubtemas, fetchPlacas]);
+
+  // ── Cargar subtemas de contexto cuando cambia el tema manualmente ─────────────────
+  useEffect(() => {
+    if (!initialParamsHandledRef.current) return;
     setSubtemas([]);
     setPlacas([]);
     setPlacasConMapa(new Set());
@@ -420,8 +516,9 @@ const MoverPlaca: React.FC = () => {
     void fetchSubtemas(selectedTemaId);
   }, [selectedTemaId, subtemasReloadTick, fetchSubtemas]);
 
-  // ── Cargar placas cuando cambia el subtema de contexto ────────────────
+  // ── Cargar placas cuando cambia el subtema de contexto manualmente ────────────────
   useEffect(() => {
+    if (!initialParamsHandledRef.current) return;
     setPlacas([]);
     setPlacasConMapa(new Set());
     setSelectedPlaca(null);
@@ -446,8 +543,18 @@ const MoverPlaca: React.FC = () => {
       setShowEditComentario(false);
       setEditTincion('');
       setShowEditTincion(false);
+      setPendingImageFile(null);
+      setPendingImagePreviewUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
       return;
     }
+    setPendingImageFile(null);
+    setPendingImagePreviewUrl(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     setEditTemaId(selectedPlaca.tema_id);
     setEditSubtemaId(selectedPlaca.subtema_id);
     setEditAumento(selectedPlaca.aumento ?? '');
@@ -522,9 +629,30 @@ const MoverPlaca: React.FC = () => {
         toTemaObj != null && toSubtemaObj != null;
 
       let finalPhotoUrl = selectedPlaca.photo_url;
+
+      // 1. Si hay una nueva imagen pendiente de actualización (solo Administrador)
+      if (pendingImageFile) {
+        try {
+          const replaceResult = await replaceCloudinaryImage(
+            pendingImageFile,
+            selectedPlaca.photo_url,
+            { optimizeForPlaque: true }
+          );
+          if (replaceResult?.secure_url) {
+            finalPhotoUrl = replaceResult.secure_url;
+          }
+        } catch (replaceErr: any) {
+          console.error('Error al reemplazar imagen física de la placa:', replaceErr);
+          const detail = replaceErr?.message || 'Error al procesar y subir la nueva imagen.';
+          setSaveError(`No se pudo actualizar la imagen: ${detail}`);
+          setIsSaving(false);
+          return;
+        }
+      }
+
       if (isLocationChanging && toTemaObj && toSubtemaObj) {
-        const fromPublicId = getCloudinaryPublicId(selectedPlaca.photo_url);
-        const targetPublicId = buildPlacaStorageKey(toTemaObj.nombre, toSubtemaObj.nombre, fromPublicId || selectedPlaca.photo_url);
+        const fromPublicId = getCloudinaryPublicId(finalPhotoUrl);
+        const targetPublicId = buildPlacaStorageKey(toTemaObj.nombre, toSubtemaObj.nombre, fromPublicId || finalPhotoUrl);
 
         if (fromPublicId && targetPublicId && fromPublicId !== targetPublicId) {
           try {
@@ -609,6 +737,15 @@ const MoverPlaca: React.FC = () => {
         },
       }).catch(auditErr => console.warn('Advertencia al registrar auditoría de edición de placa:', auditErr));
 
+      // Limpiar memoria y caché de la placa modificada tanto a nivel de imagen como de catálogo
+      if (pendingImageFile) {
+        invalidateImageCache(finalPhotoUrl);
+      }
+      invalidatePlacasCache(selectedPlaca.subtema_id);
+      if (editSubtemaId && editSubtemaId !== selectedPlaca.subtema_id) {
+        invalidatePlacasCache(editSubtemaId);
+      }
+
       // Si el subtema destino es diferente al actual, quitar la placa de la lista
       if (editSubtemaId !== selectedPlaca.subtema_id) {
         setPlacas(prev => prev.filter(p => p.id !== selectedPlaca.id));
@@ -619,6 +756,11 @@ const MoverPlaca: React.FC = () => {
         setPlacas(prev => prev.map(p => p.id === selectedPlaca.id ? updated : p));
         setSelectedPlaca(updated);
       }
+      setPendingImageFile(null);
+      setPendingImagePreviewUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
       setSelectedPlaca(null);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
@@ -638,8 +780,13 @@ const MoverPlaca: React.FC = () => {
     editSenaladosPos,
     editComentario,
     editTincion,
+    pendingImageFile,
+    editTemas,
+    editSubtemas,
     user?.id,
     user?.username,
+    user?.nombre,
+    user?.rol,
   ]);
 
   const getSenaladoGroupIndices = useCallback((index: number) => {
@@ -720,6 +867,7 @@ const MoverPlaca: React.FC = () => {
   }, [interactivePlacas, placasByAumento]);
 
   const hasChanges = selectedPlaca !== null && (
+    pendingImageFile !== null ||
     editTemaId    !== selectedPlaca.tema_id ||
     editSubtemaId !== selectedPlaca.subtema_id ||
     editAumento   !== (selectedPlaca.aumento ?? '') ||
@@ -1008,7 +1156,7 @@ const MoverPlaca: React.FC = () => {
 
         {/* Panel de edición */}
         {selectedPlaca && (
-          <div style={s.editPanel}>
+          <div ref={editPanelRef} style={s.editPanel}>
             <div style={s.editPanelInner}>
 
               {/* Foto */}
@@ -1128,9 +1276,25 @@ const MoverPlaca: React.FC = () => {
 
                 <PlateEditorPanel
                   title="Editar placa"
-                  imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'thumb')}
+                  imageSrc={selectedPlaca.photo_url}
                   highResImageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
                   imageAlt="Miniatura de la placa que estás editando"
+                  pendingImageFile={pendingImageFile}
+                  pendingImagePreviewUrl={pendingImagePreviewUrl}
+                  onSelectImageFile={(file) => {
+                    setPendingImageFile(file);
+                    setPendingImagePreviewUrl(prev => {
+                      if (prev) URL.revokeObjectURL(prev);
+                      return URL.createObjectURL(file);
+                    });
+                  }}
+                  onClearPendingImage={() => {
+                    setPendingImageFile(null);
+                    setPendingImagePreviewUrl(prev => {
+                      if (prev) URL.revokeObjectURL(prev);
+                      return null;
+                    });
+                  }}
                   primaryActionLabel="💾 Guardar cambios"
                   primaryActionLoading={isSaving}
                   primaryActionDisabled={!hasChanges || isSaving || !editTemaId || !editSubtemaId}
@@ -1202,6 +1366,11 @@ const MoverPlaca: React.FC = () => {
                     setMultipleSenaladoLabel('');
                     setMultipleSenaladoPromptOpen(false);
                     setMultipleSenaladoBatchOpen(false);
+                    setPendingImageFile(null);
+                    setPendingImagePreviewUrl(prev => {
+                      if (prev) URL.revokeObjectURL(prev);
+                      return null;
+                    });
                     setSelectedPlaca(null);
                   }}
                   labels={{
@@ -1242,7 +1411,7 @@ const MoverPlaca: React.FC = () => {
 
       {editingSenaladoIndex !== null && selectedPlaca && (
         <SenaladoLocationPicker
-          imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
+          imageSrc={pendingImagePreviewUrl || getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
           senaladoLabel={editSenalados[editingSenaladoIndex] ?? ''}
           initialLocation={editSenaladosPos[editingSenaladoIndex] ?? null}
           borderMode={borderSenaladoIndex === editingSenaladoIndex || Boolean(editSenaladosPos[editingSenaladoIndex]?.regionPoints?.length)}
@@ -1296,7 +1465,7 @@ const MoverPlaca: React.FC = () => {
       {editingSenaladoGroup && selectedPlaca && (
         <SenaladoLocationPicker
           key={`senalado-group-${editingSenaladoGroup.label}-${editingSenaladoGroup.indices.join('-')}`}
-          imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
+          imageSrc={pendingImagePreviewUrl || getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
           senaladoLabel={editingSenaladoGroup.label}
           batchMode
           allowBatchBorders
@@ -1376,7 +1545,7 @@ const MoverPlaca: React.FC = () => {
 
       {multipleSenaladoBatchOpen && selectedPlaca && (
         <SenaladoLocationPicker
-          imageSrc={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
+          imageSrc={pendingImagePreviewUrl || getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
           senaladoLabel={multipleSenaladoLabel}
           batchMode
           allowBatchBorders

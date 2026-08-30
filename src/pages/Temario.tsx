@@ -17,6 +17,7 @@ import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { useAuth } from '../contexts/AuthContext';
 import { logAuditEvent } from '../services/unifiedAuditService';
 import { invalidateCatalogCache, getCachedSubtemas, getQuickSubtemas } from '../services/catalogService';
+import { usePreservedParam } from '../hooks/usePreservedParam';
 
 // --- Interfaces ---
 interface Tema {
@@ -159,7 +160,7 @@ const Temario: React.FC = () => {
   const [deletingSubtemaId, setDeletingSubtemaId] = useState<string>('');
   const [temas, setTemas] = useState<Tema[]>([]);
   const [subtemasOfSelectedTema, setSubtemasOfSelectedTema] = useState<Subtema[]>([]);
-  const [selectedTemaId, setSelectedTemaId] = useState<string>('');
+  const [selectedTemaId, setSelectedTemaId] = usePreservedParam<string>('tema', '');
   const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
   const [subtemasLoadError, setSubtemasLoadError] = useState<string | null>(null);
   const [temasReloadTick, setTemasReloadTick] = useState(0);

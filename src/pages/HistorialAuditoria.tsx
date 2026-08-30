@@ -34,6 +34,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { syncUrlSearchParam } from '../services/navigationStateKeeper';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import BackButton from '../components/BackButton';
@@ -240,9 +241,19 @@ const HistorialAuditoria: React.FC = () => {
   const [dateTo, setDateTo] = useState('');
 
   // Paginación y modales
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() => Number(searchParams.get('page')) || 1);
   const pageSize = 25;
   const [selectedLog, setSelectedLog] = useState<AuditLogEntry | null>(null);
+
+  // Sincronizar filtros y página en la URL al cambiar
+  useEffect(() => {
+    syncUrlSearchParam('entity', selectedEntity === 'all' ? null : selectedEntity);
+    syncUrlSearchParam('subtemaId', selectedSubtemaId === 'all' ? null : selectedSubtemaId);
+    syncUrlSearchParam('action', selectedAction === 'all' ? null : selectedAction);
+    syncUrlSearchParam('actorUserId', selectedActorId === 'all' ? null : selectedActorId);
+    syncUrlSearchParam('q', searchQuery.trim() ? searchQuery : null);
+    syncUrlSearchParam('page', currentPage > 1 ? currentPage : null);
+  }, [selectedEntity, selectedSubtemaId, selectedAction, selectedActorId, searchQuery, currentPage]);
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
   const [copiedFicha, setCopiedFicha] = useState(false);
 

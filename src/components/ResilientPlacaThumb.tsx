@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Microscope } from 'lucide-react';
 import { getCloudinaryImageUrl, type CloudinaryImageProfile } from '../services/cloudinaryImages';
 
@@ -25,6 +25,28 @@ export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
 }) => {
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [invalidationTick, setInvalidationTick] = useState(0);
+
+  // Escuchar invalidación de imágenes para actualizar en vivo
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<{ url?: string; timestamp?: number }>;
+      if (!custom.detail?.url || !photoUrl) {
+        setInvalidationTick(t => t + 1);
+        return;
+      }
+      const target = custom.detail.url.toLowerCase();
+      const current = photoUrl.toLowerCase();
+      if (current.includes(target) || target.includes(current)) {
+        setCandidateIndex(0);
+        setLoaded(false);
+        setInvalidationTick(t => t + 1);
+      }
+    };
+
+    window.addEventListener('atlas:image-invalidated', handler);
+    return () => window.removeEventListener('atlas:image-invalidated', handler);
+  }, [photoUrl]);
 
   // Generar lista de URLs candidatas en cascada
   const candidates = useMemo(() => {
@@ -57,7 +79,7 @@ export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
     }
 
     return list;
-  }, [photoUrl, profile, subtemaLogo, temaLogo]);
+  }, [photoUrl, profile, subtemaLogo, temaLogo, invalidationTick]);
 
   const currentSrc = candidates[candidateIndex] || '';
 

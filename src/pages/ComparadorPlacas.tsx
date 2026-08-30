@@ -15,6 +15,8 @@ import DualPlateViewport from '../components/comparador/DualPlateViewport';
 import PlatePickerModal, { type ComparadorPlacaItem } from '../components/comparador/PlatePickerModal';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
+import { supabase } from '../services/supabase';
+import { getPreservedSearchParam, syncUrlSearchParam } from '../services/navigationStateKeeper';
 import laboratoryLogo from '../assets/logos/laboratorio.png';
 import '../styles/comparador.css';
 
@@ -54,6 +56,60 @@ const ComparadorPlacas: React.FC = () => {
       releaseAtlasScrollLock();
     };
   }, []);
+
+  // Restaurar placas comparadas desde parámetros preservados al recargar
+  useEffect(() => {
+    const idARaw = getPreservedSearchParam('placaA');
+    const idBRaw = getPreservedSearchParam('placaB');
+    const idA = idARaw ? Number(idARaw) : null;
+    const idB = idBRaw ? Number(idBRaw) : null;
+    const idsToFetch = [idA, idB].filter((id): id is number => Number.isFinite(id) && (id as number) > 0);
+
+    if (idsToFetch.length === 0) return;
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('placas')
+          .select('id, photo_url, aumento, tincion, comentario, senalados, senalados_meta, subtema_id, subtemas(id, nombre, tema_id, temas(id, nombre, parcial))')
+          .in('id', idsToFetch);
+
+        if (!error && data) {
+          data.forEach((row: any) => {
+            const subtema = Array.isArray(row.subtemas) ? row.subtemas[0] : row.subtemas;
+            const tema = subtema ? (Array.isArray(subtema.temas) ? subtema.temas[0] : subtema.temas) : null;
+            const item: ComparadorPlacaItem = {
+              id: row.id,
+              photo_url: row.photo_url,
+              aumento: row.aumento,
+              tincion: row.tincion,
+              comentario: row.comentario,
+              senalados: row.senalados,
+              senalados_meta: row.senalados_meta,
+              subtema_id: subtema?.id ?? row.subtema_id,
+              subtema_nombre: subtema?.nombre ?? '',
+              tema_id: tema?.id ?? 0,
+              tema_nombre: tema?.nombre ?? '',
+              parcial_key: tema?.parcial ?? '',
+            };
+            if (idA && row.id === idA) setPlateA(item);
+            if (idB && row.id === idB) setPlateB(item);
+          });
+        }
+      } catch (err) {
+        console.warn('Error al restaurar placas comparadas:', err);
+      }
+    })();
+  }, []);
+
+  // Sincronizar placas comparadas en la URL
+  useEffect(() => {
+    syncUrlSearchParam('placaA', plateA?.id ?? null);
+  }, [plateA]);
+
+  useEffect(() => {
+    syncUrlSearchParam('placaB', plateB?.id ?? null);
+  }, [plateB]);
 
   // Open picker for A or B
   const handleOpenPicker = (target: 'A' | 'B') => {

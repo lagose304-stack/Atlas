@@ -27,6 +27,7 @@ import {
   getQuickSubtemas,
   prefetchSubtemaPlacas,
 } from '../services/catalogService';
+import { getPreservedSearchParam, syncUrlSearchParam } from '../services/navigationStateKeeper';
 
 interface Placa {
   id: number;
@@ -102,9 +103,19 @@ const PlacasSubtemaContent: React.FC = () => {
         }
       : null
   );
+  const initialPlacaIdParam = (() => {
+    const raw = getPreservedSearchParam('placa');
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })();
+
+  const initialSelectedPlaca = initialPlacaIdParam && initialPlacasBundle?.placas
+    ? ((initialPlacasBundle.placas as unknown as Placa[]).find((p) => p.id === initialPlacaIdParam) ?? null)
+    : null;
+
   const [loading, setLoading] = useState<boolean>(!hasCompleteInitialData);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(null);
+  const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(initialSelectedPlaca);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(
@@ -113,6 +124,38 @@ const PlacasSubtemaContent: React.FC = () => {
   const [allSubtemas, setAllSubtemas] = useState<SubtemaNav[]>(
     (initialSiblingSubtemas as unknown as SubtemaNav[]) ?? []
   );
+
+  // Restaurar placa seleccionada cuando el bundle o catálogo asíncrono termine de cargar
+  useEffect(() => {
+    if (!selectedPlaca && placas.length > 0) {
+      const placaParam = getPreservedSearchParam('placa');
+      if (placaParam) {
+        const id = Number(placaParam);
+        const match = placas.find((p) => p.id === id);
+        if (match) {
+          setSelectedPlaca(match);
+        }
+      }
+    }
+  }, [placas, selectedPlaca]);
+
+  // Escuchar si el usuario navega con atrás/adelante del navegador
+  useEffect(() => {
+    const handlePopState = () => {
+      const placaParam = getPreservedSearchParam('placa');
+      if (!placaParam) {
+        setSelectedPlaca(null);
+      } else {
+        const id = Number(placaParam);
+        const match = placas.find((p) => p.id === id);
+        if (match) {
+          setSelectedPlaca(match);
+        }
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [placas]);
 
   useEffect(() => {
     if (!numSubtemaId) return;
@@ -324,6 +367,7 @@ const PlacasSubtemaContent: React.FC = () => {
   }, [nonInteractivePlacas]);
 
   const handlePlacaOpen = (placa: Placa) => {
+    syncUrlSearchParam('placa', placa.id);
     void logPlacaView(placa.id, Number(subtemaId));
     setSelectedPlaca(placa);
   };
@@ -335,6 +379,7 @@ const PlacasSubtemaContent: React.FC = () => {
   const navigateToPlate = (index: number) => {
     const targetPlate = placas[index];
     if (!targetPlate) return;
+    syncUrlSearchParam('placa', targetPlate.id);
     void logPlacaView(targetPlate.id, Number(subtemaId));
     setSelectedPlaca(targetPlate);
   };
@@ -555,11 +600,16 @@ const PlacasSubtemaContent: React.FC = () => {
         <ImageViewerModal
           src={getCloudinaryImageUrl(selectedPlaca.photo_url, 'view')}
           srcZoom={getCloudinaryImageUrl(selectedPlaca.photo_url, 'zoom')}
-          onClose={() => setSelectedPlaca(null)}
+          onClose={() => {
+            syncUrlSearchParam('placa', null);
+            setSelectedPlaca(null);
+          }}
           placaId={selectedPlaca.id}
           hasInteractiveMapHint={placasConMapa.has(selectedPlaca.id)}
           temaNombre={temaNombre}
           subtemaNombre={subtema?.nombre}
+          temaId={subtema?.tema_id}
+          subtemaId={subtema?.id ?? numSubtemaId}
           aumento={selectedPlaca.aumento}
           senalados={selectedPlaca.senalados}
           senaladosMeta={selectedPlaca.senalados_meta}
@@ -569,6 +619,34 @@ const PlacasSubtemaContent: React.FC = () => {
           plateCount={placas.length}
           onPreviousPlate={selectedPlacaIndex > 0 ? () => navigateToPlate(selectedPlacaIndex - 1) : undefined}
           onNextPlate={selectedPlacaIndex >= 0 && selectedPlacaIndex < placas.length - 1 ? () => navigateToPlate(selectedPlacaIndex + 1) : undefined}
+          onPlateUpdated={(updated) => {
+            setSelectedPlaca(prev => {
+              if (!prev) return null;
+              return {
+                ...prev,
+                ...(updated.photoUrl ? { photo_url: updated.photoUrl } : {}),
+                ...(updated.aumento !== undefined ? { aumento: updated.aumento } : {}),
+                ...(updated.tincion !== undefined ? { tincion: updated.tincion } : {}),
+                ...(updated.comentario !== undefined ? { comentario: updated.comentario } : {}),
+                ...(updated.senalados !== undefined ? { senalados: updated.senalados } : {}),
+                ...(updated.senaladosMeta !== undefined ? { senalados_meta: updated.senaladosMeta } : {}),
+              };
+            });
+            setPlacas(prevPlacas => {
+              return prevPlacas.map(p => {
+                if (p.id !== selectedPlaca.id) return p;
+                return {
+                  ...p,
+                  ...(updated.photoUrl ? { photo_url: updated.photoUrl } : {}),
+                  ...(updated.aumento !== undefined ? { aumento: updated.aumento } : {}),
+                  ...(updated.tincion !== undefined ? { tincion: updated.tincion } : {}),
+                  ...(updated.comentario !== undefined ? { comentario: updated.comentario } : {}),
+                  ...(updated.senalados !== undefined ? { senalados: updated.senalados } : {}),
+                  ...(updated.senaladosMeta !== undefined ? { senalados_meta: updated.senaladosMeta } : {}),
+                };
+              });
+            });
+          }}
         />
       )}
     </div>

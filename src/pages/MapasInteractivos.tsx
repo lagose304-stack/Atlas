@@ -11,6 +11,8 @@ import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import EditorParcialAccordionPicker from '../components/editor/EditorParcialAccordionPicker';
 import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
 import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
+import { usePreservedParam } from '../hooks/usePreservedParam';
+import { syncUrlSearchParam, getPreservedSearchParam } from '../services/navigationStateKeeper';
 
 interface Tema {
   id: number;
@@ -629,8 +631,10 @@ const MapasInteractivos: React.FC = () => {
   const [pendingMapEditTarget, setPendingMapEditTarget] = useState<PendingMapEditTarget | null>(null);
   const [deletingMapId, setDeletingMapId] = useState<number | null>(null);
 
-  const [selectedTemaId, setSelectedTemaId] = useState<number | null>(null);
-  const [selectedSubtemaId, setSelectedSubtemaId] = useState<number | null>(null);
+  const [selectedTemaId, setSelectedTemaId] = usePreservedParam<number | null>('tema', null);
+  const [selectedSubtemaId, setSelectedSubtemaId] = usePreservedParam<number | null>('subtema', null);
+  const prevTemaRef = useRef<number | null>(selectedTemaId);
+  const prevSubtemaRef = useRef<number | null>(selectedSubtemaId);
   const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(null);
   const [selectedTool, setSelectedTool] = useState<'lasso' | 'zoom' | 'move_all'>('lasso');
   const [moveAllStep, setMoveAllStep] = useState<1 | 5 | 20>(5);
@@ -734,10 +738,15 @@ const MapasInteractivos: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (prevTemaRef.current !== selectedTemaId) {
+      if (prevTemaRef.current !== null) {
+        setSelectedSubtemaId(null);
+        setSelectedPlaca(null);
+      }
+      prevTemaRef.current = selectedTemaId;
+    }
     setSubtemas([]);
     setPlacas([]);
-    setSelectedSubtemaId(null);
-    setSelectedPlaca(null);
     if (!selectedTemaId) return;
 
     const quick = getQuickSubtemas(selectedTemaId);
@@ -760,12 +769,17 @@ const MapasInteractivos: React.FC = () => {
     };
 
     void fetchSubtemas();
-  }, [selectedTemaId]);
+  }, [selectedTemaId, setSelectedSubtemaId]);
 
   useEffect(() => {
+    if (prevSubtemaRef.current !== selectedSubtemaId) {
+      if (prevSubtemaRef.current !== null) {
+        setSelectedPlaca(null);
+      }
+      prevSubtemaRef.current = selectedSubtemaId;
+    }
     setPlacas([]);
     setPlacasConMapa(new Set());
-    setSelectedPlaca(null);
     if (!selectedSubtemaId) return;
 
     const fetchPlacas = async () => {
@@ -778,6 +792,11 @@ const MapasInteractivos: React.FC = () => {
 
       if (data) {
         setPlacas(data);
+        const preservedPlaca = Number(getPreservedSearchParam('placa'));
+        if (Number.isFinite(preservedPlaca) && preservedPlaca > 0) {
+          const match = data.find((p) => p.id === preservedPlaca);
+          if (match) setSelectedPlaca(match);
+        }
 
         const placaIds = data
           .map((placa) => placa.id)
@@ -810,6 +829,10 @@ const MapasInteractivos: React.FC = () => {
 
     fetchPlacas();
   }, [selectedSubtemaId]);
+
+  useEffect(() => {
+    syncUrlSearchParam('placa', selectedPlaca?.id ?? null);
+  }, [selectedPlaca]);
 
   useEffect(() => {
     setTemaMaps([]);

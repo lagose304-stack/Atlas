@@ -13,6 +13,7 @@ import { supabase } from '../services/supabase';
 import { deleteOwnedTestReferenceImages } from '../services/testReferenceImages';
 import { logAuditEvent } from '../services/unifiedAuditService';
 import { collectWeeklyThemeIds, groupHistoricalTestsByPartial, orderTestsByWeeklyPriority } from './evaluacionesUtils';
+import { usePreservedParam } from '../hooks/usePreservedParam';
 import {
   BookOpenCheck,
   CalendarDays,
@@ -317,10 +318,10 @@ const GestionPruebas: React.FC = () => {
   const [error, setError] = useState('');
   const [updatingTestId, setUpdatingTestId] = useState<string | null>(null);
 
-  // Filtros
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'todos' | 'publicada' | 'borrador'>('todos');
-  const [scopeFilter, setScopeFilter] = useState<'todos' | TestScope>('todos');
+  // Filtros preservados al recargar
+  const [search, setSearch] = usePreservedParam<string>('q', '');
+  const [statusFilter, setStatusFilter] = usePreservedParam<'todos' | 'publicada' | 'borrador'>('estado', 'todos');
+  const [scopeFilter, setScopeFilter] = usePreservedParam<'todos' | TestScope>('alcance', 'todos');
 
   // Modal de confirmación de borrado
   const [showDeleteModal, setShowDeleteModal] = useState(false);

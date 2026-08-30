@@ -44,9 +44,42 @@ const ROLE_MICRO = 'Microscopía' as const;
 
 const RouteLoadingFallback = () => <AtlasLoadingScreen label="Cargando sección…" />;
 
-const ScrollToTop: React.FC = () => {
+import { saveScrollPosition, restoreScrollPosition } from './services/navigationStateKeeper';
+
+const GlobalNavigationStateRestorer: React.FC = () => {
   const { pathname } = useLocation();
-  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  const prevPathnameRef = React.useRef<string | null>(null);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      saveScrollPosition(pathname);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [pathname]);
+
+  useEffect(() => {
+    if (prevPathnameRef.current === null) {
+      // Montaje inicial o recarga de la página: no reiniciar scroll a 0, intentar restaurar scroll previo
+      prevPathnameRef.current = pathname;
+      restoreScrollPosition(pathname);
+      const t1 = window.setTimeout(() => restoreScrollPosition(pathname), 120);
+      const t2 = window.setTimeout(() => restoreScrollPosition(pathname), 400);
+      return () => {
+        window.clearTimeout(t1);
+        window.clearTimeout(t2);
+      };
+    }
+
+    if (prevPathnameRef.current !== pathname) {
+      // Cambio real de página: resetear scroll arriba
+      prevPathnameRef.current = pathname;
+      window.scrollTo(0, 0);
+    }
+  }, [pathname]);
+
   return null;
 };
 
@@ -117,7 +150,7 @@ const App: React.FC = () => {
       <Router>
         <MaintenanceGate>
         <SeoManager />
-        <ScrollToTop />
+        <GlobalNavigationStateRestorer />
         <SiteVisitTracker />
         <SpellcheckEnabler />
         <ClientErrorReporter />

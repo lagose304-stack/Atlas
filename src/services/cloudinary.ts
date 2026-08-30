@@ -189,6 +189,114 @@ export const uploadToCloudinary = async (file: File, options?: UploadOptions) =>
   }
 };
 
+/**
+ * Genera una miniatura WebP en el navegador a partir de un archivo de imagen
+ */
+export const generateWebPThumbnail = async (
+  file: File,
+  maxWidth = 480,
+  quality = 0.8
+): Promise<File> => {
+  try {
+    const dataUrl = await fileToDataUrl(file);
+    const image = await dataUrlToImage(dataUrl);
+
+    let width = image.naturalWidth || image.width;
+    let height = image.naturalHeight || image.height;
+
+    if (width > maxWidth) {
+      height = Math.round((height * maxWidth) / width);
+      width = maxWidth;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: false });
+    if (!ctx) return file;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(image, 0, 0, width, height);
+
+    const blob = await canvasToBlobWithType(canvas, 'image/webp', quality);
+    const baseName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    return new File([blob], `${baseName}_thumb.webp`, {
+      type: 'image/webp',
+      lastModified: Date.now(),
+    });
+  } catch (err) {
+    console.warn('No se pudo generar la miniatura WebP en cliente:', err);
+    return file;
+  }
+};
+
+/**
+ * Reemplaza una imagen existente en Cloudflare R2 con el mismo nombre y clave exacta,
+ * convirtiéndola a WebP optimizado y actualizando también su miniatura asociada.
+ */
+export const replaceCloudinaryImage = async (
+  file: File,
+  targetKeyOrUrl: string,
+  options?: UploadOptions
+): Promise<{ secure_url: string; public_id: string }> => {
+  if (!targetKeyOrUrl) {
+    throw new Error('Se requiere la ruta o URL original para reemplazar la imagen.');
+  }
+
+  const rawKey = getCloudinaryPublicId(targetKeyOrUrl);
+  let cleanKey = rawKey
+    .replace(/^\/+/, '')
+    .replace(/^atlas-media\//i, '')
+    .replace(/^atlas\//i, '');
+
+  if (!cleanKey.endsWith('.webp') && !cleanKey.includes('.')) {
+    cleanKey += '.webp';
+  } else {
+    cleanKey = cleanKey.replace(/\.(jpe?g|png|bmp|tiff?)$/i, '.webp');
+  }
+
+  // 1. Optimizar imagen principal a WebP de alta fidelidad diagnóstica
+  const webpFile = await convertAndOptimizeToWebP(file, {
+    isPlaque: options?.optimizeForPlaque ?? true,
+    customQuality: options?.quality,
+    customMaxDimension: options?.maxDimension,
+  });
+
+  // 2. Generar miniatura optimizada para compatibilidad con Cloudflare Pages y backend
+  const thumbFile = await generateWebPThumbnail(webpFile);
+
+  const formData = new FormData();
+  formData.append('file', webpFile);
+  formData.append('thumb', thumbFile);
+  formData.append('targetKey', cleanKey);
+
+  const uploadUrl = isUsingEdgeFunctions
+    ? '/api/images-upload'
+    : backendUrl('/api/images/upload');
+
+  try {
+    const { data } = await axios.post(uploadUrl, formData, {
+      headers: {
+        ...authHeaders(),
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 60000,
+    });
+
+    if (data?.secure_url) {
+      return data;
+    }
+
+    throw new Error('No se pudo obtener la confirmación del reemplazo de imagen.');
+  } catch (error: any) {
+    const detail = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Error al reemplazar la imagen en Cloudflare R2';
+    console.error('Error al reemplazar imagen en Cloudflare R2:', detail, error);
+    throw new Error(detail);
+  }
+};
+
 type DeleteFromCloudinaryInput =
   | string
   | {

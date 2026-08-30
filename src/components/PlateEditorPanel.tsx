@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Sparkles, Camera, RotateCcw } from 'lucide-react';
 import BoldField from './BoldField';
 import TincionAccordionSelector from './TincionAccordionSelector';
 import AllSenaladosMoverModal from './AllSenaladosMoverModal';
 import PlateAnnotationViewerEditor from './PlateAnnotationViewerEditor';
+import ResilientPlacaThumb from './ResilientPlacaThumb';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
+import { useAuth } from '../contexts/AuthContext';
 
 export interface MarkerLocation {
   x: number;
@@ -22,6 +24,10 @@ interface PlateEditorPanelProps {
   imageSrc?: string;
   imageAlt?: string;
   highResImageSrc?: string;
+  pendingImageFile?: File | null;
+  pendingImagePreviewUrl?: string | null;
+  onSelectImageFile?: (file: File) => void;
+  onClearPendingImage?: () => void;
   primaryActionLabel?: string;
   primaryActionDisabled?: boolean;
   primaryActionLoading?: boolean;
@@ -198,6 +204,10 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
   imageSrc,
   imageAlt,
   highResImageSrc,
+  pendingImageFile,
+  pendingImagePreviewUrl,
+  onSelectImageFile,
+  onClearPendingImage,
   primaryActionLabel,
   primaryActionDisabled,
   primaryActionLoading,
@@ -225,6 +235,12 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
   labels,
   styles,
 }) => {
+  const { user } = useAuth();
+  const isAdmin = user?.rol === 'Administrador';
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const displayImageSrc = pendingImagePreviewUrl || imageSrc;
+
   const mergedStyles = {
     ...defaultStyles,
     ...styles,
@@ -447,20 +463,140 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
                     borderRadius: '18px',
                     overflow: 'hidden',
                     background: '#0f172a',
-                    border: '1px solid rgba(148, 163, 184, 0.35)',
+                    border: pendingImagePreviewUrl
+                      ? '2px solid #3b82f6'
+                      : '1px solid rgba(148, 163, 184, 0.35)',
                     aspectRatio: '3 / 4',
                     minHeight: '340px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    position: 'relative',
+                    boxShadow: pendingImagePreviewUrl ? '0 0 0 3px rgba(59, 130, 246, 0.25)' : 'none',
                   }}
                 >
-                  <img
-                    src={imageSrc}
-                    alt={imageAlt ?? 'Miniatura de la placa'}
-                    style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-                  />
+                  {pendingImagePreviewUrl ? (
+                    <img
+                      key={pendingImagePreviewUrl}
+                      src={pendingImagePreviewUrl}
+                      alt={imageAlt ?? 'Nueva imagen seleccionada'}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                    />
+                  ) : (
+                    <ResilientPlacaThumb
+                      photoUrl={imageSrc}
+                      alt={imageAlt ?? 'Miniatura de la placa'}
+                      profile="thumb"
+                      style={{ objectFit: 'contain', width: '100%', height: '100%' }}
+                    />
+                  )}
+                  {pendingImagePreviewUrl && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '10px',
+                        left: '10px',
+                        right: '10px',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        background: 'rgba(30, 58, 138, 0.88)',
+                        color: '#ffffff',
+                        fontSize: '0.78em',
+                        fontWeight: 700,
+                        textAlign: 'center',
+                        backdropFilter: 'blur(4px)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                      }}
+                    >
+                      ✨ Nueva foto seleccionada (sin guardar)
+                    </div>
+                  )}
                 </div>
+
+                {/* Botón de actualizar imagen: visible ÚNICAMENTE para usuarios con rol Administrador */}
+                {isAdmin && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file && onSelectImageFile) {
+                          onSelectImageFile(file);
+                        }
+                        // Limpiar para permitir seleccionar el mismo archivo si es necesario
+                        if (fileInputRef.current) {
+                          fileInputRef.current.value = '';
+                        }
+                      }}
+                    />
+
+                    <button
+                      type="button"
+                      id="btn-actualizar-imagen-placa"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        padding: '10px 14px',
+                        borderRadius: '12px',
+                        border: '1.5px solid #93c5fd',
+                        background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                        color: '#1d4ed8',
+                        fontWeight: 800,
+                        fontSize: '0.86em',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 2px 6px rgba(37, 99, 235, 0.12)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb, #1d4ed8)';
+                        e.currentTarget.style.color = '#ffffff';
+                        e.currentTarget.style.borderColor = '#1d4ed8';
+                        e.currentTarget.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.25)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)';
+                        e.currentTarget.style.color = '#1d4ed8';
+                        e.currentTarget.style.borderColor = '#93c5fd';
+                        e.currentTarget.style.boxShadow = '0 2px 6px rgba(37, 99, 235, 0.12)';
+                      }}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Camera size={16} strokeWidth={2.4} />
+                      <span>{pendingImageFile ? 'Cambiar foto seleccionada' : 'Actualizar imagen'}</span>
+                    </button>
+
+                    {pendingImagePreviewUrl && onClearPendingImage && (
+                      <button
+                        type="button"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          padding: '7px 12px',
+                          borderRadius: '10px',
+                          border: '1px solid #fecaca',
+                          background: '#fff1f2',
+                          color: '#dc2626',
+                          fontWeight: 700,
+                          fontSize: '0.8em',
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                        }}
+                        onClick={onClearPendingImage}
+                      >
+                        <RotateCcw size={13} />
+                        <span>Deshacer y conservar original</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </aside>
           )}
@@ -625,10 +761,10 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
         </div>
       </div>
 
-      {imageSrc && showMoveAllModal && (
+      {displayImageSrc && showMoveAllModal && (
         <AllSenaladosMoverModal
           isOpen={showMoveAllModal}
-          imageSrc={imageSrc}
+          imageSrc={displayImageSrc}
           imageAlt={imageAlt}
           senalados={senalados}
           senaladosPos={senaladosPos}
@@ -640,11 +776,11 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
         />
       )}
 
-      {imageSrc && showFullVisualEditor && (
+      {displayImageSrc && showFullVisualEditor && (
         <PlateAnnotationViewerEditor
-          imageSrc={imageSrc}
+          imageSrc={displayImageSrc}
           imageAlt={imageAlt}
-          highResImageSrc={highResImageSrc || imageSrc}
+          highResImageSrc={pendingImagePreviewUrl || highResImageSrc || imageSrc}
           aumento={aumento}
           tincion={tincion}
           comentario={comentario}

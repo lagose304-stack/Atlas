@@ -8,6 +8,11 @@ import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { InteractiveMapViewerSection } from './InteractiveMapViewerModal';
 import laboratoryLogo from '../assets/logos/laboratorio.png';
+import PlateEditorPanel, { MarkerLocation } from './PlateEditorPanel';
+import { replaceCloudinaryImage } from '../services/cloudinary';
+import { invalidateImageCache } from '../services/cloudinaryImages';
+import { invalidatePlacasCache } from '../services/catalogService';
+import { logPlateActivity } from '../services/plateActivityAudit';
 
 interface SenaladoMetaItem {
   label: string;
@@ -35,6 +40,8 @@ interface ImageViewerModalProps {
   onActiveMapSectionChange?: (index: number | null) => void;
   temaNombre?: string;
   subtemaNombre?: string;
+  temaId?: number | null;
+  subtemaId?: number | null;
   aumento?: string | null;
   senalados?: string[] | null;
   senaladosMeta?: SenaladoMetaItem[] | null;
@@ -44,6 +51,14 @@ interface ImageViewerModalProps {
   onNextPlate?: () => void;
   platePosition?: number;
   plateCount?: number;
+  onPlateUpdated?: (updated: {
+    photoUrl?: string;
+    aumento?: string | null;
+    tincion?: string | null;
+    comentario?: string | null;
+    senalados?: string[] | null;
+    senaladosMeta?: SenaladoMetaItem[] | null;
+  }) => void;
 }
 
 interface InteractiveMapRawSection {
@@ -415,6 +430,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   onActiveMapSectionChange,
   temaNombre,
   subtemaNombre,
+  temaId,
+  subtemaId,
   aumento,
   senalados,
   senaladosMeta,
@@ -424,14 +441,278 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   onNextPlate,
   platePosition,
   plateCount,
+  onPlateUpdated,
 }) => {
   const { user } = useAuth();
+  const isAdminOrMicroscopia = user?.rol === 'Administrador' || user?.rol === 'Microscopía';
   const sharpenFilterId = useId();
+
+  // Estados locales editables para reflejar cambios en tiempo real en el visor
+  const [currentSrc, setCurrentSrc] = useState(src);
+  const [currentSrcZoom, setCurrentSrcZoom] = useState(srcZoom);
+  const [currentAumento, setCurrentAumento] = useState(aumento ?? '');
+  const [currentTincion, setCurrentTincion] = useState(tincion ?? '');
+  const [currentComentario, setCurrentComentario] = useState(comentario ?? '');
+  const [currentSenalados, setCurrentSenalados] = useState<string[]>(() => senalados ? [...senalados] : []);
+  const [currentSenaladosMeta, setCurrentSenaladosMeta] = useState<SenaladoMetaItem[] | null>(() => senaladosMeta ? [...senaladosMeta] : null);
+
+  // Sincronizar estados locales si las props externas cambian
+  useEffect(() => {
+    setCurrentSrc(src);
+  }, [src]);
+
+  useEffect(() => {
+    setCurrentSrcZoom(srcZoom);
+  }, [srcZoom]);
+
+  useEffect(() => {
+    setCurrentAumento(aumento ?? '');
+  }, [aumento]);
+
+  useEffect(() => {
+    setCurrentTincion(tincion ?? '');
+  }, [tincion]);
+
+  useEffect(() => {
+    setCurrentComentario(comentario ?? '');
+  }, [comentario]);
+
+  useEffect(() => {
+    setCurrentSenalados(senalados ? [...senalados] : []);
+  }, [senalados]);
+
+  useEffect(() => {
+    setCurrentSenaladosMeta(senaladosMeta ? [...senaladosMeta] : null);
+  }, [senaladosMeta]);
+
+  // Estados del modal de edición de placa (PlateEditorPanel)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editAumento, setEditAumento] = useState('');
+  const [editTincion, setEditTincion] = useState('');
+  const [showEditTincion, setShowEditTincion] = useState(false);
+  const [editComentario, setEditComentario] = useState('');
+  const [showEditComentario, setShowEditComentario] = useState(false);
+  const [editSenalados, setEditSenalados] = useState<string[]>([]);
+  const [editSenaladosPos, setEditSenaladosPos] = useState<Array<MarkerLocation | null>>([]);
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [pendingImagePreviewUrl, setPendingImagePreviewUrl] = useState<string | null>(null);
+  const [isSavingPlate, setIsSavingPlate] = useState(false);
+  const [savePlateError, setSavePlateError] = useState('');
+  const [savePlateSuccess, setSavePlateSuccess] = useState(false);
+
+  const openPlateEditor = useCallback(() => {
+    const nextNames = currentSenalados ? [...currentSenalados] : [];
+    const nextPositions: Array<MarkerLocation | null> = nextNames.map((_, index) => {
+      const item = currentSenaladosMeta?.[index];
+      if (!item || item.x == null || item.y == null) return null;
+      return {
+        x: item.x,
+        y: item.y,
+        startX: item.startX ?? null,
+        startY: item.startY ?? null,
+        regionPoints: item.regionPoints ?? null,
+        regionHoles: item.regionHoles ?? null,
+        regionColor: item.regionColor ?? null,
+        regionOpacity: item.regionOpacity ?? null,
+      };
+    });
+
+    setEditAumento(currentAumento || '');
+    setEditTincion(currentTincion || '');
+    setShowEditTincion(Boolean(currentTincion));
+    setEditComentario(currentComentario || '');
+    setShowEditComentario(Boolean(currentComentario));
+    setEditSenalados(nextNames);
+    setEditSenaladosPos(nextPositions);
+    setPendingImageFile(null);
+    setPendingImagePreviewUrl(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setSavePlateError('');
+    setSavePlateSuccess(false);
+    setIsEditModalOpen(true);
+  }, [currentAumento, currentTincion, currentComentario, currentSenalados, currentSenaladosMeta]);
+
+  const handleSavePlateFromViewer = useCallback(async () => {
+    if (!placaId) return;
+
+    // Validar señalados
+    const labels: string[] = [];
+    const meta: SenaladoMetaItem[] = [];
+    const total = Math.max(editSenalados.length, editSenaladosPos.length);
+
+    for (let i = 0; i < total; i++) {
+      const label = (editSenalados[i] ?? '').trim();
+      const pos = editSenaladosPos[i] ?? null;
+      if (!label && !pos) continue;
+      if (label && !pos) {
+        setSavePlateError(`Debes ubicar el señalado ${i + 1} antes de guardar.`);
+        return;
+      }
+      if (!label && pos) {
+        setSavePlateError(`Debes escribir el nombre del señalado ${i + 1}.`);
+        return;
+      }
+      labels.push(label);
+      meta.push({
+        label,
+        x: pos?.x ?? null,
+        y: pos?.y ?? null,
+        startX: pos?.startX ?? null,
+        startY: pos?.startY ?? null,
+        regionPoints: pos?.regionPoints ?? null,
+        regionHoles: pos?.regionHoles ?? null,
+        regionColor: pos?.regionColor ?? null,
+        regionOpacity: pos?.regionOpacity ?? null,
+      });
+    }
+
+    setIsSavingPlate(true);
+    setSavePlateError('');
+    setSavePlateSuccess(false);
+
+    try {
+      let finalPhotoUrl = currentSrc;
+
+      // 1. Si hay una nueva imagen pendiente de actualización (solo Administrador)
+      if (pendingImageFile) {
+        try {
+          const replaceResult = await replaceCloudinaryImage(
+            pendingImageFile,
+            currentSrc,
+            { optimizeForPlaque: true }
+          );
+          if (replaceResult?.secure_url) {
+            finalPhotoUrl = replaceResult.secure_url;
+          }
+        } catch (replaceErr: any) {
+          console.error('Error al reemplazar imagen física de la placa:', replaceErr);
+          const detail = replaceErr?.message || 'Error al procesar y subir la nueva imagen.';
+          setSavePlateError(`No se pudo actualizar la imagen: ${detail}`);
+          setIsSavingPlate(false);
+          return;
+        }
+      }
+
+      // 2. Guardar en base de datos
+      const updatePayload: Record<string, any> = {
+        photo_url: finalPhotoUrl,
+        aumento: editAumento || null,
+        senalados: labels.length > 0 ? labels : null,
+        senalados_meta: meta.length > 0 ? meta : null,
+        comentario: editComentario.trim() || null,
+        tincion: editTincion.trim() || null,
+      };
+
+      const { error: dbError } = await supabase
+        .from('placas')
+        .update(updatePayload)
+        .eq('id', placaId);
+
+      if (dbError) throw dbError;
+
+      // 3. Auditoría en segundo plano
+      void logPlateActivity({
+        actionType: 'edit_plate',
+        targetTable: 'placas',
+        placaId: Number(placaId),
+        actor: {
+          id: user?.id ?? null,
+          username: user?.username ?? null,
+          name: user?.nombre ?? null,
+          role: user?.rol ?? null,
+        },
+        details: {
+          photo_url: finalPhotoUrl,
+          nombre_placa: `Placa #${placaId} - ${subtemaNombre || 'Placa'}`,
+          tema_id: temaId ?? null,
+          tema_nombre: temaNombre || null,
+          subtema_id: subtemaId ?? null,
+          subtema_nombre: subtemaNombre || null,
+          aumento: editAumento || null,
+          tincion: editTincion.trim() || null,
+          comentario: editComentario.trim() || null,
+          source: 'image_viewer_editor',
+          changed_fields: updatePayload,
+        },
+      }).catch(auditErr => console.warn('Advertencia al registrar auditoría:', auditErr));
+
+      // 4. Invalidar cachés locales
+      if (pendingImageFile) {
+        invalidateImageCache(finalPhotoUrl);
+      }
+      if (subtemaId) {
+        invalidatePlacasCache(subtemaId);
+      }
+
+      // 5. Actualizar estado local del visor inmediatamente
+      setCurrentSrc(finalPhotoUrl);
+      setCurrentAumento(editAumento);
+      setCurrentTincion(editTincion.trim());
+      setCurrentComentario(editComentario.trim());
+      setCurrentSenalados(labels);
+      setCurrentSenaladosMeta(meta);
+
+      onPlateUpdated?.({
+        photoUrl: finalPhotoUrl,
+        aumento: editAumento || null,
+        tincion: editTincion.trim() || null,
+        comentario: editComentario.trim() || null,
+        senalados: labels.length > 0 ? labels : null,
+        senaladosMeta: meta.length > 0 ? meta : null,
+      });
+
+      setSavePlateSuccess(true);
+      setTimeout(() => {
+        setIsEditModalOpen(false);
+      }, 700);
+    } catch (err: any) {
+      console.error('Error al guardar cambios de la placa:', err);
+      setSavePlateError(err?.message || 'Ocurrió un error al guardar los cambios.');
+    } finally {
+      setIsSavingPlate(false);
+    }
+  }, [
+    placaId,
+    currentSrc,
+    editAumento,
+    editTincion,
+    editComentario,
+    editSenalados,
+    editSenaladosPos,
+    pendingImageFile,
+    user,
+    temaId,
+    temaNombre,
+    subtemaId,
+    subtemaNombre,
+    onPlateUpdated,
+  ]);
+
+  const hasPlateEditorChanges = useMemo(() => {
+    if (pendingImageFile) return true;
+    if (editAumento !== (currentAumento || '')) return true;
+    if (editTincion.trim() !== (currentTincion || '').trim()) return true;
+    if (editComentario.trim() !== (currentComentario || '').trim()) return true;
+    if (JSON.stringify(editSenalados) !== JSON.stringify(currentSenalados)) return true;
+    return false;
+  }, [
+    pendingImageFile,
+    editAumento,
+    currentAumento,
+    editTincion,
+    currentTincion,
+    editComentario,
+    currentComentario,
+    editSenalados,
+    currentSenalados,
+  ]);
   const resolvedInitialMarkerVisualMode: MarkerVisualMode = hideSidebar ? 'pointer' : initialMarkerVisualMode;
   const resolvedInitialMarkerIndex = hideSidebar && ((senaladosMeta?.length ?? senalados?.length ?? 0) > 0) ? 0 : null;
   const senaladosItems = useMemo<SenaladoMetaItem[]>(() => {
-    if (senaladosMeta && senaladosMeta.length > 0) {
-      return senaladosMeta.map(item => ({
+    if (currentSenaladosMeta && currentSenaladosMeta.length > 0) {
+      return currentSenaladosMeta.map(item => ({
         label: item.label,
         x: item.x,
         y: item.y,
@@ -444,14 +725,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       }));
     }
 
-    return (senalados ?? []).map(item => ({
+    return (currentSenalados ?? []).map(item => ({
       label: item,
       x: null,
       y: null,
       startX: null,
       startY: null,
     }));
-  }, [senalados, senaladosMeta]);
+  }, [currentSenalados, currentSenaladosMeta]);
   const groupedSenaladosItems = useMemo(() => {
     const groups = new Map<string, { label: string; count: number; firstIndex: number; representativeIndex: number; representative: SenaladoMetaItem }>();
 
@@ -483,8 +764,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const hasPlateDetails = !!(
     senaladosItems.length > 0 ||
-    comentario ||
-    tincion
+    currentComentario ||
+    currentTincion
   );
 
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
@@ -2549,6 +2830,58 @@ const panBy = (dx: number, dy: number) => {
             }}
           >
             <PanelRightOpen size={19} strokeWidth={2.4} />
+          </button>
+        )}
+
+        {/* Botón circular de atajo para editar placa (Solo Administrador o Microscopía) */}
+        {isAdminOrMicroscopia && Boolean(placaId) && (
+          <button
+            type="button"
+            onClick={openPlateEditor}
+            title="Editar esta placa"
+            aria-label="Editar esta placa"
+            style={{
+              position: 'absolute',
+              top: '16px',
+              right: showSidebar
+                ? (isDesktop ? '16px' : 'calc(min(320px, 90vw) + 14px)')
+                : (!hideSidebar && hasInfo ? '66px' : '16px'),
+              background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(240, 247, 255, 0.92) 100%)',
+              color: '#1d4ed8',
+              border: '1.5px solid rgba(147, 197, 253, 0.85)',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              minWidth: '40px',
+              minHeight: '40px',
+              cursor: 'pointer',
+              zIndex: 26,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backdropFilter: 'blur(12px) saturate(140%)',
+              boxShadow: '0 8px 24px rgba(15, 75, 105, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.95)',
+              transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.15s ease',
+              touchAction: 'manipulation',
+              WebkitTapHighlightColor: 'transparent',
+              padding: 0,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'scale(1.08) translateY(-1px)';
+              e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)';
+              e.currentTarget.style.color = '#ffffff';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.85)';
+              e.currentTarget.style.boxShadow = '0 12px 28px rgba(29, 78, 216, 0.45), 0 0 16px rgba(59, 130, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.6)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1) translateY(0)';
+              e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(240, 247, 255, 0.92) 100%)';
+              e.currentTarget.style.color = '#1d4ed8';
+              e.currentTarget.style.borderColor = 'rgba(147, 197, 253, 0.85)';
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 75, 105, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.95)';
+            }}
+          >
+            <Pencil size={18} strokeWidth={2.4} />
           </button>
         )}
 
@@ -4709,6 +5042,83 @@ const panBy = (dx: number, dy: number) => {
             )}
           </div>
         </div>
+      )}
+
+      {/* Panel modal de edición de placa (disponible directamente desde el visor) */}
+      {isEditModalOpen && (
+        <PlateEditorPanel
+          title={`Editar placa #${placaId}`}
+          imageSrc={currentSrc}
+          highResImageSrc={currentSrcZoom || currentSrc}
+          imageAlt={subtemaNombre ? `Placa de ${subtemaNombre}` : 'Placa en edición'}
+          pendingImageFile={pendingImageFile}
+          pendingImagePreviewUrl={pendingImagePreviewUrl}
+          onSelectImageFile={(file) => {
+            setPendingImageFile(file);
+            setPendingImagePreviewUrl(prev => {
+              if (prev) URL.revokeObjectURL(prev);
+              return URL.createObjectURL(file);
+            });
+          }}
+          onClearPendingImage={() => {
+            setPendingImageFile(null);
+            setPendingImagePreviewUrl(prev => {
+              if (prev) URL.revokeObjectURL(prev);
+              return null;
+            });
+          }}
+          primaryActionLabel="💾 Guardar cambios"
+          primaryActionLoading={isSavingPlate}
+          primaryActionDisabled={!hasPlateEditorChanges || isSavingPlate}
+          primaryActionFeedback={savePlateError || (savePlateSuccess ? 'Placa actualizada correctamente.' : '')}
+          primaryActionFeedbackTone={savePlateError ? 'error' : savePlateSuccess ? 'success' : 'info'}
+          onPrimaryAction={handleSavePlateFromViewer}
+          hasChanges={hasPlateEditorChanges}
+          aumento={editAumento}
+          onAumentoChange={setEditAumento}
+          showTincion={showEditTincion}
+          onShowTincion={() => setShowEditTincion(true)}
+          tincion={editTincion}
+          onTincionChange={setEditTincion}
+          senalados={editSenalados}
+          senaladosPos={editSenaladosPos}
+          onSenaladosPosChange={setEditSenaladosPos}
+          onSaveAllSenalados={(newLabels, newPos) => {
+            setEditSenalados(newLabels);
+            setEditSenaladosPos(newPos);
+          }}
+          onSenaladoChange={(index, value) => {
+            setEditSenalados(prev => {
+              const next = [...prev];
+              next[index] = value;
+              return next;
+            });
+          }}
+          onRemoveSenalado={(index) => {
+            setEditSenalados(prev => prev.filter((_, i) => i !== index));
+            setEditSenaladosPos(prev => prev.filter((_, i) => i !== index));
+          }}
+          onAddSenalado={() => {
+            setEditSenalados(prev => [...prev, '']);
+            setEditSenaladosPos(prev => [...prev, null]);
+          }}
+          showComentario={showEditComentario}
+          onShowComentario={() => setShowEditComentario(true)}
+          comentario={editComentario}
+          onComentarioChange={setEditComentario}
+          onClearComentario={() => {
+            setEditComentario('');
+            setShowEditComentario(false);
+          }}
+          onRequestClose={() => {
+            setPendingImageFile(null);
+            setPendingImagePreviewUrl(prev => {
+              if (prev) URL.revokeObjectURL(prev);
+              return null;
+            });
+            setIsEditModalOpen(false);
+          }}
+        />
       )}
 
     </div>,

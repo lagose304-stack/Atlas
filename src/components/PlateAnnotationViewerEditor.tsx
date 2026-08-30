@@ -395,6 +395,14 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 }) => {
   // Resolve true high-definition image URL (avoiding _thumb)
   const resolvedImageSrc = useMemo(() => {
+    if (highResImageSrc) {
+      if (highResImageSrc.startsWith('blob:') || highResImageSrc.startsWith('data:')) {
+        return highResImageSrc;
+      }
+    }
+    if (imageSrc && (imageSrc.startsWith('blob:') || imageSrc.startsWith('data:'))) {
+      return imageSrc;
+    }
     if (highResImageSrc) return highResImageSrc;
     if (!imageSrc) return '';
     if (imageSrc.includes('r2.dev') || imageSrc.includes('cloudinary.com') || imageSrc.includes('_thumb')) {
@@ -475,8 +483,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     return [];
   });
 
-  // Current active tool mode (Mano / Paneo por defecto)
-  const [activeTool, setActiveTool] = useState<EditorTool>('pan');
+  // Current active tool mode (Mano / Paneo por defecto, o Borde si viene en borderPickerMode)
+  const [activeTool, setActiveTool] = useState<EditorTool>(() => (borderPickerMode ? 'border' : 'pan'));
 
   // Freehand continuous drawing state
   const [isDrawingFreehand, setIsDrawingFreehand] = useState(false);
@@ -970,13 +978,26 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Finalize Freehand Polygon Region
   const finalizeFreehandPolygon = useCallback((rawPoints: number[]) => {
-    if (rawPoints.length < 4) {
+    if (rawPoints.length < 2) {
       setDrawingPolygonPoints([]);
       return;
     }
 
     let ptsToUse = rawPoints;
-    if (rawPoints.length === 4) {
+    if (rawPoints.length === 2) {
+      const cx = rawPoints[0], cy = rawPoints[1];
+      const r = 0.015;
+      ptsToUse = [
+        cx, cy - r,
+        cx + r * 0.7, cy - r * 0.7,
+        cx + r, cy,
+        cx + r * 0.7, cy + r * 0.7,
+        cx, cy + r,
+        cx - r * 0.7, cy + r * 0.7,
+        cx - r, cy,
+        cx - r * 0.7, cy - r * 0.7,
+      ];
+    } else if (rawPoints.length === 4) {
       const p1x = rawPoints[0], p1y = rawPoints[1];
       const p2x = rawPoints[2], p2y = rawPoints[3];
       const midX = (p1x + p2x) / 2;
@@ -1170,7 +1191,6 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     if (
       isPinching ||
       isPinchingRef.current ||
-      justPinchedRef.current ||
       activeTouchesCountRef.current >= 2
     ) {
       if (isDrawingFreehandRef.current) {
@@ -1215,37 +1235,44 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   };
 
   // Unified Pointer Up for Canvas
-  const handleCanvasPointerUp = () => {
-    if (
-      isPinching ||
-      isPinchingRef.current ||
-      justPinchedRef.current ||
-      activeTouchesCountRef.current >= 2
-    ) {
-      if (isDrawingFreehandRef.current) {
-        isDrawingFreehandRef.current = false;
-        setIsDrawingFreehand(false);
-        drawingPolygonPointsRef.current = [];
-        setDrawingPolygonPoints([]);
+  const handleCanvasPointerUp = (e?: React.PointerEvent | React.MouseEvent) => {
+    if (e && 'pointerId' in e) {
+      try {
+        (e.target as Element).releasePointerCapture?.((e as React.PointerEvent).pointerId);
+      } catch {
+        // ignore if not captured
       }
-      setIsDraggingCanvas(false);
-      setDragStartMouse(null);
-      return;
     }
 
+    // Si había un trazo a mano alzada activo, finalizarlo con prioridad absoluta
     if (isDrawingFreehandRef.current) {
       isDrawingFreehandRef.current = false;
       setIsDrawingFreehand(false);
       const pointsToFinalize = drawingPolygonPointsRef.current;
       drawingPolygonPointsRef.current = [];
       setDrawingPolygonPoints([]);
-      if (pointsToFinalize.length >= 4) {
+
+      const wasPinchingActive = isPinching || isPinchingRef.current || activeTouchesCountRef.current >= 2;
+      if (!wasPinchingActive && pointsToFinalize.length >= 2) {
         justDrawnRef.current = true;
         setTimeout(() => {
           justDrawnRef.current = false;
-        }, 120);
+        }, 300);
+        finalizeFreehandPolygon(pointsToFinalize);
       }
-      finalizeFreehandPolygon(pointsToFinalize);
+      setIsDraggingCanvas(false);
+      setDragStartMouse(null);
+      return;
+    }
+
+    if (
+      isPinching ||
+      isPinchingRef.current ||
+      justPinchedRef.current ||
+      activeTouchesCountRef.current >= 2
+    ) {
+      setIsDraggingCanvas(false);
+      setDragStartMouse(null);
       return;
     }
 
@@ -1540,20 +1567,52 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
         setZoomLevel(nextZoom);
       }
+      return;
+    }
+
+    // Muestreo de trazo continuo en dispositivos táctiles (1 dedo)
+    if (e.touches.length === 1 && isDrawingFreehandRef.current) {
+      const touch = e.touches[0];
+      const coords = clientToImageCoords(touch.clientX, touch.clientY);
+      if (coords) {
+        setCursorImagePos(coords);
+        const prev = drawingPolygonPointsRef.current;
+        if (prev.length < 2) {
+          drawingPolygonPointsRef.current = [coords.x, coords.y];
+          setDrawingPolygonPoints([coords.x, coords.y]);
+        } else {
+          const lastX = prev[prev.length - 2];
+          const lastY = prev[prev.length - 1];
+          const dist = Math.hypot(coords.x - lastX, coords.y - lastY);
+          if (dist >= 0.0008) {
+            const next = [...prev, coords.x, coords.y];
+            drawingPolygonPointsRef.current = next;
+            setDrawingPolygonPoints(next);
+          }
+        }
+      }
     }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    const wasPinching = isPinchingRef.current || isPinching;
     activeTouchesCountRef.current = e.touches.length;
     if (e.touches.length < 2) {
       pinchRef.current = null;
       isPinchingRef.current = false;
       setIsPinching(false);
-      justPinchedRef.current = true;
-      if (pinchCooldownTimeoutRef.current) clearTimeout(pinchCooldownTimeoutRef.current);
-      pinchCooldownTimeoutRef.current = setTimeout(() => {
-        justPinchedRef.current = false;
-      }, 400);
+      if (wasPinching) {
+        justPinchedRef.current = true;
+        if (pinchCooldownTimeoutRef.current) clearTimeout(pinchCooldownTimeoutRef.current);
+        pinchCooldownTimeoutRef.current = setTimeout(() => {
+          justPinchedRef.current = false;
+        }, 400);
+      }
+    }
+
+    // En dispositivos táctiles, cuando se levanta el dedo (0 toques activos) y había un trazo activo
+    if (e.touches.length === 0 && isDrawingFreehandRef.current && !wasPinching) {
+      handleCanvasPointerUp();
     }
   };
 
@@ -1711,6 +1770,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       {/* Main Viewport & Canvas Area (MODO CLARO) */}
       <div
         ref={containerRef}
+        data-testid="annotation-editor-canvas"
         style={{
           flex: 1,
           position: 'relative',
@@ -1719,6 +1779,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          touchAction: 'none',
           cursor: reassigningTipMarkerId
             ? 'crosshair'
             : (isSpacePressed || (activeTool === 'pan' && isDraggingCanvas)
@@ -1738,6 +1799,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
         onDoubleClick={handleCanvasDoubleClick}
       >
         {/* Top Left Title & Topic Info */}
