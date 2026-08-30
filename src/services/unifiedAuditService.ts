@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { formatCleanActorName } from './plateDiffHelper';
 
 export type AuditEntityType =
   | 'placa'
@@ -709,7 +710,7 @@ export const fetchTemaAuditLogs = async (
               entity_name: `Contenido de página: ${v.version_name || (temaNombre ? `Tema ${temaNombre}` : `Tema #${v.entity_id}`)}`,
               actor_user_id: null,
               actor_username: v.updated_by || v.created_by || 'editor',
-              actor_name: v.updated_by_name || v.created_by_name || v.updated_by || v.created_by || 'Editor de Contenido',
+              actor_name: formatCleanActorName(v.updated_by_name || v.created_by_name || v.updated_by || v.created_by, v.updated_by || v.created_by),
               actor_role: 'Editor',
               details: {
                 version_id: v.id,
@@ -810,7 +811,7 @@ export const fetchSubtemaAuditLogs = async (
               entity_name: `Contenido de página: ${v.version_name || (subtemaNombre ? `Subtema ${subtemaNombre}` : `Subtema #${v.entity_id}`)}`,
               actor_user_id: null,
               actor_username: v.updated_by || v.created_by || 'editor',
-              actor_name: v.updated_by_name || v.created_by_name || v.updated_by || v.created_by || 'Editor de Contenido',
+              actor_name: formatCleanActorName(v.updated_by_name || v.created_by_name || v.updated_by || v.created_by, v.updated_by || v.created_by),
               actor_role: 'Editor',
               details: {
                 version_id: v.id,
@@ -906,7 +907,7 @@ export const fetchPlacaAuditLogs = async (
               entity_name: row.details?.nombre_placa || `Placa #${idStr}`,
               actor_user_id: row.actor_user_id,
               actor_username: row.actor_username,
-              actor_name: row.actor_username || 'Usuario',
+              actor_name: formatCleanActorName(row.actor_username, row.actor_username, row.actor_user_id),
               actor_role: null,
               details: row.details || {},
               ip_address: null,

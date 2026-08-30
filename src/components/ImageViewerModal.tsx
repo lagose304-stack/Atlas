@@ -13,6 +13,7 @@ import { replaceCloudinaryImage } from '../services/cloudinary';
 import { invalidateImageCache } from '../services/cloudinaryImages';
 import { invalidatePlacasCache } from '../services/catalogService';
 import { logPlateActivity } from '../services/plateActivityAudit';
+import { computePlateChangesDiff, type PlateComparisonState } from '../services/plateDiffHelper';
 
 interface SenaladoMetaItem {
   label: string;
@@ -612,6 +613,27 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
       if (dbError) throw dbError;
 
+      // Calcular diff de cambios legibles para la auditoría
+      const beforeState: PlateComparisonState = {
+        photo_url: currentSrc,
+        aumento: currentAumento,
+        tincion: currentTincion,
+        comentario: currentComentario,
+        senalados: currentSenalados,
+        senalados_meta: currentSenaladosMeta,
+      };
+      const afterState: PlateComparisonState = {
+        photo_url: finalPhotoUrl,
+        aumento: editAumento || null,
+        tincion: editTincion.trim() || null,
+        comentario: editComentario.trim() || null,
+        senalados: labels,
+        senalados_meta: meta,
+      };
+      const humanChanges = computePlateChangesDiff(beforeState, afterState, {
+        isNewImageReplaced: Boolean(pendingImageFile),
+      });
+
       // 3. Auditoría en segundo plano
       void logPlateActivity({
         actionType: 'edit_plate',
@@ -634,6 +656,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           tincion: editTincion.trim() || null,
           comentario: editComentario.trim() || null,
           source: 'image_viewer_editor',
+          cambios_resumen: humanChanges,
           changed_fields: updatePayload,
         },
       }).catch(auditErr => console.warn('Advertencia al registrar auditoría:', auditErr));

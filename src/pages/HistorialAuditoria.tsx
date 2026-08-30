@@ -13,10 +13,8 @@ import {
   Copy,
   Download,
   Eye,
-  ExternalLink,
   FileSpreadsheet,
   FileText,
-  Image as ImageIcon,
   Layers,
   LogIn,
   MapPin,
@@ -41,6 +39,7 @@ import BackButton from '../components/BackButton';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
+import { describeLogChanges, formatCleanActorName } from '../services/plateDiffHelper';
 import {
   calculateAuditMetrics,
   countAuditLogsForPurge,
@@ -274,23 +273,62 @@ const HistorialAuditoria: React.FC = () => {
 
   // Lista de autores únicos para el filtro
   const [uniqueActors, setUniqueActors] = useState<Array<{ id: number | null; name: string; username: string }>>([]);
+  const [userDirectory, setUserDirectory] = useState<Map<string | number, string>>(new Map());
+  const [selectedLogPlateThumbnail, setSelectedLogPlateThumbnail] = useState<string | null>(null);
 
-  // Cargar lista de temas y subtemas para los filtros
+  // Cargar lista de temas, subtemas y usuarios para los filtros y nombres reales
   useEffect(() => {
     const fetchCatalog = async () => {
       try {
-        const [temasRes, subtemasRes] = await Promise.all([
+        const [temasRes, subtemasRes, usuariosRes] = await Promise.all([
           supabase.from('temas').select('id, nombre, parcial').order('nombre'),
           supabase.from('subtemas').select('id, nombre, tema_id').order('nombre'),
+          supabase.from('usuarios').select('id, username, nombre'),
         ]);
         if (temasRes.data) setTemasList(temasRes.data as TemaItem[]);
         if (subtemasRes.data) setSubtemasList(subtemasRes.data as SubtemaItem[]);
+        if (usuariosRes.data) {
+          const dir = new Map<string | number, string>();
+          usuariosRes.data.forEach((u: any) => {
+            if (u.id != null && u.nombre) dir.set(u.id, u.nombre);
+            if (u.username && u.nombre) dir.set(String(u.username).trim().toLowerCase(), u.nombre);
+          });
+          setUserDirectory(dir);
+        }
       } catch (err) {
         console.warn('Error al cargar catálogo para filtros de auditoría:', err);
       }
     };
     void fetchCatalog();
   }, []);
+
+  // Resolver miniatura para la ficha seleccionada en caso de que no venga en details
+  useEffect(() => {
+    if (!selectedLog) {
+      setSelectedLogPlateThumbnail(null);
+      return;
+    }
+    const directUrl = getPlateThumbnailUrl(selectedLog);
+    if (directUrl) {
+      setSelectedLogPlateThumbnail(directUrl);
+      return;
+    }
+    if (selectedLog.entity_type === 'placa' && selectedLog.entity_id) {
+      const plateId = Number(selectedLog.entity_id);
+      if (!isNaN(plateId)) {
+        void supabase
+          .from('placas')
+          .select('photo_url')
+          .eq('id', plateId)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data?.photo_url) {
+              setSelectedLogPlateThumbnail(data.photo_url);
+            }
+          });
+      }
+    }
+  }, [selectedLog]);
 
   // Función principal de carga con bifurcación a búsquedas específicas dedicadas
   const loadData = async (showRefreshIndicator = false) => {
@@ -436,11 +474,12 @@ const HistorialAuditoria: React.FC = () => {
     if (uniqueActors.length === 0 && logs.length > 0) {
       const actorsMap = new Map<string, { id: number | null; name: string; username: string }>();
       logs.forEach((log) => {
-        const key = log.actor_name || log.actor_username || 'Usuario';
+        const cleanName = formatCleanActorName(log.actor_name, log.actor_username, log.actor_user_id, userDirectory);
+        const key = cleanName;
         if (!actorsMap.has(key)) {
           actorsMap.set(key, {
             id: log.actor_user_id,
-            name: log.actor_name || log.actor_username || 'Usuario',
+            name: cleanName,
             username: log.actor_username || '',
           });
         }
@@ -992,6 +1031,13 @@ const HistorialAuditoria: React.FC = () => {
                 const aumentoVal = (log.details?.aumento as string) || '';
                 const tincionVal = (log.details?.tincion as string) || '';
                 const comentarioVal = (log.details?.comentario as string) || '';
+                const authorDisplayName = formatCleanActorName(
+                  log.actor_name,
+                  log.actor_username,
+                  log.actor_user_id,
+                  userDirectory
+                );
+                const changesList = describeLogChanges(log);
 
                 return (
                   <article key={log.id} style={styles.auditCard}>
@@ -1022,26 +1068,23 @@ const HistorialAuditoria: React.FC = () => {
 
                     <div style={styles.cardMainContent}>
                       <div style={styles.cardHeaderRow}>
-                        {/* Autor con Nombre Real */}
-                        <div style={styles.actorRow}>
-                          <div style={styles.actorAvatar}>
-                            {log.actor_name ? log.actor_name.charAt(0).toUpperCase() : 'U'}
+                          {/* Autor con Nombre Real */}
+                          <div style={styles.actorRow}>
+                            <div style={styles.actorAvatar}>
+                              {authorDisplayName ? authorDisplayName.charAt(0).toUpperCase() : 'U'}
+                            </div>
+                            <div>
+                              <span style={styles.actorRealName}>{authorDisplayName}</span>
+                              {log.actor_role && <span style={styles.roleTag}>{log.actor_role}</span>}
+                            </div>
                           </div>
-                          <div>
-                            <span style={styles.actorRealName}>{log.actor_name}</span>
-                            {log.actor_username && log.actor_username !== log.actor_name && (
-                              <span style={styles.actorUsername}>@{log.actor_username}</span>
-                            )}
-                            {log.actor_role && <span style={styles.roleTag}>{log.actor_role}</span>}
-                          </div>
-                        </div>
 
-                        {/* Fecha y Hora */}
-                        <div style={styles.timeBadge} title={formatFullDateTime(log.created_at)}>
-                          <Clock size={13} color="#64748b" />
-                          <span>{formatRelativeTime(log.created_at)}</span>
+                          {/* Fecha y Hora */}
+                          <div style={styles.timeBadge} title={formatFullDateTime(log.created_at)}>
+                            <Clock size={13} color="#64748b" />
+                            <span>{formatRelativeTime(log.created_at)}</span>
+                          </div>
                         </div>
-                      </div>
 
                       {/* Descripción de la acción */}
                       <div style={styles.actionRow}>
@@ -1100,6 +1143,20 @@ const HistorialAuditoria: React.FC = () => {
                           </span>
                         )}
                       </div>
+
+                      {/* Vista previa de cambios realizados */}
+                      {changesList.length > 0 && (
+                        <div style={styles.cardChangesPreview}>
+                          {changesList.slice(0, 2).map((cambio, cIdx) => (
+                            <span key={cIdx} style={styles.cardChangeItem}>
+                              {cambio.includes('Agregó') ? '✨' : cambio.includes('Borró') ? '🗑️' : cambio.includes('Modificó') ? '✏️' : cambio.includes('Reubicó') ? '📍' : '•'} {cambio}
+                            </span>
+                          ))}
+                          {changesList.length > 2 && (
+                            <span style={styles.cardChangesMore}>+{changesList.length - 2} más</span>
+                          )}
+                        </div>
+                      )}
 
                       {comentarioVal && (
                         <p style={styles.commentExcerpt}>
@@ -1163,55 +1220,168 @@ const HistorialAuditoria: React.FC = () => {
         </div>
 
         {/* Modal de Ficha Detallada */}
-        {selectedLog && (
-          <div style={styles.modalOverlay} onClick={() => setSelectedLog(null)}>
-            <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-              <div style={styles.modalHeader}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div
-                    style={{
-                      ...styles.modalBadgeIcon,
-                      background: (ENTITY_CONFIG[selectedLog.entity_type] || ENTITY_CONFIG.sistema).bg,
-                    }}
+        {selectedLog && (() => {
+          const authorDisplayName = formatCleanActorName(
+            selectedLog.actor_name,
+            selectedLog.actor_username,
+            selectedLog.actor_user_id,
+            userDirectory
+          );
+          const changesList = describeLogChanges(selectedLog);
+          const plateThumbnail = selectedLogPlateThumbnail || getPlateThumbnailUrl(selectedLog);
+
+          return (
+            <div style={styles.modalOverlay} onClick={() => setSelectedLog(null)}>
+              <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                <div style={styles.modalHeader}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div
+                      style={{
+                        ...styles.modalBadgeIcon,
+                        background: (ENTITY_CONFIG[selectedLog.entity_type] || ENTITY_CONFIG.sistema).bg,
+                      }}
+                    >
+                      {React.createElement(
+                        (ENTITY_CONFIG[selectedLog.entity_type] || ENTITY_CONFIG.sistema).icon,
+                        { size: 20, color: (ENTITY_CONFIG[selectedLog.entity_type] || ENTITY_CONFIG.sistema).color }
+                      )}
+                    </div>
+                    <div>
+                      <h3 style={styles.modalTitle}>{selectedLog.entity_name}</h3>
+                      <span style={styles.modalSubtitle}>
+                        Operación #{selectedLog.id} • {formatFullDateTime(selectedLog.created_at)}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLog(null)}
+                    style={styles.closeModalBtn}
+                    aria-label="Cerrar ficha"
                   >
-                    {React.createElement(
-                      (ENTITY_CONFIG[selectedLog.entity_type] || ENTITY_CONFIG.sistema).icon,
-                      { size: 20, color: (ENTITY_CONFIG[selectedLog.entity_type] || ENTITY_CONFIG.sistema).color }
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div style={styles.modalBody}>
+                  {/* Resumen del Autor y Acción */}
+                  <div style={styles.authorBannerCard}>
+                    <div style={styles.authorAvatarBig}>
+                      {authorDisplayName.charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <strong style={styles.authorBannerName}>{authorDisplayName}</strong>
+                        {selectedLog.actor_role && (
+                          <span style={styles.roleTag}>{selectedLog.actor_role}</span>
+                        )}
+                        <span style={styles.actionPillBadge}>
+                          {(ACTION_CONFIG[selectedLog.action_type] || ACTION_CONFIG.update).label}
+                        </span>
+                      </div>
+                      <span style={styles.authorBannerSub}>
+                        {selectedLog.entity_type === 'placa' ? 'Placa Histológica' : (ENTITY_CONFIG[selectedLog.entity_type] || ENTITY_CONFIG.sistema).label}
+                        {selectedLog.entity_id ? ` (ID #${selectedLog.entity_id})` : ''}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Sección Central: Miniatura + Lista de Cambios Realizados */}
+                  <div style={styles.modalMainSplit}>
+                    {/* Columna Izquierda: Miniatura de la Placa */}
+                    {Boolean(plateThumbnail) && (
+                      <div style={styles.modalThumbnailCard}>
+                        <div style={styles.modalThumbnailWrap}>
+                          <img
+                            src={plateThumbnail!}
+                            alt="Miniatura de la placa"
+                            style={styles.modalThumbnailImg}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setLightboxImageUrl(plateThumbnail!)}
+                            style={styles.thumbnailZoomOverlayBtn}
+                            title="Ampliar imagen"
+                          >
+                            <Maximize2 size={13} /> Ampliar
+                          </button>
+                        </div>
+
+                        {/* Ficha técnica compacta bajo la miniatura */}
+                        <div style={styles.thumbnailMetaChips}>
+                          {selectedLog.details?.subtema_nombre != null && (
+                            <span style={styles.metaChip} title="Subtema">
+                              🏷️ {String(selectedLog.details.subtema_nombre)}
+                            </span>
+                          )}
+                          {selectedLog.details?.aumento != null && (
+                            <span style={{ ...styles.metaChip, color: '#15803d', background: '#f0fdf4', borderColor: '#bbf7d0' }}>
+                              🔬 {String(selectedLog.details.aumento)}
+                            </span>
+                          )}
+                          {selectedLog.details?.tincion != null && (
+                            <span style={{ ...styles.metaChip, color: '#b45309', background: '#fffbeb', borderColor: '#fde68a' }}>
+                              🧪 {String(selectedLog.details.tincion)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     )}
-                  </div>
-                  <div>
-                    <h3 style={styles.modalTitle}>Ficha de Operación #{selectedLog.id}</h3>
-                    <span style={styles.modalSubtitle}>{formatFullDateTime(selectedLog.created_at)}</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedLog(null)}
-                  style={styles.closeModalBtn}
-                  aria-label="Cerrar ficha"
-                >
-                  <X size={18} />
-                </button>
-              </div>
 
-              <div style={styles.modalBody}>
-                {/* Resumen */}
-                <div style={styles.summaryBanner}>
-                  <p style={styles.summaryBannerText}>
-                    👤 <strong>{selectedLog.actor_name}</strong>{' '}
-                    <span style={{ color: '#0369a1' }}>{(ACTION_CONFIG[selectedLog.action_type] || ACTION_CONFIG.update).verb}</span>{' '}
-                    <strong>{selectedLog.entity_name}</strong>
-                  </p>
-                </div>
+                    {/* Columna Derecha: ¿Qué cambió o qué hizo esta persona? */}
+                    <div style={styles.changesMainCard}>
+                      <div style={styles.changesCardHeader}>
+                        <Sparkles size={16} color="#0284c7" />
+                        <span style={styles.changesCardTitle}>¿Qué cambió en este registro?</span>
+                      </div>
 
-                {/* Accesos directos a la sección */}
-                <div style={styles.navigationHubCard}>
-                  <span style={styles.navigationHubTitle}>
-                    <Compass size={16} color="#0284c7" /> Accesos Directos a la Sección:
-                  </span>
-                  <div style={styles.navigationButtonsGrid}>
-                    {selectedLog.entity_type === 'placa' && (
-                      <>
+                      <div style={styles.changesListContainer}>
+                        {changesList.map((cambio, idx) => {
+                          const isAdd = cambio.includes('Agregó') || cambio.includes('Subió') || cambio.includes('Creó');
+                          const isDel = cambio.includes('Borró') || cambio.includes('Eliminó');
+                          const isMove = cambio.includes('Reubicó') || cambio.includes('Movió');
+                          const isEdit = cambio.includes('Modificó') || cambio.includes('Actualizó') || cambio.includes('Cambió') || cambio.includes('Renombró');
+
+                          const bulletIcon = isAdd ? '✨' : isDel ? '🗑️' : isMove ? '📍' : isEdit ? '✏️' : '•';
+                          const bulletBg = isAdd ? '#ecfdf5' : isDel ? '#fef2f2' : isMove ? '#eff6ff' : isEdit ? '#fffbeb' : '#f8fafc';
+                          const bulletBorder = isAdd ? '#a7f3d0' : isDel ? '#fecaca' : isMove ? '#bfdbfe' : isEdit ? '#fde68a' : '#e2e8f0';
+                          const textColor = isAdd ? '#065f46' : isDel ? '#991b1b' : isMove ? '#1e40af' : isEdit ? '#92400e' : '#334155';
+
+                          return (
+                            <div
+                              key={idx}
+                              style={{
+                                ...styles.changeItemRow,
+                                background: bulletBg,
+                                borderColor: bulletBorder,
+                              }}
+                            >
+                              <span style={styles.changeBulletIcon}>{bulletIcon}</span>
+                              <span style={{ ...styles.changeItemText, color: textColor }}>{cambio}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Comentarios o notas clínicas si existen */}
+                      {Boolean(selectedLog.details?.comentario || selectedLog.details?.descripcion) && (
+                        <div style={styles.commentBoxCompact}>
+                          <span style={styles.commentBoxTitle}>📝 Nota o comentario de la placa:</span>
+                          <p style={styles.commentBoxText}>
+                            {String(selectedLog.details?.comentario || selectedLog.details?.descripcion)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Accesos rápidos a la sección */}
+                  {selectedLog.entity_type === 'placa' && (
+                    <div style={styles.navigationHubCardCompact}>
+                      <span style={styles.navigationHubTitle}>
+                        <Compass size={15} color="#0284c7" /> Accesos rápidos a la placa:
+                      </span>
+                      <div style={styles.navigationButtonsGrid}>
                         {selectedLog.details?.tema_id != null && (
                           <button
                             type="button"
@@ -1221,8 +1391,8 @@ const HistorialAuditoria: React.FC = () => {
                             }}
                             style={styles.navActionBtnPrimary}
                           >
-                            <Microscope size={15} />
-                            <span>Ver Subtemas del Tema</span>
+                            <Microscope size={14} />
+                            <span>Ver en el Catálogo</span>
                             <ArrowRight size={13} />
                           </button>
                         )}
@@ -1250,209 +1420,51 @@ const HistorialAuditoria: React.FC = () => {
                           <Layers size={14} />
                           <span>Gestión de Placas</span>
                         </button>
-                      </>
-                    )}
-
-                    {selectedLog.entity_type === 'pagina' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedLog(null);
-                          navigate('/editor-paginas');
-                        }}
-                        style={styles.navActionBtnPrimary}
-                      >
-                        <FileText size={15} />
-                        <span>Abrir Editor de Páginas</span>
-                        <ArrowRight size={13} />
-                      </button>
-                    )}
-
-                    {selectedLog.entity_type === 'prueba' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedLog(null);
-                          navigate('/gestion-pruebas');
-                        }}
-                        style={styles.navActionBtnPrimary}
-                      >
-                        <TestTube size={15} />
-                        <span>Gestión de Pruebas</span>
-                        <ArrowRight size={13} />
-                      </button>
-                    )}
-
-                    {(selectedLog.entity_type === 'tema' || selectedLog.entity_type === 'subtema') && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedLog(null);
-                          navigate('/temario-admin');
-                        }}
-                        style={styles.navActionBtnPrimary}
-                      >
-                        <BookOpen size={15} />
-                        <span>Gestión del Temario</span>
-                        <ArrowRight size={13} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Sección de Imagen Grande */}
-                {Boolean(getPlateThumbnailUrl(selectedLog)) && (
-                  <div style={styles.modalHeroImageCard}>
-                    <div style={styles.modalHeroImageHeader}>
-                      <span style={styles.modalHeroImageTitle}>
-                        <ImageIcon size={16} color="#0284c7" /> Muestra Histológica
-                      </span>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          type="button"
-                          onClick={() => setLightboxImageUrl(getPlateThumbnailUrl(selectedLog)!)}
-                          style={styles.heroZoomBtn}
-                        >
-                          <Maximize2 size={13} /> Ampliar
-                        </button>
-                        <a
-                          href={getPlateThumbnailUrl(selectedLog)!}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={styles.openExternalLink}
-                        >
-                          <ExternalLink size={13} /> Original
-                        </a>
                       </div>
                     </div>
-                    <div
-                      style={styles.modalHeroImageWrap}
-                      onClick={() => setLightboxImageUrl(getPlateThumbnailUrl(selectedLog)!)}
-                      title="Haz clic para ver en pantalla completa"
+                  )}
+
+                  {/* Detalles técnicos avanzados (JSON) colapsados al fondo */}
+                  <details style={styles.jsonAccordion}>
+                    <summary style={styles.jsonSummary}>▶ Ver metadatos técnicos avanzados (JSON)</summary>
+                    <pre style={styles.jsonPre}>{JSON.stringify(selectedLog.details, null, 2)}</pre>
+                  </details>
+                </div>
+
+                <div style={styles.modalFooter}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const summary = `[AUDITORÍA ATLAS] ${authorDisplayName} (${selectedLog.action_type}) en ${selectedLog.entity_type}: ${selectedLog.entity_name}\n${changesList.map(c => `- ${c}`).join('\n')}`;
+                        void navigator.clipboard.writeText(summary);
+                        setCopiedFicha(true);
+                        setTimeout(() => setCopiedFicha(false), 2500);
+                      }}
+                      style={styles.copySummaryBtn}
                     >
-                      <img
-                        src={getPlateThumbnailUrl(selectedLog)!}
-                        alt="Imagen de la placa"
-                        style={styles.modalHeroImg}
-                      />
-                    </div>
-                  </div>
-                )}
+                      {copiedFicha ? <Check size={15} color="#059669" /> : <Copy size={15} />}
+                      <span>{copiedFicha ? '¡Copiado!' : 'Copiar Resumen'}</span>
+                    </button>
 
-                {/* Información de Metadatos */}
-                <div style={styles.modalGrid}>
-                  <div style={styles.modalInfoCard}>
-                    <span style={styles.modalInfoLabel}>Responsable / Autor</span>
-                    <strong style={styles.modalInfoValue}>{selectedLog.actor_name}</strong>
-                    {selectedLog.actor_username && (
-                      <span style={styles.modalInfoSub}>@{selectedLog.actor_username}</span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteSingleLog(selectedLog.id)}
+                      style={styles.deleteSingleLogBtn}
+                    >
+                      <Trash2 size={15} />
+                      <span>Eliminar este registro</span>
+                    </button>
                   </div>
 
-                  <div style={styles.modalInfoCard}>
-                    <span style={styles.modalInfoLabel}>Tipo de Recurso y Acción</span>
-                    <strong style={styles.modalInfoValue}>
-                      {(ENTITY_CONFIG[selectedLog.entity_type] || ENTITY_CONFIG.sistema).label}
-                    </strong>
-                    <span style={styles.modalInfoSub}>
-                      {(ACTION_CONFIG[selectedLog.action_type] || ACTION_CONFIG.update).label}
-                    </span>
-                  </div>
-
-                  {selectedLog.details.subtema_nombre != null && (
-                    <div style={styles.modalInfoCard}>
-                      <span style={styles.modalInfoLabel}>🏷️ Subtema</span>
-                      <strong style={{ ...styles.modalInfoValue, color: '#4338ca' }}>
-                        {String(selectedLog.details.subtema_nombre)}
-                      </strong>
-                    </div>
-                  )}
-
-                  {selectedLog.details.tema_nombre != null && (
-                    <div style={styles.modalInfoCard}>
-                      <span style={styles.modalInfoLabel}>📚 Tema</span>
-                      <strong style={{ ...styles.modalInfoValue, color: '#1d4ed8' }}>
-                        {String(selectedLog.details.tema_nombre)}
-                      </strong>
-                    </div>
-                  )}
-
-                  {selectedLog.details.aumento != null && (
-                    <div style={styles.modalInfoCard}>
-                      <span style={styles.modalInfoLabel}>🔬 Aumento</span>
-                      <strong style={{ ...styles.modalInfoValue, color: '#15803d' }}>
-                        {String(selectedLog.details.aumento)}
-                      </strong>
-                    </div>
-                  )}
-
-                  {selectedLog.details.tincion != null && (
-                    <div style={styles.modalInfoCard}>
-                      <span style={styles.modalInfoLabel}>🧪 Tinción</span>
-                      <strong style={{ ...styles.modalInfoValue, color: '#b45309' }}>
-                        {String(selectedLog.details.tincion)}
-                      </strong>
-                    </div>
-                  )}
-
-                  {selectedLog.entity_id && (
-                    <div style={styles.modalInfoCard}>
-                      <span style={styles.modalInfoLabel}>Identificador</span>
-                      <strong style={styles.modalInfoValue}>ID #{selectedLog.entity_id}</strong>
-                    </div>
-                  )}
-                </div>
-
-                {/* Comentarios */}
-                {Boolean(selectedLog.details.comentario || selectedLog.details.descripcion) && (
-                  <div style={styles.commentBox}>
-                    <span style={styles.modalInfoLabel}>📝 Comentario / Descripción</span>
-                    <p style={styles.commentBoxText}>
-                      {String(selectedLog.details.comentario || selectedLog.details.descripcion)}
-                    </p>
-                  </div>
-                )}
-
-                {/* JSON */}
-                <details style={styles.jsonAccordion}>
-                  <summary style={styles.jsonSummary}>▶ Ver metadatos técnicos avanzados (JSON)</summary>
-                  <pre style={styles.jsonPre}>{JSON.stringify(selectedLog.details, null, 2)}</pre>
-                </details>
-              </div>
-
-              <div style={styles.modalFooter}>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const summary = `[AUDITORÍA ATLAS] ${selectedLog.actor_name} (${selectedLog.action_type}) en ${selectedLog.entity_type}: ${selectedLog.entity_name}`;
-                      void navigator.clipboard.writeText(summary);
-                      setCopiedFicha(true);
-                      setTimeout(() => setCopiedFicha(false), 2500);
-                    }}
-                    style={styles.copySummaryBtn}
-                  >
-                    {copiedFicha ? <Check size={15} color="#059669" /> : <Copy size={15} />}
-                    <span>{copiedFicha ? '¡Copiado!' : 'Copiar Resumen'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteSingleLog(selectedLog.id)}
-                    style={styles.deleteSingleLogBtn}
-                  >
-                    <Trash2 size={15} />
-                    <span>Eliminar este registro</span>
+                  <button type="button" onClick={() => setSelectedLog(null)} style={styles.modalCloseFooterBtn}>
+                    Cerrar Ficha
                   </button>
                 </div>
-
-                <button type="button" onClick={() => setSelectedLog(null)} style={styles.modalCloseFooterBtn}>
-                  Cerrar Ficha
-                </button>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Modal de Limpieza y Purga */}
         {showPurgeModal && (
@@ -2494,6 +2506,202 @@ const styles: Record<string, any> = {
     fontSize: '1em',
     color: '#0f172a',
     lineHeight: 1.4,
+  },
+  authorBannerCard: {
+    background: '#f8fafc',
+    border: '1.5px solid #e2e8f0',
+    borderRadius: '14px',
+    padding: '14px 18px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+  },
+  authorAvatarBig: {
+    width: '44px',
+    height: '44px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+    color: '#ffffff',
+    fontWeight: 800,
+    fontSize: '1.15em',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 2px 8px rgba(2, 132, 199, 0.25)',
+  },
+  authorBannerName: {
+    fontSize: '1.08em',
+    color: '#0f172a',
+  },
+  authorBannerSub: {
+    fontSize: '0.82em',
+    color: '#64748b',
+    display: 'block',
+    marginTop: '2px',
+  },
+  actionPillBadge: {
+    fontSize: '0.78em',
+    fontWeight: 700,
+    color: '#0369a1',
+    background: '#e0f2fe',
+    border: '1px solid #bae6fd',
+    borderRadius: '6px',
+    padding: '2px 8px',
+  },
+  modalMainSplit: {
+    display: 'flex',
+    gap: '20px',
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    flexWrap: 'wrap',
+  },
+  modalThumbnailCard: {
+    flex: '1 1 240px',
+    maxWidth: '280px',
+    background: '#ffffff',
+    border: '1.5px solid #e2e8f0',
+    borderRadius: '14px',
+    padding: '12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)',
+  },
+  modalThumbnailWrap: {
+    position: 'relative',
+    width: '100%',
+    height: '180px',
+    background: '#0f172a',
+    borderRadius: '10px',
+    overflow: 'hidden',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalThumbnailImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+  },
+  thumbnailZoomOverlayBtn: {
+    position: 'absolute',
+    bottom: '8px',
+    right: '8px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '4px 10px',
+    background: 'rgba(15, 23, 42, 0.75)',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '0.76em',
+    fontWeight: 600,
+    cursor: 'pointer',
+    backdropFilter: 'blur(4px)',
+  },
+  thumbnailMetaChips: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '6px',
+  },
+  metaChip: {
+    fontSize: '0.78em',
+    fontWeight: 600,
+    color: '#4338ca',
+    background: '#eef2ff',
+    border: '1px solid #c7d2fe',
+    borderRadius: '6px',
+    padding: '3px 8px',
+  },
+  changesMainCard: {
+    flex: '2 1 340px',
+    background: '#ffffff',
+    border: '1.5px solid #e2e8f0',
+    borderRadius: '14px',
+    padding: '16px 18px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)',
+  },
+  changesCardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    borderBottom: '1.5px solid #f1f5f9',
+    paddingBottom: '10px',
+  },
+  changesCardTitle: {
+    fontSize: '1em',
+    fontWeight: 800,
+    color: '#0f172a',
+  },
+  changesListContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  changeItemRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '10px',
+    padding: '10px 14px',
+    borderRadius: '10px',
+    border: '1px solid',
+  },
+  changeBulletIcon: {
+    fontSize: '1.1em',
+    lineHeight: 1.2,
+  },
+  changeItemText: {
+    fontSize: '0.92em',
+    fontWeight: 600,
+    lineHeight: 1.45,
+  },
+  commentBoxCompact: {
+    background: '#fffbeb',
+    border: '1px solid #fde68a',
+    borderRadius: '10px',
+    padding: '10px 14px',
+    marginTop: '4px',
+  },
+  commentBoxTitle: {
+    fontSize: '0.8em',
+    fontWeight: 700,
+    color: '#92400e',
+    display: 'block',
+    marginBottom: '3px',
+  },
+  navigationHubCardCompact: {
+    background: '#f8fafc',
+    borderRadius: '12px',
+    border: '1.5px solid #e2e8f0',
+    padding: '12px 16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  cardChangesPreview: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '6px',
+    alignItems: 'center',
+    marginTop: '6px',
+  },
+  cardChangeItem: {
+    fontSize: '0.8em',
+    fontWeight: 600,
+    color: '#0369a1',
+    background: '#f0f9ff',
+    border: '1px solid #bae6fd',
+    borderRadius: '6px',
+    padding: '2px 8px',
+  },
+  cardChangesMore: {
+    fontSize: '0.78em',
+    fontWeight: 600,
+    color: '#64748b',
   },
   navigationHubCard: {
     background: '#f8fafc',
