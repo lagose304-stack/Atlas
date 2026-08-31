@@ -88,11 +88,6 @@ interface InteractiveMapManagerRow {
   sections: InteractiveMapSectionPayload[] | null;
 }
 
-interface PendingMapEditTarget {
-  temaId: number;
-  subtemaId: number | null;
-  placaId: number;
-}
 
 interface InteractiveMapsBySubtemaGroup {
   key: string;
@@ -628,7 +623,7 @@ const MapasInteractivos: React.FC = () => {
   const [temaMaps, setTemaMaps] = useState<InteractiveMapManagerRow[]>([]);
   const [loadingTemaMaps, setLoadingTemaMaps] = useState(false);
   const [temaMapsError, setTemaMapsError] = useState<string | null>(null);
-  const [pendingMapEditTarget, setPendingMapEditTarget] = useState<PendingMapEditTarget | null>(null);
+  const [openingMapId, setOpeningMapId] = useState<number | null>(null);
   const [deletingMapId, setDeletingMapId] = useState<number | null>(null);
 
   const [selectedTemaId, setSelectedTemaId] = usePreservedParam<number | null>('tema', null);
@@ -837,7 +832,6 @@ const MapasInteractivos: React.FC = () => {
   useEffect(() => {
     setTemaMaps([]);
     setTemaMapsError(null);
-    setPendingMapEditTarget(null);
     setDeletingMapId(null);
 
     if (!isManageMode || !selectedTemaId) return;
@@ -876,63 +870,6 @@ const MapasInteractivos: React.FC = () => {
       isEffectActive = false;
     };
   }, [isManageMode, selectedTemaId]);
-
-  useEffect(() => {
-    if (!pendingMapEditTarget) return;
-
-    if (selectedTemaId !== pendingMapEditTarget.temaId) {
-      setSelectedTemaId(pendingMapEditTarget.temaId);
-      return;
-    }
-
-    if (pendingMapEditTarget.subtemaId === null) {
-      setMapPersistMessage('El mapa no tiene subtema asociado y no se puede abrir para edición.');
-      setPendingMapEditTarget(null);
-      return;
-    }
-
-    if (selectedSubtemaId !== pendingMapEditTarget.subtemaId) {
-      setSelectedSubtemaId(pendingMapEditTarget.subtemaId);
-      return;
-    }
-
-    if (loadingPlacas) return;
-
-    const targetPlaca = placas.find((placa) => placa.id === pendingMapEditTarget.placaId);
-    if (targetPlaca) {
-      setSelectedPlaca(targetPlaca);
-      setPendingMapEditTarget(null);
-      return;
-    }
-
-    let isEffectActive = true;
-
-    const fetchTargetPlaca = async () => {
-      const { data, error } = await supabase
-        .from('placas')
-        .select('id, photo_url, aumento, sort_order')
-        .eq('id', pendingMapEditTarget.placaId)
-        .maybeSingle();
-
-      if (!isEffectActive) return;
-
-      if (error || !data) {
-        setIsEditingExistingMap(false);
-        setMapPersistMessage('No se encontró la placa del mapa seleccionado.');
-        setPendingMapEditTarget(null);
-        return;
-      }
-
-      setSelectedPlaca(data as Placa);
-      setPendingMapEditTarget(null);
-    };
-
-    void fetchTargetPlaca();
-
-    return () => {
-      isEffectActive = false;
-    };
-  }, [pendingMapEditTarget, selectedTemaId, selectedSubtemaId, loadingPlacas, placas]);
 
   useEffect(() => {
     if (!selectedPlaca) {
@@ -2533,13 +2470,103 @@ const MapasInteractivos: React.FC = () => {
       });
   }, [isManageMode, selectedTemaId, subtemas, temaMaps]);
 
-  const handleEditMapFromManager = (mapRow: InteractiveMapManagerRow) => {
+  const handleEditMapFromManager = async (mapRow: InteractiveMapManagerRow) => {
     setMapPersistMessage(null);
-    setPendingMapEditTarget({
-      temaId: mapRow.tema_id,
-      subtemaId: mapRow.subtema_id,
-      placaId: mapRow.placa_id,
-    });
+    setOpeningMapId(mapRow.id);
+
+    try {
+      // 1. Obtener la placa asociada a este mapa (con su tema y subtema reales)
+      const { data: placaData, error: placaError } = await supabase
+        .from('placas')
+        .select('id, photo_url, aumento, sort_order, subtema_id, tema_id')
+        .eq('id', mapRow.placa_id)
+        .maybeSingle();
+
+      if (placaError || !placaData) {
+        setMapPersistMessage('No se pudo encontrar la placa asociada a este mapa interactivo.');
+        return;
+      }
+
+      const targetTemaId = mapRow.tema_id || (placaData.tema_id as number | null) || selectedTemaId;
+      const targetSubtemaId = mapRow.subtema_id ?? (placaData.subtema_id as number | null);
+
+      if (!targetTemaId) {
+        setMapPersistMessage('No se pudo determinar el tema de la placa.');
+        return;
+      }
+
+      // Si el mapa no tenía subtema_id pero la placa sí, reparar el registro silenciosamente en Supabase
+      if (mapRow.subtema_id === null && targetSubtemaId !== null) {
+        void supabase
+          .from(INTERACTIVE_MAPS_TABLE)
+          .update({ subtema_id: targetSubtemaId })
+          .eq('id', mapRow.id);
+
+        setTemaMaps((prev) =>
+          prev.map((item) => (item.id === mapRow.id ? { ...item, subtema_id: targetSubtemaId } : item))
+        );
+      }
+
+      // Sincronizar referencias para evitar que los efectos de reseteo borren la placa seleccionada
+      prevTemaRef.current = targetTemaId;
+      prevSubtemaRef.current = targetSubtemaId;
+
+      if (selectedTemaId !== targetTemaId) {
+        setSelectedTemaId(targetTemaId);
+      }
+      if (targetSubtemaId !== null && selectedSubtemaId !== targetSubtemaId) {
+        setSelectedSubtemaId(targetSubtemaId);
+      }
+
+      // Cargar subtemas del tema si no están en memoria
+      const cachedSubtemas = await getCachedSubtemas(targetTemaId);
+      if (cachedSubtemas && cachedSubtemas.length > 0) {
+        setSubtemas(cachedSubtemas as Subtema[]);
+      }
+
+      // Cargar placas del subtema para tener galería disponible en el editor
+      if (targetSubtemaId !== null) {
+        const { data: siblingPlacas } = await supabase
+          .from('placas')
+          .select('id, photo_url, aumento, sort_order')
+          .eq('subtema_id', targetSubtemaId)
+          .order('sort_order', { ascending: true });
+
+        if (siblingPlacas && siblingPlacas.length > 0) {
+          setPlacas(siblingPlacas);
+        } else {
+          setPlacas([{
+            id: placaData.id,
+            photo_url: placaData.photo_url,
+            aumento: placaData.aumento,
+            sort_order: placaData.sort_order ?? 0,
+          }]);
+        }
+      } else {
+        setPlacas([{
+          id: placaData.id,
+          photo_url: placaData.photo_url,
+          aumento: placaData.aumento,
+          sort_order: placaData.sort_order ?? 0,
+        }]);
+      }
+
+      // Establecer el mapa actual y la placa seleccionada para activar el workspace
+      setCurrentMapId(mapRow.id);
+      setCurrentMapNumber(mapRow.map_number);
+      setIsEditingExistingMap(true);
+      setSelectedPlaca({
+        id: placaData.id,
+        photo_url: placaData.photo_url,
+        aumento: placaData.aumento,
+        sort_order: placaData.sort_order ?? 0,
+      });
+    } catch (err) {
+      console.error('Error al abrir mapa interactivo para edición:', err);
+      setMapPersistMessage('Ocurrió un error al intentar abrir el mapa para edición.');
+    } finally {
+      setOpeningMapId(null);
+    }
   };
 
   const handleDeleteMapFromManager = async (mapRow: InteractiveMapManagerRow) => {
@@ -3616,7 +3643,7 @@ const MapasInteractivos: React.FC = () => {
                         <div style={s.managedMapList}>
                           {group.items.map((mapRow) => {
                             const isDeletingCurrent = deletingMapId === mapRow.id;
-                            const cannotEdit = mapRow.subtema_id === null;
+                            const isOpeningCurrent = openingMapId === mapRow.id;
 
                             return (
                               <article key={mapRow.id} style={s.managedMapRow}>
@@ -3630,24 +3657,26 @@ const MapasInteractivos: React.FC = () => {
                                     type="button"
                                     style={{
                                       ...s.managedMapEditBtn,
-                                      ...(cannotEdit ? s.managedMapActionBtnDisabled : {}),
+                                      ...(isOpeningCurrent || isDeletingCurrent ? s.managedMapActionBtnDisabled : {}),
                                     }}
-                                    onClick={() => handleEditMapFromManager(mapRow)}
-                                    disabled={cannotEdit}
-                                    title={cannotEdit ? 'Este mapa no tiene subtema asociado y no se puede abrir.' : 'Abrir mapa para edición'}
+                                    onClick={() => {
+                                      void handleEditMapFromManager(mapRow);
+                                    }}
+                                    disabled={isOpeningCurrent || isDeletingCurrent}
+                                    title="Abrir mapa para edición"
                                   >
-                                    ✏️ Editar
+                                    {isOpeningCurrent ? 'Abriendo...' : '✏️ Editar'}
                                   </button>
                                   <button
                                     type="button"
                                     style={{
                                       ...s.managedMapDeleteBtn,
-                                      ...(isDeletingCurrent ? s.managedMapActionBtnDisabled : {}),
+                                      ...(isDeletingCurrent || isOpeningCurrent ? s.managedMapActionBtnDisabled : {}),
                                     }}
                                     onClick={() => {
                                       void handleDeleteMapFromManager(mapRow);
                                     }}
-                                    disabled={isDeletingCurrent}
+                                    disabled={isDeletingCurrent || isOpeningCurrent}
                                     title="Borrar mapa"
                                   >
                                     {isDeletingCurrent ? 'Borrando...' : '🗑️ Borrar'}
