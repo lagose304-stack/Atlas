@@ -802,7 +802,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   thumbSquare: {
     position: 'relative',
     width: '100%',
-    paddingTop: '100%',
+    aspectRatio: '1 / 1',
     overflow: 'hidden',
   },
   thumbImg: {

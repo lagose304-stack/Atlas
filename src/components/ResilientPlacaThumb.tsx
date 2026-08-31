@@ -95,15 +95,23 @@ export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
   const handleError = () => {
     if (candidateIndex < candidates.length - 1) {
       setCandidateIndex((prev) => prev + 1);
+      setLoaded(false);
     }
   };
 
   const isAllFailed = candidateIndex >= candidates.length;
+  const isAbsolute = style?.position === 'absolute';
 
   if (isAllFailed || !currentSrc) {
     return (
       <div
         style={{
+          position: isAbsolute ? 'absolute' : 'relative',
+          inset: isAbsolute ? (style?.inset ?? 0) : undefined,
+          top: isAbsolute ? style?.top : undefined,
+          left: isAbsolute ? style?.left : undefined,
+          right: isAbsolute ? style?.right : undefined,
+          bottom: isAbsolute ? style?.bottom : undefined,
           width: '100%',
           height: '100%',
           display: 'flex',
@@ -144,7 +152,12 @@ export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
   return (
     <div
       style={{
-        position: 'relative',
+        position: isAbsolute ? 'absolute' : 'relative',
+        inset: isAbsolute ? (style?.inset ?? 0) : undefined,
+        top: isAbsolute ? style?.top : undefined,
+        left: isAbsolute ? style?.left : undefined,
+        right: isAbsolute ? style?.right : undefined,
+        bottom: isAbsolute ? style?.bottom : undefined,
         width: '100%',
         height: '100%',
         overflow: 'hidden',
@@ -175,6 +188,8 @@ export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
           transition: 'opacity 0.2s ease-in-out',
           opacity: loaded ? 1 : 0,
           ...style,
+          position: isAbsolute ? 'absolute' : (style?.position || 'relative'),
+          inset: isAbsolute ? 0 : undefined,
         }}
         className={className}
         loading="lazy"
