@@ -336,8 +336,9 @@ const StandardSubtemas: React.FC = () => {
                             loading="lazy"
                             decoding="async"
                             onError={() => {
-                              if (!subtemaFallbackUrls[subtema.id] && subtema.logo_url) {
-                                setSubtemaFallbackUrls((prev) => ({ ...prev, [subtema.id]: subtema.logo_url }));
+                              const fallbackUrl = subtema.logo_url;
+                              if (!subtemaFallbackUrls[subtema.id] && fallbackUrl) {
+                                setSubtemaFallbackUrls((prev) => ({ ...prev, [subtema.id]: fallbackUrl }));
                               } else {
                                 setFailedSubtemaLogos((prev) => ({ ...prev, [subtema.id]: true }));
                               }
