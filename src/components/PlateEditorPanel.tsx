@@ -434,12 +434,16 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
             <aside
               style={{
                 position: 'sticky',
-                top: '20px',
+                top: 0,
                 alignSelf: 'start',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '12px',
                 minHeight: 0,
+                maxHeight: '100%',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                paddingRight: '4px',
               }}
             >
               <div
@@ -466,12 +470,15 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
                     border: pendingImagePreviewUrl
                       ? '2px solid #3b82f6'
                       : '1px solid rgba(148, 163, 184, 0.35)',
-                    aspectRatio: '3 / 4',
-                    minHeight: '340px',
+                    aspectRatio: '16 / 10',
+                    maxHeight: '220px',
+                    minHeight: '140px',
+                    width: '100%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     position: 'relative',
+                    flexShrink: 0,
                     boxShadow: pendingImagePreviewUrl ? '0 0 0 3px rgba(59, 130, 246, 0.25)' : 'none',
                   }}
                 >
@@ -515,7 +522,7 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
 
                 {/* Botón de actualizar imagen: visible ÚNICAMENTE para usuarios con rol Administrador */}
                 {isAdmin && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px', flexShrink: 0 }}>
                     <input
                       ref={fileInputRef}
                       type="file"

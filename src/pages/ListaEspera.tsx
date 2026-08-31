@@ -1211,7 +1211,7 @@ const ListaEspera: React.FC = () => {
                     <div style={{ fontSize: '0.88em', fontWeight: 900, color: '#1e293b' }}>Miniatura</div>
                     <div style={{ fontSize: '0.82em', color: '#64748b' }}>Placa que esta editando</div>
                   </div>
-                  <div style={{ borderRadius: '18px', overflow: 'hidden', background: '#0f172a', border: '1px solid rgba(148, 163, 184, 0.35)', aspectRatio: '3 / 4', minHeight: '340px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ borderRadius: '18px', overflow: 'hidden', background: '#0f172a', border: '1px solid rgba(148, 163, 184, 0.35)', aspectRatio: '16 / 10', maxHeight: '220px', minHeight: '140px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <ResilientPlacaImage
                       photoUrl={preselectPlate.photo_url}
                       publicId={preselectPlate.public_id}
