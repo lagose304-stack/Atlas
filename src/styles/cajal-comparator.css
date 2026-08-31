@@ -1,0 +1,517 @@
+/* ─── Cajal History Comparator Styles ─── */
+
+.cajal-comparator-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Toolbar de navegación y modos */
+.cajal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cajal-mode-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: rgba(241, 245, 249, 0.9);
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.cajal-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #475569;
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.cajal-tab-btn:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.cajal-tab-btn.is-active {
+  color: #0284c7;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(12, 69, 104, 0.12), 0 1px 2px rgba(12, 69, 104, 0.06);
+}
+
+.cajal-legend-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(254, 243, 199, 0.85), rgba(254, 215, 170, 0.75));
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #92400e;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.cajal-spark-icon {
+  color: #d97706;
+}
+
+/* Visor y máscaras de imagen */
+.cajal-viewer {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 11;
+  min-height: 250px;
+  max-height: 295px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow:
+    0 10px 26px -6px rgba(12, 69, 104, 0.12),
+    0 4px 10px rgba(12, 69, 104, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+  border: 1.5px solid rgba(147, 213, 248, 0.7);
+  background: #0f172a;
+  user-select: none;
+  touch-action: none;
+}
+
+.cajal-viewer.is-slider-mode {
+  cursor: ew-resize;
+}
+
+.cajal-viewer:focus-visible {
+  outline: 2px solid #0284c7;
+  outline-offset: 2px;
+}
+
+.cajal-viewer.is-auto-animating .cajal-divider {
+  transition: left 1.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.cajal-viewer.is-auto-animating .cajal-layer-drawing {
+  transition: clip-path 1.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Capas */
+.cajal-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.cajal-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+  object-position: center 88%;
+}
+
+.cajal-layer-drawing .cajal-img {
+  object-position: center 88%;
+}
+
+.cajal-layer-microscopy .cajal-img {
+  object-position: center 88%;
+}
+
+/* Badges sobrepuestos */
+.cajal-badge {
+  position: absolute;
+  top: 10px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  color: #ffffff;
+  pointer-events: none;
+  animation: cajalFadeIn 0.3s ease;
+}
+
+.cajal-badge span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.cajal-badge small {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 500;
+  margin-top: 1px;
+}
+
+.cajal-badge-left {
+  left: 10px;
+}
+
+.cajal-badge-right {
+  right: 10px;
+}
+
+.cajal-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.dot-drawing {
+  background: #f59e0b;
+  box-shadow: 0 0 6px #f59e0b;
+}
+
+.dot-micro {
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+}
+
+/* Divisor deslizante */
+.cajal-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  z-index: 5;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.cajal-divider-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2.5px;
+  transform: translateX(-50%);
+  background: #ffffff;
+  box-shadow:
+    0 0 8px rgba(0, 0, 0, 0.5),
+    0 0 16px rgba(56, 189, 248, 0.8);
+}
+
+.cajal-divider-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ffffff, #f0f9ff);
+  border: 2px solid #0284c7;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    0 0 12px rgba(2, 132, 199, 0.3);
+  color: #0284c7;
+  font-size: 0.85rem;
+  font-weight: 900;
+  pointer-events: auto;
+  cursor: ew-resize;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.cajal-viewer:hover .cajal-divider-handle,
+.cajal-viewer.is-dragging .cajal-divider-handle {
+  transform: translate(-50%, -50%) scale(1.1);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.45),
+    0 0 16px rgba(2, 132, 199, 0.5);
+}
+
+.cajal-handle-arrow {
+  line-height: 1;
+  font-size: 1rem;
+}
+
+.cajal-handle-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #0284c7;
+}
+
+.cajal-divider-hint {
+  position: absolute;
+  top: calc(50% + 25px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #ffffff;
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  backdrop-filter: blur(6px);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+/* Hotspots interactivos */
+.cajal-hotspots-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.cajal-hotspot-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  pointer-events: auto;
+  padding: 0;
+}
+
+.cajal-pin-pulse {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.4);
+  animation: cajalPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.cajal-pin-core {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #0284c7;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.cajal-hotspot-pin:hover .cajal-pin-core,
+.cajal-hotspot-pin.is-active .cajal-pin-core {
+  transform: scale(1.25);
+  background: #38bdf8;
+}
+
+@keyframes cajalPulse {
+  0%, 100% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* Popover explicativo de Hotspot */
+.cajal-hotspot-popover {
+  position: absolute;
+  z-index: 8;
+  transform: translate(-50%, 0);
+  width: min(280px, 86%);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #f8fafc;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(147, 213, 248, 0.35);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  animation: cajalPopIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: auto;
+}
+
+.cajal-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.cajal-popover-badge {
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #38bdf8;
+}
+
+.cajal-popover-close {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.cajal-popover-close:hover {
+  color: #ffffff;
+}
+
+.cajal-hotspot-popover strong {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 3px;
+}
+
+.cajal-hotspot-popover p {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: #cbd5e1;
+}
+
+@keyframes cajalPopIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes cajalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Pie informativo del comparador */
+.cajal-caption-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(240, 249, 255, 0.75);
+  border: 1px solid rgba(186, 230, 253, 0.8);
+  border-radius: 12px;
+}
+
+.cajal-caption-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: #334155;
+  font-size: 0.73rem;
+  line-height: 1.45;
+}
+
+.cajal-info-icon {
+  flex-shrink: 0;
+  color: #0284c7;
+  margin-top: 1px;
+}
+
+.cajal-caption-info strong {
+  color: #0f2a43;
+}
+
+.cajal-explore-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid rgba(186, 230, 253, 0.9);
+  color: #0284c7;
+  font-size: 0.7rem;
+  font-weight: 750;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.cajal-explore-link:hover {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
+}
+
+@media (max-width: 768px) {
+  .cajal-viewer {
+    aspect-ratio: 16 / 10;
+    min-height: 180px;
+    max-height: 235px;
+  }
+
+  .cajal-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .cajal-mode-tabs {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .cajal-tab-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 5px 6px;
+    font-size: 0.66rem;
+  }
+
+  .cajal-caption-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .cajal-explore-link {
+    justify-content: center;
+  }
+}
