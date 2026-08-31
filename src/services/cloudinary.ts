@@ -146,50 +146,6 @@ export const convertAndOptimizeToWebP = async (
 };
 
 /**
- * Subida universal a Cloudflare R2: Convierte SIEMPRE y obligatoriamente a WebP
- */
-export const uploadToCloudinary = async (file: File, options?: UploadOptions) => {
-  const isPlaque = options?.optimizeForPlaque || (!options?.optimizeImage && file.size > 1.2 * 1024 * 1024);
-  
-  // 1. Conversión universal y obligatoria a WebP de máxima calidad
-  const webpFile = await convertAndOptimizeToWebP(file, {
-    isPlaque,
-    customQuality: options?.quality,
-    customMaxDimension: options?.maxDimension,
-  });
-
-  const formData = new FormData();
-  formData.append('file', webpFile);
-  if (options?.folder) {
-    formData.append('folder', options.folder);
-  }
-
-  const uploadUrl = isUsingEdgeFunctions
-    ? '/api/images-upload'
-    : backendUrl('/api/images/upload');
-
-  try {
-    const { data } = await axios.post(uploadUrl, formData, {
-      headers: {
-        ...authHeaders(),
-        'Content-Type': 'multipart/form-data',
-      },
-      timeout: 60000,
-    });
-
-    if (data?.secure_url) {
-      return data;
-    }
-
-    throw new Error('No se pudo obtener la URL de la imagen subida.');
-  } catch (error: any) {
-    const detail = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Error al conectar con el servidor de subida';
-    console.error('Error al subir imagen a Cloudflare R2:', detail, error);
-    throw new Error(detail);
-  }
-};
-
-/**
  * Genera una miniatura WebP en el navegador a partir de un archivo de imagen
  */
 export const generateWebPThumbnail = async (
@@ -229,6 +185,55 @@ export const generateWebPThumbnail = async (
   } catch (err) {
     console.warn('No se pudo generar la miniatura WebP en cliente:', err);
     return file;
+  }
+};
+
+/**
+ * Subida universal a Cloudflare R2: Convierte SIEMPRE y obligatoriamente a WebP
+ * e incluye miniatura _thumb.webp para asegurar compatibilidad con todas las vistas.
+ */
+export const uploadToCloudinary = async (file: File, options?: UploadOptions) => {
+  const isPlaque = options?.optimizeForPlaque || (!options?.optimizeImage && file.size > 1.2 * 1024 * 1024);
+  
+  // 1. Conversión universal y obligatoria a WebP de máxima calidad
+  const webpFile = await convertAndOptimizeToWebP(file, {
+    isPlaque,
+    customQuality: options?.quality,
+    customMaxDimension: options?.maxDimension,
+  });
+
+  // 2. Generar miniatura WebP para que Cloudflare R2 disponga de _thumb.webp
+  const thumbFile = await generateWebPThumbnail(webpFile);
+
+  const formData = new FormData();
+  formData.append('file', webpFile);
+  formData.append('thumb', thumbFile);
+  if (options?.folder) {
+    formData.append('folder', options.folder);
+  }
+
+  const uploadUrl = isUsingEdgeFunctions
+    ? '/api/images-upload'
+    : backendUrl('/api/images/upload');
+
+  try {
+    const { data } = await axios.post(uploadUrl, formData, {
+      headers: {
+        ...authHeaders(),
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 60000,
+    });
+
+    if (data?.secure_url) {
+      return data;
+    }
+
+    throw new Error('No se pudo obtener la URL de la imagen subida.');
+  } catch (error: any) {
+    const detail = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Error al conectar con el servidor de subida';
+    console.error('Error al subir imagen a Cloudflare R2:', detail, error);
+    throw new Error(detail);
   }
 };
 

@@ -26,7 +26,6 @@ import { OPEN_HEADER_SEARCH_EVENT } from '../constants/uiEvents';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks } from '../services/contentPublication';
 import bombillaIcon from '../assets/icons/bombilla.ico';
-import InteractiveCalciumBoneSimulator from '../components/InteractiveCalciumBoneSimulator';
 import '../styles/home.css';
 
 const Home: React.FC = () => {
@@ -170,63 +169,6 @@ const Home: React.FC = () => {
             <ContentBlockRenderer blocks={weeklyPublication} />
           </section>
         )}
-
-        <section className="home-histology-fact home-reveal" aria-labelledby="home-histology-fact-title">
-          {/* Elementos decorativos de fondo */}
-          <span className="home-fact-shine" aria-hidden="true" />
-          <span className="home-fact-glow home-fact-glow-cyan" aria-hidden="true" />
-          <span className="home-fact-glow home-fact-glow-violet" aria-hidden="true" />
-          <span className="home-fact-orbit home-fact-orbit-one" aria-hidden="true" />
-          <span className="home-fact-orbit home-fact-orbit-two" aria-hidden="true" />
-          <span className="home-histology-fact-mesh" aria-hidden="true" />
-          <span className="home-fact-crosshair home-fact-crosshair-tl" aria-hidden="true" />
-          <span className="home-fact-crosshair home-fact-crosshair-br" aria-hidden="true" />
-
-          <div className="home-histology-fact-header">
-            <div className="home-histology-fact-brand">
-              <div className="home-histology-fact-icon" aria-hidden="true">
-                <Microscope size={20} />
-              </div>
-              <span className="home-histology-fact-label">
-                <Sparkles size={15} /> Dato histológico de la semana
-              </span>
-            </div>
-
-            <div className="home-histology-fact-badges">
-              <span className="home-histology-fact-chip">Tejido Óseo</span>
-            </div>
-          </div>
-
-          <div className="home-histology-fact-body home-fact-wrap-body">
-            {/* 1. SECCIÓN SUPERIOR: Texto introductorio a un lado + Diagrama al otro lado */}
-            <div className="home-fact-top-row">
-              <div className="home-fact-intro-side">
-                <div className="home-fact-quote-card home-fact-intro-card">
-                  <p id="home-histology-fact-title">
-                    El <strong>tejido óseo</strong> funciona como el gran <strong>reservorio de calcio del cuerpo (alberga el 99%)</strong>. El equilibrio de la calcemia en sangre depende de la acción coordinada de sus <strong>tres células protagonistas</strong>, reguladas por el <strong>eje hormonal</strong>:
-                  </p>
-
-                  <div className="home-fact-hormone-pills">
-                    <div className="home-fact-hormone-item hormone-pth">
-                      <span className="hormone-title">⚡ PTH (Paratiroides)</span>
-                      <span className="hormone-desc">Se libera ante calcio bajo para estimular a los osteoblastos a expresar RANKL y activar la resorción ósea.</span>
-                    </div>
-                    <div className="home-fact-hormone-item hormone-calcitonin">
-                      <span className="hormone-title">🛡️ Calcitonina (Tiroides)</span>
-                      <span className="hormone-desc">Se libera ante calcio alto para inhibir directamente a los osteoclastos y favorecer el depósito óseo.</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="home-histology-tissue-wrapper home-fact-diagram-side">
-                <InteractiveCalciumBoneSimulator />
-              </div>
-            </div>
-
-
-          </div>
-        </section>
 
         <section className="home-learning-route home-reveal" aria-labelledby="home-route-title">
           {/* Fondo y decoraciones de ambientación */}

@@ -13,6 +13,7 @@ import EditSubtemaForm from '../components/temario/EditSubtemaForm';
 import DeleteTemaForm from '../components/temario/DeleteTemaForm';
 import DeleteSubtemaForm from '../components/temario/DeleteSubtemaForm';
 import { uploadToCloudinary, deleteFromCloudinary, getCloudinaryPublicId } from '../services/cloudinary';
+import { invalidateImageCache } from '../services/cloudinaryImages';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { useAuth } from '../contexts/AuthContext';
 import { logAuditEvent } from '../services/unifiedAuditService';
@@ -436,13 +437,18 @@ const Temario: React.FC = () => {
       if (editingTemaNewLogoFile) {
         const upload = await uploadToCloudinary(editingTemaNewLogoFile, { folder: 'temas/logos', optimizeImage: true });
         updateData.logo_url = upload.secure_url;
-        // Borrar imagen antigua de Cloudinary
+        if (upload.secure_url) {
+          invalidateImageCache(upload.secure_url);
+        }
+        // Borrar imagen antigua de Cloudflare R2 / Cloudinary
         if (editingTemaLogoUrl) {
+          invalidateImageCache(editingTemaLogoUrl);
           const publicId = getCloudinaryPublicId(editingTemaLogoUrl);
           if (publicId) deleteFromCloudinary({ publicId, imageUrl: editingTemaLogoUrl }).catch(e => console.warn('No se pudo borrar imagen antigua:', e));
         }
       }
-      const { error } = await supabase.from('temas').update(updateData).match({ id: editingTemaId });
+      const temaIdNum = parseInt(editingTemaId, 10);
+      const { error } = await supabase.from('temas').update(updateData).eq('id', temaIdNum);
       if (error) return alert(`Error al actualizar el tema: ${error.message}`);
       void logAuditEvent({
         entityType: 'tema',
@@ -455,8 +461,9 @@ const Temario: React.FC = () => {
         },
       });
 
+      invalidateCatalogCache();
       alert('Tema actualizado con éxito.');
-      fetchTemas();
+      await fetchTemas();
       resetAllForms();
     } catch (err: any) {
       console.error('Error al actualizar tema:', err);
@@ -477,13 +484,18 @@ const Temario: React.FC = () => {
       if (editingSubtemaNewLogoFile) {
         const upload = await uploadToCloudinary(editingSubtemaNewLogoFile, { folder: 'temas', optimizeImage: true });
         updateData.logo_url = upload.secure_url;
-        // Borrar imagen antigua de Cloudinary
+        if (upload.secure_url) {
+          invalidateImageCache(upload.secure_url);
+        }
+        // Borrar imagen antigua de Cloudflare R2 / Cloudinary
         if (editingSubtemaLogoUrl) {
+          invalidateImageCache(editingSubtemaLogoUrl);
           const publicId = getCloudinaryPublicId(editingSubtemaLogoUrl);
           if (publicId) deleteFromCloudinary({ publicId, imageUrl: editingSubtemaLogoUrl }).catch(e => console.warn('No se pudo borrar imagen antigua:', e));
         }
       }
-      const { error } = await supabase.from('subtemas').update(updateData).match({ id: editingSubtemaId });
+      const subtemaIdNum = parseInt(editingSubtemaId, 10);
+      const { error } = await supabase.from('subtemas').update(updateData).eq('id', subtemaIdNum);
       if (error) return alert(`Error al actualizar el subtema: ${error.message}`);
       void logAuditEvent({
         entityType: 'subtema',
@@ -496,6 +508,8 @@ const Temario: React.FC = () => {
         },
       });
 
+      invalidateCatalogCache();
+      setSubtemasReloadTick(prev => prev + 1);
       alert('Subtema actualizado con éxito.');
       resetAllForms();
     } catch (err: any) {

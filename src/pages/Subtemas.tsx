@@ -73,6 +73,7 @@ const StandardSubtemas: React.FC = () => {
   const [temaLogoFailed, setTemaLogoFailed] = useState(false);
   const [temaLogoSrc, setTemaLogoSrc] = useState('');
   const [failedSubtemaLogos, setFailedSubtemaLogos] = useState<Record<number, boolean>>({});
+  const [subtemaFallbackUrls, setSubtemaFallbackUrls] = useState<Record<number, string>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [allTemas, setAllTemas] = useState<Tema[]>((initialAllTemas as unknown as Tema[]) ?? []);
 
@@ -329,13 +330,17 @@ const StandardSubtemas: React.FC = () => {
                       {subtema.logo_url && !failedSubtemaLogos[subtema.id] ? (
                         <div className="subtema-card-img-wrap" style={styles.subtemaLogoWrap}>
                           <img
-                            src={getCloudinaryImageUrl(subtema.logo_url, 'thumb')}
+                            src={subtemaFallbackUrls[subtema.id] || getCloudinaryImageUrl(subtema.logo_url, 'thumb')}
                             alt={subtema.nombre}
                             style={styles.subtemaLogo}
                             loading="lazy"
                             decoding="async"
                             onError={() => {
-                              setFailedSubtemaLogos((prev) => ({ ...prev, [subtema.id]: true }));
+                              if (!subtemaFallbackUrls[subtema.id] && subtema.logo_url) {
+                                setSubtemaFallbackUrls((prev) => ({ ...prev, [subtema.id]: subtema.logo_url }));
+                              } else {
+                                setFailedSubtemaLogos((prev) => ({ ...prev, [subtema.id]: true }));
+                              }
                             }}
                           />
                         </div>
