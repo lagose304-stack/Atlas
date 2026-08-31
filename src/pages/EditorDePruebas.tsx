@@ -1467,16 +1467,6 @@ const EditorDePruebas: React.FC = () => {
                 ...s.referenceModalSidebar,
                 ...(referencePicker.mode === 'upload' ? { display: 'none' } : {}),
               }}>
-                <div style={s.referenceModalCard}>
-                  <span style={s.metaLabel}>Flujo</span>
-                  <strong style={s.referenceModalFlowTitle}>
-                    Todo el atlas → tema → subtema → placa
-                  </strong>
-                  <p style={s.referenceModalFlowText}>
-                    Puedes usar una placa de cualquier parcial, sin importar el alcance de la prueba.
-                  </p>
-                </div>
-
                 <div style={s.referenceAccordionCard}>
                   <button
                     type="button"
@@ -1485,7 +1475,7 @@ const EditorDePruebas: React.FC = () => {
                       setReferencePicker(prev => (prev ? { ...prev, step: 'parcial' } : prev));
                     }}
                   >
-                    <span>
+                    <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
                       <span style={s.referenceAccordionLabel}>Parcial</span>
                       <strong style={s.referenceAccordionValue}>
                         {referencePicker.partialKey
@@ -1535,7 +1525,7 @@ const EditorDePruebas: React.FC = () => {
                         }
                       }}
                     >
-                      <span>
+                      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
                         <span style={s.referenceAccordionLabel}>Tema</span>
                         <strong style={s.referenceAccordionValue}>
                           {selectedReferenceTema?.nombre ?? 'Selecciona un tema'}
@@ -1601,7 +1591,7 @@ const EditorDePruebas: React.FC = () => {
                         }
                       }}
                     >
-                      <span>
+                      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
                         <span style={s.referenceAccordionLabel}>Subtema</span>
                         <strong style={s.referenceAccordionValue}>
                           {selectedReferenceSubtema?.nombre ?? 'Selecciona un subtema'}
@@ -2253,6 +2243,8 @@ const s: Record<string, React.CSSProperties> = {
   },
   referenceModal: {
     width: 'min(1180px, 100%)',
+    height: 'min(88vh, 860px)',
+    minHeight: 'min(580px, 92vh)',
     maxHeight: 'min(88vh, 920px)',
     overflow: 'hidden',
     borderRadius: '28px',
@@ -2336,10 +2328,11 @@ const s: Record<string, React.CSSProperties> = {
   },
   referenceModalBody: {
     display: 'grid',
-    gridTemplateColumns: '320px minmax(0, 1fr)',
+    gridTemplateColumns: '340px minmax(0, 1fr)',
     gap: '18px',
     padding: '18px',
     minHeight: 0,
+    flex: 1,
     overflow: 'hidden',
   },
   referenceModalBodyUpload: {
@@ -2349,8 +2342,10 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
-    overflow: 'auto',
-    paddingRight: '4px',
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    paddingRight: '6px',
+    paddingBottom: '24px',
   },
   referenceModalCard: {
     borderRadius: '22px',
@@ -2363,11 +2358,12 @@ const s: Record<string, React.CSSProperties> = {
     gap: '10px',
   },
   referenceAccordionCard: {
-    borderRadius: '22px',
+    borderRadius: '20px',
     border: '1px solid #dbeafe',
     background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-    boxShadow: '0 12px 24px rgba(15,23,42,0.06)',
+    boxShadow: '0 8px 18px rgba(15,23,42,0.06)',
     overflow: 'hidden',
+    flexShrink: 0,
   },
   referenceAccordionHeader: {
     width: '100%',
@@ -2396,6 +2392,7 @@ const s: Record<string, React.CSSProperties> = {
     color: '#0f172a',
     fontSize: '0.95rem',
     lineHeight: 1.4,
+    wordBreak: 'break-word',
   },
   referenceAccordionState: {
     flexShrink: 0,
