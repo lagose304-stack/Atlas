@@ -10,7 +10,14 @@ import LoadingToast from '../components/LoadingToast';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
-import { getCachedSubtemas, getQuickSubtemas } from '../services/catalogService';
+import {
+  getCachedTemas,
+  getQuickTemas,
+  getCachedSubtemas,
+  getQuickSubtemas,
+  getQuickPlacasForSubtema,
+  invalidatePlacasCache,
+} from '../services/catalogService';
 import { usePreservedParam } from '../hooks/usePreservedParam';
 
 interface Tema {
@@ -98,17 +105,32 @@ function extractAllBlockImageUrls(b: { block_type: string; content: Record<strin
 const EliminarPlacas: React.FC = () => {
   const { user } = useAuth();
 
-  const [temas,    setTemas]    = useState<Tema[]>([]);
+  const initialTemas = getQuickTemas() ?? [];
+  const [temas,    setTemas]    = useState<Tema[]>(initialTemas as Tema[]);
   const [subtemas, setSubtemas] = useState<Subtema[]>([]);
   const [placas,   setPlacas]   = useState<Placa[]>([]);
   const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-  const [selectedTemaId,    setSelectedTemaId]    = usePreservedParam<number | null>('tema', null);
-  const [selectedSubtemaId, setSelectedSubtemaId] = usePreservedParam<number | null>('subtema', null);
-  const prevTemaRef = useRef<number | null>(selectedTemaId);
+  const [selectedTemaId, setSelectedTemaId] = usePreservedParam<number | null>('tema', null, {
+    deserialize: (raw) => {
+      const num = Number(raw);
+      return Number.isFinite(num) ? num : null;
+    },
+  });
+  const [selectedSubtemaId, setSelectedSubtemaId] = usePreservedParam<number | null>('subtema', null, {
+    deserialize: (raw) => {
+      const num = Number(raw);
+      return Number.isFinite(num) ? num : null;
+    },
+  });
 
-  const [loadingTemas,    setLoadingTemas]    = useState(true);
+  const numericTemaId = selectedTemaId !== null && selectedTemaId !== undefined ? Number(selectedTemaId) : null;
+  const numericSubtemaId = selectedSubtemaId !== null && selectedSubtemaId !== undefined ? Number(selectedSubtemaId) : null;
+
+  const prevTemaRef = useRef<number | null>(numericTemaId);
+
+  const [loadingTemas,    setLoadingTemas]    = useState(initialTemas.length === 0);
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
   const [loadingPlacas,   setLoadingPlacas]   = useState(false);
   const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
@@ -125,33 +147,31 @@ const EliminarPlacas: React.FC = () => {
   const [hoveredCard,   setHoveredCard]   = useState<number | null>(null);
 
   const fetchTemas = useCallback(async (): Promise<boolean> => {
-    setLoadingTemas(true);
+    if (temas.length === 0) {
+      setLoadingTemas(true);
+    }
     setTemasLoadError(null);
     try {
-      const { data, error } = await supabase
-        .from('temas')
-        .select('id, nombre, parcial, sort_order')
-        .order('parcial')
-        .order('sort_order', { ascending: true });
-
-      if (error) {
-        throw error;
-      }
-
-      setTemas(data ?? []);
+      const data = await getCachedTemas({ forceRefresh: temasReloadTick > 0 });
+      setTemas(data as Tema[]);
       return true;
     } catch (err) {
       console.error('Error al cargar temas en eliminar placas:', err);
-      setTemas([]);
-      setTemasLoadError('No se pudieron cargar los temas. Revisa tu conexión e inténtalo de nuevo.');
+      if (temas.length === 0) {
+        setTemas([]);
+        setTemasLoadError('No se pudieron cargar los temas. Revisa tu conexión e inténtalo de nuevo.');
+      }
       return false;
     } finally {
       setLoadingTemas(false);
     }
-  }, []);
+  }, [temas.length, temasReloadTick]);
 
   const fetchSubtemas = useCallback(async (temaId: number): Promise<boolean> => {
-    const quick = getQuickSubtemas(temaId);
+    const numTemaId = Number(temaId);
+    if (!Number.isFinite(numTemaId) || numTemaId <= 0) return false;
+
+    const quick = getQuickSubtemas(numTemaId);
     if (quick && quick.length > 0) {
       setSubtemas(quick as unknown as Subtema[]);
       setLoadingSubtemas(false);
@@ -161,12 +181,12 @@ const EliminarPlacas: React.FC = () => {
     setSubtemasLoadError(null);
 
     try {
-      const data = await getCachedSubtemas(temaId);
+      const data = await getCachedSubtemas(numTemaId, { forceRefresh: subtemasReloadTick > 0 });
       setSubtemas(data as unknown as Subtema[]);
       return true;
     } catch (err) {
       console.error('Error al cargar subtemas en eliminar placas:', err);
-      const fallback = getQuickSubtemas(temaId);
+      const fallback = getQuickSubtemas(numTemaId);
       if (fallback && fallback.length > 0) {
         setSubtemas(fallback as unknown as Subtema[]);
         return true;
@@ -177,16 +197,27 @@ const EliminarPlacas: React.FC = () => {
     } finally {
       setLoadingSubtemas(false);
     }
-  }, []);
+  }, [subtemasReloadTick]);
 
   const fetchPlacas = useCallback(async (subtemaId: number): Promise<boolean> => {
-    setLoadingPlacas(true);
+    const numSubtemaId = Number(subtemaId);
+    if (!Number.isFinite(numSubtemaId) || numSubtemaId <= 0) return false;
+
+    const quick = getQuickPlacasForSubtema(numSubtemaId);
+    if (quick && quick.placas && quick.placas.length > 0) {
+      setPlacas(quick.placas as Placa[]);
+      setPlacasConMapa(new Set(quick.placasConMapa || []));
+      setLoadingPlacas(false);
+    } else {
+      setLoadingPlacas(true);
+    }
     setPlacasLoadError(null);
+
     try {
       const { data, error } = await supabase
         .from('placas')
         .select('id, photo_url, aumento, sort_order, tema_id, subtema_id')
-        .eq('subtema_id', subtemaId)
+        .eq('subtema_id', numSubtemaId)
         .order('sort_order', { ascending: true });
 
       if (error) {
@@ -201,20 +232,24 @@ const EliminarPlacas: React.FC = () => {
         .filter((id): id is number => typeof id === 'number');
 
       if (placaIds.length > 0) {
-        const { data: interactiveMapsData, error: interactiveMapsError } = await supabase
-          .from('interactive_maps')
-          .select('placa_id, sections')
-          .in('placa_id', placaIds);
+        try {
+          const { data: interactiveMapsData, error: interactiveMapsError } = await supabase
+            .from('interactive_maps')
+            .select('placa_id, sections')
+            .in('placa_id', placaIds);
 
-        if (interactiveMapsError) {
-          console.error('Error al consultar mapas interactivos por placa en eliminar placas:', interactiveMapsError);
+          if (interactiveMapsError) {
+            console.error('Error al consultar mapas interactivos por placa en eliminar placas:', interactiveMapsError);
+            setPlacasConMapa(new Set());
+          } else {
+            const placaIdsConMapa = (interactiveMapsData ?? [])
+              .filter((row: InteractiveMapPlacaRow) => Array.isArray(row.sections) && row.sections.length > 0)
+              .map((row: InteractiveMapPlacaRow) => row.placa_id)
+              .filter((id): id is number => typeof id === 'number');
+            setPlacasConMapa(new Set(placaIdsConMapa));
+          }
+        } catch {
           setPlacasConMapa(new Set());
-        } else {
-          const placaIdsConMapa = (interactiveMapsData ?? [])
-            .filter((row: InteractiveMapPlacaRow) => Array.isArray(row.sections) && row.sections.length > 0)
-            .map((row: InteractiveMapPlacaRow) => row.placa_id)
-            .filter((id): id is number => typeof id === 'number');
-          setPlacasConMapa(new Set(placaIdsConMapa));
         }
       } else {
         setPlacasConMapa(new Set());
@@ -223,6 +258,12 @@ const EliminarPlacas: React.FC = () => {
       return true;
     } catch (err) {
       console.error('Error al cargar placas en eliminar placas:', err);
+      const fallback = getQuickPlacasForSubtema(numSubtemaId);
+      if (fallback && fallback.placas && fallback.placas.length > 0) {
+        setPlacas(fallback.placas as Placa[]);
+        setPlacasConMapa(new Set(fallback.placasConMapa || []));
+        return true;
+      }
       setPlacas([]);
       setPlacasConMapa(new Set());
       setPlacasLoadError('No se pudieron cargar las placas. Revisa tu conexión e inténtalo de nuevo.');
@@ -235,36 +276,45 @@ const EliminarPlacas: React.FC = () => {
   // Cargar temas al montar
   useEffect(() => {
     void fetchTemas();
-  }, [fetchTemas, temasReloadTick]);
+  }, [fetchTemas]);
 
   // Cargar subtemas cuando cambia el tema
   useEffect(() => {
-    if (prevTemaRef.current !== selectedTemaId) {
+    if (prevTemaRef.current !== numericTemaId) {
       if (prevTemaRef.current !== null) {
         setSelectedSubtemaId(null);
       }
-      prevTemaRef.current = selectedTemaId;
+      prevTemaRef.current = numericTemaId;
     }
-    setSubtemas([]);
-    setPlacas([]);
-    setPlacasConMapa(new Set());
-    setSelectedIds(new Set());
+
+    if (!numericTemaId) {
+      setSubtemas([]);
+      setPlacas([]);
+      setPlacasConMapa(new Set());
+      setSelectedIds(new Set());
+      setSubtemasLoadError(null);
+      setPlacasLoadError(null);
+      setPlacasReloadTick(0);
+      return;
+    }
+
     setSubtemasLoadError(null);
-    setPlacasLoadError(null);
-    setPlacasReloadTick(0);
-    if (!selectedTemaId) return;
-    void fetchSubtemas(selectedTemaId);
-  }, [selectedTemaId, subtemasReloadTick, fetchSubtemas, setSelectedSubtemaId]);
+    void fetchSubtemas(numericTemaId);
+  }, [numericTemaId, subtemasReloadTick, fetchSubtemas, setSelectedSubtemaId]);
 
   // Cargar placas cuando cambia el subtema
   useEffect(() => {
-    setPlacas([]);
-    setPlacasConMapa(new Set());
-    setSelectedIds(new Set());
+    if (!numericSubtemaId) {
+      setPlacas([]);
+      setPlacasConMapa(new Set());
+      setSelectedIds(new Set());
+      setPlacasLoadError(null);
+      return;
+    }
+
     setPlacasLoadError(null);
-    if (!selectedSubtemaId) return;
-    void fetchPlacas(selectedSubtemaId);
-  }, [selectedSubtemaId, placasReloadTick, fetchPlacas]);
+    void fetchPlacas(numericSubtemaId);
+  }, [numericSubtemaId, placasReloadTick, fetchPlacas]);
 
   const toggleSelect = (id: number) => {
     setSelectedIds(prev => {
@@ -354,8 +404,8 @@ const EliminarPlacas: React.FC = () => {
             }
           }
 
-          const selTemaObj = temas.find(t => t.id === selectedTemaId);
-          const selSubtemaObj = subtemas.find(s => s.id === selectedSubtemaId);
+          const selTemaObj = temas.find(t => Number(t.id) === numericTemaId);
+          const selSubtemaObj = subtemas.find(s => Number(s.id) === numericSubtemaId);
 
           await logPlateActivity({
             actionType: 'delete_classified',
@@ -370,18 +420,21 @@ const EliminarPlacas: React.FC = () => {
             details: {
               photo_url: placa.photo_url,
               nombre_placa: `Placa #${placa.id} - ${selSubtemaObj?.nombre || 'Placa'}`,
-              tema_id: placa.tema_id ?? selectedTemaId,
+              tema_id: placa.tema_id ?? numericTemaId,
               tema_nombre: selTemaObj?.nombre || null,
-              subtema_id: placa.subtema_id ?? selectedSubtemaId,
+              subtema_id: placa.subtema_id ?? numericSubtemaId,
               subtema_nombre: selSubtemaObj?.nombre || null,
               aumento: placa.aumento || null,
               source: 'eliminar_placas',
-              selected_tema_id: selectedTemaId,
-              selected_subtema_id: selectedSubtemaId,
+              selected_tema_id: numericTemaId,
+              selected_subtema_id: numericSubtemaId,
             },
           });
         })
       );
+      if (numericSubtemaId) {
+        invalidatePlacasCache(numericSubtemaId);
+      }
       setPlacas(prev => prev.filter(p => !selectedIds.has(p.id)));
       setPlacasConMapa((prev) => {
         if (prev.size === 0) return prev;
@@ -403,7 +456,7 @@ const EliminarPlacas: React.FC = () => {
     } finally {
       setIsDeleting(false);
     }
-  }, [selectedIds, placas, user, selectedTemaId, selectedSubtemaId]);
+  }, [selectedIds, placas, user, numericTemaId, numericSubtemaId, temas, subtemas]);
 
   const temasByParcial: Record<ParcialKey, Tema[]> = { primer: [], segundo: [], tercer: [] };
   temas.forEach(t => {
@@ -412,8 +465,8 @@ const EliminarPlacas: React.FC = () => {
     }
   });
 
-  const selectedTema    = temas.find(t => t.id === selectedTemaId)       ?? null;
-  const selectedSubtema = subtemas.find(s => s.id === selectedSubtemaId) ?? null;
+  const selectedTema    = (numericTemaId !== null ? temas.find(t => Number(t.id) === numericTemaId) : null) ?? null;
+  const selectedSubtema = (numericSubtemaId !== null ? subtemas.find(s => Number(s.id) === numericSubtemaId) : null) ?? null;
   const allSelected     = placas.length > 0 && selectedIds.size === placas.length;
   const someSelected    = selectedIds.size > 0;
   const handleGoBack = useSmartBackNavigation('/edicion');
@@ -567,8 +620,12 @@ const EliminarPlacas: React.FC = () => {
               ) : (
                 <select
                   style={s.select}
-                  value={selectedTemaId ?? ''}
-                  onChange={e => setSelectedTemaId(e.target.value ? Number(e.target.value) : null)}
+                  value={numericTemaId ?? ''}
+                  onChange={e => {
+                    const nextTema = e.target.value ? Number(e.target.value) : null;
+                    setSelectedTemaId(nextTema);
+                    setSelectedSubtemaId(null);
+                  }}
                 >
                   <option value="">— Elige un tema —</option>
                   {PARCIALES.map(({ key, label }) =>
@@ -591,13 +648,13 @@ const EliminarPlacas: React.FC = () => {
                 <div style={s.inlineLoading}><div style={s.spinnerSm} /> Cargando...</div>
               ) : (
                 <select
-                  style={{ ...s.select, ...(!selectedTemaId ? s.selectDisabled : {}) }}
-                  value={selectedSubtemaId ?? ''}
-                  disabled={!selectedTemaId || subtemas.length === 0}
+                  style={{ ...s.select, ...(!numericTemaId ? s.selectDisabled : {}) }}
+                  value={numericSubtemaId ?? ''}
+                  disabled={!numericTemaId || subtemas.length === 0}
                   onChange={e => setSelectedSubtemaId(e.target.value ? Number(e.target.value) : null)}
                 >
                   <option value="">
-                    {!selectedTemaId
+                    {!numericTemaId
                       ? '— Primero elige un tema —'
                       : subtemas.length === 0
                       ? '— Sin subtemas —'
@@ -627,7 +684,7 @@ const EliminarPlacas: React.FC = () => {
                 </div>
               )}
 
-              {subtemasLoadError && selectedTemaId && (
+              {subtemasLoadError && numericTemaId && (
                 <div style={s.loadErrorRow}>
                   <span style={s.loadErrorText}>{subtemasLoadError}</span>
                   <button
@@ -645,11 +702,11 @@ const EliminarPlacas: React.FC = () => {
         </div>
 
         {/* Grid de placas */}
-        {selectedSubtema && (
+        {numericSubtemaId !== null && (
           <div style={s.card}>
             <div style={s.cardHeader}>
               <h2 style={s.cardTitle}>
-                {selectedTema?.nombre} › {selectedSubtema.nombre}
+                {(selectedTema?.nombre || 'Tema')} › {(selectedSubtema?.nombre || 'Subtema')}
               </h2>
               <p style={s.cardSubtitle}>
                 {placas.length} {placas.length === 1 ? 'placa' : 'placas'} — haz clic para seleccionar
