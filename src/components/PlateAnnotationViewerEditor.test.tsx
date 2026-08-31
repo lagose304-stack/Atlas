@@ -623,4 +623,139 @@ describe('PlateAnnotationViewerEditor', () => {
     expect(savedPos[0].regionPoints).toBeDefined();
     expect(savedPos[0].regionPoints.length).toBeGreaterThanOrEqual(6);
   });
+
+  it('no muestra el indicador "✂️ Excluyendo" al trazar una nueva región fuera de un polígono seleccionado', () => {
+    render(
+      <PlateAnnotationViewerEditor
+        imageSrc="https://res.cloudinary.com/demo/image/upload/sample.jpg"
+        initialSenalados={['Célula Primaria']}
+        initialSenaladosPos={[
+          {
+            x: 0.25,
+            y: 0.25,
+            regionPoints: [0.1, 0.1, 0.4, 0.1, 0.4, 0.4, 0.1, 0.4],
+            regionColor: '#22c55e',
+            regionOpacity: 0.35,
+          },
+        ]}
+        onCancel={vi.fn()}
+      />
+    );
+
+    const img = screen.getByAltText(/Placa histológica de alta calidad/i);
+    Object.defineProperty(img, 'naturalWidth', { value: 1000 });
+    Object.defineProperty(img, 'naturalHeight', { value: 800 });
+    Object.defineProperty(img, 'clientWidth', { value: 1000 });
+    Object.defineProperty(img, 'clientHeight', { value: 800 });
+    Object.defineProperty(img, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 1000, height: 800, right: 1000, bottom: 800 }),
+    });
+    fireEvent.load(img);
+
+    // Seleccionar la región existente
+    const regionPath = document.querySelector('path[fill-rule="evenodd"]');
+    fireEvent.click(regionPath!);
+    expect(screen.getByText(/Detalle del Señalado/i)).toBeInTheDocument();
+
+    // Activar Bordes Múltiples para dibujar otra estructura
+    const batchBorderBtn = screen.getByRole('button', { name: /^Bordes Múltiples$/i });
+    fireEvent.click(batchBorderBtn);
+
+    // Dibujar en una zona totalmente EXTERNA a la región existente (X: 700..800, Y: 600..700)
+    const canvas = screen.getByTestId('annotation-editor-canvas');
+    fireEvent.mouseDown(canvas, { clientX: 700, clientY: 600, button: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 750, clientY: 600 });
+    fireEvent.mouseMove(canvas, { clientX: 750, clientY: 650 });
+
+    // NO debe mostrarse "✂️ Excluyendo" porque el trazo está fuera del polígono seleccionado
+    expect(screen.queryByText(/✂️ Excluyendo/i)).toBeNull();
+
+    fireEvent.mouseMove(canvas, { clientX: 700, clientY: 650 });
+    fireEvent.mouseUp(canvas, { clientX: 700, clientY: 600 });
+
+    // Al finalizar se debe crear la nueva estructura sin ser hueco
+    expect(screen.queryByText(/Hueco interior/i)).toBeNull();
+  });
+
+  it('el botón de deshacer detiene la propagación y no inicia trazos accidentales en el borde', () => {
+    render(
+      <PlateAnnotationViewerEditor
+        imageSrc="https://res.cloudinary.com/demo/image/upload/sample.jpg"
+        initialSenalados={[]}
+        initialSenaladosPos={[]}
+        onCancel={vi.fn()}
+      />
+    );
+
+    const img = screen.getByAltText(/Placa histológica de alta calidad/i);
+    Object.defineProperty(img, 'naturalWidth', { value: 1000 });
+    Object.defineProperty(img, 'naturalHeight', { value: 800 });
+    Object.defineProperty(img, 'clientWidth', { value: 1000 });
+    Object.defineProperty(img, 'clientHeight', { value: 800 });
+    Object.defineProperty(img, 'getBoundingClientRect', {
+      value: () => ({ left: 200, top: 100, width: 1000, height: 800, right: 1200, bottom: 900 }),
+    });
+    fireEvent.load(img);
+
+    // Activar herramienta Borde
+    const borderBtn = screen.getByRole('button', { name: /^Borde$/i });
+    fireEvent.click(borderBtn);
+
+    const undoBtn = screen.getByTitle(/Deshacer \(Ctrl\+Z\)/i);
+    expect(undoBtn).toBeInTheDocument();
+
+    // Clic en Deshacer fuera del canvas de imagen
+    fireEvent.pointerDown(undoBtn, { clientX: 20, clientY: 300, button: 0 });
+    fireEvent.click(undoBtn);
+
+    // No debe haber iniciado trazo a mano alzada
+    expect(screen.queryByText(/✂️ Excluyendo/i)).toBeNull();
+    const polygons = document.querySelectorAll('polygon');
+    expect(polygons.length).toBe(0);
+  });
+
+  it('no deselecciona el señalado recién creado al hacer doble clic o re-click en la herramienta activa antes de guardar', () => {
+    render(
+      <PlateAnnotationViewerEditor
+        imageSrc="https://res.cloudinary.com/demo/image/upload/sample.jpg"
+        initialSenalados={[]}
+        initialSenaladosPos={[]}
+        onCancel={vi.fn()}
+      />
+    );
+
+    const img = screen.getByAltText(/Placa histológica de alta calidad/i);
+    Object.defineProperty(img, 'naturalWidth', { value: 1000 });
+    Object.defineProperty(img, 'naturalHeight', { value: 800 });
+    Object.defineProperty(img, 'clientWidth', { value: 1000 });
+    Object.defineProperty(img, 'clientHeight', { value: 800 });
+    Object.defineProperty(img, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 1000, height: 800, right: 1000, bottom: 800 }),
+    });
+    fireEvent.load(img);
+
+    // Activar Borde
+    const borderBtn = screen.getByRole('button', { name: /^Borde$/i });
+    fireEvent.click(borderBtn);
+
+    const canvas = screen.getByTestId('annotation-editor-canvas');
+
+    // Trazar una región
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 200, button: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 250, clientY: 200 });
+    fireEvent.mouseMove(canvas, { clientX: 250, clientY: 250 });
+    fireEvent.mouseMove(canvas, { clientX: 200, clientY: 250 });
+    fireEvent.mouseUp(canvas, { clientX: 200, clientY: 200 });
+
+    // El contador debe marcar 1 colocado
+    expect(screen.getByText(/1 colocado/i)).toBeInTheDocument();
+
+    // Re-hacer clic en la herramienta Borde activa no debe reiniciar la sesión
+    fireEvent.click(borderBtn);
+    expect(screen.getByText(/1 colocado/i)).toBeInTheDocument();
+
+    // Doble clic sobre el canvas tampoco debe deseleccionar la sesión en curso
+    fireEvent.doubleClick(canvas);
+    expect(screen.getByText(/1 colocado/i)).toBeInTheDocument();
+  });
 });

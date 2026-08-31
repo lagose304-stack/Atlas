@@ -7,6 +7,7 @@ import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ImageViewerModal from '../components/ImageViewerModal';
+import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
@@ -53,6 +54,7 @@ interface SubtemaInfo {
   nombre: string;
   tema_id: number;
   sort_order?: number | null;
+  logo_url?: string | null;
   temas?: { nombre: string; parcial?: string } | { nombre: string; parcial?: string }[];
 }
 
@@ -407,19 +409,12 @@ const PlacasSubtemaContent: React.FC = () => {
         aria-label={`Abrir placa${placa.aumento ? ` con aumento ${placa.aumento}` : ''}`}
       >
         <div style={styles.thumbSquare}>
-          <img
-            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+          <ResilientPlacaThumb
+            photoUrl={placa.photo_url}
             alt="Placa histológica"
             style={styles.thumbImg}
-            loading="lazy"
-            decoding="async"
-            onError={(e) => {
-              const target = e.currentTarget;
-              const full = getCloudinaryImageUrl(placa.photo_url, 'view');
-              if (target.src !== full) {
-                target.src = full;
-              }
-            }}
+            profile="thumb"
+            subtemaLogo={subtema?.logo_url}
           />
           {(placa.aumento || hasInteractiveMap) && (
             <div style={styles.thumbBadgesRow}>

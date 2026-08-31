@@ -21,6 +21,24 @@ describe('getCloudinaryImageUrl', () => {
       .toBe('https://example.com/image.jpg');
     expect(getCloudinaryImageUrl('', 'zoom')).toBe('');
   });
+
+  it('procesa correctamente URLs que ya contienen query string ?v=... generando miniatura limpia', () => {
+    const sourceWithQuery = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Ojo/Cornea/1788064584813_d2d9d68e25e663b3c8161ed5ef8aa3ca.webp?v=1788123096603';
+    const thumbResult = getCloudinaryImageUrl(sourceWithQuery, 'thumb');
+
+    expect(thumbResult).toBe('https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Ojo/Cornea/1788064584813_d2d9d68e25e663b3c8161ed5ef8aa3ca_thumb.webp?v=1788123096603');
+    expect(thumbResult.indexOf('?')).toBe(thumbResult.lastIndexOf('?')); // Un solo '?'
+
+    const viewResult = getCloudinaryImageUrl(sourceWithQuery, 'view');
+    expect(viewResult).toBe('https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Ojo/Cornea/1788064584813_d2d9d68e25e663b3c8161ed5ef8aa3ca.webp?v=1788123096603');
+  });
+
+  it('remueve el sufijo _thumb.webp cuando se solicita perfil view o zoom desde una URL de miniatura', () => {
+    const thumbUrl = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Ojo/Cornea/1788064584813_thumb.webp';
+    const viewResult = getCloudinaryImageUrl(thumbUrl, 'view');
+
+    expect(viewResult).toBe('https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Ojo/Cornea/1788064584813.webp');
+  });
 });
 
 describe('getImageCandidateUrls', () => {

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Microscope } from 'lucide-react';
-import { getCloudinaryImageUrl, type CloudinaryImageProfile } from '../services/cloudinaryImages';
+import { getCloudinaryImageUrl, getImageCandidateUrls, type CloudinaryImageProfile } from '../services/cloudinaryImages';
 
 interface ResilientPlacaThumbProps {
   photoUrl: string;
@@ -26,6 +26,12 @@ export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [invalidationTick, setInvalidationTick] = useState(0);
+
+  // Reiniciar estado si la prop photoUrl cambia
+  useEffect(() => {
+    setCandidateIndex(0);
+    setLoaded(false);
+  }, [photoUrl]);
 
   // Escuchar invalidación de imágenes para actualizar en vivo
   useEffect(() => {
@@ -53,13 +59,16 @@ export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
     const list: string[] = [];
     if (!photoUrl) return list;
 
-    // 1. URL resuelta estándar
-    const resolved = getCloudinaryImageUrl(photoUrl, profile);
-    if (resolved) list.push(resolved);
+    // 1. URLs candidatas en cascada desde getImageCandidateUrls
+    const baseList = getImageCandidateUrls(photoUrl, profile);
+    baseList.forEach(url => {
+      if (url && !list.includes(url)) list.push(url);
+    });
 
-    // 2. Si la URL contiene sin_clasificar, intentar también con extensión .webp explícita
-    if (photoUrl.startsWith('http') && !list.includes(photoUrl)) {
-      list.push(photoUrl);
+    // 2. Fallback URL limpia directa sin query string
+    const cleanUrl = photoUrl.trim().split('?')[0];
+    if (cleanUrl && !list.includes(cleanUrl)) {
+      list.push(cleanUrl);
     }
 
     // 3. Fallback con subtema logo

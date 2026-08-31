@@ -538,6 +538,12 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Tool switcher with clean session reset
   const handleSelectTool = useCallback((newTool: EditorTool) => {
+    // Si se hace clic en la misma herramienta que ya está activa, mantener sesión y selección intactas
+    if (newTool === activeTool) {
+      setSidebarOpen(true);
+      return;
+    }
+
     // Si había elementos en la sesión actual con un nombre escrito, asegurar que lo conserven
     if (sessionMarkerIds.length > 0 && currentCreationLabel.trim()) {
       const trimmed = currentCreationLabel.trim();
@@ -556,13 +562,13 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       return;
     }
 
-    // Al seleccionar cualquier herramienta de dibujo/creación:
+    // Al seleccionar cualquier herramienta de dibujo/creación distinta:
     setActiveTool(newTool);
     setCurrentCreationLabel(singlePickerMode && targetLabel ? targetLabel : '');
     setSessionMarkerIds([]);
     setSelectedMarkerId(null);
     setSidebarOpen(true);
-  }, [currentCreationLabel, sessionMarkerIds, singlePickerMode, targetLabel]);
+  }, [activeTool, currentCreationLabel, sessionMarkerIds, singlePickerMode, targetLabel]);
 
   // Canvas zoom, pan, rotation
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -633,14 +639,28 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   }, []);
 
   const handleUndo = useCallback(() => {
-    if (drawingPolygonPoints.length > 0) {
-      setDrawingPolygonPoints(prev => prev.slice(0, -2));
+    // Si hay un trazo a mano alzada en curso, cancelarlo limpiamente sin afectar historial
+    if (drawingPolygonPoints.length > 0 || isDrawingFreehandRef.current) {
+      isDrawingFreehandRef.current = false;
+      setIsDrawingFreehand(false);
+      drawingPolygonPointsRef.current = [];
+      setDrawingPolygonPoints([]);
       return;
     }
     if (historyStack.length === 0) return;
     const previous = historyStack[historyStack.length - 1];
     setHistoryStack(prev => prev.slice(0, -1));
     setMarkers(previous);
+
+    // Mantener la coherencia de la selección tras retroceder cambios
+    setSelectedMarkerId(prevId => {
+      if (!prevId) return null;
+      const stillExists = previous.some(m => m.id === prevId);
+      if (stillExists) return prevId;
+      return previous.length > 0 ? previous[previous.length - 1].id : null;
+    });
+    setSelectedVertex(null);
+    setSelectedHoleIndex(null);
   }, [drawingPolygonPoints.length, historyStack]);
 
   // Lock body scroll
@@ -978,42 +998,23 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Finalize Freehand Polygon Region
   const finalizeFreehandPolygon = useCallback((rawPoints: number[]) => {
-    if (rawPoints.length < 2) {
+    // Si fueron menos de 6 coordenadas (menos de 3 puntos), fue un toque o clic accidental sin trazo
+    if (rawPoints.length < 6) {
       setDrawingPolygonPoints([]);
+      const tapX = rawPoints[0];
+      const tapY = rawPoints[1];
+      // Si se hizo un toque puntual sobre una región existente, seleccionarla
+      const clickedMarker = markers.slice().reverse().find(m =>
+        m.regionPoints && m.regionPoints.length >= 6 && pointInPolygon(tapX, tapY, m.regionPoints)
+      );
+      if (clickedMarker) {
+        setSelectedMarkerId(clickedMarker.id);
+      }
       return;
     }
 
-    let ptsToUse = rawPoints;
-    if (rawPoints.length === 2) {
-      const cx = rawPoints[0], cy = rawPoints[1];
-      const r = 0.015;
-      ptsToUse = [
-        cx, cy - r,
-        cx + r * 0.7, cy - r * 0.7,
-        cx + r, cy,
-        cx + r * 0.7, cy + r * 0.7,
-        cx, cy + r,
-        cx - r * 0.7, cy + r * 0.7,
-        cx - r, cy,
-        cx - r * 0.7, cy - r * 0.7,
-      ];
-    } else if (rawPoints.length === 4) {
-      const p1x = rawPoints[0], p1y = rawPoints[1];
-      const p2x = rawPoints[2], p2y = rawPoints[3];
-      const midX = (p1x + p2x) / 2;
-      const midY = (p1y + p2y) / 2;
-      const dx = p2x - p1x;
-      const dy = p2y - p1y;
-      ptsToUse = [
-        p1x, p1y,
-        midX - dy * 0.5, midY + dx * 0.5,
-        p2x, p2y,
-        midX + dy * 0.5, midY - dx * 0.5,
-      ];
-    }
-
-    const simplified = simplifyPoints(ptsToUse, 0.0015);
-    const finalPoints = simplified.length >= 6 ? simplified : ptsToUse;
+    const simplified = simplifyPoints(rawPoints, 0.0015);
+    const finalPoints = simplified.length >= 6 ? simplified : rawPoints;
 
     pushHistory(markers);
     const count = finalPoints.length / 2;
@@ -1041,11 +1042,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       candidateMarker &&
       candidateMarker.regionPoints &&
       candidateMarker.regionPoints.length >= 6 &&
-      (
-        pointInPolygon(centroidX, centroidY, candidateMarker.regionPoints) ||
-        pointInPolygon(finalPoints[0], finalPoints[1], candidateMarker.regionPoints) ||
-        finalPoints.some((_, i) => i % 2 === 0 && pointInPolygon(finalPoints[i], finalPoints[i + 1], candidateMarker.regionPoints!))
-      )
+      pointInPolygon(centroidX, centroidY, candidateMarker.regionPoints) &&
+      pointInPolygon(finalPoints[0], finalPoints[1], candidateMarker.regionPoints)
     );
 
     if (isDrawnInsideCandidate && candidateMarker) {
@@ -1163,7 +1161,23 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
     const hasSelectedPolygon = Boolean(activeSelectedMarker && activeSelectedMarker.regionPoints && activeSelectedMarker.regionPoints.length >= 6);
 
+    const img = imageRef.current;
+    const rect = img?.getBoundingClientRect();
+    const isInsideImage = Boolean(
+      rect &&
+      rect.width > 0 &&
+      rect.height > 0 &&
+      e.clientX >= rect.left &&
+      e.clientX <= rect.right &&
+      e.clientY >= rect.top &&
+      e.clientY <= rect.bottom
+    );
+
     if ((activeTool === 'border' || activeTool === 'batch-border' || hasSelectedPolygon) && !reassigningTipMarkerId && e.button === 0) {
+      if (!isInsideImage) {
+        // Clic fuera de la placa: no iniciar trazo a mano alzada ni selección accidental
+        return;
+      }
       const coords = clientToImageCoords(e.clientX, e.clientY);
       if (!coords) return;
       const pointerId = 'pointerId' in e ? (e as React.PointerEvent).pointerId : undefined;
@@ -1283,6 +1297,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   // Double-click outside any marker deselects the current selection and reveals all markers
   const handleCanvasDoubleClick = (event: React.MouseEvent) => {
     event.stopPropagation();
+    // Si estamos en plena creación de señalados (borde individual o múltiple) o con sesión activa, no deseleccionar
+    if (sessionMarkerIds.length > 0 || activeTool === 'border' || activeTool === 'batch-border') {
+      return;
+    }
     setSelectedMarkerId(null);
     setSelectedVertex(null);
     setSelectedHoleIndex(null);
@@ -1323,6 +1341,11 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         setSelectedVertex(null);
         setSelectedHoleIndex(null);
       }
+      return;
+    }
+
+    // Para herramientas de borde libre, los clics aislados no deben deseleccionar ni agregar registros redundantes
+    if (activeTool === 'border' || activeTool === 'batch-border') {
       return;
     }
 
@@ -1804,7 +1827,12 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       >
         {/* Top Left Title & Topic Info */}
         {(temaNombre || subtemaNombre) && (
-          <div style={{ position: 'absolute', top: 16, left: 86, zIndex: 30, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: 'absolute', top: 16, left: 86, zIndex: 30, display: 'flex', alignItems: 'center', gap: 10 }}
+          >
             <div
               style={{
                 background: 'rgba(255, 255, 255, 0.94)',
@@ -1830,6 +1858,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         {/* Top Center Toast Notification (Guardando / Guardado con éxito) */}
         {(isSavingLocally || saveSuccessNotification) && (
           <div
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             style={{
               position: 'absolute',
               top: 18,
@@ -1871,7 +1902,12 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
         {/* Top Right Controls when Sidebar is Closed */}
         {!sidebarOpen && (
-          <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 30 }}>
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: 'absolute', top: 16, right: 16, zIndex: 30 }}
+          >
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
@@ -1897,6 +1933,12 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
         {/* VERTICAL STUDIO TOOLBAR (Lado Izquierdo, responsivo y autocontenido sin desbordamiento) */}
         <div
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
           style={{
             position: 'absolute',
             top: '50%',
@@ -2208,7 +2250,12 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
               type="button"
               title="Deshacer (Ctrl+Z)"
               disabled={historyStack.length === 0 && drawingPolygonPoints.length === 0}
-              onClick={handleUndo}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUndo();
+              }}
               style={{
                 border: 'none',
                 background: 'transparent',
@@ -2757,7 +2804,12 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
               {/* Live Freehand Polygon / Exclusion Zone Drawing In-Progress */}
               {drawingPolygonPoints.length >= 2 && (() => {
-                const isExclusionDrawing = Boolean(activeSelectedMarker && activeSelectedMarker.regionPoints && activeSelectedMarker.regionPoints.length >= 6);
+                const isExclusionDrawing = Boolean(
+                  activeSelectedMarker &&
+                  activeSelectedMarker.regionPoints &&
+                  activeSelectedMarker.regionPoints.length >= 6 &&
+                  pointInPolygon(drawingPolygonPoints[0], drawingPolygonPoints[1], activeSelectedMarker.regionPoints)
+                );
                 const strokePointsStr = Array.from({ length: drawingPolygonPoints.length / 2 }, (_, i) =>
                   `${drawingPolygonPoints[i * 2] * imageSize.width},${drawingPolygonPoints[i * 2 + 1] * imageSize.height}`
                 ).join(' ');

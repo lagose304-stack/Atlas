@@ -264,6 +264,25 @@ function r2DevServerPlugin(): Plugin {
                 }));
               }
 
+              // También mover la miniatura asociada si existe
+              const fromThumb = matchedSourceKey.replace(/\.[^.]+$/, '') + '_thumb.webp';
+              const toThumb = toPublicId.replace(/\.[^.]+$/, '') + '_thumb.webp';
+              try {
+                await r2Client.send(new CopyObjectCommand({
+                  Bucket: r2BucketName,
+                  CopySource: `${r2BucketName}/${fromThumb}`,
+                  Key: toThumb,
+                }));
+                if (fromThumb !== toThumb) {
+                  await r2Client.send(new DeleteObjectCommand({
+                    Bucket: r2BucketName,
+                    Key: fromThumb,
+                  }));
+                }
+              } catch {
+                // Miniatura previa puede no existir
+              }
+
               const secureUrl = `${r2PublicDomain}/${toPublicId}`;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ secure_url: secureUrl, public_id: toPublicId }));

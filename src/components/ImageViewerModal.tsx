@@ -574,7 +574,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     setSavePlateSuccess(false);
 
     try {
-      let finalPhotoUrl = currentSrc;
+      let finalPhotoUrl = currentSrc.trim().split('?')[0];
 
       // 1. Si hay una nueva imagen pendiente de actualización (solo Administrador)
       if (pendingImageFile) {
@@ -585,7 +585,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             { optimizeForPlaque: true }
           );
           if (replaceResult?.secure_url) {
-            finalPhotoUrl = replaceResult.secure_url;
+            finalPhotoUrl = replaceResult.secure_url.trim().split('?')[0];
           }
         } catch (replaceErr: any) {
           console.error('Error al reemplazar imagen física de la placa:', replaceErr);
@@ -615,7 +615,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
       // Calcular diff de cambios legibles para la auditoría
       const beforeState: PlateComparisonState = {
-        photo_url: currentSrc,
+        photo_url: currentSrc.trim().split('?')[0],
         aumento: currentAumento,
         tincion: currentTincion,
         comentario: currentComentario,
@@ -664,6 +664,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       // 4. Invalidar cachés locales
       if (pendingImageFile) {
         invalidateImageCache(finalPhotoUrl);
+        setPendingImageFile(null);
       }
       if (subtemaId) {
         invalidatePlacasCache(subtemaId);
@@ -671,6 +672,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
       // 5. Actualizar estado local del visor inmediatamente
       setCurrentSrc(finalPhotoUrl);
+      setCurrentSrcZoom(finalPhotoUrl);
       setCurrentAumento(editAumento);
       setCurrentTincion(editTincion.trim());
       setCurrentComentario(editComentario.trim());

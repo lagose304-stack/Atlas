@@ -27,7 +27,7 @@ const memoryImageVersions: Record<string, number> = getStoredImageVersions();
 export const invalidateImageCache = (photoUrlOrStorageKey: string): void => {
   if (!photoUrlOrStorageKey) return;
   const now = Date.now();
-  const trimmed = photoUrlOrStorageKey.trim();
+  const trimmed = photoUrlOrStorageKey.trim().split('?')[0];
   memoryImageVersions[trimmed] = now;
 
   // Extraer también versión normalizada/limpia para asegurar matching
@@ -67,25 +67,28 @@ export const getCloudinaryImageUrl = (
     return trimmed;
   }
 
+  // 1. Separar cualquier query string existente (ej: ?v=123 o ?width=...)
+  const [urlWithoutQuery, existingQuery] = trimmed.split('?');
+
   // Detectar si la URL ya tiene o requiere versión de cache-busting
-  const cleanOriginal = trimmed
+  const cleanOriginal = urlWithoutQuery
     .replace(/^https?:\/\/[^/]+\//, '')
     .replace(/^atlas-media\//i, '')
     .replace(/^\/+/, '');
-  const version = memoryImageVersions[trimmed] || memoryImageVersions[cleanOriginal] || null;
+  const version = memoryImageVersions[urlWithoutQuery] || memoryImageVersions[cleanOriginal] || memoryImageVersions[trimmed] || null;
 
-  let path = trimmed;
-  if (trimmed.includes('res.cloudinary.com')) {
-    path = trimmed.replace(/^https?:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/(v\d+\/)?/, '');
+  let path = urlWithoutQuery;
+  if (urlWithoutQuery.includes('res.cloudinary.com')) {
+    path = urlWithoutQuery.replace(/^https?:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/(v\d+\/)?/, '');
     path = path.replace(/^(?:[a-z]{1,3}_[^/]+(?:,[a-z]{1,3}_[^/]+)*\/)+/, '');
-  } else if (trimmed.startsWith(R2_PUBLIC_DOMAIN)) {
-    path = trimmed.slice(R2_PUBLIC_DOMAIN.length);
-  } else if (/^https?:\/\//i.test(trimmed) && !trimmed.includes('.r2.dev')) {
-    if (version) {
-      const sep = trimmed.includes('?') ? '&' : '?';
-      return `${trimmed}${sep}v=${version}`;
+  } else if (urlWithoutQuery.startsWith(R2_PUBLIC_DOMAIN)) {
+    path = urlWithoutQuery.slice(R2_PUBLIC_DOMAIN.length);
+  } else if (/^https?:\/\//i.test(urlWithoutQuery) && !urlWithoutQuery.includes('.r2.dev')) {
+    const v = version || (existingQuery ? existingQuery.replace(/^v=/, '') : null);
+    if (v) {
+      return `${urlWithoutQuery}?v=${v}`;
     }
-    return trimmed;
+    return urlWithoutQuery;
   }
 
   let cleanKey = path
@@ -120,8 +123,9 @@ export const getCloudinaryImageUrl = (
   }
 
   const finalUrl = `${R2_PUBLIC_DOMAIN}/${cleanKey}`;
-  if (version) {
-    return `${finalUrl}?v=${version}`;
+  const effectiveVersion = version || (existingQuery ? existingQuery.replace(/^v=/, '') : null);
+  if (effectiveVersion) {
+    return `${finalUrl}?v=${effectiveVersion}`;
   }
 
   return finalUrl;
@@ -149,29 +153,23 @@ export const getImageCandidateUrls = (
     }
   }
 
-  // 3. URL directa original de la BD si es HTTP y diferente
+  // 3. URL directa original de la BD sin query
+  const cleanOriginal = trimmed.split('?')[0];
+  if (/^https?:\/\//i.test(cleanOriginal) && !list.includes(cleanOriginal)) {
+    list.push(cleanOriginal);
+  }
+
+  // 4. URL con query original si difería
   if (/^https?:\/\//i.test(trimmed) && !list.includes(trimmed)) {
     list.push(trimmed);
   }
 
-  // 4. Fallback con extensión original en R2 si era jpg/png
-  if (trimmed.match(/\.(jpe?g|png|bmp|tiff?)$/i)) {
-    const extMatch = trimmed.match(/\.(jpe?g|png|bmp|tiff?)$/i);
-    if (extMatch && resolved.endsWith('.webp')) {
-      const originalExtUrl = resolved.replace(/\.webp$/, extMatch[0]);
-      if (!list.includes(originalExtUrl)) {
-        list.push(originalExtUrl);
-      }
-    }
-  }
-
-  // 5. Versión anti-caché con timestamp
-  const primary = list[0] || trimmed;
-  if (primary && primary.startsWith('http')) {
-    const sep = primary.includes('?') ? '&' : '?';
-    const timestamped = `${primary}${sep}t=${Date.now()}`;
-    if (!list.includes(timestamped)) {
-      list.push(timestamped);
+  // 5. Fallback con extensión original en R2 si era jpg/png
+  const extMatch = cleanOriginal.match(/\.(jpe?g|png|bmp|tiff?)$/i);
+  if (extMatch && resolved.includes('.webp')) {
+    const originalExtUrl = resolved.replace(/\.webp(\?.*)?$/, extMatch[0]);
+    if (!list.includes(originalExtUrl)) {
+      list.push(originalExtUrl);
     }
   }
 

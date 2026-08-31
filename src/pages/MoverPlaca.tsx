@@ -628,7 +628,7 @@ const MoverPlaca: React.FC = () => {
       const isLocationChanging = (editTemaId !== selectedPlaca.tema_id || editSubtemaId !== selectedPlaca.subtema_id) &&
         toTemaObj != null && toSubtemaObj != null;
 
-      let finalPhotoUrl = selectedPlaca.photo_url;
+      let finalPhotoUrl = selectedPlaca.photo_url.trim().split('?')[0];
 
       // 1. Si hay una nueva imagen pendiente de actualización (solo Administrador)
       if (pendingImageFile) {
@@ -639,7 +639,7 @@ const MoverPlaca: React.FC = () => {
             { optimizeForPlaque: true }
           );
           if (replaceResult?.secure_url) {
-            finalPhotoUrl = replaceResult.secure_url;
+            finalPhotoUrl = replaceResult.secure_url.trim().split('?')[0];
           }
         } catch (replaceErr: any) {
           console.error('Error al reemplazar imagen física de la placa:', replaceErr);
@@ -658,7 +658,7 @@ const MoverPlaca: React.FC = () => {
           try {
             const moveResult = await moveCloudinaryImage(fromPublicId, targetPublicId);
             if (moveResult?.secure_url) {
-              finalPhotoUrl = moveResult.secure_url;
+              finalPhotoUrl = moveResult.secure_url.trim().split('?')[0];
             }
           } catch (moveErr) {
             console.warn('Advertencia al mover imagen en Cloudflare R2 al mover placa:', moveErr);

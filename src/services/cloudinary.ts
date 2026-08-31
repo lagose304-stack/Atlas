@@ -245,32 +245,41 @@ export const replaceCloudinaryImage = async (
     throw new Error('Se requiere la ruta o URL original para reemplazar la imagen.');
   }
 
-  const rawKey = getCloudinaryPublicId(targetKeyOrUrl);
-  let cleanKey = rawKey
+  // 1. Quitar cualquier query string previo (ej: ?v=...)
+  const cleanTarget = targetKeyOrUrl.trim().split('?')[0];
+
+  const rawKey = getCloudinaryPublicId(cleanTarget);
+  const oldKey = rawKey
     .replace(/^\/+/, '')
     .replace(/^atlas-media\//i, '')
-    .replace(/^atlas\//i, '');
+    .replace(/^atlas\//i, '')
+    .replace(/_thumb\.webp$/i, '.webp');
 
-  if (!cleanKey.endsWith('.webp') && !cleanKey.includes('.')) {
-    cleanKey += '.webp';
-  } else {
-    cleanKey = cleanKey.replace(/\.(jpe?g|png|bmp|tiff?)$/i, '.webp');
-  }
+  // 2. Extraer la carpeta de la placa existente (ej. 'placas/Ojo/Cornea')
+  const lastSlash = oldKey.lastIndexOf('/');
+  const folder = lastSlash !== -1 ? oldKey.substring(0, lastSlash) : (options?.folder || 'placas/sin_clasificar');
 
-  // 1. Optimizar imagen principal a WebP de alta fidelidad diagnóstica
+  // 3. Generar una clave ÚNICA con timestamp nuevo para invalidar por completo cualquier caché previo (navegador y CDN)
+  const timestamp = Date.now();
+  const rawFileName = slugify(file.name || 'placa').replace(/\.[^.]+$/, '');
+  const cleanName = rawFileName.replace(/^\d+_/, '') || 'placa';
+  const newKey = `${folder}/${timestamp}_${cleanName}.webp`;
+
+  // 4. Optimizar imagen principal a WebP de alta fidelidad diagnóstica
   const webpFile = await convertAndOptimizeToWebP(file, {
     isPlaque: options?.optimizeForPlaque ?? true,
     customQuality: options?.quality,
     customMaxDimension: options?.maxDimension,
   });
 
-  // 2. Generar miniatura optimizada para compatibilidad con Cloudflare Pages y backend
+  // 5. Generar miniatura optimizada para compatibilidad con Cloudflare Pages y backend
   const thumbFile = await generateWebPThumbnail(webpFile);
 
   const formData = new FormData();
   formData.append('file', webpFile);
   formData.append('thumb', thumbFile);
-  formData.append('targetKey', cleanKey);
+  formData.append('targetKey', newKey);
+  formData.append('target_key', newKey);
 
   const uploadUrl = isUsingEdgeFunctions
     ? '/api/images-upload'
@@ -286,7 +295,17 @@ export const replaceCloudinaryImage = async (
     });
 
     if (data?.secure_url) {
-      return data;
+      // 6. Eliminar el archivo antiguo y su miniatura en Cloudflare R2 para no acumular archivos huérfanos
+      if (oldKey && oldKey !== newKey) {
+        deleteFromCloudinary({ publicId: oldKey }).catch((delErr) => {
+          console.warn('[replaceCloudinaryImage] No se pudo borrar el archivo antiguo en R2:', delErr);
+        });
+      }
+
+      return {
+        secure_url: data.secure_url.split('?')[0],
+        public_id: data.public_id || newKey,
+      };
     }
 
     throw new Error('No se pudo obtener la confirmación del reemplazo de imagen.');

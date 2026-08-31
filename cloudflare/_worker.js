@@ -71,15 +71,22 @@ const handleUpload = async (request, env) => {
   try {
     const formData = await request.formData();
     const file = formData.get('file');
-    const folder = ((formData.get('folder')) || 'general').replace(/^\/+|\/+$/g, '');
+    const thumb = formData.get('thumb');
+    const targetKey = (formData.get('targetKey') || formData.get('target_key') || '').toString().trim().replace(/^\/+/, '');
+    const folder = ((formData.get('folder')) || 'general').toString().replace(/^\/+|\/+$/g, '');
 
     if (!file || typeof file === 'string') {
       return json(400, { message: 'No se envió ningún archivo de imagen' });
     }
 
-    const cleanName = sanitizeFileName(file.name);
-    const timestamp = Date.now();
-    const uniqueKey = `${folder}/${timestamp}_${cleanName}`;
+    let uniqueKey = '';
+    if (targetKey) {
+      uniqueKey = targetKey;
+    } else {
+      const cleanName = sanitizeFileName(file.name);
+      const timestamp = Date.now();
+      uniqueKey = `${folder}/${timestamp}_${cleanName}`;
+    }
 
     const r2Bucket = env.R2_BUCKET;
     const r2PublicDomain = (env.R2_PUBLIC_DOMAIN || 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev').replace(/\/+$/, '');
@@ -87,13 +94,33 @@ const handleUpload = async (request, env) => {
     if (r2Bucket && typeof r2Bucket.put === 'function') {
       const buffer = await file.arrayBuffer();
       const contentType = file.type || 'image/webp';
+      const cacheControl = targetKey
+        ? 'public, max-age=60, s-maxage=300, must-revalidate'
+        : 'public, max-age=31536000, immutable';
 
+      // 1. Guardar archivo principal
       await r2Bucket.put(uniqueKey, buffer, {
         httpMetadata: {
           contentType,
-          cacheControl: 'public, max-age=31536000, immutable',
+          cacheControl,
         },
       });
+
+      // 2. Guardar miniatura _thumb.webp si fue provista
+      if (thumb && typeof thumb !== 'string') {
+        try {
+          const thumbBuffer = await thumb.arrayBuffer();
+          const thumbKey = uniqueKey.replace(/\.[^.]+$/, '') + '_thumb.webp';
+          await r2Bucket.put(thumbKey, thumbBuffer, {
+            httpMetadata: {
+              contentType: 'image/webp',
+              cacheControl,
+            },
+          });
+        } catch (thumbErr) {
+          console.warn('[Cloudflare Worker R2] Error guardando miniatura:', thumbErr);
+        }
+      }
 
       return json(200, {
         secure_url: `${r2PublicDomain}/${uniqueKey}`,
@@ -139,6 +166,8 @@ const handleDelete = async (request, env) => {
     const r2Bucket = env.R2_BUCKET;
     if (r2Bucket && typeof r2Bucket.delete === 'function') {
       await r2Bucket.delete(key);
+      const thumbKey = key.replace(/\.[^.]+$/, '') + '_thumb.webp';
+      await r2Bucket.delete(thumbKey).catch(() => {});
       return json(200, { message: 'Operación de eliminación procesada con éxito.', success: true });
     }
 
@@ -198,12 +227,30 @@ const handleMove = async (request, env) => {
       }
 
       if (sourceObj) {
+        // 1. Mover imagen principal
         await r2Bucket.put(toPublicId, sourceObj.body, {
           httpMetadata: sourceObj.httpMetadata,
         });
 
         if (matchedKey !== toPublicId) {
           await r2Bucket.delete(matchedKey);
+        }
+
+        // 2. Mover miniatura asociada si existe
+        const fromThumb = matchedKey.replace(/\.[^.]+$/, '') + '_thumb.webp';
+        const toThumb = toPublicId.replace(/\.[^.]+$/, '') + '_thumb.webp';
+        try {
+          const sourceThumbObj = await r2Bucket.get(fromThumb);
+          if (sourceThumbObj) {
+            await r2Bucket.put(toThumb, sourceThumbObj.body, {
+              httpMetadata: sourceThumbObj.httpMetadata,
+            });
+            if (fromThumb !== toThumb) {
+              await r2Bucket.delete(fromThumb);
+            }
+          }
+        } catch (thumbMoveErr) {
+          console.warn('[Cloudflare Worker R2] Advertencia moviendo miniatura:', thumbMoveErr);
         }
 
         return json(200, {
