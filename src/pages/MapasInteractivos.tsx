@@ -81,10 +81,6 @@ interface InteractiveMapRow {
   sections: InteractiveMapSectionPayload[] | null;
 }
 
-interface InteractiveMapPlacaRow {
-  placa_id: number;
-  sections: InteractiveMapSectionPayload[] | null;
-}
 
 interface InteractiveMapManagerRow {
   id: number;
@@ -2452,7 +2448,7 @@ const MapasInteractivos: React.FC = () => {
   const activeSavedSelectionTitle = activeSavedSelectionIndex !== null
     ? (savedSelectionDetails[activeSavedSelectionIndex]?.title?.trim() || `Seleccion ${activeSavedSelectionIndex + 1}`)
     : '';
-  const themeSubtemaMapGroups = useMemo<InteractiveMapsBySubtemaGroup[]>(() => {
+  const mapsBySubtema = useMemo<InteractiveMapsBySubtemaGroup[]>(() => {
     if (!isManageMode || !numTemaId) return [];
 
     const subtemaIndexById = new Map<number, number>();
