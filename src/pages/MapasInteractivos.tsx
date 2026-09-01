@@ -10,7 +10,14 @@ import { getImageCandidateUrls } from '../services/cloudinaryImages';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import EditorParcialAccordionPicker from '../components/editor/EditorParcialAccordionPicker';
 import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
-import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
+import {
+  getCachedTemas,
+  getCachedSubtemas,
+  getQuickTemas,
+  getQuickSubtemas,
+  getCachedPlacasForSubtema,
+  getQuickPlacasForSubtema,
+} from '../services/catalogService';
 import { usePreservedParam } from '../hooks/usePreservedParam';
 import { syncUrlSearchParam, getPreservedSearchParam } from '../services/navigationStateKeeper';
 
@@ -626,10 +633,22 @@ const MapasInteractivos: React.FC = () => {
   const [openingMapId, setOpeningMapId] = useState<number | null>(null);
   const [deletingMapId, setDeletingMapId] = useState<number | null>(null);
 
-  const [selectedTemaId, setSelectedTemaId] = usePreservedParam<number | null>('tema', null);
-  const [selectedSubtemaId, setSelectedSubtemaId] = usePreservedParam<number | null>('subtema', null);
-  const prevTemaRef = useRef<number | null>(selectedTemaId);
-  const prevSubtemaRef = useRef<number | null>(selectedSubtemaId);
+  const [selectedTemaId, setSelectedTemaId] = usePreservedParam<number | null>('tema', null, {
+    deserialize: (raw) => {
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    },
+  });
+  const [selectedSubtemaId, setSelectedSubtemaId] = usePreservedParam<number | null>('subtema', null, {
+    deserialize: (raw) => {
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    },
+  });
+  const numTemaId = selectedTemaId !== null && selectedTemaId !== undefined ? Number(selectedTemaId) : null;
+  const numSubtemaId = selectedSubtemaId !== null && selectedSubtemaId !== undefined ? Number(selectedSubtemaId) : null;
+  const prevTemaRef = useRef<number | null>(numTemaId);
+  const prevSubtemaRef = useRef<number | null>(numSubtemaId);
   const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(null);
   const [selectedTool, setSelectedTool] = useState<'lasso' | 'zoom' | 'move_all'>('lasso');
   const [moveAllStep, setMoveAllStep] = useState<1 | 5 | 20>(5);
@@ -733,97 +752,109 @@ const MapasInteractivos: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (prevTemaRef.current !== selectedTemaId) {
+    const isTemaChanged = prevTemaRef.current !== numTemaId;
+    if (isTemaChanged) {
       if (prevTemaRef.current !== null) {
         setSelectedSubtemaId(null);
         setSelectedPlaca(null);
       }
-      prevTemaRef.current = selectedTemaId;
+      prevTemaRef.current = numTemaId;
+      setSubtemas([]);
+      setPlacas([]);
+      setPlacasConMapa(new Set());
     }
-    setSubtemas([]);
-    setPlacas([]);
-    if (!selectedTemaId) return;
 
-    const quick = getQuickSubtemas(selectedTemaId);
+    if (!numTemaId) {
+      setSubtemas([]);
+      setPlacas([]);
+      setPlacasConMapa(new Set());
+      setLoadingSubtemas(false);
+      return;
+    }
+
+    const quick = getQuickSubtemas(numTemaId);
     if (quick && quick.length > 0) {
       setSubtemas(quick as Subtema[]);
       setLoadingSubtemas(false);
-    } else {
+    } else if (isTemaChanged) {
       setLoadingSubtemas(true);
     }
 
+    let isEffectActive = true;
     const fetchSubtemas = async () => {
       try {
-        const data = await getCachedSubtemas(selectedTemaId);
-        if (data) setSubtemas(data as Subtema[]);
+        const data = await getCachedSubtemas(numTemaId);
+        if (isEffectActive && data) setSubtemas(data as Subtema[]);
       } catch (err) {
         console.error('Error al consultar subtemas:', err);
       } finally {
-        setLoadingSubtemas(false);
+        if (isEffectActive) setLoadingSubtemas(false);
       }
     };
 
     void fetchSubtemas();
-  }, [selectedTemaId, setSelectedSubtemaId]);
+
+    return () => {
+      isEffectActive = false;
+    };
+  }, [numTemaId, setSelectedSubtemaId]);
 
   useEffect(() => {
-    if (prevSubtemaRef.current !== selectedSubtemaId) {
+    const isSubtemaChanged = prevSubtemaRef.current !== numSubtemaId;
+    if (isSubtemaChanged) {
       if (prevSubtemaRef.current !== null) {
         setSelectedPlaca(null);
       }
-      prevSubtemaRef.current = selectedSubtemaId;
+      prevSubtemaRef.current = numSubtemaId;
+      setPlacas([]);
+      setPlacasConMapa(new Set());
     }
-    setPlacas([]);
-    setPlacasConMapa(new Set());
-    if (!selectedSubtemaId) return;
 
-    const fetchPlacas = async () => {
-      setLoadingPlacas(true);
-      const { data } = await supabase
-        .from('placas')
-        .select('id, photo_url, aumento, sort_order')
-        .eq('subtema_id', selectedSubtemaId)
-        .order('sort_order', { ascending: true });
-
-      if (data) {
-        setPlacas(data);
-        const preservedPlaca = Number(getPreservedSearchParam('placa'));
-        if (Number.isFinite(preservedPlaca) && preservedPlaca > 0) {
-          const match = data.find((p) => p.id === preservedPlaca);
-          if (match) setSelectedPlaca(match);
-        }
-
-        const placaIds = data
-          .map((placa) => placa.id)
-          .filter((id): id is number => typeof id === 'number');
-
-        if (placaIds.length > 0) {
-          const { data: interactiveMapsData, error: interactiveMapsError } = await supabase
-            .from(INTERACTIVE_MAPS_TABLE)
-            .select('placa_id, sections')
-            .in('placa_id', placaIds);
-
-          if (interactiveMapsError) {
-            console.error('Error al consultar mapas por placa:', interactiveMapsError);
-            setPlacasConMapa(new Set());
-          } else {
-            const placaIdsConMapa = (interactiveMapsData ?? [])
-              .filter((row: InteractiveMapPlacaRow) => Array.isArray(row.sections) && row.sections.length > 0)
-              .map((row: InteractiveMapPlacaRow) => row.placa_id)
-              .filter((id): id is number => typeof id === 'number');
-            setPlacasConMapa(new Set(placaIdsConMapa));
-          }
-        } else {
-          setPlacasConMapa(new Set());
-        }
-      } else {
-        setPlacasConMapa(new Set());
-      }
+    if (!numSubtemaId) {
+      setPlacas([]);
+      setPlacasConMapa(new Set());
       setLoadingPlacas(false);
+      return;
+    }
+
+    const quickBundle = getQuickPlacasForSubtema(numSubtemaId);
+    if (quickBundle && quickBundle.placas.length > 0) {
+      setPlacas(quickBundle.placas as Placa[]);
+      setPlacasConMapa(new Set(quickBundle.placasConMapa));
+      setLoadingPlacas(false);
+    } else if (isSubtemaChanged) {
+      setLoadingPlacas(true);
+    }
+
+    let isEffectActive = true;
+    const fetchPlacas = async () => {
+      try {
+        const bundle = await getCachedPlacasForSubtema(numSubtemaId);
+        if (!isEffectActive) return;
+
+        if (bundle && bundle.placas) {
+          setPlacas(bundle.placas as Placa[]);
+          setPlacasConMapa(new Set(bundle.placasConMapa));
+
+          const preservedPlaca = Number(getPreservedSearchParam('placa'));
+          if (Number.isFinite(preservedPlaca) && preservedPlaca > 0) {
+            const match = bundle.placas.find((p) => p.id === preservedPlaca);
+            if (match) setSelectedPlaca(match as Placa);
+          }
+        }
+      } catch (err) {
+        console.error('Error al consultar placas:', err);
+      } finally {
+        if (isEffectActive) setLoadingPlacas(false);
+      }
     };
 
-    fetchPlacas();
-  }, [selectedSubtemaId]);
+    void fetchPlacas();
+
+    return () => {
+      isEffectActive = false;
+    };
+  }, [numSubtemaId]);
 
   useEffect(() => {
     syncUrlSearchParam('placa', selectedPlaca?.id ?? null);
@@ -834,7 +865,7 @@ const MapasInteractivos: React.FC = () => {
     setTemaMapsError(null);
     setDeletingMapId(null);
 
-    if (!isManageMode || !selectedTemaId) return;
+    if (!isManageMode || !numTemaId) return;
 
     let isEffectActive = true;
 
@@ -844,7 +875,7 @@ const MapasInteractivos: React.FC = () => {
       const { data, error } = await supabase
         .from(INTERACTIVE_MAPS_TABLE)
         .select('id, map_number, tema_id, subtema_id, placa_id, sections')
-        .eq('tema_id', selectedTemaId)
+        .eq('tema_id', numTemaId)
         .order('map_number', { ascending: true });
 
       if (!isEffectActive) return;
@@ -869,7 +900,7 @@ const MapasInteractivos: React.FC = () => {
     return () => {
       isEffectActive = false;
     };
-  }, [isManageMode, selectedTemaId]);
+  }, [isManageMode, numTemaId]);
 
   useEffect(() => {
     if (!selectedPlaca) {
@@ -1346,7 +1377,7 @@ const MapasInteractivos: React.FC = () => {
     selectionsToPersist: number[][],
     detailsToPersist: SelectionDetails[]
   ): Promise<{ id: number; mapNumber: number } | null> => {
-    if (!selectedTemaId || !selectedPlaca) return null;
+    if (!numTemaId || !selectedPlaca) return null;
 
     const sectionsPayload = buildSectionsPayload(selectionsToPersist, detailsToPersist, imageRect ?? baseImageRect);
     if (sectionsPayload.length === 0) return null;
@@ -1368,8 +1399,8 @@ const MapasInteractivos: React.FC = () => {
       const { error: updateExistingMapError } = await supabase
         .from(INTERACTIVE_MAPS_TABLE)
         .update({
-          tema_id: selectedTemaId,
-          subtema_id: selectedSubtemaId,
+          tema_id: numTemaId,
+          subtema_id: numSubtemaId,
           placa_id: selectedPlaca.id,
           sections: sectionsPayload,
         })
@@ -1398,7 +1429,7 @@ const MapasInteractivos: React.FC = () => {
     const { data: latestMapRows, error: latestMapError } = await supabase
       .from(INTERACTIVE_MAPS_TABLE)
       .select('map_number')
-      .eq('tema_id', selectedTemaId)
+      .eq('tema_id', numTemaId)
       .order('map_number', { ascending: false })
       .limit(1);
 
@@ -1411,8 +1442,8 @@ const MapasInteractivos: React.FC = () => {
     const { data: createdMap, error: createMapError } = await supabase
       .from(INTERACTIVE_MAPS_TABLE)
       .insert({
-        tema_id: selectedTemaId,
-        subtema_id: selectedSubtemaId,
+        tema_id: numTemaId,
+        subtema_id: numSubtemaId,
         placa_id: selectedPlaca.id,
         map_number: nextMapNumber,
         sections: sectionsPayload,
@@ -1443,7 +1474,7 @@ const MapasInteractivos: React.FC = () => {
   };
 
   const updateInteractiveMapRecord = async (): Promise<boolean> => {
-    if (!selectedTemaId || !selectedPlaca) return false;
+    if (!numTemaId || !selectedPlaca) return false;
 
     const sectionsPayload = buildSectionsPayload(savedSelections, savedSelectionDetails, imageRect ?? baseImageRect);
     if (sectionsPayload.length === 0) {
@@ -1464,8 +1495,8 @@ const MapasInteractivos: React.FC = () => {
         const { error: updateError } = await supabase
           .from(INTERACTIVE_MAPS_TABLE)
           .update({
-            tema_id: selectedTemaId,
-            subtema_id: selectedSubtemaId,
+            tema_id: numTemaId,
+            subtema_id: numSubtemaId,
             placa_id: selectedPlaca.id,
             sections: sectionsPayload,
           })
@@ -1631,7 +1662,7 @@ const MapasInteractivos: React.FC = () => {
       return;
     }
 
-    if (!selectedTemaId || !selectedPlaca) return;
+    if (!numTemaId || !selectedPlaca) return;
 
     setIsPersistingMap(true);
     setMapPersistMessage('Creando mapa...');
@@ -2325,8 +2356,8 @@ const MapasInteractivos: React.FC = () => {
     persistedSelectionDetailsSnapshot,
   ]);
 
-  const selectedTema = temas.find(t => t.id === selectedTemaId) ?? null;
-  const selectedSubtema = subtemas.find(s => s.id === selectedSubtemaId) ?? null;
+  const selectedTema = temas.find(t => Number(t.id) === numTemaId) ?? null;
+  const selectedSubtema = subtemas.find(s => Number(s.id) === numSubtemaId) ?? null;
   const interactivePlacas = useMemo(() => placas.filter((placa) => placasConMapa.has(placa.id)), [placas, placasConMapa]);
   const nonInteractivePlacas = useMemo(() => placas.filter((placa) => !placasConMapa.has(placa.id)), [placas, placasConMapa]);
   const placasByAumento = useMemo<PlacaGroupByAumento[]>(() => {
@@ -2421,8 +2452,8 @@ const MapasInteractivos: React.FC = () => {
   const activeSavedSelectionTitle = activeSavedSelectionIndex !== null
     ? (savedSelectionDetails[activeSavedSelectionIndex]?.title?.trim() || `Seleccion ${activeSavedSelectionIndex + 1}`)
     : '';
-  const mapsBySubtema = useMemo<InteractiveMapsBySubtemaGroup[]>(() => {
-    if (!isManageMode || !selectedTemaId) return [];
+  const themeSubtemaMapGroups = useMemo<InteractiveMapsBySubtemaGroup[]>(() => {
+    if (!isManageMode || !numTemaId) return [];
 
     const subtemaIndexById = new Map<number, number>();
     const subtemaNameById = new Map<number, string>();
@@ -2468,7 +2499,7 @@ const MapasInteractivos: React.FC = () => {
         if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
         return a.title.localeCompare(b.title, 'es', { sensitivity: 'base' });
       });
-  }, [isManageMode, selectedTemaId, subtemas, temaMaps]);
+  }, [isManageMode, numTemaId, subtemas, temaMaps]);
 
   const handleEditMapFromManager = async (mapRow: InteractiveMapManagerRow) => {
     setMapPersistMessage(null);
@@ -2487,7 +2518,7 @@ const MapasInteractivos: React.FC = () => {
         return;
       }
 
-      const targetTemaId = mapRow.tema_id || (placaData.tema_id as number | null) || selectedTemaId;
+      const targetTemaId = mapRow.tema_id || (placaData.tema_id as number | null) || numTemaId;
       const targetSubtemaId = mapRow.subtema_id ?? (placaData.subtema_id as number | null);
 
       if (!targetTemaId) {
@@ -2511,10 +2542,10 @@ const MapasInteractivos: React.FC = () => {
       prevTemaRef.current = targetTemaId;
       prevSubtemaRef.current = targetSubtemaId;
 
-      if (selectedTemaId !== targetTemaId) {
+      if (numTemaId !== targetTemaId) {
         setSelectedTemaId(targetTemaId);
       }
-      if (targetSubtemaId !== null && selectedSubtemaId !== targetSubtemaId) {
+      if (targetSubtemaId !== null && numSubtemaId !== targetSubtemaId) {
         setSelectedSubtemaId(targetSubtemaId);
       }
 
@@ -3603,7 +3634,7 @@ const MapasInteractivos: React.FC = () => {
               <div style={{ marginBottom: '24px' }}>
                 <EditorParcialAccordionPicker
                   temas={temas}
-                  selectedTemaId={selectedTemaId}
+                  selectedTemaId={numTemaId}
                   onSelectTema={(id) => setSelectedTemaId(id)}
                   loadingTemas={loadingTemas}
                   temasError={temaMapsError}
@@ -3707,8 +3738,8 @@ const MapasInteractivos: React.FC = () => {
               <EditorParcialAccordionPicker
                 temas={temas}
                 subtemas={subtemas}
-                selectedTemaId={selectedTemaId}
-                selectedSubtemaId={selectedSubtemaId}
+                selectedTemaId={numTemaId}
+                selectedSubtemaId={numSubtemaId}
                 onSelectTema={(id) => setSelectedTemaId(id)}
                 onSelectSubtema={(id) => setSelectedSubtemaId(id)}
                 loadingTemas={loadingTemas}

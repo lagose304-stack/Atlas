@@ -109,13 +109,16 @@ export const EditorParcialAccordionPicker: React.FC<EditorParcialAccordionPicker
   const [isTemasPickerExpanded, setIsTemasPickerExpanded] = useState(!selectedTemaId);
   const [activeParcialFilter, setActiveParcialFilter] = useState<ParcialKey | 'all'>('all');
 
-  const selectedTema = useMemo(() => temas.find((t) => t.id === selectedTemaId) ?? null, [selectedTemaId, temas]);
+  const numSelectedTemaId = selectedTemaId !== null && selectedTemaId !== undefined ? Number(selectedTemaId) : null;
+  const numSelectedSubtemaId = selectedSubtemaId !== null && selectedSubtemaId !== undefined ? Number(selectedSubtemaId) : null;
+
+  const selectedTema = useMemo(() => temas.find((t) => Number(t.id) === numSelectedTemaId) ?? null, [numSelectedTemaId, temas]);
 
   useEffect(() => {
-    if (!selectedTemaId) {
+    if (!numSelectedTemaId) {
       setIsTemasPickerExpanded(true);
     }
-  }, [selectedTemaId]);
+  }, [numSelectedTemaId]);
 
   const selectedParcialConfig = useMemo(() => {
     if (!selectedTema?.parcial) return PARCIALES_CONFIG[0];
@@ -153,11 +156,11 @@ export const EditorParcialAccordionPicker: React.FC<EditorParcialAccordionPicker
   }, [temas, search]);
 
   const relevantSubtemas = useMemo(() => {
-    if (!selectedTemaId) return [];
+    if (!numSelectedTemaId) return [];
     return subtemas
-      .filter((st) => st.tema_id === selectedTemaId)
+      .filter((st) => Number(st.tema_id) === numSelectedTemaId)
       .sort((a, b) => (a.sort_order ?? a.id) - (b.sort_order ?? b.id));
-  }, [selectedTemaId, subtemas]);
+  }, [numSelectedTemaId, subtemas]);
 
   const toggleParcial = (key: ParcialKey) => {
     setOpenParciales((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -371,7 +374,7 @@ export const EditorParcialAccordionPicker: React.FC<EditorParcialAccordionPicker
               {PARCIALES_CONFIG.filter((p) => activeParcialFilter === 'all' || activeParcialFilter === p.key).map((parcial) => {
                 const list = temasByParcial[parcial.key] || [];
                 const isOpen = openParciales[parcial.key];
-                const hasSelected = list.some((t) => t.id === selectedTemaId);
+                const hasSelected = list.some((t) => Number(t.id) === numSelectedTemaId);
 
                 return (
                   <div
@@ -430,7 +433,7 @@ export const EditorParcialAccordionPicker: React.FC<EditorParcialAccordionPicker
                         ) : (
                           <div style={s.themesGrid}>
                             {list.map((tema, idx) => {
-                              const isSelected = selectedTemaId === tema.id;
+                              const isSelected = numSelectedTemaId === Number(tema.id);
                               return (
                                 <button
                                   key={tema.id}
@@ -533,7 +536,7 @@ export const EditorParcialAccordionPicker: React.FC<EditorParcialAccordionPicker
           ) : (
             <div style={s.subtemasGrid}>
               {relevantSubtemas.map((subtema, idx) => {
-                const isSelected = selectedSubtemaId === subtema.id;
+                const isSelected = numSelectedSubtemaId === Number(subtema.id);
                 return (
                   <button
                     key={subtema.id}
