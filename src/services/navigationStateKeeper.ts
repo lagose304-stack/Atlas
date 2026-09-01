@@ -89,6 +89,17 @@ export const clearPreservedScroll = (pathname: string): void => {
 };
 
 /**
+ * Limpia el estado preservado de parámetros para una ruta en sessionStorage.
+ */
+export const clearPreservedRouteState = (pathname: string): void => {
+  try {
+    sessionStorage.removeItem(`${STORAGE_PREFIX}${pathname}`);
+  } catch {
+    // Ignorar
+  }
+};
+
+/**
  * Sincroniza un parámetro en la URL sin recargar la página ni contaminar
  * el historial hacia atrás (usando replaceState).
  */

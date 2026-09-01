@@ -36,7 +36,7 @@ import {
   type PageVersionRow,
 } from '../services/pageVersionsService';
 import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
-import { getPreservedSearchParam, syncUrlSearchParam } from '../services/navigationStateKeeper';
+import { clearPreservedRouteState, syncUrlSearchParam } from '../services/navigationStateKeeper';
 
 type WorkspaceMode = 'edit' | 'preview';
 type ViewMode = 'versions_hub' | 'editor';
@@ -76,29 +76,66 @@ const EditorPaginas: React.FC = () => {
   const isAdministrator = user?.rol === 'Administrador';
   const handleGoBack = useSmartBackNavigation('/edicion');
   
-  // Por defecto NO seleccionamos ninguna página a menos que venga explícitamente en el URL
-  const [selection, setSelection] = useState<PageSelection | null>(() => (
-    isAdministrator && new URLSearchParams(window.location.search).get('pagina') === 'creditos'
-      ? { kind: 'credits', label: 'Créditos' }
-      : null
-  ));
   const quickTemas = (getQuickTemas() ?? []) as EditorTemaItem[];
   const quickSubtemas = (getQuickSubtemas() ?? []) as EditorSubtemaItem[];
   const [temas, setTemas] = useState<EditorTemaItem[]>(quickTemas);
   const [subtemas, setSubtemas] = useState<EditorSubtemaItem[]>(quickSubtemas);
   const [loadingPages, setLoadingPages] = useState(quickTemas.length === 0);
   const [loadError, setLoadError] = useState('');
-  
+
+  // 1. Restaurar página seleccionada inmediatamente solo si viene en los parámetros de la URL actual
+  const [selection, setSelection] = useState<PageSelection | null>(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tipo = urlParams.get('tipo') || urlParams.get('pagina');
+    const idRaw = urlParams.get('id');
+    const id = idRaw ? Number(idRaw) : null;
+
+    if (tipo === 'credits' && isAdministrator) {
+      return { kind: 'credits', label: 'Créditos' };
+    }
+    if (tipo === 'home') {
+      return { kind: 'home', label: 'Inicio' };
+    }
+    if (tipo === 'temario') {
+      return { kind: 'temario', label: 'Temario' };
+    }
+    if (tipo === 'tema' && id) {
+      const t = quickTemas.find((item) => item.id === id);
+      return { kind: 'tema', id, label: t?.nombre || `Tema ${id}` };
+    }
+    if (tipo === 'subtema' && id) {
+      const s = quickSubtemas.find((item) => item.id === id);
+      const parent = quickTemas.find((t) => t.id === s?.tema_id);
+      return {
+        kind: 'subtema',
+        id,
+        temaId: s?.tema_id ?? 0,
+        label: s?.nombre || `Subtema ${id}`,
+        parentLabel: parent?.nombre ?? '',
+      };
+    }
+    return null;
+  });
+
+  // 2. Comprobar si hay una versión inicial solicitada en URL para restaurar al recargar (F5)
+  const initialVersionParam = new URLSearchParams(window.location.search).get('version');
+  const initialVersionId = initialVersionParam ? Number(initialVersionParam) : null;
+
+  // Ref que guarda la versión pendiente de restaurar en el primer ciclo (se consume y se limpia)
+  const pendingVersionRestoreRef = useRef<number | null>(initialVersionId);
+
   // Estado de vista: Hub de Versiones vs Editor de Bloques
-  const [viewMode, setViewMode] = useState<ViewMode>('versions_hub');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => (initialVersionId ? 'editor' : 'versions_hub'));
   const [activeVersion, setActiveVersion] = useState<PageVersionRow | null>(null);
+  const activeVersionRef = useRef<PageVersionRow | null>(null);
+  activeVersionRef.current = activeVersion;
   const [versions, setVersions] = useState<PageVersionRow[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
 
   const [mode, setMode] = useState<WorkspaceMode>('edit');
   const [draftBlocks, setDraftBlocks] = useState<ContentBlock[]>([]);
   const [isDirty, setIsDirty] = useState(false);
-  const [isPageNavigatorOpen, setIsPageNavigatorOpen] = useState(true);
+  const [isPageNavigatorOpen, setIsPageNavigatorOpen] = useState(false);
   const editorRef = useRef<PageContentEditorHandle>(null);
 
   // Notificación flotante de guardado
@@ -136,40 +173,36 @@ const EditorPaginas: React.FC = () => {
     void loadPages();
   }, []);
 
-  // Restaurar página seleccionada al recargar desde parámetros preservados
+  // Actualizar etiquetas de página cuando termine de cargar el catálogo completo
   useEffect(() => {
-    if (!selection && (temas.length > 0 || subtemas.length > 0)) {
-      const tipo = getPreservedSearchParam('tipo') || getPreservedSearchParam('pagina');
-      const idRaw = getPreservedSearchParam('id');
-      const id = idRaw ? Number(idRaw) : null;
-
-      if (tipo === 'credits' && isAdministrator) {
-        setSelection({ kind: 'credits', label: 'Créditos' });
-      } else if (tipo === 'home') {
-        setSelection({ kind: 'home', label: 'Inicio' });
-      } else if (tipo === 'temario') {
-        setSelection({ kind: 'temario', label: 'Temario' });
-      } else if (tipo === 'tema' && id) {
-        const t = temas.find((item) => item.id === id);
-        if (t) setSelection({ kind: 'tema', id: t.id, label: t.nombre });
-      } else if (tipo === 'subtema' && id) {
-        const s = subtemas.find((item) => item.id === id);
-        if (s) {
-          const parent = temas.find((t) => t.id === s.tema_id);
-          setSelection({
-            kind: 'subtema',
-            id: s.id,
+    if (selection && (selection.kind === 'tema' || selection.kind === 'subtema') && (temas.length > 0 || subtemas.length > 0)) {
+      if (selection.kind === 'tema') {
+        const t = temas.find((item) => item.id === selection.id);
+        if (t && t.nombre !== selection.label) {
+          setSelection(prev => (prev ? { ...prev, label: t.nombre } : prev));
+        }
+      } else if (selection.kind === 'subtema') {
+        const s = subtemas.find((item) => item.id === selection.id);
+        const parent = temas.find((t) => t.id === s?.tema_id);
+        if (s && (s.nombre !== selection.label || (parent && parent.nombre !== selection.parentLabel))) {
+          setSelection(prev => (prev ? {
+            ...prev,
             temaId: s.tema_id,
             label: s.nombre,
             parentLabel: parent?.nombre ?? '',
-          });
+          } : prev));
         }
       }
     }
-  }, [selection, temas, subtemas, isAdministrator]);
+  }, [selection, temas, subtemas]);
 
   // Sincronizar selección y versión activa en la URL para que no se pierda al recargar
+  const isInitialMount = useRef(true);
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     if (selection) {
       syncUrlSearchParam('tipo', selection.kind);
       syncUrlSearchParam('id', 'id' in selection ? selection.id : null);
@@ -178,10 +211,6 @@ const EditorPaginas: React.FC = () => {
       } else if (viewMode === 'versions_hub') {
         syncUrlSearchParam('version', null);
       }
-    } else {
-      syncUrlSearchParam('tipo', null);
-      syncUrlSearchParam('id', null);
-      syncUrlSearchParam('version', null);
     }
   }, [selection, viewMode, activeVersion]);
 
@@ -205,14 +234,18 @@ const EditorPaginas: React.FC = () => {
       });
 
       // Si acabamos de recargar la página (F5) con un parámetro 'version' guardado en URL, restaurar directamente el editor
-      const preservedVer = getPreservedSearchParam('version') || new URLSearchParams(window.location.search).get('version');
-      if (preservedVer) {
-        const verId = Number(preservedVer);
-        const match = rows.find(r => r.id === verId);
+      const targetVer = pendingVersionRestoreRef.current;
+      if (targetVer) {
+        pendingVersionRestoreRef.current = null;
+        const match = rows.find(r => r.id === targetVer);
         if (match) {
           setActiveVersion(match);
           setDraftBlocks(match.blocks ?? []);
           setViewMode('editor');
+          syncUrlSearchParam('version', match.id);
+        } else if (rows.length > 0) {
+          setViewMode('versions_hub');
+          syncUrlSearchParam('version', null);
         }
       }
     } catch (err) {
@@ -251,11 +284,14 @@ const EditorPaginas: React.FC = () => {
       return;
     }
     if (isDirty && !window.confirm('Hay cambios sin guardar en esta versión. ¿Deseas cambiar de página y descartarlos?')) return;
+    pendingVersionRestoreRef.current = null;
     setDraftBlocks([]);
     setIsDirty(false);
     setSelection(nextSelection);
     setViewMode('versions_hub');
     setActiveVersion(null);
+    syncUrlSearchParam('tipo', nextSelection.kind);
+    syncUrlSearchParam('id', 'id' in nextSelection ? nextSelection.id : null);
     syncUrlSearchParam('version', null);
     setMode('edit');
     setIsPageNavigatorOpen(false);
@@ -263,6 +299,7 @@ const EditorPaginas: React.FC = () => {
 
   // Acción: Editar una versión específica
   const handleEditVersion = (version: PageVersionRow) => {
+    pendingVersionRestoreRef.current = null;
     setActiveVersion(version);
     setDraftBlocks(version.blocks ?? []);
     setViewMode('editor');
@@ -318,7 +355,7 @@ const EditorPaginas: React.FC = () => {
       }
 
       // 1. Guardar los cambios de la versión automáticamente
-      if (editorRef.current?.saveChanges) {
+      if (isDirty && editorRef.current?.saveChanges) {
         try {
           await editorRef.current.saveChanges();
         } catch (err) {
@@ -326,6 +363,7 @@ const EditorPaginas: React.FC = () => {
         }
       }
       setIsDirty(false);
+      pendingVersionRestoreRef.current = null;
       setViewMode('versions_hub');
       setActiveVersion(null);
       syncUrlSearchParam('version', null);
@@ -335,14 +373,19 @@ const EditorPaginas: React.FC = () => {
 
     // Si estamos en el Hub de Versiones de una página, regresar al catálogo general de páginas
     if (selection !== null) {
+      pendingVersionRestoreRef.current = null;
       setSelection(null);
+      setViewMode('versions_hub');
+      setActiveVersion(null);
       syncUrlSearchParam('tipo', null);
       syncUrlSearchParam('id', null);
       syncUrlSearchParam('version', null);
+      clearPreservedRouteState('/editor-paginas');
       return;
     }
 
     // 2. Si ya está en la pantalla inicial, salir al panel de administración /edicion
+    clearPreservedRouteState('/editor-paginas');
     handleGoBack();
   };
 
@@ -551,6 +594,37 @@ const EditorPaginas: React.FC = () => {
                 </div>
               ) : config ? (
                 /* ─── VISTA 2: LIENZO EDITOR DE CONTENIDO VISUAL ─── */
+                viewMode === 'editor' && !activeVersion ? (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: '420px',
+                    gap: '14px',
+                    background: '#ffffff',
+                    borderRadius: '20px',
+                    border: '1px solid #e2e8f0',
+                    padding: '40px 20px',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.03)',
+                    margin: '12px 0',
+                  }}>
+                    <div style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '50%',
+                      border: '3.5px solid #e2e8f0',
+                      borderTopColor: '#2563eb',
+                      animation: 'spin 0.8s linear infinite',
+                    }} />
+                    <strong style={{ fontSize: '1rem', color: '#1e293b' }}>
+                      Cargando editor de la versión...
+                    </strong>
+                    <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                      Restaurando componentes y diseño de la plantilla.
+                    </span>
+                  </div>
+                ) : (
                 <div>
                   {/* ─── BARRA SUPERIOR DE EDICIÓN DE VERSIÓN ─── */}
                   <div className="page-editor-topbar">
@@ -711,6 +785,7 @@ const EditorPaginas: React.FC = () => {
                     </div>
                   </div>
                 </div>
+                )
               ) : null}
             </div>
           </section>
