@@ -4639,6 +4639,41 @@ const panBy = (dx: number, dy: number) => {
                     <button type="button" onClick={() => setInteractiveMapReloadTick(value => value + 1)} style={{ marginLeft: '8px', border: '1px solid #fca5a5', borderRadius: '7px', background: '#fff', color: '#991b1b', padding: '4px 7px', fontWeight: 750, cursor: 'pointer' }}>Reintentar</button>
                   </div>
                 )}
+                {activeNavigationCount > 1 && (
+                  <div style={{ marginBottom: '12px', paddingBottom: '11px', borderBottom: '1px solid #cce7f0', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => navigateActiveItem(-1)}
+                      onMouseEnter={() => setHoveredNavigationId('senalados-previous')}
+                      onMouseLeave={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
+                      onMouseDown={() => setPressedNavigationId('senalados-previous')}
+                      onMouseUp={() => setPressedNavigationId(null)}
+                      onFocus={() => setHoveredNavigationId('senalados-previous')}
+                      onBlur={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
+                      aria-label="Elemento anterior"
+                      style={{ ...compactNavigationButtonStyle, ...getNavigationButtonInteractionStyle('senalados-previous'), justifyContent: 'flex-start' }}
+                    >
+                      <span style={compactNavigationIconStyle} aria-hidden="true">←</span>
+                      <span>Anterior</span>
+                    </button>
+                    <span style={compactNavigationCounterStyle}>{activeNavigationPosition || '—'} / {activeNavigationCount}</span>
+                    <button
+                      type="button"
+                      onClick={() => navigateActiveItem(1)}
+                      onMouseEnter={() => setHoveredNavigationId('senalados-next')}
+                      onMouseLeave={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
+                      onMouseDown={() => setPressedNavigationId('senalados-next')}
+                      onMouseUp={() => setPressedNavigationId(null)}
+                      onFocus={() => setHoveredNavigationId('senalados-next')}
+                      onBlur={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
+                      aria-label="Elemento siguiente"
+                      style={{ ...compactNavigationButtonStyle, ...getNavigationButtonInteractionStyle('senalados-next'), justifyContent: 'flex-end' }}
+                    >
+                      <span>Siguiente</span>
+                      <span style={compactNavigationIconStyle} aria-hidden="true">→</span>
+                    </button>
+                  </div>
+                )}
                 {groupedSenaladosItems.length > 0 && viewerMode !== 'map' && (
                   <>
                 <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -4951,41 +4986,6 @@ const panBy = (dx: number, dy: number) => {
                         );
                       })}
                     </ol>
-                  </div>
-                )}
-                {activeNavigationCount > 1 && (
-                  <div style={{ marginTop: '13px', paddingTop: '12px', borderTop: '1px solid #cce7f0', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '8px' }}>
-                    <button
-                      type="button"
-                      onClick={() => navigateActiveItem(-1)}
-                      onMouseEnter={() => setHoveredNavigationId('senalados-previous')}
-                      onMouseLeave={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
-                      onMouseDown={() => setPressedNavigationId('senalados-previous')}
-                      onMouseUp={() => setPressedNavigationId(null)}
-                      onFocus={() => setHoveredNavigationId('senalados-previous')}
-                      onBlur={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
-                      aria-label="Elemento anterior"
-                      style={{ ...compactNavigationButtonStyle, ...getNavigationButtonInteractionStyle('senalados-previous'), justifyContent: 'flex-start' }}
-                    >
-                      <span style={compactNavigationIconStyle} aria-hidden="true">←</span>
-                      <span>Anterior</span>
-                    </button>
-                    <span style={compactNavigationCounterStyle}>{activeNavigationPosition || '—'} / {activeNavigationCount}</span>
-                    <button
-                      type="button"
-                      onClick={() => navigateActiveItem(1)}
-                      onMouseEnter={() => setHoveredNavigationId('senalados-next')}
-                      onMouseLeave={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
-                      onMouseDown={() => setPressedNavigationId('senalados-next')}
-                      onMouseUp={() => setPressedNavigationId(null)}
-                      onFocus={() => setHoveredNavigationId('senalados-next')}
-                      onBlur={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
-                      aria-label="Elemento siguiente"
-                      style={{ ...compactNavigationButtonStyle, ...getNavigationButtonInteractionStyle('senalados-next'), justifyContent: 'flex-end' }}
-                    >
-                      <span>Siguiente</span>
-                      <span style={compactNavigationIconStyle} aria-hidden="true">→</span>
-                    </button>
                   </div>
                 )}
               </div>

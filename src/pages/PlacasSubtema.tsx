@@ -157,9 +157,11 @@ const PlacasSubtemaContent: React.FC = () => {
           nombre: initialSubtema.nombre,
           tema_id: initialSubtema.tema_id,
           sort_order: initialSubtema.sort_order,
+          logo_url: initialSubtema.logo_url ?? null,
         }
       : null
   );
+  const [subtemaLogoFailed, setSubtemaLogoFailed] = useState<boolean>(false);
   const initialPlacaIdParam = (() => {
     const raw = getPreservedSearchParam('placa');
     const n = Number(raw);
@@ -227,7 +229,7 @@ const PlacasSubtemaContent: React.FC = () => {
         const [subtemaRes, maintenanceRes, placasBundleRes, blocksRes] = await Promise.allSettled([
           supabase
             .from('subtemas')
-            .select('id, nombre, tema_id, sort_order, temas(nombre, parcial)')
+            .select('id, nombre, tema_id, sort_order, logo_url, temas(nombre, parcial)')
             .eq('id', numSubtemaId)
             .single(),
           fetchSiteMaintenanceStatus(),
@@ -249,6 +251,7 @@ const PlacasSubtemaContent: React.FC = () => {
               nombre: fallback.nombre,
               tema_id: fallback.tema_id,
               sort_order: fallback.sort_order,
+              logo_url: fallback.logo_url ?? null,
             };
             setSubtema(subtemaData);
           }
@@ -711,17 +714,38 @@ const PlacasSubtemaContent: React.FC = () => {
 
         <section style={styles.section}>
           <div style={styles.sectionHeader}>
-            <div style={styles.galleryIcon}><Images size={25} /></div>
+            {subtema?.logo_url && !subtemaLogoFailed ? (
+              <div
+                style={{
+                  ...styles.galleryIcon,
+                  overflow: 'hidden',
+                  padding: 0,
+                  background: '#ffffff',
+                  border: '1.5px solid rgba(203, 213, 225, 0.8)',
+                  boxShadow: '0 8px 24px -4px rgba(15, 23, 42, 0.14), 0 2px 6px -1px rgba(0, 0, 0, 0.05)',
+                }}
+              >
+                <img
+                  src={getCloudinaryImageUrl(subtema.logo_url, 'thumb')}
+                  alt={subtema.nombre}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
+                  onError={() => setSubtemaLogoFailed(true)}
+                />
+              </div>
+            ) : (
+              <div style={styles.galleryIcon}>
+                <Images size={25} />
+              </div>
+            )}
             <div style={styles.sectionTitleWrap}>
-              {temaNombre && <span style={styles.breadcrumb}>{temaNombre} · Galería histológica</span>}
               <h1 style={styles.title}>
                 {loading ? 'Cargando...' : subtema?.nombre ?? 'Placas'}
               </h1>
-              {!loading && placas.length > 0 && (
-                <span style={styles.countBadge}>
-                  {placas.length} {placas.length === 1 ? 'placa' : 'placas'}
-                </span>
-              )}
             </div>
           </div>
 
@@ -1139,7 +1163,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: 0,
     fontSize: 'clamp(1.3em, 3vw, 2em)',
     fontWeight: 800,
-    color: '#123b66',
+    color: '#000000',
     letterSpacing: '-0.02em',
   },
   countBadge: {
