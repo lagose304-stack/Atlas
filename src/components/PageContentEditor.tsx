@@ -22,9 +22,7 @@ import SpanishEditorShortcuts from './page-editor/SpanishEditorShortcuts';
 import EditorParcialAccordionPicker from './editor/EditorParcialAccordionPicker';
 import {
   HistologyGeneralitiesInlineEditor,
-  HistologyFunctionInlineEditor,
-  HistologyMorphologyInlineEditor,
-  HistologyLocationsInlineEditor,
+  HistologyPillarsInlineEditor,
   HistologyStainsInlineEditor,
 } from './page-editor/HistologyBlockEditors';
 import type { BlockType, ContentBlock } from '../types/contentBlocks';
@@ -242,9 +240,7 @@ const BLOCK_TOOLBAR_GROUPS: Array<{ title: string; types: BlockType[] }> = [
     title: 'Fundamentos Histológicos',
     types: [
       'histology_generalities',
-      'histology_function',
-      'histology_morphology',
-      'histology_locations',
+      'histology_pillars',
       'histology_stains',
     ],
   },
@@ -277,9 +273,7 @@ const BLOCK_TYPE_VISUAL_ICON: Record<BlockType, string> = {
   section_end: 'FIN',
   columns_2: 'COL',
   histology_generalities: 'GEN',
-  histology_function: 'FUN',
-  histology_morphology: 'MORF',
-  histology_locations: 'UBI',
+  histology_pillars: 'PIL',
   histology_stains: 'TINC',
 };
 
@@ -673,7 +667,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     };
 
     load();
-  }, [entityType, entityId, activeVersion]);
+  }, [entityType, entityId, activeVersion?.id]);
 
   useEffect(() => {
     blocksRef.current = blocks;
@@ -1314,6 +1308,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       setHasChanges(false);
 
       if (activeVersion) {
+        activeVersion.blocks = persistedBlocks;
         await savePageVersionBlocks(activeVersion.id, persistedBlocks);
         onVersionSaved?.();
       } else {
@@ -2332,24 +2327,8 @@ const MemoBlockContentEditor = React.memo(({
         />
       )}
 
-      {block.block_type === 'histology_function' && (
-        <HistologyFunctionInlineEditor
-          content={block.content}
-          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
-          onPickImage={field => onOpenImageModal(block.id, field)}
-        />
-      )}
-
-      {block.block_type === 'histology_morphology' && (
-        <HistologyMorphologyInlineEditor
-          content={block.content}
-          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
-          onPickImage={field => onOpenImageModal(block.id, field)}
-        />
-      )}
-
-      {block.block_type === 'histology_locations' && (
-        <HistologyLocationsInlineEditor
+      {block.block_type === 'histology_pillars' && (
+        <HistologyPillarsInlineEditor
           content={block.content}
           onUpdate={changes => onUpdateBlockContent(block.id, changes)}
           onPickImage={field => onOpenImageModal(block.id, field)}

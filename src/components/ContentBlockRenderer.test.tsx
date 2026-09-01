@@ -527,7 +527,7 @@ describe('ContentBlockRenderer', () => {
     expect(row).toHaveStyle({ gap: '22px', borderRadius: '24px' });
   });
 
-  it('renderiza correctamente los 5 bloques de fundamentos histologicos desde la base de datos', () => {
+  it('renderiza correctamente los 3 bloques oficiales de fundamentos histologicos', () => {
     const histologyBlocks: ContentBlock[] = [
       {
         id: 'hist-gen-1',
@@ -548,59 +548,28 @@ describe('ContentBlockRenderer', () => {
         },
       },
       {
-        id: 'hist-fun-1',
+        id: 'hist-pillars-1',
         entity_type: 'placas_page',
         entity_id: 156,
-        block_type: 'histology_function',
+        block_type: 'histology_pillars',
         sort_order: 1,
         content: {
-          title: 'Función Secretora Renal',
-          badge_text: 'Fisiología Tisular',
-          description: 'Transporte activo de iones.',
-          feats_count: '2',
-          feat_1_title: 'Reabsorción Tubular',
-          feat_1_desc: 'Recuperación de glucosa.',
-          feat_2_title: 'Secreción Activa',
-          feat_2_desc: 'Eliminación de metabolitos.',
-          clinical_note: 'Afectado en necrosis tubular.',
-        },
-      },
-      {
-        id: 'hist-morf-1',
-        entity_type: 'placas_page',
-        entity_id: 156,
-        block_type: 'histology_morphology',
-        sort_order: 2,
-        content: {
-          title: 'Criterios de Identificación Cúbica',
-          badge_text: 'Microscopía Óptica',
-          intro_text: 'Pautas para reconocer epitelio cúbico.',
-          items_count: '2',
-          item_1_title: 'Núcleo Esférico Central',
-          item_1_desc: 'Ubicado exactamente en el centro.',
-          item_2_title: 'Límites Celulares Claros',
-          item_2_desc: 'Bordes laterales definidos.',
-          exam_tip: 'Clave en folículos tiroideos.',
-        },
-      },
-      {
-        id: 'hist-loc-1',
-        entity_type: 'placas_page',
-        entity_id: 156,
-        block_type: 'histology_locations',
-        sort_order: 3,
-        content: {
-          title: 'Ubicaciones del Epitelio Cúbico',
-          badge_text: 'Atlas Anatómico',
-          intro_text: 'Órganos principales.',
-          items_count: '2',
-          item_1_organ: 'Túbulos Renales',
-          item_1_system: 'Sistema Urinario',
-          item_1_desc: 'Túbulo contorneado proximal y distal.',
-          item_2_organ: 'Folículos Tiroideos',
-          item_2_system: 'Sistema Endocrino',
-          item_2_desc: 'Rodean el coloide tiroideo.',
-          mnemotic_tip: 'Recordar Tiroides y Riñón.',
+          function_badge: 'Fisiología Tisular',
+          function_title: 'Función Secretora Renal',
+          main_function_name: 'REABSORCIÓN TUBULAR',
+          main_function_desc: 'Recuperación de glucosa.',
+          assoc_count: '1',
+          assoc_1_label: 'Secreción Activa',
+          criteria_badge: 'Microscopía Óptica',
+          criteria_title: 'Criterios de Identificación Cúbica',
+          crit_count: '1',
+          crit_1_title: 'Núcleo Esférico Central',
+          crit_1_desc: 'Ubicado exactamente en el centro.',
+          locations_badge: 'Atlas Anatómico',
+          locations_title: 'Ubicaciones del Epitelio Cúbico',
+          loc_count: '1',
+          loc_1_organ: 'Túbulos Renales',
+          loc_1_desc: 'Túbulo contorneado proximal y distal.',
         },
       },
       {
@@ -608,7 +577,7 @@ describe('ContentBlockRenderer', () => {
         entity_type: 'placas_page',
         entity_id: 156,
         block_type: 'histology_stains',
-        sort_order: 4,
+        sort_order: 2,
         content: {
           title: 'Tinciones para Epitelio Cúbico',
           badge_text: 'Colorimetría Tisular',
@@ -632,20 +601,18 @@ describe('ContentBlockRenderer', () => {
     expect(screen.getByText('Morfología Isodiamétrica')).toBeInTheDocument();
     expect(screen.getByText('Misma altura y anchura.')).toBeInTheDocument();
 
-    // Función
+    // Tríada (Función, Criterios, Ubicaciones)
     expect(screen.getByText('Función Secretora Renal')).toBeInTheDocument();
-    expect(screen.getByText('Reabsorción Tubular')).toBeInTheDocument();
+    expect(screen.getByText('REABSORCIÓN TUBULAR')).toBeInTheDocument();
     expect(screen.getByText('Recuperación de glucosa.')).toBeInTheDocument();
+    expect(screen.getByText('Secreción Activa')).toBeInTheDocument();
 
-    // Morfología
     expect(screen.getByText('Criterios de Identificación Cúbica')).toBeInTheDocument();
     expect(screen.getByText('Núcleo Esférico Central')).toBeInTheDocument();
     expect(screen.getByText('Ubicado exactamente en el centro.')).toBeInTheDocument();
 
-    // Ubicaciones
     expect(screen.getByText('Ubicaciones del Epitelio Cúbico')).toBeInTheDocument();
     expect(screen.getByText('Túbulos Renales')).toBeInTheDocument();
-    expect(screen.getByText('Sistema Urinario')).toBeInTheDocument();
 
     // Tinciones
     expect(screen.getByText('Tinciones para Epitelio Cúbico')).toBeInTheDocument();
@@ -692,5 +659,99 @@ describe('ContentBlockRenderer', () => {
     expect(topic1Link).toHaveAttribute('href', '/subtemas/10');
     expect(topic2Link).toHaveAttribute('href', '/subtemas/11');
     expect(topic3Link).toHaveAttribute('href', '/subtemas/12');
+  });
+
+  it('renderiza la nueva tríada de fundamentos histológicos (histology_pillars) y generalidades con idea clave', () => {
+    const blocks: ContentBlock[] = [
+      {
+        id: 'hist-gen-v2',
+        entity_type: 'placas_page',
+        entity_id: 200,
+        block_type: 'histology_generalities',
+        sort_order: 1,
+        content: {
+          title: '1. Generalidades del Tejido',
+          badge_text: 'Fundamentos',
+          intro_text: 'El epitelio plano simple consiste en una sola capa de células.',
+          key_idea: 'Su estructura delgada permite difusión eficiente.',
+        },
+      },
+      {
+        id: 'hist-pillars-v2',
+        entity_type: 'placas_page',
+        entity_id: 200,
+        block_type: 'histology_pillars',
+        sort_order: 2,
+        content: {
+          function_badge: 'Función',
+          function_title: '2. Función Principal',
+          main_function_name: 'INTERCAMBIO',
+          main_function_desc: 'Facilita el intercambio rápido de gases.',
+          assoc_count: '2',
+          assoc_1_label: 'Filtración',
+          assoc_2_label: 'Difusión',
+          criteria_badge: 'Criterios Morfológicos',
+          criteria_title: '3. Criterios Morfológicos',
+          crit_count: '2',
+          crit_1_title: 'Número de capas',
+          crit_1_desc: 'Una sola capa de células.',
+          crit_2_title: 'Forma celular',
+          crit_2_desc: 'Aplanada, tipo escamosa.',
+          locations_badge: 'Ubicaciones Anatómicas',
+          locations_title: '4. Ubicaciones Anatómicas',
+          loc_count: '2',
+          loc_1_organ: 'Alvéolos pulmonares',
+          loc_1_desc: 'Revestimiento de los alvéolos.',
+          loc_2_organ: 'Endotelio vascular',
+          loc_2_desc: 'Revestimiento de vasos sanguíneos.',
+        },
+      },
+      {
+        id: 'hist-stains-v2',
+        entity_type: 'placas_page',
+        entity_id: 200,
+        block_type: 'histology_stains',
+        sort_order: 3,
+        content: {
+          title: '5. Tinciones Histológicas',
+          badge_text: 'Tinciones Histológicas',
+          items_count: '2',
+          item_1_name: 'Hematoxilina - Eosina (H&E)',
+          item_1_nucleus: 'azul/violeta',
+          item_1_cytoplasm: 'rosado',
+          item_1_utility: 'Evaluación general.',
+          item_2_name: 'PAS',
+          item_2_highlights: 'Carbohidratos y mucinas',
+          item_2_utility: 'Identificación de glucógeno.',
+        },
+      },
+    ];
+
+    render(<ContentBlockRenderer blocks={blocks} />);
+
+    // Generalidades e Idea Clave
+    expect(screen.getByText('1. Generalidades del Tejido')).toBeInTheDocument();
+    expect(screen.getByText('Idea clave')).toBeInTheDocument();
+    expect(screen.getByText('Su estructura delgada permite difusión eficiente.')).toBeInTheDocument();
+
+    // Tríada de Pilares
+    expect(screen.getByText('2. Función Principal')).toBeInTheDocument();
+    expect(screen.getByText('INTERCAMBIO')).toBeInTheDocument();
+    expect(screen.getByText('Filtración')).toBeInTheDocument();
+    expect(screen.getByText('Difusión')).toBeInTheDocument();
+
+    expect(screen.getByText('3. Criterios Morfológicos')).toBeInTheDocument();
+    expect(screen.getByText('Número de capas')).toBeInTheDocument();
+    expect(screen.getByText('Aplanada, tipo escamosa.')).toBeInTheDocument();
+
+    expect(screen.getByText('4. Ubicaciones Anatómicas')).toBeInTheDocument();
+    expect(screen.getByText('Alvéolos pulmonares')).toBeInTheDocument();
+    expect(screen.getByText('Endotelio vascular')).toBeInTheDocument();
+
+    // Tinciones
+    expect(screen.getByText('5. Tinciones Histológicas')).toBeInTheDocument();
+    expect(screen.getByText('Hematoxilina - Eosina (H&E)')).toBeInTheDocument();
+    expect(screen.getByText('azul/violeta')).toBeInTheDocument();
+    expect(screen.getByText('Carbohidratos y mucinas')).toBeInTheDocument();
   });
 });

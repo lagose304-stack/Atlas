@@ -20,6 +20,7 @@ export interface HistologyGeneralitiesProps {
   imageUrl?: string;
   imageCaption?: string;
   imageBadge?: string;
+  keyIdea?: string;
   onOpenImageViewer?: (url: string) => void;
 }
 
@@ -33,6 +34,7 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
   labTip,
   imageUrl,
   imageBadge = '🔬 Micrografía de Referencia · H&E',
+  keyIdea,
   onOpenImageViewer,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -52,8 +54,20 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
   };
 
   const validKeyPoints = keyPoints?.filter(p => (p.label && p.label.trim() !== '') || (p.content && p.content.trim() !== '')) || [];
-  const hasTopContent = (badgeText && badgeText.trim() !== '') || (title && title.trim() !== '') || (introText && introText.trim() !== '') || (pills && pills.length > 0) || (imageUrl && imageUrl.trim() !== '');
+  const hasImage = Boolean(imageUrl && imageUrl.trim() !== '');
+  const hasKeyIdea = Boolean(keyIdea && keyIdea.trim() !== '');
+  const hasTopContent = (badgeText && badgeText.trim() !== '') || (title && title.trim() !== '') || (introText && introText.trim() !== '') || (pills && pills.length > 0) || hasImage || hasKeyIdea;
   const hasBottomContent = (pointsTitle && pointsTitle.trim() !== '') || validKeyPoints.length > 0 || (labTip && labTip.trim() !== '');
+
+  // Determinar columnas dinámicamente:
+  let gridColumns = '1fr';
+  if (hasImage && hasKeyIdea) {
+    gridColumns = 'minmax(0, 1.3fr) minmax(260px, 1.1fr) minmax(200px, 0.8fr)';
+  } else if (hasImage) {
+    gridColumns = 'minmax(0, 1.2fr) minmax(280px, 0.8fr)';
+  } else if (hasKeyIdea) {
+    gridColumns = 'minmax(0, 1.5fr) minmax(240px, 0.8fr)';
+  }
 
   return (
     <div
@@ -70,18 +84,18 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
         gap: '24px',
       }}
     >
-      {/* ─── FILA SUPERIOR: TEXTO INTRODUCTORIO (Y FOTO SI EXISTE) ─── */}
+      {/* ─── FILA SUPERIOR: TEXTO INTRODUCTORIO + FOTO CENTRAL + TARJETA IDEA CLAVE ─── */}
       {hasTopContent && (
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: imageUrl && imageUrl.trim() !== '' ? 'minmax(0, 1.15fr) minmax(280px, 0.85fr)' : '1fr',
-            alignItems: 'center',
-            gap: 'clamp(18px, 2.5vw, 32px)',
+            gridTemplateColumns: gridColumns,
+            alignItems: 'stretch',
+            gap: 'clamp(16px, 2vw, 24px)',
           }}
         >
-          {/* Lado Izquierdo: Cabecera, Título e Introducción */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Columna 1 (Izquierda): Cabecera, Título e Introducción */}
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '12px' }}>
             {/* Badge de sección (Solo si tiene texto) */}
             {badgeText && badgeText.trim() !== '' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -127,13 +141,20 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
             {introText && introText.trim() !== '' && (
               <div
                 style={{
-                  fontSize: '0.94rem',
-                  lineHeight: 1.7,
+                  fontSize: '0.92rem',
+                  lineHeight: 1.65,
                   color: '#334155',
                   fontWeight: 450,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
                 }}
               >
-                {renderBoldText(introText)}
+                {introText.split(/\n\s*\n/).map((para, pIdx) => (
+                  <p key={pIdx} style={{ margin: 0 }}>
+                    {renderBoldText(para.trim())}
+                  </p>
+                ))}
               </div>
             )}
 
@@ -159,9 +180,9 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
             )}
           </div>
 
-          {/* Lado Derecho: Marco Microscópico de la Imagen de Referencia (Solo si hay imagen) */}
-          {imageUrl && imageUrl.trim() !== '' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {/* Columna 2 (Centro): Marco Microscópico de la Imagen de Referencia (Solo si hay imagen) */}
+          {hasImage && (
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div
                 style={{
                   position: 'relative',
@@ -169,10 +190,11 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                   overflow: 'hidden',
                   background: 'linear-gradient(145deg, #0c3852 0%, #172554 60%, #1e1b4b 100%)',
                   border: '2px solid rgba(199, 210, 254, 0.9)',
-                  boxShadow: '0 12px 30px rgba(79, 70, 229, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
+                  boxShadow: '0 10px 26px rgba(79, 70, 229, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
                   aspectRatio: '16 / 10',
-                  minHeight: '220px',
-                  maxHeight: '290px',
+                  minHeight: '190px',
+                  height: '100%',
+                  maxHeight: '260px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -181,7 +203,7 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
                 onClick={() => {
-                  if (onOpenImageViewer) {
+                  if (onOpenImageViewer && imageUrl) {
                     onOpenImageViewer(imageUrl);
                   }
                 }}
@@ -211,18 +233,18 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                       background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(245, 243, 255, 0.92))',
                       border: '1px solid rgba(199, 210, 254, 0.9)',
                       color: '#4338ca',
-                      fontSize: '0.70rem',
+                      fontSize: '0.68rem',
                       fontWeight: 850,
-                      letterSpacing: '0.04em',
+                      letterSpacing: '0.03em',
                       boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
                       backdropFilter: 'blur(8px)',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '6px',
+                      gap: '5px',
                       pointerEvents: 'none',
                     }}
                   >
-                    <BookOpen size={12} color="#6366f1" />
+                    <BookOpen size={11} color="#6366f1" />
                     <span>{imageBadge}</span>
                   </div>
                 )}
@@ -243,13 +265,47 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                     alignItems: 'center',
                     gap: '5px',
                     boxShadow: '0 4px 12px rgba(2, 132, 199, 0.35)',
-                    opacity: isHovered ? 1 : 0.85,
+                    opacity: isHovered ? 1 : 0.9,
                     transition: 'opacity 0.2s ease',
                   }}
                 >
-                  <ZoomIn size={13} />
+                  <ZoomIn size={12} />
                   <span>Ampliar</span>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Columna 3 (Derecha): Tarjeta Idea Clave */}
+          {hasKeyIdea && (
+            <div
+              style={{
+                borderRadius: '18px',
+                background: 'linear-gradient(180deg, #fbfaff 0%, #f5f3ff 100%)',
+                border: '1.5px solid #ede9fe',
+                padding: '20px 18px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                gap: '12px',
+                boxShadow: '0 6px 18px rgba(99, 102, 241, 0.04)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#4f46e5' }}>
+                <BookOpen size={17} />
+                <span style={{ fontSize: '0.88rem', fontWeight: 800, letterSpacing: '-0.01em' }}>
+                  Idea clave
+                </span>
+              </div>
+              <div
+                style={{
+                  fontSize: '0.86rem',
+                  lineHeight: 1.6,
+                  color: '#475569',
+                  fontWeight: 500,
+                }}
+              >
+                {renderBoldText(keyIdea || '')}
               </div>
             </div>
           )}

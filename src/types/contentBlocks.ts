@@ -18,9 +18,7 @@ export type BlockType =
   | 'section_end'
   | 'columns_2'
   | 'histology_generalities'
-  | 'histology_function'
-  | 'histology_morphology'
-  | 'histology_locations'
+  | 'histology_pillars'
   | 'histology_stains';
 
 export type PageEntityType = 'subtemas_page' | 'placas_page' | 'home_page';

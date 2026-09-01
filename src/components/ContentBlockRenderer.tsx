@@ -10,9 +10,7 @@ import { normalizeBlockContent } from './blocks/blockRegistry';
 import { supabase } from '../services/supabase';
 import {
   HistologyGeneralitiesBlock,
-  HistologyFunctionBlock,
-  HistologyMorphologyBlock,
-  HistologyLocationsBlock,
+  HistologyPillarsBlock,
   HistologyStainsBlock,
 } from './histology-blocks';
 
@@ -1540,127 +1538,120 @@ const BlockItem: React.FC<{
           labTip={c.lab_tip || undefined}
           imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
           imageBadge={c.image_badge !== undefined ? c.image_badge : '🔬 Micrografía de Referencia'}
+          keyIdea={c.key_idea || undefined}
           onOpenImageViewer={() => onZoom(c.image_url, c.placa_id || c.weekly_placa_id)}
         />
       );
     }
 
-    case 'histology_function': {
-      const count = Number(c.feats_count) || (c.feat_4_title || c.feat_4_desc ? 4 : c.feat_3_title || c.feat_3_desc ? 3 : c.feat_2_title || c.feat_2_desc ? 2 : 4);
-      const features = [];
-      for (let i = 1; i <= Math.max(1, count); i++) {
-        const title = c[`feat_${i}_title`];
-        const detail = c[`feat_${i}_desc`];
-        if ((title && title.trim() !== '') || (detail && detail.trim() !== '')) {
-          features.push({ title: title || '', detail: detail || '' });
+    case 'histology_pillars': {
+      // Tarjeta 1: Función
+      const assocCount = Number(c.assoc_count) || (c.assoc_3_label ? 3 : c.assoc_2_label ? 2 : 3);
+      const associatedFunctions = [];
+      for (let i = 1; i <= Math.max(1, assocCount); i++) {
+        const label = c[`assoc_${i}_label`];
+        const icon = (c[`assoc_${i}_icon`] || 'sparkles') as any;
+        if (label && label.trim() !== '') {
+          associatedFunctions.push({ label, icon });
         }
       }
 
-      return (
-        <HistologyFunctionBlock
-          title={c.title !== undefined ? c.title : 'Función Principal del Tejido'}
-          badgeText={c.badge_text !== undefined ? c.badge_text : 'Función Principal del Tejido'}
-          description={c.description || ''}
-          featsTitle={c.feats_title !== undefined ? c.feats_title : undefined}
-          features={features.length > 0 ? features : undefined}
-          clinicalNote={c.clinical_note || undefined}
-          imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
-          imageBadge={c.image_badge !== undefined ? c.image_badge : '⚡ Esquema Funcional'}
-          onOpenImageViewer={() => onZoom(c.image_url, c.placa_id || c.weekly_placa_id)}
-        />
-      );
-    }
-
-    case 'histology_morphology': {
-      const count = Number(c.items_count) || (c.item_5_title || c.item_5_desc ? 5 : c.item_4_title || c.item_4_desc ? 4 : c.item_3_title || c.item_3_desc ? 3 : 5);
-      const items = [];
-      for (let i = 1; i <= Math.max(1, count); i++) {
-        const title = c[`item_${i}_title`];
-        const description = c[`item_${i}_desc`];
-        if ((title && title.trim() !== '') || (description && description.trim() !== '')) {
-          items.push({
+      // Tarjeta 2: Criterios
+      const critCount = Number(c.crit_count) || (c.crit_5_title || c.crit_5_desc ? 5 : c.crit_4_title || c.crit_4_desc ? 4 : c.crit_3_title || c.crit_3_desc ? 3 : 5);
+      const criteria = [];
+      for (let i = 1; i <= Math.max(1, critCount); i++) {
+        const title = c[`crit_${i}_title`];
+        const detail = c[`crit_${i}_desc`];
+        if ((title && title.trim() !== '') || (detail && detail.trim() !== '')) {
+          criteria.push({
             number: String(i).padStart(2, '0'),
             title: title || '',
-            description: description || '',
-          });
-        }
-      }
-
-      return (
-        <HistologyMorphologyBlock
-          title={c.title !== undefined ? c.title : 'Criterios Morfológicos de Identificación'}
-          badgeText={c.badge_text !== undefined ? c.badge_text : 'Reconocimiento Microscópico'}
-          introText={c.intro_text || ''}
-          criteriaTitle={c.criteria_title !== undefined ? c.criteria_title : undefined}
-          items={items.length > 0 ? items : undefined}
-          examTip={c.exam_tip || undefined}
-          imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
-          imageBadge={c.image_badge !== undefined ? c.image_badge : '🔬 Micrografía Morfológica'}
-          onOpenImageViewer={() => onZoom(c.image_url, c.placa_id || c.weekly_placa_id)}
-        />
-      );
-    }
-
-    case 'histology_locations': {
-      const count = Number(c.items_count) || (c.item_5_organ || c.item_5_desc ? 5 : c.item_4_organ || c.item_4_desc ? 4 : c.item_3_organ || c.item_3_desc ? 3 : 5);
-      const items = [];
-      for (let i = 1; i <= Math.max(1, count); i++) {
-        const organ = c[`item_${i}_organ`];
-        const system = c[`item_${i}_system`];
-        const detail = c[`item_${i}_desc`];
-        if ((organ && organ.trim() !== '') || (detail && detail.trim() !== '') || (system && system.trim() !== '')) {
-          items.push({
-            number: String(i).padStart(2, '0'),
-            organ: organ || '',
-            system: system || '',
             detail: detail || '',
           });
         }
       }
 
+      // Tarjeta 3: Ubicaciones
+      const locCount = Number(c.loc_count) || (c.loc_5_organ || c.loc_5_desc ? 5 : c.loc_4_organ || c.loc_4_desc ? 4 : c.loc_3_organ || c.loc_3_desc ? 3 : 5);
+      const locations = [];
+      for (let i = 1; i <= Math.max(1, locCount); i++) {
+        const organ = c[`loc_${i}_organ`];
+        const detail = c[`loc_${i}_desc`];
+        const icon = c[`loc_${i}_icon`];
+        if ((organ && organ.trim() !== '') || (detail && detail.trim() !== '')) {
+          locations.push({
+            organ: organ || '',
+            detail: detail || '',
+            icon: icon || undefined,
+          });
+        }
+      }
+
       return (
-        <HistologyLocationsBlock
-          title={c.title !== undefined ? c.title : 'Ubicaciones Anatómicas Clave'}
-          badgeText={c.badge_text !== undefined ? c.badge_text : 'Atlas Anatómico'}
-          introText={c.intro_text || ''}
-          locationsTitle={c.locations_title !== undefined ? c.locations_title : undefined}
-          items={items.length > 0 ? items : undefined}
-          mnemoticTip={c.mnemotic_tip || undefined}
-          imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
-          imageBadge={c.image_badge !== undefined ? c.image_badge : '📍 Esquema Anatómico'}
-          onOpenImageViewer={() => onZoom(c.image_url, c.placa_id || c.weekly_placa_id)}
+        <HistologyPillarsBlock
+          functionBadge={c.function_badge || 'Función'}
+          functionTitle={c.function_title || '2. Función Principal'}
+          mainFunctionName={c.main_function_name || ''}
+          mainFunctionDesc={c.main_function_desc || ''}
+          mainFunctionIcon={c.main_function_icon || 'exchange'}
+          associatedFunctions={associatedFunctions}
+
+          criteriaBadge={c.criteria_badge || 'Criterios Morfológicos'}
+          criteriaTitle={c.criteria_title || '3. Criterios Morfológicos'}
+          criteria={criteria}
+
+          locationsBadge={c.locations_badge || 'Ubicaciones Anatómicas'}
+          locationsTitle={c.locations_title || '4. Ubicaciones Anatómicas'}
+          locations={locations}
         />
       );
     }
 
     case 'histology_stains': {
-      const count = Number(c.items_count) || (c.item_5_name || c.item_5_result ? 5 : c.item_4_name || c.item_4_result ? 4 : c.item_3_name || c.item_3_result ? 3 : 5);
+      const count = Number(c.items_count) || (c.item_5_name || c.item_5_result ? 5 : c.item_4_name || c.item_4_result ? 4 : c.item_3_name || c.item_3_result ? 3 : 4);
       const items = [];
       for (let i = 1; i <= Math.max(1, count); i++) {
         const name = c[`item_${i}_name`];
         const category = c[`item_${i}_cat`];
+        const nucleus = c[`item_${i}_nucleus`];
+        const cytoplasm = c[`item_${i}_cytoplasm`];
+        const highlights = c[`item_${i}_highlights`];
+        const utility = c[`item_${i}_utility`];
         const result = c[`item_${i}_result`];
-        if ((name && name.trim() !== '') || (result && result.trim() !== '') || (category && category.trim() !== '')) {
+        const imgKey = c[`item_${i}_image_url`];
+        const imageUrl = imgKey ? getCloudinaryImageUrl(imgKey, 'view') : undefined;
+
+        if (
+          (name && name.trim() !== '') ||
+          (result && result.trim() !== '') ||
+          (nucleus && nucleus.trim() !== '') ||
+          (highlights && highlights.trim() !== '') ||
+          (utility && utility.trim() !== '') ||
+          (category && category.trim() !== '')
+        ) {
           items.push({
             number: String(i).padStart(2, '0'),
             name: name || '',
             category: category || '',
+            nucleus: nucleus || '',
+            cytoplasm: cytoplasm || '',
+            highlights: highlights || '',
+            utility: utility || '',
             result: result || '',
+            imageUrl,
+            icon: c[`item_${i}_icon`] || undefined,
           });
         }
       }
 
       return (
         <HistologyStainsBlock
-          title={c.title !== undefined ? c.title : 'Tinciones Histológicas y Colorimetría'}
-          badgeText={c.badge_text !== undefined ? c.badge_text : 'Colorimetría & Laboratorio'}
+          title={c.title !== undefined ? c.title : '5. Tinciones Histológicas'}
+          badgeText={c.badge_text !== undefined ? c.badge_text : 'Tinciones Histológicas'}
           introText={c.intro_text || ''}
-          stainsTitle={c.stains_title !== undefined ? c.stains_title : undefined}
           items={items.length > 0 ? items : undefined}
           colorKeyTip={c.color_tip || undefined}
-          imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
-          imageBadge={c.image_badge !== undefined ? c.image_badge : '🎨 Muestra de Tinción'}
-          onOpenImageViewer={() => onZoom(c.image_url, c.placa_id || c.weekly_placa_id)}
+          onOpenImageViewer={(url) => onZoom(url)}
         />
       );
     }

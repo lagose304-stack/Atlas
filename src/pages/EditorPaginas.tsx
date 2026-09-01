@@ -168,13 +168,22 @@ const EditorPaginas: React.FC = () => {
     }
   }, [selection, temas, subtemas, isAdministrator]);
 
-  // Sincronizar selección en la URL para que no se pierda al recargar
+  // Sincronizar selección y versión activa en la URL para que no se pierda al recargar
   useEffect(() => {
     if (selection) {
       syncUrlSearchParam('tipo', selection.kind);
       syncUrlSearchParam('id', 'id' in selection ? selection.id : null);
+      if (viewMode === 'editor' && activeVersion) {
+        syncUrlSearchParam('version', activeVersion.id);
+      } else if (viewMode === 'versions_hub') {
+        syncUrlSearchParam('version', null);
+      }
+    } else {
+      syncUrlSearchParam('tipo', null);
+      syncUrlSearchParam('id', null);
+      syncUrlSearchParam('version', null);
     }
-  }, [selection]);
+  }, [selection, viewMode, activeVersion]);
 
   // Carga del historial de versiones para la página seleccionada
   const loadVersions = useCallback(async () => {
@@ -187,6 +196,25 @@ const EditorPaginas: React.FC = () => {
         username: user?.username,
       });
       setVersions(rows);
+
+      // Si ya hay una versión activa, actualizarla con los datos frescos de la BD
+      setActiveVersion(prev => {
+        if (!prev) return null;
+        const fresh = rows.find(r => r.id === prev.id);
+        return fresh ?? prev;
+      });
+
+      // Si acabamos de recargar la página (F5) con un parámetro 'version' guardado en URL, restaurar directamente el editor
+      const preservedVer = getPreservedSearchParam('version') || new URLSearchParams(window.location.search).get('version');
+      if (preservedVer) {
+        const verId = Number(preservedVer);
+        const match = rows.find(r => r.id === verId);
+        if (match) {
+          setActiveVersion(match);
+          setDraftBlocks(match.blocks ?? []);
+          setViewMode('editor');
+        }
+      }
     } catch (err) {
       console.warn('Error al cargar versiones de página:', err);
       setVersions([]);
@@ -228,6 +256,7 @@ const EditorPaginas: React.FC = () => {
     setSelection(nextSelection);
     setViewMode('versions_hub');
     setActiveVersion(null);
+    syncUrlSearchParam('version', null);
     setMode('edit');
     setIsPageNavigatorOpen(false);
   }, [isDirty, selection]);
@@ -238,6 +267,7 @@ const EditorPaginas: React.FC = () => {
     setDraftBlocks(version.blocks ?? []);
     setViewMode('editor');
     setMode('edit');
+    syncUrlSearchParam('version', version.id);
   };
 
   // Acción: Guardar cambios manualmente con notificación visual
@@ -252,6 +282,7 @@ const EditorPaginas: React.FC = () => {
       const ok = await editorRef.current.saveChanges();
       if (ok) {
         setIsDirty(false);
+        setActiveVersion(prev => (prev ? { ...prev, blocks: draftBlocks } : prev));
         void loadVersions();
         setSaveToast({
           type: 'success',
@@ -296,6 +327,8 @@ const EditorPaginas: React.FC = () => {
       }
       setIsDirty(false);
       setViewMode('versions_hub');
+      setActiveVersion(null);
+      syncUrlSearchParam('version', null);
       void loadVersions();
       return;
     }
@@ -303,6 +336,9 @@ const EditorPaginas: React.FC = () => {
     // Si estamos en el Hub de Versiones de una página, regresar al catálogo general de páginas
     if (selection !== null) {
       setSelection(null);
+      syncUrlSearchParam('tipo', null);
+      syncUrlSearchParam('id', null);
+      syncUrlSearchParam('version', null);
       return;
     }
 
@@ -363,24 +399,26 @@ const EditorPaginas: React.FC = () => {
     await loadVersions();
   };
 
-  // Si el usuario activó la vista previa real en vivo, mostramos la experiencia auténtica completa
-  if (selection && viewMode === 'editor' && mode === 'preview') {
-    return (
-      <RealPageDraftViewer
-        selection={selection}
-        blocks={draftBlocks}
-        versionName={activeVersion?.version_name}
-        isPublished={activeVersion?.is_published}
-        onBackToEditor={() => setMode('edit')}
-      />
-    );
-  }
-
   return (
-    <div className="page-editor-page">
-      <Header />
-      <main className="page-editor-page-main">
-        <BackButton onClick={handleSmartBack} />
+    <>
+      {/* ─── VISTA PREVIA EN VIVO REAL (sin desmontar el editor de contenido) ─── */}
+      {selection && viewMode === 'editor' && mode === 'preview' && (
+        <RealPageDraftViewer
+          selection={selection}
+          blocks={draftBlocks}
+          versionName={activeVersion?.version_name}
+          isPublished={activeVersion?.is_published}
+          onBackToEditor={() => setMode('edit')}
+        />
+      )}
+
+      <div
+        className="page-editor-page"
+        style={{ display: mode === 'preview' ? 'none' : 'block' }}
+      >
+        <Header />
+        <main className="page-editor-page-main">
+          <BackButton onClick={handleSmartBack} />
 
         {/* ─── NOTIFICACIÓN FLOTANTE DE GUARDADO ─── */}
         {saveToast && (
@@ -662,7 +700,10 @@ const EditorPaginas: React.FC = () => {
                         activeVersion={activeVersion}
                         onBlocksChange={setDraftBlocks}
                         onDirtyChange={setIsDirty}
-                        onVersionSaved={loadVersions}
+                        onVersionSaved={() => {
+                          setActiveVersion(prev => (prev ? { ...prev, blocks: draftBlocks } : prev));
+                          void loadVersions();
+                        }}
                         onManualSaveRequest={handleManualSaveVersion}
                         experienceMode="advanced"
                         autoSave
@@ -677,7 +718,8 @@ const EditorPaginas: React.FC = () => {
       </main>
       <Footer />
     </div>
-  );
+  </>
+);
 };
 
 export default EditorPaginas;
