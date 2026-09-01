@@ -48,6 +48,7 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
 
   return (
     <div
+      className="histology-stains-block"
       style={{
         position: 'relative',
         borderRadius: '24px',
@@ -107,8 +108,8 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
             style={{
               fontSize: '0.90rem',
               lineHeight: 1.6,
-              color: '#475569',
-              fontWeight: 450,
+              color: '#000000',
+              fontWeight: 500,
             }}
           >
             {renderBoldText(introText)}
@@ -210,7 +211,7 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
                     {item.highlights && (
                       <div>
                         <strong style={{ color: '#9333ea', fontWeight: 750 }}>Resalta: </strong>
-                        <span>{item.highlights}</span>
+                        <span>{renderBoldText(item.highlights)}</span>
                       </div>
                     )}
 
@@ -219,9 +220,9 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
                     )}
 
                     {item.utility && (
-                      <div style={{ marginTop: '2px', color: '#64748b', fontSize: '0.73rem', lineHeight: 1.35 }}>
+                      <div style={{ marginTop: '2px', color: '#000000', fontSize: '0.73rem', lineHeight: 1.35 }}>
                         <strong style={{ color: '#1e293b', fontWeight: 700 }}>Utilidad: </strong>
-                        <span>{item.utility}</span>
+                        <span>{renderBoldText(item.utility)}</span>
                       </div>
                     )}
                   </div>
@@ -300,7 +301,7 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
           }}
         >
           <Sparkles size={16} style={{ flexShrink: 0, color: '#9333ea' }} />
-          <div>{renderBoldText(colorKeyTip)}</div>
+          <div style={{ color: '#000000' }}>{renderBoldText(colorKeyTip)}</div>
         </div>
       )}
     </div>

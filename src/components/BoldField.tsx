@@ -9,6 +9,7 @@
  */
 
 import React, { useRef, useEffect, useCallback } from 'react';
+import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 
 // ─── Conversión markdown ↔ HTML ───────────────────────────────────────────────
 
@@ -39,9 +40,13 @@ function fromHtml(html: string): string {
     .replace(/\n+$/, '');
 }
 
-/** Renderiza **texto** como <strong> en vistas de solo lectura */
+/** Renderiza **texto** como <strong> o HTML formateado (colores, tamaños, estilos) en vistas de solo lectura */
 export function renderBoldText(text: string | null | undefined): React.ReactNode {
-  if (!text || !text.includes('**')) return text ?? '';
+  if (!text) return '';
+  if (hasHtmlMarkup(text)) {
+    return <span className="atlas-rich-rendered" style={{ color: '#000000' }} dangerouslySetInnerHTML={{ __html: toSafeHtml(text) }} />;
+  }
+  if (!text.includes('**')) return text;
   const parts = text.split(/(\*\*[\s\S]*?\*\*)/g);
   return (
     <>

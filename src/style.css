@@ -160,7 +160,7 @@ body {
   z-index: 12000;
 }
 
-/* TipTap rich editor */
+/* TipTap rich editor y párrafos */
 .tiptap-editor-content {
   min-height: 100px;
   outline: none;
@@ -171,6 +171,7 @@ body {
 
 .tiptap-editor-content p {
   margin: 0 0 0.55em;
+  color: var(--atlas-editor-text, #000000);
 }
 
 /* Ritmo vertical compartido por el contenido creado en el editor de páginas. */
@@ -188,9 +189,19 @@ body {
   flex: 0 0 auto !important;
 }
 
+/* Párrafos de contenido y texto enriquecido: negro puro #000000 por defecto */
 .tiptap-editor-content p:not([style*="color"]),
-.tiptap-editor-content li:not([style*="color"]) {
-  color: inherit !important;
+.tiptap-editor-content li:not([style*="color"]),
+.visual-properties-rich-text-input p:not([style*="color"]),
+.visual-properties-rich-text-input li:not([style*="color"]),
+.cb-paragraph p:not([style*="color"]),
+.cb-paragraph li:not([style*="color"]),
+.public-editor-content p:not([style*="color"]),
+.histology-generalities-block p:not([style*="color"]),
+.histology-pillars-block p:not([style*="color"]),
+.histology-stains-block p:not([style*="color"]),
+.atlas-rich-rendered p:not([style*="color"]) {
+  color: var(--atlas-editor-text, #000000) !important;
 }
 
 .tiptap-editor-content p:last-child {

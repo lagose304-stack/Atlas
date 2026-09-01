@@ -70,6 +70,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
 
   return (
     <div
+      className="histology-pillars-block"
       style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
@@ -183,8 +184,8 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                   style={{
                     fontSize: '0.82rem',
                     lineHeight: 1.55,
-                    color: '#334155',
-                    fontWeight: 450,
+                    color: '#000000',
+                    fontWeight: 500,
                   }}
                 >
                   {renderBoldText(mainFunctionDesc)}
@@ -333,7 +334,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                           color: '#0f172a',
                         }}
                       >
-                        {item.title}
+                        {renderBoldText(item.title)}
                       </strong>
                     )}
                     {item.detail && (
@@ -341,8 +342,8 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                         style={{
                           fontSize: '0.80rem',
                           lineHeight: 1.45,
-                          color: '#475569',
-                          fontWeight: 450,
+                          color: '#000000',
+                          fontWeight: 500,
                         }}
                       >
                         {renderBoldText(item.detail)}
@@ -454,7 +455,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                           color: '#0f172a',
                         }}
                       >
-                        {item.organ}
+                        {renderBoldText(item.organ)}
                       </strong>
                     )}
                     {item.detail && (
@@ -462,8 +463,8 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                         style={{
                           fontSize: '0.80rem',
                           lineHeight: 1.45,
-                          color: '#475569',
-                          fontWeight: 450,
+                          color: '#000000',
+                          fontWeight: 500,
                         }}
                       >
                         {renderBoldText(item.detail)}

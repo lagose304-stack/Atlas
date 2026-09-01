@@ -81,7 +81,7 @@
   font-family: var(--atlas-font-temario);
   font-size: var(--atlas-body-size);
   font-weight: var(--atlas-body-weight);
-  color: var(--atlas-body-color);
+  color: inherit;
 }
 
 .atlas-typo-title {

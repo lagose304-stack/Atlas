@@ -379,9 +379,10 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
 
       return (
         <>
-          <TextAreaField label="Título de la sección" value={content.title ?? ''} onChange={title => onChange({ title })} />
-          <TextAreaField label="Etiqueta superior" value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
-          <TextAreaField label="Párrafo introductorio" value={content.intro_text ?? ''} onChange={intro_text => onChange({ intro_text })} />
+          <TextAreaField label="Título de la sección" editorId={`${block.id}:title`} value={content.title ?? ''} onChange={title => onChange({ title })} />
+          <TextAreaField label="Etiqueta superior" editorId={`${block.id}:badge_text`} value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
+          <TextAreaField label="Párrafo introductorio" editorId={`${block.id}:intro_text`} value={content.intro_text ?? ''} onChange={intro_text => onChange({ intro_text })} />
+          <TextAreaField label="Tarjeta Idea Clave" editorId={`${block.id}:key_idea`} value={content.key_idea ?? ''} onChange={key_idea => onChange({ key_idea })} />
           <ImageField url={content.image_url ?? ''} onPick={() => onPickImage('image_url')} onClear={() => onChange({ image_url: '' })} />
           <label className="visual-properties-field"><span>Etiqueta de la imagen</span><input value={content.image_badge || ''} onChange={event => onChange({ image_badge: event.target.value })} placeholder="Ej: 🔬 Micrografía de Referencia" /></label>
           <label className="visual-properties-field"><span>Título de la subsección de pilares</span><input value={content.points_title || ''} onChange={event => onChange({ points_title: event.target.value })} placeholder="Ej: Pilares Teóricos y Embriología del Tejido" /></label>
@@ -397,24 +398,24 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
                 )}
               </div>
               <label className="visual-properties-field"><span>Título del pilar</span><input value={content[`point_${num}_title`] || ''} onChange={event => onChange({ [`point_${num}_title`]: event.target.value })} /></label>
-              <TextAreaField label="Descripción" value={content[`point_${num}_desc`] || ''} onChange={val => onChange({ [`point_${num}_desc`]: val })} />
+              <TextAreaField label="Descripción" editorId={`${block.id}:point_${num}_desc`} value={content[`point_${num}_desc`] || ''} onChange={val => onChange({ [`point_${num}_desc`]: val })} />
             </div>
           ))}
           <button type="button" onClick={handleAddPoint} style={{ marginTop: '8px', width: '100%', padding: '7px', borderRadius: '8px', background: '#eff6ff', border: '1px dashed #93c5fd', color: '#1d4ed8', fontWeight: 700, fontSize: '0.82em', cursor: 'pointer' }}>
             + Añadir otro Pilar
           </button>
-          <TextAreaField label="Tip de laboratorio (Callout)" value={content.lab_tip ?? ''} onChange={lab_tip => onChange({ lab_tip })} />
+          <TextAreaField label="Tip de laboratorio (Callout)" editorId={`${block.id}:lab_tip`} value={content.lab_tip ?? ''} onChange={lab_tip => onChange({ lab_tip })} />
         </>
       );
     }
     if (block.block_type === 'histology_pillars') {
       return (
         <>
-          <TextAreaField label="Título de la Función" value={content.function_title ?? ''} onChange={function_title => onChange({ function_title })} />
-          <TextAreaField label="Función Rectora" value={content.main_function_name ?? ''} onChange={main_function_name => onChange({ main_function_name })} />
-          <TextAreaField label="Descripción de la función" value={content.main_function_desc ?? ''} onChange={main_function_desc => onChange({ main_function_desc })} />
-          <TextAreaField label="Título de Criterios" value={content.criteria_title ?? ''} onChange={criteria_title => onChange({ criteria_title })} />
-          <TextAreaField label="Título de Ubicaciones" value={content.locations_title ?? ''} onChange={locations_title => onChange({ locations_title })} />
+          <TextAreaField label="Título de la Función" editorId={`${block.id}:function_title`} value={content.function_title ?? ''} onChange={function_title => onChange({ function_title })} />
+          <TextAreaField label="Función Rectora" editorId={`${block.id}:main_function_name`} value={content.main_function_name ?? ''} onChange={main_function_name => onChange({ main_function_name })} />
+          <TextAreaField label="Descripción de la función" editorId={`${block.id}:main_function_desc`} value={content.main_function_desc ?? ''} onChange={main_function_desc => onChange({ main_function_desc })} />
+          <TextAreaField label="Título de Criterios" editorId={`${block.id}:criteria_title`} value={content.criteria_title ?? ''} onChange={criteria_title => onChange({ criteria_title })} />
+          <TextAreaField label="Título de Ubicaciones" editorId={`${block.id}:locations_title`} value={content.locations_title ?? ''} onChange={locations_title => onChange({ locations_title })} />
         </>
       );
     }
@@ -443,9 +444,9 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
 
       return (
         <>
-          <TextAreaField label="Título de la sección" value={content.title ?? ''} onChange={title => onChange({ title })} />
-          <TextAreaField label="Etiqueta superior" value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
-          <TextAreaField label="Introducción de colorimetría" value={content.intro_text ?? ''} onChange={intro_text => onChange({ intro_text })} />
+          <TextAreaField label="Título de la sección" editorId={`${block.id}:title`} value={content.title ?? ''} onChange={title => onChange({ title })} />
+          <TextAreaField label="Etiqueta superior" editorId={`${block.id}:badge_text`} value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
+          <TextAreaField label="Introducción de colorimetría" editorId={`${block.id}:intro_text`} value={content.intro_text ?? ''} onChange={intro_text => onChange({ intro_text })} />
           <ImageField url={content.image_url ?? ''} onPick={() => onPickImage('image_url')} onClear={() => onChange({ image_url: '' })} />
           <label className="visual-properties-field"><span>Etiqueta de la imagen</span><input value={content.image_badge || ''} onChange={event => onChange({ image_badge: event.target.value })} placeholder="Ej: 🎨 Muestra de Tinción" /></label>
           <label className="visual-properties-field"><span>Título de la subsección de tinciones</span><input value={content.stains_title || ''} onChange={event => onChange({ stains_title: event.target.value })} placeholder="Ej: Tinciones de Referencia en el Laboratorio Histológico" /></label>
@@ -462,13 +463,13 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
               </div>
               <label className="visual-properties-field"><span>Nombre de la tinción</span><input value={content[`item_${num}_name`] || ''} onChange={event => onChange({ [`item_${num}_name`]: event.target.value })} /></label>
               <label className="visual-properties-field"><span>Categoría</span><input value={content[`item_${num}_cat`] || ''} onChange={event => onChange({ [`item_${num}_cat`]: event.target.value })} /></label>
-              <TextAreaField label="Resultado cromático" value={content[`item_${num}_result`] || ''} onChange={val => onChange({ [`item_${num}_result`]: val })} />
+              <TextAreaField label="Resultado cromático" editorId={`${block.id}:item_${num}_result`} value={content[`item_${num}_result`] || ''} onChange={val => onChange({ [`item_${num}_result`]: val })} />
             </div>
           ))}
           <button type="button" onClick={handleAddItem} style={{ marginTop: '8px', width: '100%', padding: '7px', borderRadius: '8px', background: '#eff6ff', border: '1px dashed #93c5fd', color: '#1d4ed8', fontWeight: 700, fontSize: '0.82em', cursor: 'pointer' }}>
             + Añadir otra Tinción
           </button>
-          <TextAreaField label="Clave de laboratorio (Callout)" value={content.color_tip ?? ''} onChange={color_tip => onChange({ color_tip })} />
+          <TextAreaField label="Clave de laboratorio (Callout)" editorId={`${block.id}:color_tip`} value={content.color_tip ?? ''} onChange={color_tip => onChange({ color_tip })} />
         </>
       );
     }

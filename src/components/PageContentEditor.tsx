@@ -2321,6 +2321,7 @@ const MemoBlockContentEditor = React.memo(({
 
       {block.block_type === 'histology_generalities' && (
         <HistologyGeneralitiesInlineEditor
+          blockId={block.id}
           content={block.content}
           onUpdate={changes => onUpdateBlockContent(block.id, changes)}
           onPickImage={field => onOpenImageModal(block.id, field)}
@@ -2329,6 +2330,7 @@ const MemoBlockContentEditor = React.memo(({
 
       {block.block_type === 'histology_pillars' && (
         <HistologyPillarsInlineEditor
+          blockId={block.id}
           content={block.content}
           onUpdate={changes => onUpdateBlockContent(block.id, changes)}
           onPickImage={field => onOpenImageModal(block.id, field)}
@@ -2337,6 +2339,7 @@ const MemoBlockContentEditor = React.memo(({
 
       {block.block_type === 'histology_stains' && (
         <HistologyStainsInlineEditor
+          blockId={block.id}
           content={block.content}
           onUpdate={changes => onUpdateBlockContent(block.id, changes)}
           onPickImage={field => onOpenImageModal(block.id, field)}
@@ -2401,6 +2404,7 @@ const AutoTextarea: React.FC<{
     editorProps: {
       attributes: {
         class: 'tiptap-editor-content',
+        style: 'color: var(--atlas-editor-text, #000000) !important; font-weight: 500; outline: none;',
         spellcheck: 'true',
         lang: 'es',
         autocorrect: 'on',
@@ -4862,6 +4866,7 @@ const es: Record<string, React.CSSProperties> = {
   textareaParagraph: {
     fontSize: '0.95em',
     lineHeight: 1.75,
+    color: '#000000',
   },
 
   // Bloque imagen

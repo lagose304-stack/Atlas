@@ -11,8 +11,10 @@ import {
 import { getCloudinaryImageUrl } from '../../services/cloudinaryImages';
 import { MedicalIcon } from '../common/MedicalIcon';
 import { MedicalIconPickerModal } from '../common/MedicalIconPickerModal';
+import { HistologyRichField } from './HistologyRichField';
 
 interface BaseHistologyEditorProps {
+  blockId?: string;
   content: Record<string, string>;
   onUpdate: (updates: Record<string, string>) => void;
   onPickImage: (fieldKey: string) => void;
@@ -24,17 +26,10 @@ const inputStyle: React.CSSProperties = {
   borderRadius: '8px',
   border: '1px solid #cbd5e1',
   fontSize: '0.88rem',
-  color: '#1e293b',
+  color: '#000000',
   background: '#ffffff',
   boxSizing: 'border-box',
   fontFamily: 'inherit',
-};
-
-const textareaStyle: React.CSSProperties = {
-  ...inputStyle,
-  minHeight: '65px',
-  resize: 'vertical',
-  lineHeight: 1.5,
 };
 
 const labelStyle: React.CSSProperties = {
@@ -101,6 +96,7 @@ const removeBtnStyle: React.CSSProperties = {
 
 // ─── 1. GENERALIDADES DEL TEJIDO ────────────────────────────────────────────
 export const HistologyGeneralitiesInlineEditor: React.FC<BaseHistologyEditorProps> = ({
+  blockId,
   content,
   onUpdate,
   onPickImage,
@@ -154,24 +150,22 @@ export const HistologyGeneralitiesInlineEditor: React.FC<BaseHistologyEditorProp
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(240px, 0.8fr)', gap: '16px', alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <label style={labelStyle}>
-            <span>📝 Párrafo introductorio (Soporta múltiples párrafos y **negritas**)</span>
-            <textarea
-              style={{ ...textareaStyle, minHeight: '110px' }}
-              value={content.intro_text ?? ''}
-              onChange={e => onUpdate({ intro_text: e.target.value })}
-              placeholder="Escribe la descripción general del tejido (ej: Consiste en una sola capa de células con escaso citoplasma...)"
-            />
-          </label>
-          <label style={labelStyle}>
-            <span>💡 Tarjeta "Idea clave" (Columna lateral derecha)</span>
-            <textarea
-              style={{ ...textareaStyle, minHeight: '75px', borderLeft: '4px solid #6366f1', background: '#faf5ff' }}
-              value={content.key_idea ?? ''}
-              onChange={e => onUpdate({ key_idea: e.target.value })}
-              placeholder="Ej: Su estructura delgada y aplanada permite procesos de intercambio rápido y difusión eficiente."
-            />
-          </label>
+          <HistologyRichField
+            label="📝 Párrafo introductorio (Soporta múltiples párrafos, negritas y colores)"
+            editorId={blockId ? `${blockId}:intro_text` : undefined}
+            value={content.intro_text ?? ''}
+            onChange={val => onUpdate({ intro_text: val })}
+            placeholder="Escribe la descripción general del tejido (ej: Consiste en una sola capa de células con escaso citoplasma...)"
+            minHeight="100px"
+          />
+          <HistologyRichField
+            label="💡 Tarjeta 'Idea clave' (Columna lateral derecha)"
+            editorId={blockId ? `${blockId}:key_idea` : undefined}
+            value={content.key_idea ?? ''}
+            onChange={val => onUpdate({ key_idea: val })}
+            placeholder="Ej: Su estructura delgada y aplanada permite procesos de intercambio rápido y difusión eficiente."
+            minHeight="65px"
+          />
         </div>
 
         <div style={imagePickerBoxStyle}>
@@ -259,11 +253,13 @@ export const HistologyGeneralitiesInlineEditor: React.FC<BaseHistologyEditorProp
                   onChange={e => onUpdate({ [`point_${num}_title`]: e.target.value })}
                   placeholder={`Título del pilar ${num}`}
                 />
-                <textarea
-                  style={{ ...textareaStyle, minHeight: '60px' }}
+                <HistologyRichField
+                  label="Detalle del pilar"
+                  editorId={blockId ? `${blockId}:point_${num}_desc` : undefined}
                   value={content[`point_${num}_desc`] ?? ''}
-                  onChange={e => onUpdate({ [`point_${num}_desc`]: e.target.value })}
+                  onChange={val => onUpdate({ [`point_${num}_desc`]: val })}
                   placeholder={`Detalle del pilar ${num}...`}
+                  minHeight="55px"
                 />
               </div>
             ))}
@@ -280,21 +276,21 @@ export const HistologyGeneralitiesInlineEditor: React.FC<BaseHistologyEditorProp
         </button>
       </div>
 
-      <label style={labelStyle}>
-        <span>💡 Tip o Clave de Laboratorio (Callout destacado opcional)</span>
-        <textarea
-          style={{ ...textareaStyle, borderLeft: '4px solid #6366f1', background: '#f5f3ff' }}
-          value={content.lab_tip ?? ''}
-          onChange={e => onUpdate({ lab_tip: e.target.value })}
-          placeholder="Regla de oro en el microscopio..."
-        />
-      </label>
+      <HistologyRichField
+        label="💡 Tip o Clave de Laboratorio (Callout destacado opcional)"
+        editorId={blockId ? `${blockId}:lab_tip` : undefined}
+        value={content.lab_tip ?? ''}
+        onChange={val => onUpdate({ lab_tip: val })}
+        placeholder="Regla de oro en el microscopio..."
+        minHeight="60px"
+      />
     </div>
   );
 };
 
 // ─── 2. TRÍADA DE FUNDAMENTOS (FUNCIÓN + CRITERIOS + UBICACIONES) ───────────────
 export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = ({
+  blockId,
   content,
   onUpdate,
 }) => {
@@ -543,15 +539,14 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
               />
             </label>
 
-            <label style={labelStyle}>
-              <span>Explicación del mecanismo</span>
-              <textarea
-                style={{ ...textareaStyle, minHeight: '70px' }}
-                value={content.main_function_desc ?? ''}
-                onChange={e => onUpdate({ main_function_desc: e.target.value })}
-                placeholder="Ej: Su delgadez le permite facilitar el intercambio rápido de gases, nutrientes y desechos por difusión..."
-              />
-            </label>
+            <HistologyRichField
+              label="Explicación del mecanismo (Soporta colores, negrita y estilos)"
+              editorId={blockId ? `${blockId}:main_function_desc` : undefined}
+              value={content.main_function_desc ?? ''}
+              onChange={val => onUpdate({ main_function_desc: val })}
+              placeholder="Ej: Su delgadez le permite facilitar el intercambio rápido de gases, nutrientes y desechos por difusión..."
+              minHeight="70px"
+            />
           </div>
 
           {/* Funciones Asociadas Dinámicas */}
@@ -682,11 +677,13 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
                     onChange={e => onUpdate({ [`crit_${num}_title`]: e.target.value })}
                     placeholder={`Estructura (ej: Número de capas / Forma celular / Núcleo)`}
                   />
-                  <input
-                    style={inputStyle}
+                  <HistologyRichField
+                    label="Detalle observable al microscopio"
+                    editorId={blockId ? `${blockId}:crit_${num}_desc` : undefined}
                     value={content[`crit_${num}_desc`] ?? ''}
-                    onChange={e => onUpdate({ [`crit_${num}_desc`]: e.target.value })}
+                    onChange={val => onUpdate({ [`crit_${num}_desc`]: val })}
                     placeholder={`Detalle observable (ej: Una sola capa de células / Aplanada)`}
+                    minHeight="45px"
                   />
                 </div>
               ))}
@@ -786,11 +783,13 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
                       onChange={e => onUpdate({ [`loc_${num}_organ`]: e.target.value })}
                       placeholder={`Órgano / Estructura (ej: Alvéolos pulmonares / Endotelio vascular)`}
                     />
-                    <input
-                      style={inputStyle}
+                    <HistologyRichField
+                      label="Detalle anatómico"
+                      editorId={blockId ? `${blockId}:loc_${num}_desc` : undefined}
                       value={content[`loc_${num}_desc`] ?? ''}
-                      onChange={e => onUpdate({ [`loc_${num}_desc`]: e.target.value })}
+                      onChange={val => onUpdate({ [`loc_${num}_desc`]: val })}
                       placeholder={`Detalle anatómico (ej: Revestimiento interno de vasos sanguíneos)`}
+                      minHeight="45px"
                     />
                   </div>
                 );
@@ -813,6 +812,7 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
 
 // ─── 3. TINCIONES HISTOLÓGICAS ──────────────────────────────────────────────
 export const HistologyStainsInlineEditor: React.FC<BaseHistologyEditorProps> = ({
+  blockId,
   content,
   onUpdate,
   onPickImage,
@@ -905,15 +905,14 @@ export const HistologyStainsInlineEditor: React.FC<BaseHistologyEditorProps> = (
         </label>
       </div>
 
-      <label style={labelStyle}>
-        <span>📝 Introducción (Opcional)</span>
-        <textarea
-          style={{ ...textareaStyle, minHeight: '60px' }}
-          value={content.intro_text ?? ''}
-          onChange={e => onUpdate({ intro_text: e.target.value })}
-          placeholder="Descripción general de colorimetría o afinidades tintoriales..."
-        />
-      </label>
+      <HistologyRichField
+        label="📝 Introducción de colorimetría (Opcional)"
+        editorId={blockId ? `${blockId}:intro_text` : undefined}
+        value={content.intro_text ?? ''}
+        onChange={val => onUpdate({ intro_text: val })}
+        placeholder="Descripción general de colorimetría o afinidades tintoriales..."
+        minHeight="60px"
+      />
 
       {/* Tinciones Dinámicas */}
       <div>
@@ -1076,18 +1075,22 @@ export const HistologyStainsInlineEditor: React.FC<BaseHistologyEditorProps> = (
                     />
                   </div>
 
-                  <input
-                    style={inputStyle}
+                  <HistologyRichField
+                    label="Estructuras resaltadas"
+                    editorId={blockId ? `${blockId}:item_${num}_highlights` : undefined}
                     value={content[`item_${num}_highlights`] ?? ''}
-                    onChange={e => onUpdate({ [`item_${num}_highlights`]: e.target.value })}
+                    onChange={val => onUpdate({ [`item_${num}_highlights`]: val })}
                     placeholder="Resalta (ej: Carbohidratos y mucinas)"
+                    minHeight="40px"
                   />
 
-                  <input
-                    style={inputStyle}
+                  <HistologyRichField
+                    label="Utilidad diagnóstica"
+                    editorId={blockId ? `${blockId}:item_${num}_utility` : undefined}
                     value={content[`item_${num}_utility`] ?? ''}
-                    onChange={e => onUpdate({ [`item_${num}_utility`]: e.target.value })}
+                    onChange={val => onUpdate({ [`item_${num}_utility`]: val })}
                     placeholder="Utilidad diagnóstica"
+                    minHeight="40px"
                   />
 
                   {/* Foto individual de muestra de la tinción */}
@@ -1151,15 +1154,14 @@ export const HistologyStainsInlineEditor: React.FC<BaseHistologyEditorProps> = (
         </button>
       </div>
 
-      <label style={labelStyle}>
-        <span>🧪 Clave de Laboratorio para Tinciones (Callout opcional)</span>
-        <textarea
-          style={{ ...textareaStyle, borderLeft: '4px solid #9333ea', background: '#faf5ff' }}
-          value={content.color_tip ?? ''}
-          onChange={e => onUpdate({ color_tip: e.target.value })}
-          placeholder="Regla de oro de colorimetría para identificar estructuras teñidas..."
-        />
-      </label>
+      <HistologyRichField
+        label="🧪 Clave de Laboratorio para Tinciones (Callout opcional)"
+        editorId={blockId ? `${blockId}:color_tip` : undefined}
+        value={content.color_tip ?? ''}
+        onChange={val => onUpdate({ color_tip: val })}
+        placeholder="Regla de oro de colorimetría para identificar estructuras teñidas..."
+        minHeight="55px"
+      />
     </div>
   );
 };

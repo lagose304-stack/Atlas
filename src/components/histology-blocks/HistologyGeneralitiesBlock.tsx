@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BookOpen, Sparkles, Compass, ShieldCheck, Dna, Info, ZoomIn } from 'lucide-react';
 import { renderBoldText } from '../BoldField';
+import { hasHtmlMarkup } from '../../services/richText';
 
 export interface GeneralitiesPoint {
   id?: string;
@@ -71,6 +72,7 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
 
   return (
     <div
+      className="histology-generalities-block"
       style={{
         position: 'relative',
         borderRadius: '24px',
@@ -143,18 +145,22 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                 style={{
                   fontSize: '0.92rem',
                   lineHeight: 1.65,
-                  color: '#334155',
-                  fontWeight: 450,
+                  color: '#000000',
+                  fontWeight: 500,
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '10px',
                 }}
               >
-                {introText.split(/\n\s*\n/).map((para, pIdx) => (
-                  <p key={pIdx} style={{ margin: 0 }}>
-                    {renderBoldText(para.trim())}
-                  </p>
-                ))}
+                {hasHtmlMarkup(introText) ? (
+                  renderBoldText(introText)
+                ) : (
+                  introText.split(/\n\s*\n/).map((para, pIdx) => (
+                    <p key={pIdx} style={{ margin: 0, color: '#000000' }}>
+                      {renderBoldText(para.trim())}
+                    </p>
+                  ))
+                )}
               </div>
             )}
 
@@ -301,7 +307,7 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                 style={{
                   fontSize: '0.86rem',
                   lineHeight: 1.6,
-                  color: '#475569',
+                  color: '#000000',
                   fontWeight: 500,
                 }}
               >
@@ -371,7 +377,7 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                     )}
                   </div>
                   {point.content && point.content.trim() !== '' && (
-                    <div style={{ fontSize: '0.82rem', lineHeight: 1.55, color: '#475569' }}>
+                    <div style={{ fontSize: '0.82rem', lineHeight: 1.55, color: '#000000' }}>
                       {renderBoldText(point.content)}
                     </div>
                   )}
@@ -391,14 +397,14 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                 borderRadius: '14px',
                 background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
                 border: '1px solid #c7d2fe',
-                color: '#3730a3',
+                color: '#1e1b4b',
                 fontSize: '0.84rem',
                 lineHeight: 1.55,
                 fontWeight: 500,
               }}
             >
               <Info size={18} style={{ flexShrink: 0, marginTop: '2px', color: '#6366f1' }} />
-              <div>{renderBoldText(labTip)}</div>
+              <div style={{ color: '#000000' }}>{renderBoldText(labTip)}</div>
             </div>
           )}
         </div>

@@ -17,9 +17,9 @@ import {
 const RichTextValue: React.FC<{ value: string; className?: string; style?: React.CSSProperties }> = ({ value, className, style }) => {
   if (!value) return null;
   if (hasHtmlMarkup(value)) {
-    return <div className={className} style={style} dangerouslySetInnerHTML={{ __html: toSafeHtml(value) }} />;
+    return <div className={className} style={{ color: '#000000', ...style }} dangerouslySetInnerHTML={{ __html: toSafeHtml(value) }} />;
   }
-  return <div className={className} style={style}>{renderBoldText(value)}</div>;
+  return <div className={className} style={{ color: '#000000', ...style }}>{renderBoldText(value)}</div>;
 };
 
 const TEXT_BLOCK_TYPES: BlockType[] = ['heading', 'subheading', 'paragraph', 'list', 'callout'];
@@ -581,7 +581,7 @@ const BlockItem: React.FC<{
         soft: { padding: 'clamp(16px, 2vw, 24px)', borderRadius: '16px', background: '#f1f5f9' },
         quote: { padding: '0.7em 1.1em', borderLeft: `5px solid ${c.text_box_accent || '#38bdf8'}`, background: '#f8fafc', fontStyle: 'italic' },
       };
-      return <RichTextValue className="cb-paragraph" style={{ ...rs.paragraph, ...userTypographyStyle, ...boxStyles[boxStyle], paddingBlock: boxStyle === 'plain' ? '0.3em' : undefined, columnCount: columns, columnGap: '2em', textAlign: align, ...(userTextColor ? { color: userTextColor } : {}), ...(userFontSize ? { fontSize: userFontSize } : {}), ...(userFontWeight ? { fontWeight: userFontWeight } : {}) }} value={c.text} />;
+      return <RichTextValue className="cb-paragraph" style={{ ...rs.paragraph, ...userTypographyStyle, ...boxStyles[boxStyle], paddingBlock: boxStyle === 'plain' ? '0.3em' : undefined, columnCount: columns, columnGap: '2em', textAlign: align, color: userTextColor || '#000000', ...(userFontSize ? { fontSize: userFontSize } : {}), fontWeight: userFontWeight || 500 }} value={c.text} />;
     }
 
     case 'section': {
