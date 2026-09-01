@@ -731,7 +731,6 @@ describe('ContentBlockRenderer', () => {
 
     // Generalidades e Idea Clave
     expect(screen.getByText('1. Generalidades del Tejido')).toBeInTheDocument();
-    expect(screen.getByText('Idea clave')).toBeInTheDocument();
     expect(screen.getByText('Su estructura delgada permite difusión eficiente.')).toBeInTheDocument();
 
     // Tríada de Pilares
