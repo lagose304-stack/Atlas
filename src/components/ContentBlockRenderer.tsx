@@ -1589,11 +1589,16 @@ const BlockItem: React.FC<{
 
       return (
         <HistologyPillarsBlock
+          showFunctionCard={c.show_function_card !== 'false'}
+          showCriteriaCard={c.show_criteria_card !== 'false'}
+          showLocationsCard={c.show_locations_card !== 'false'}
           functionBadge={c.function_badge || 'Función'}
           functionTitle={c.function_title || '2. Función Principal'}
           mainFunctionName={c.main_function_name || ''}
           mainFunctionDesc={c.main_function_desc || ''}
           mainFunctionIcon={c.main_function_icon || 'exchange'}
+          functionImageUrl={c.function_image_url ? getCloudinaryImageUrl(c.function_image_url, 'cardWideSmall') : undefined}
+          functionImageCaption={c.function_image_caption || ''}
           associatedFunctions={associatedFunctions}
 
           criteriaBadge={c.criteria_badge || 'Criterios Morfológicos'}

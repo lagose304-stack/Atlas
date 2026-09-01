@@ -277,18 +277,24 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
     meta: { label: 'Tríada: Función, Criterios y Ubicaciones', icon: 'PIL', description: 'Función, criterios morfológicos y ubicaciones anatómicas en 3 tarjetas.', color: '#059669' },
     schemaVersion: 1,
     defaultContent: {
-      function_badge: 'Función',
+      show_function_card: 'true',
+      show_criteria_card: 'true',
+      show_locations_card: 'true',
+
+      function_badge: '',
       function_title: '2. Función Principal',
       main_function_name: '',
       main_function_desc: '',
       main_function_icon: 'exchange',
+      function_image_url: '',
+      function_image_caption: '',
       assoc_count: '0',
 
-      criteria_badge: 'Criterios',
+      criteria_badge: '',
       criteria_title: '3. Criterios Morfológicos',
       crit_count: '0',
 
-      locations_badge: 'Ubicaciones',
+      locations_badge: '',
       locations_title: '4. Ubicaciones Anatómicas',
       loc_count: '0',
     },

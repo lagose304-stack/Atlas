@@ -204,6 +204,22 @@ body {
   color: var(--atlas-editor-text, #000000) !important;
 }
 
+/* Compactar párrafos y eliminar espacios en blanco excesivos dentro de los bloques histológicos */
+.histology-pillars-block p,
+.histology-generalities-block p,
+.histology-stains-block p,
+.histology-pillars-desc,
+.histology-pillars-desc p {
+  margin: 0 !important;
+  line-height: 1.45;
+}
+
+.histology-pillars-block p + p,
+.histology-generalities-block p + p,
+.histology-stains-block p + p {
+  margin-top: 0.35em !important;
+}
+
 .tiptap-editor-content p:last-child {
   margin-bottom: 0;
 }

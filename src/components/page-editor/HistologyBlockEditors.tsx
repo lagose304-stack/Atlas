@@ -293,6 +293,7 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
   blockId,
   content,
   onUpdate,
+  onPickImage,
 }) => {
   const [activeTab, setActiveTab] = useState<'function' | 'criteria' | 'locations'>('function');
   const [iconPickerTarget, setIconPickerTarget] = useState<{
@@ -379,6 +380,10 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
     onUpdate(updates);
   };
 
+  const showFunctionCard = content.show_function_card !== 'false';
+  const showCriteriaCard = content.show_criteria_card !== 'false';
+  const showLocationsCard = content.show_locations_card !== 'false';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '12px 0' }}>
       {/* Modal buscador de iconos médicos */}
@@ -411,8 +416,8 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
             padding: '8px 16px',
             borderRadius: '10px',
             border: 'none',
-            background: activeTab === 'function' ? '#10b981' : '#f1f5f9',
-            color: activeTab === 'function' ? '#ffffff' : '#475569',
+            background: activeTab === 'function' ? '#10b981' : (showFunctionCard ? '#f1f5f9' : '#fef2f2'),
+            color: activeTab === 'function' ? '#ffffff' : (showFunctionCard ? '#475569' : '#991b1b'),
             fontWeight: 800,
             fontSize: '0.82rem',
             cursor: 'pointer',
@@ -420,9 +425,11 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
             alignItems: 'center',
             gap: '6px',
             transition: 'all 0.15s ease',
+            opacity: showFunctionCard ? 1 : 0.75,
+            textDecoration: showFunctionCard ? 'none' : 'line-through',
           }}
         >
-          <Zap size={15} /> 1. Función ({assocCount} asociadas)
+          <Zap size={15} /> 1. Función {!showFunctionCard ? '(Oculta)' : `(${assocCount})`}
         </button>
 
         <button
@@ -432,8 +439,8 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
             padding: '8px 16px',
             borderRadius: '10px',
             border: 'none',
-            background: activeTab === 'criteria' ? '#3b82f6' : '#f1f5f9',
-            color: activeTab === 'criteria' ? '#ffffff' : '#475569',
+            background: activeTab === 'criteria' ? '#3b82f6' : (showCriteriaCard ? '#f1f5f9' : '#fef2f2'),
+            color: activeTab === 'criteria' ? '#ffffff' : (showCriteriaCard ? '#475569' : '#991b1b'),
             fontWeight: 800,
             fontSize: '0.82rem',
             cursor: 'pointer',
@@ -441,9 +448,11 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
             alignItems: 'center',
             gap: '6px',
             transition: 'all 0.15s ease',
+            opacity: showCriteriaCard ? 1 : 0.75,
+            textDecoration: showCriteriaCard ? 'none' : 'line-through',
           }}
         >
-          <Microscope size={15} /> 2. Criterios ({critCount})
+          <Microscope size={15} /> 2. Criterios {!showCriteriaCard ? '(Oculta)' : `(${critCount})`}
         </button>
 
         <button
@@ -453,8 +462,8 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
             padding: '8px 16px',
             borderRadius: '10px',
             border: 'none',
-            background: activeTab === 'locations' ? '#f97316' : '#f1f5f9',
-            color: activeTab === 'locations' ? '#ffffff' : '#475569',
+            background: activeTab === 'locations' ? '#f97316' : (showLocationsCard ? '#f1f5f9' : '#fef2f2'),
+            color: activeTab === 'locations' ? '#ffffff' : (showLocationsCard ? '#475569' : '#991b1b'),
             fontWeight: 800,
             fontSize: '0.82rem',
             cursor: 'pointer',
@@ -462,35 +471,61 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
             alignItems: 'center',
             gap: '6px',
             transition: 'all 0.15s ease',
+            opacity: showLocationsCard ? 1 : 0.75,
+            textDecoration: showLocationsCard ? 'none' : 'line-through',
           }}
         >
-          <MapPin size={15} /> 3. Ubicaciones ({locCount})
+          <MapPin size={15} /> 3. Ubicaciones {!showLocationsCard ? '(Oculta)' : `(${locCount})`}
         </button>
       </div>
 
       {/* ─── TAB 1: FUNCIÓN PRINCIPAL ─── */}
       {activeTab === 'function' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '12px' }}>
-            <label style={labelStyle}>
-              <span>🏷️ Badge de la tarjeta</span>
+          {/* Interruptor de Visibilidad de Tarjeta 1 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              borderRadius: '12px',
+              background: showFunctionCard ? '#f0fdf4' : '#f8fafc',
+              border: `1.5px solid ${showFunctionCard ? '#86efac' : '#e2e8f0'}`,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Zap size={16} color={showFunctionCard ? '#16a34a' : '#94a3b8'} />
+              <div>
+                <strong style={{ fontSize: '0.82rem', color: showFunctionCard ? '#166534' : '#64748b' }}>
+                  {showFunctionCard ? 'Tarjeta Visible en la Página' : 'Tarjeta Oculta (No se mostrará)'}
+                </strong>
+                <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>
+                  {showFunctionCard ? 'Esta tarjeta se muestra en la tríada' : 'La cuadrícula se adaptará para las demás tarjetas'}
+                </p>
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 800, color: showFunctionCard ? '#15803d' : '#64748b' }}>
               <input
-                style={inputStyle}
-                value={content.function_badge ?? ''}
-                onChange={e => onUpdate({ function_badge: e.target.value })}
-                placeholder="Ej: Función"
+                type="checkbox"
+                checked={showFunctionCard}
+                onChange={e => onUpdate({ show_function_card: e.target.checked ? 'true' : 'false' })}
+                style={{ width: '16px', height: '16px', accentColor: '#16a34a', cursor: 'pointer' }}
               />
-            </label>
-            <label style={labelStyle}>
-              <span>⚡ Título de la tarjeta</span>
-              <input
-                style={inputStyle}
-                value={content.function_title ?? ''}
-                onChange={e => onUpdate({ function_title: e.target.value })}
-                placeholder="Ej: 2. Función Principal"
-              />
+              <span>{showFunctionCard ? 'Activa' : 'Oculta'}</span>
             </label>
           </div>
+
+          <label style={labelStyle}>
+            <span>⚡ Título de la tarjeta</span>
+            <input
+              style={inputStyle}
+              value={content.function_title ?? ''}
+              onChange={e => onUpdate({ function_title: e.target.value })}
+              placeholder="Ej: 2. Función Principal"
+            />
+          </label>
 
           {/* Bloque Rector de Función */}
           <div style={{ ...cardItemStyle, background: '#f0fdf4', border: '1.5px solid #bbf7d0', gap: '12px' }}>
@@ -549,10 +584,91 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
             />
           </div>
 
+          {/* Imagen de Referencia / Esquema Funcional Opcional */}
+          <div style={{ ...cardItemStyle, background: '#f8fafc', border: '1.5px solid #e2e8f0', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <strong style={{ fontSize: '0.82rem', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <ImageIcon size={14} /> Imagen de Referencia / Esquema (Opcional)
+              </strong>
+              {content.function_image_url && (
+                <button
+                  type="button"
+                  onClick={() => onUpdate({ function_image_url: '', function_image_caption: '' })}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#ef4444',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <Trash2 size={12} /> Quitar imagen
+                </button>
+              )}
+            </div>
+
+            <p style={{ margin: 0, fontSize: '0.76rem', color: '#64748b', lineHeight: 1.35 }}>
+              Añade una micrografía o esquema funcional para ilustrar el mecanismo y equilibrar la altura de la tarjeta.
+            </p>
+
+            {content.function_image_url ? (
+              <div style={{ width: '100%', height: '75px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #cbd5e1', position: 'relative' }}>
+                <img
+                  src={getCloudinaryImageUrl(content.function_image_url, 'cardWideSmall')}
+                  alt="Referencia de función"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
+            ) : (
+              <div style={{ height: '55px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '0.78rem' }}>
+                Sin imagen asignada (opcional)
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => onPickImage('function_image_url')}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  background: '#10b981',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <ImageIcon size={13} />
+                {content.function_image_url ? 'Cambiar Imagen del Sitio' : 'Elegir Imagen del Sitio'}
+              </button>
+            </div>
+
+            {content.function_image_url && (
+              <label style={{ ...labelStyle, fontSize: '0.75rem' }}>
+                <span>Pie de foto / Descripción corta de la imagen</span>
+                <input
+                  style={{ ...inputStyle, padding: '5px 8px', fontSize: '0.78rem' }}
+                  value={content.function_image_caption ?? ''}
+                  onChange={e => onUpdate({ function_image_caption: e.target.value })}
+                  placeholder="Ej: Micrografía de difusión alveolar · H&E"
+                />
+              </label>
+            )}
+          </div>
+
           {/* Funciones Asociadas Dinámicas */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <strong style={{ fontSize: '0.82rem', color: '#166534' }}>
-              🌿 Funciones Asociadas ({assocCount})
+              🌿 Otras Funciones Asociadas ({assocCount})
             </strong>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
@@ -627,26 +743,50 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
       {/* ─── TAB 2: CRITERIOS MORFOLÓGICOS ─── */}
       {activeTab === 'criteria' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '12px' }}>
-            <label style={labelStyle}>
-              <span>🏷️ Badge de la tarjeta</span>
+          {/* Interruptor de Visibilidad de Tarjeta 2 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              borderRadius: '12px',
+              background: showCriteriaCard ? '#eff6ff' : '#f8fafc',
+              border: `1.5px solid ${showCriteriaCard ? '#93c5fd' : '#e2e8f0'}`,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Microscope size={16} color={showCriteriaCard ? '#2563eb' : '#94a3b8'} />
+              <div>
+                <strong style={{ fontSize: '0.82rem', color: showCriteriaCard ? '#1e40af' : '#64748b' }}>
+                  {showCriteriaCard ? 'Tarjeta Visible en la Página' : 'Tarjeta Oculta (No se mostrará)'}
+                </strong>
+                <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>
+                  {showCriteriaCard ? 'Esta tarjeta se muestra en la tríada' : 'La cuadrícula se adaptará para las demás tarjetas'}
+                </p>
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 800, color: showCriteriaCard ? '#1d4ed8' : '#64748b' }}>
               <input
-                style={inputStyle}
-                value={content.criteria_badge ?? ''}
-                onChange={e => onUpdate({ criteria_badge: e.target.value })}
-                placeholder="Ej: Criterios Morfológicos"
+                type="checkbox"
+                checked={showCriteriaCard}
+                onChange={e => onUpdate({ show_criteria_card: e.target.checked ? 'true' : 'false' })}
+                style={{ width: '16px', height: '16px', accentColor: '#2563eb', cursor: 'pointer' }}
               />
-            </label>
-            <label style={labelStyle}>
-              <span>🔬 Título de la tarjeta</span>
-              <input
-                style={inputStyle}
-                value={content.criteria_title ?? ''}
-                onChange={e => onUpdate({ criteria_title: e.target.value })}
-                placeholder="Ej: 3. Criterios Morfológicos"
-              />
+              <span>{showCriteriaCard ? 'Activa' : 'Oculta'}</span>
             </label>
           </div>
+
+          <label style={labelStyle}>
+            <span>🔬 Título de la tarjeta</span>
+            <input
+              style={inputStyle}
+              value={content.criteria_title ?? ''}
+              onChange={e => onUpdate({ criteria_title: e.target.value })}
+              placeholder="Ej: 3. Criterios Morfológicos"
+            />
+          </label>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <strong style={{ fontSize: '0.82rem', color: '#1e40af' }}>
@@ -703,26 +843,50 @@ export const HistologyPillarsInlineEditor: React.FC<BaseHistologyEditorProps> = 
       {/* ─── TAB 3: UBICACIONES ANATÓMICAS ─── */}
       {activeTab === 'locations' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '12px' }}>
-            <label style={labelStyle}>
-              <span>🏷️ Badge de la tarjeta</span>
+          {/* Interruptor de Visibilidad de Tarjeta 3 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              borderRadius: '12px',
+              background: showLocationsCard ? '#fff7ed' : '#f8fafc',
+              border: `1.5px solid ${showLocationsCard ? '#fdba74' : '#e2e8f0'}`,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <MapPin size={16} color={showLocationsCard ? '#ea580c' : '#94a3b8'} />
+              <div>
+                <strong style={{ fontSize: '0.82rem', color: showLocationsCard ? '#c2410c' : '#64748b' }}>
+                  {showLocationsCard ? 'Tarjeta Visible en la Página' : 'Tarjeta Oculta (No se mostrará)'}
+                </strong>
+                <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>
+                  {showLocationsCard ? 'Esta tarjeta se muestra en la tríada' : 'La cuadrícula se adaptará para las demás tarjetas'}
+                </p>
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 800, color: showLocationsCard ? '#c2410c' : '#64748b' }}>
               <input
-                style={inputStyle}
-                value={content.locations_badge ?? ''}
-                onChange={e => onUpdate({ locations_badge: e.target.value })}
-                placeholder="Ej: Ubicaciones Anatómicas"
+                type="checkbox"
+                checked={showLocationsCard}
+                onChange={e => onUpdate({ show_locations_card: e.target.checked ? 'true' : 'false' })}
+                style={{ width: '16px', height: '16px', accentColor: '#ea580c', cursor: 'pointer' }}
               />
-            </label>
-            <label style={labelStyle}>
-              <span>📍 Título de la tarjeta</span>
-              <input
-                style={inputStyle}
-                value={content.locations_title ?? ''}
-                onChange={e => onUpdate({ locations_title: e.target.value })}
-                placeholder="Ej: 4. Ubicaciones Anatómicas"
-              />
+              <span>{showLocationsCard ? 'Activa' : 'Oculta'}</span>
             </label>
           </div>
+
+          <label style={labelStyle}>
+            <span>📍 Título de la tarjeta</span>
+            <input
+              style={inputStyle}
+              value={content.locations_title ?? ''}
+              onChange={e => onUpdate({ locations_title: e.target.value })}
+              placeholder="Ej: 4. Ubicaciones Anatómicas"
+            />
+          </label>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <strong style={{ fontSize: '0.82rem', color: '#c2410c' }}>

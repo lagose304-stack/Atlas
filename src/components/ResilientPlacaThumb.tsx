@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Microscope } from 'lucide-react';
 import { getCloudinaryImageUrl, getImageCandidateUrls, type CloudinaryImageProfile } from '../services/cloudinaryImages';
 
@@ -11,6 +11,7 @@ interface ResilientPlacaThumbProps {
   subtemaLogo?: string | null;
   temaLogo?: string | null;
   draggable?: boolean;
+  loading?: 'lazy' | 'eager';
 }
 
 export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
@@ -22,10 +23,12 @@ export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
   subtemaLogo,
   temaLogo,
   draggable = false,
+  loading = 'eager',
 }) => {
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [invalidationTick, setInvalidationTick] = useState(0);
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
   // Reiniciar estado si la prop photoUrl cambia
   useEffect(() => {
@@ -92,12 +95,26 @@ export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
 
   const currentSrc = candidates[candidateIndex] || '';
 
-  const handleError = () => {
-    if (candidateIndex < candidates.length - 1) {
-      setCandidateIndex((prev) => prev + 1);
-      setLoaded(false);
+  const handleError = useCallback(() => {
+    setCandidateIndex((prev) => prev + 1);
+    setLoaded(false);
+  }, []);
+
+  // Comprobar si la imagen ya fue cargada desde la caché del navegador al montar o cambiar src
+  const checkImgCache = useCallback((img: HTMLImageElement | null) => {
+    if (!img) return;
+    if (img.complete) {
+      if (img.naturalWidth > 0) {
+        setLoaded(true);
+      } else if (img.naturalWidth === 0 && img.src) {
+        handleError();
+      }
     }
-  };
+  }, [handleError]);
+
+  useEffect(() => {
+    checkImgCache(imgRef.current);
+  }, [currentSrc, checkImgCache]);
 
   const isAllFailed = candidateIndex >= candidates.length;
   const isAbsolute = style?.position === 'absolute';
@@ -173,10 +190,15 @@ export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
             backgroundSize: '200% 100%',
             animation: 'shimmer 1.5s infinite',
             zIndex: 1,
+            pointerEvents: 'none',
           }}
         />
       )}
       <img
+        ref={(node) => {
+          imgRef.current = node;
+          checkImgCache(node);
+        }}
         src={currentSrc}
         alt={alt}
         style={{
@@ -192,7 +214,8 @@ export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
           inset: isAbsolute ? 0 : undefined,
         }}
         className={className}
-        loading="lazy"
+        loading={loading}
+        decoding="async"
         draggable={draggable}
         onLoad={() => setLoaded(true)}
         onError={handleError}

@@ -412,8 +412,55 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       return (
         <>
           <TextAreaField label="Título de la Función" editorId={`${block.id}:function_title`} value={content.function_title ?? ''} onChange={function_title => onChange({ function_title })} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px 10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#475569' }}>Tarjetas Visibles en la Tríada:</span>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={content.show_function_card !== 'false'}
+                  onChange={e => onChange({ show_function_card: e.target.checked ? 'true' : 'false' })}
+                />
+                <span>Función</span>
+              </label>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={content.show_criteria_card !== 'false'}
+                  onChange={e => onChange({ show_criteria_card: e.target.checked ? 'true' : 'false' })}
+                />
+                <span>Criterios</span>
+              </label>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={content.show_locations_card !== 'false'}
+                  onChange={e => onChange({ show_locations_card: e.target.checked ? 'true' : 'false' })}
+                />
+                <span>Ubicaciones</span>
+              </label>
+            </div>
+          </div>
           <TextAreaField label="Función Rectora" editorId={`${block.id}:main_function_name`} value={content.main_function_name ?? ''} onChange={main_function_name => onChange({ main_function_name })} />
           <TextAreaField label="Descripción de la función" editorId={`${block.id}:main_function_desc`} value={content.main_function_desc ?? ''} onChange={main_function_desc => onChange({ main_function_desc })} />
+          <label className="visual-properties-field">
+            <span>Imagen de referencia (Opcional)</span>
+            <ImageField
+              url={content.function_image_url ?? ''}
+              onPick={() => onPickImage('function_image_url')}
+              onClear={() => onChange({ function_image_url: '', function_image_caption: '' })}
+            />
+          </label>
+          {content.function_image_url && (
+            <label className="visual-properties-field">
+              <span>Pie de foto de la imagen</span>
+              <input
+                value={content.function_image_caption || ''}
+                onChange={event => onChange({ function_image_caption: event.target.value })}
+                placeholder="Ej: Micrografía de difusión alveolar"
+              />
+            </label>
+          )}
           <TextAreaField label="Título de Criterios" editorId={`${block.id}:criteria_title`} value={content.criteria_title ?? ''} onChange={criteria_title => onChange({ criteria_title })} />
           <TextAreaField label="Título de Ubicaciones" editorId={`${block.id}:locations_title`} value={content.locations_title ?? ''} onChange={locations_title => onChange({ locations_title })} />
         </>
