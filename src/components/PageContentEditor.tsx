@@ -376,9 +376,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
 
   const activeToolbarGroups = useMemo(() => {
     const rawSearch = componentSearch.trim().toLowerCase();
-    const availableGroups = BLOCK_TOOLBAR_GROUPS.filter(group =>
-      group.title === 'Fundamentos Histológicos' ? entityType === 'placas_page' : true
-    );
+    const availableGroups = BLOCK_TOOLBAR_GROUPS;
 
     if (!rawSearch) {
       return availableGroups.map(g => ({
@@ -404,7 +402,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
         };
       })
       .filter(g => g.matchingTypes.length > 0);
-  }, [componentSearch, entityType]);
+  }, [componentSearch]);
 
   // ── Carga de bloques ─────────────────────────────────────────────────────
   useEffect(() => {
