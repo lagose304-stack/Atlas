@@ -741,10 +741,6 @@ body {
     padding: 0 10px !important;
   }
 
-  .atlas-header-right-side-panel {
-    width: 182px !important;
-  }
-
   .atlas-header-left-logo-aura {
     width: 152px !important;
     height: 152px !important;
@@ -756,18 +752,13 @@ body {
   }
 
   .atlas-header-right-logo-aura {
-    width: 112px !important;
-    height: 112px !important;
+    width: 152px !important;
+    height: 152px !important;
   }
 
   .atlas-header-university-logo {
-    width: 94px !important;
-    height: 94px !important;
-  }
-
-  .atlas-header-search-button {
-    width: 49px !important;
-    height: 36px !important;
+    width: 140px !important;
+    height: 140px !important;
   }
 
   .atlas-header-title {
@@ -1021,10 +1012,6 @@ body {
     padding: 0 8px !important;
   }
 
-  .atlas-header-right-side-panel {
-    width: 145px !important;
-  }
-
   .atlas-header-left-logo-aura {
     width: 122px !important;
     height: 122px !important;
@@ -1036,18 +1023,13 @@ body {
   }
 
   .atlas-header-right-logo-aura {
-    width: 92px !important;
-    height: 92px !important;
+    width: 122px !important;
+    height: 122px !important;
   }
 
   .atlas-header-university-logo {
-    width: 76px !important;
-    height: 76px !important;
-  }
-
-  .atlas-header-search-button {
-    width: 44px !important;
-    height: 32px !important;
+    width: 112px !important;
+    height: 112px !important;
   }
 
   .atlas-header-title {
@@ -1104,10 +1086,6 @@ body {
     padding: 0 6px !important;
   }
 
-  .atlas-header-right-side-panel {
-    width: 106px !important;
-  }
-
   .atlas-header-left-logo-aura {
     width: 92px !important;
     height: 92px !important;
@@ -1119,18 +1097,13 @@ body {
   }
 
   .atlas-header-right-logo-aura {
-    width: 72px !important;
-    height: 72px !important;
+    width: 92px !important;
+    height: 92px !important;
   }
 
   .atlas-header-university-logo {
-    width: 58px !important;
-    height: 58px !important;
-  }
-
-  .atlas-header-search-button {
-    width: 38px !important;
-    height: 28px !important;
+    width: 84px !important;
+    height: 84px !important;
   }
 
   .atlas-header-title {
@@ -1200,10 +1173,6 @@ body {
     padding: 0 4px !important;
   }
 
-  .atlas-header-right-side-panel {
-    width: 86px !important;
-  }
-
   .atlas-header-left-logo-aura {
     width: 78px !important;
     height: 78px !important;
@@ -1215,18 +1184,13 @@ body {
   }
 
   .atlas-header-right-logo-aura {
-    width: 60px !important;
-    height: 60px !important;
+    width: 78px !important;
+    height: 78px !important;
   }
 
   .atlas-header-university-logo {
-    width: 47px !important;
-    height: 47px !important;
-  }
-
-  .atlas-header-search-button {
-    width: 32px !important;
-    height: 24px !important;
+    width: 71px !important;
+    height: 71px !important;
   }
 
   .atlas-header-center-area {
@@ -1286,10 +1250,6 @@ body {
     padding: 0 3px !important;
   }
 
-  .atlas-header-right-side-panel {
-    width: 74px !important;
-  }
-
   .atlas-header-left-logo-aura {
     width: 66px !important;
     height: 66px !important;
@@ -1301,18 +1261,13 @@ body {
   }
 
   .atlas-header-right-logo-aura {
-    width: 52px !important;
-    height: 52px !important;
+    width: 66px !important;
+    height: 66px !important;
   }
 
   .atlas-header-university-logo {
-    width: 40px !important;
-    height: 40px !important;
-  }
-
-  .atlas-header-search-button {
-    width: 29px !important;
-    height: 22px !important;
+    width: 60px !important;
+    height: 60px !important;
   }
 
   .atlas-header-title {
@@ -1343,10 +1298,6 @@ body {
     grid-template-columns: 66px minmax(0, 1fr) 66px !important;
   }
 
-  .atlas-header-right-side-panel {
-    width: 66px !important;
-  }
-
   .atlas-header-left-logo-aura {
     width: 58px !important;
     height: 58px !important;
@@ -1358,18 +1309,13 @@ body {
   }
 
   .atlas-header-right-logo-aura {
-    width: 46px !important;
-    height: 46px !important;
+    width: 58px !important;
+    height: 58px !important;
   }
 
   .atlas-header-university-logo {
-    width: 36px !important;
-    height: 36px !important;
-  }
-
-  .atlas-header-search-button {
-    width: 26px !important;
-    height: 20px !important;
+    width: 52px !important;
+    height: 52px !important;
   }
 
   .atlas-header-title {
@@ -1563,41 +1509,37 @@ body {
    ======================================== */
 .atlas-header-nav-list {
   display: flex !important;
-  flex-wrap: nowrap !important;
+  flex-wrap: wrap !important;
   align-items: center !important;
-  justify-content: space-between !important;
+  justify-content: center !important;
   width: 100% !important;
-  gap: clamp(6px, 1.2vw, 16px) !important;
+  gap: clamp(4px, 1vw, 10px) !important;
 }
 
 .atlas-header-nav-item {
-  flex: 1 1 0 !important;
-  min-width: 0 !important;
+  flex: 0 0 auto !important;
+  min-width: max-content !important;
 }
 
 .atlas-header-nav-button {
-  width: 100% !important;
+  width: auto !important;
   justify-content: center !important;
   white-space: nowrap !important;
   text-align: center !important;
+  overflow: visible !important;
+  text-transform: none !important;
 }
 
 @media (max-width: 560px) {
   .atlas-header-nav-list {
-    flex-wrap: nowrap !important;
-    row-gap: 0 !important;
-    column-gap: 4px !important;
+    flex-wrap: wrap !important;
+    row-gap: 5px !important;
+    column-gap: 6px !important;
   }
 
   .atlas-header-nav-button {
-    font-size: clamp(9px, 2.4vw, 11px) !important;
-    gap: 3px !important;
-  }
-}
-
-@media (max-width: 420px) {
-  .atlas-header-nav-button svg {
-    display: none !important;
+    font-size: 11px !important;
+    gap: 4px !important;
   }
 }
 
@@ -3607,18 +3549,19 @@ body {
     linear-gradient(90deg, rgba(240, 247, 255, 0.4), transparent 30%, transparent 70%, rgba(240, 247, 255, 0.4));
 }
 
-/* Segmented Control / Track de navegación de 6 botones */
+/* Segmented Control / Track de navegación de botones */
 .atlas-header-nav-list {
   position: relative;
   z-index: 1;
-  max-width: 1040px !important;
+  max-width: 1280px !important;
   margin: 0 auto !important;
-  padding: 4px 5px !important;
-  gap: 5px !important;
+  padding: 5px 8px !important;
+  gap: clamp(4px, 0.8vw, 8px) !important;
   display: flex !important;
   align-items: center !important;
-  justify-content: space-between !important;
-  background: rgba(232, 243, 252, 0.65) !important;
+  justify-content: center !important;
+  flex-wrap: wrap !important;
+  background: rgba(232, 243, 252, 0.72) !important;
   backdrop-filter: blur(8px) !important;
   -webkit-backdrop-filter: blur(8px) !important;
   border: 1px solid rgba(194, 224, 247, 0.8) !important;
@@ -3627,37 +3570,41 @@ body {
 }
 
 .atlas-header-nav-item {
-  flex: 1 1 0 !important;
-  min-width: 0 !important;
+  flex: 0 0 auto !important;
+  min-width: max-content !important;
   display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .atlas-header-nav-button {
   position: relative;
-  width: 100% !important;
-  min-height: 42px !important;
-  padding: 6px clamp(8px, 1.3vw, 18px) !important;
-  gap: 8px !important;
-  overflow: hidden;
+  width: auto !important;
+  min-height: 38px !important;
+  padding: 6px clamp(8px, 1vw, 14px) !important;
+  gap: 6px !important;
+  overflow: visible !important;
   border: 1px solid transparent !important;
   border-radius: 999px !important;
   background: transparent !important;
   color: #2b5073 !important;
   box-shadow: none !important;
   font-family: 'Montserrat', 'Segoe UI', system-ui, sans-serif !important;
-  font-size: 0.80rem !important;
+  font-size: 0.86rem !important;
   font-weight: 600 !important;
-  letter-spacing: 0.045em !important;
-  text-transform: uppercase !important;
+  letter-spacing: 0.02em !important;
+  text-transform: none !important;
   text-shadow: none !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
   transform: translateY(0);
   transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 .atlas-header-nav-icon-shell {
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   display: grid;
   place-items: center;
   border: 1px solid transparent;
@@ -3669,8 +3616,11 @@ body {
 }
 
 .atlas-header-nav-label {
-  line-height: 1;
-  white-space: nowrap;
+  line-height: 1.2;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  display: inline-block !important;
 }
 
 /* Hover limpio, luminoso y fluido */
@@ -3796,40 +3746,52 @@ body {
 
 @media (max-width: 680px) {
   .atlas-header-bottom-nav {
-    padding: 6px 4px 8px !important;
+    padding: 6px 6px 8px !important;
   }
 
   .atlas-header-nav-list {
-    display: grid !important;
-    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
-    gap: 2px !important;
-    padding: 3px !important;
-    border-radius: 14px !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 5px 6px !important;
+    padding: 5px 6px !important;
+    border-radius: 16px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .atlas-header-nav-item {
+    flex: 0 0 auto !important;
+    min-width: max-content !important;
   }
 
   .atlas-header-nav-button {
-    min-height: 48px !important;
-    padding: 4px 1px !important;
-    flex-direction: column !important;
-    gap: 2px !important;
-    border-radius: 10px !important;
+    min-height: 32px !important;
+    padding: 4px 8px !important;
+    flex-direction: row !important;
+    gap: 5px !important;
+    border-radius: 999px !important;
+    overflow: visible !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
   }
 
   .atlas-header-nav-label {
-    font-size: clamp(5.8px, 1.55vw, 7.6px) !important;
-    letter-spacing: 0 !important;
-    max-width: 100% !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
+    font-size: 11.5px !important;
+    letter-spacing: 0.01em !important;
+    max-width: none !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
     white-space: nowrap !important;
-    display: block !important;
+    display: inline-block !important;
     text-align: center !important;
   }
 
   .atlas-header-nav-icon-shell {
-    width: 22px;
-    height: 22px;
-    flex-basis: 22px;
+    width: 18px !important;
+    height: 18px !important;
+    flex-basis: 18px !important;
   }
 
   .atlas-header-nav-button svg {
@@ -3845,13 +3807,40 @@ body {
 
   .atlas-compact-nav-button {
     min-height: 30px;
-    padding: 2px 4px !important;
+    padding: 2px 6px !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    font-size: 11.5px !important;
+    text-transform: none !important;
   }
 
   .atlas-compact-nav-icon-shell {
     width: 18px;
     height: 18px;
     flex-basis: 18px;
+  }
+}
+
+@media (max-width: 400px) {
+  .atlas-header-nav-button {
+    min-height: 30px !important;
+    padding: 3px 6px !important;
+    gap: 4px !important;
+  }
+
+  .atlas-header-nav-label {
+    font-size: 10.5px !important;
+  }
+
+  .atlas-header-nav-icon-shell {
+    width: 16px !important;
+    height: 16px !important;
+    flex-basis: 16px !important;
+  }
+
+  .atlas-header-nav-button svg {
+    width: 11px !important;
+    height: 11px !important;
   }
 }
 

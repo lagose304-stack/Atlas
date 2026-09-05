@@ -469,7 +469,6 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
         >
           <div className="atlas-header-glass" style={styles.heroGlass} />
           <div className="atlas-header-readable-overlay" style={styles.heroReadableOverlay} />
-          <div className="atlas-header-right-side-panel" style={styles.rightSidePanel} />
 
           <div className="atlas-header-main-row" style={styles.heroMainRow}>
             <div className="atlas-header-left-area" style={styles.leftArea}>
@@ -510,19 +509,6 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
                 <div className="atlas-header-right-logo-aura" style={{ ...styles.rightLogoAura, ...(isRightLogoHover ? styles.rightLogoAuraHover : {}) }}>
                   <img className="atlas-header-university-logo" src={logoFacultad} alt="Logo Facultad" style={styles.universityLogo} />
                 </div>
-              </button>
-
-              <button
-                type="button"
-                className="atlas-header-search-button"
-                style={{ ...styles.searchButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
-                disabled={isHeaderLocked}
-                onClick={() => setShowSearchBar((prev) => !prev)}
-                aria-label="Buscar"
-                aria-expanded={showSearchBar}
-                aria-controls="atlas-header-search-panel"
-              >
-                <Search size={24} color="#e6f5ff" strokeWidth={2.2} />
               </button>
             </div>
           </div>
@@ -636,6 +622,31 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
                 </li>
               );
             })}
+            <li className="atlas-header-nav-item" key="buscar" style={styles.navItem}>
+              <button
+                type="button"
+                className={`atlas-header-nav-button${showSearchBar ? ' is-active' : ''}`}
+                style={{ ...styles.navButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
+                disabled={isHeaderLocked}
+                aria-label="Buscar temas y subtemas"
+                aria-expanded={showSearchBar}
+                aria-controls="atlas-header-search-panel"
+                onClick={() => {
+                  setShowSearchBar((prev) => {
+                    const next = !prev;
+                    if (next && window.scrollY > 150) {
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                    return next;
+                  });
+                }}
+              >
+                <span className="atlas-header-nav-icon-shell" aria-hidden="true">
+                  <Search size={17} strokeWidth={2.3} />
+                </span>
+                <span className="atlas-header-nav-label">Buscar</span>
+              </button>
+            </li>
           </ul>
         </nav>
       </header>
@@ -690,6 +701,26 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
                 </button>
               </li>
             );})}
+            <li className="atlas-compact-nav-item" key="compact-buscar" style={styles.compactNavItem}>
+              <button
+                type="button"
+                className={`atlas-compact-nav-button${showSearchBar ? ' is-active' : ''}`}
+                style={{ ...styles.compactNavButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
+                disabled={isHeaderLocked}
+                aria-label="Buscar temas y subtemas"
+                aria-expanded={showSearchBar}
+                aria-controls="atlas-header-search-panel"
+                onClick={() => {
+                  setShowSearchBar(true);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              >
+                <span className="atlas-compact-nav-icon-shell" aria-hidden="true">
+                  <Search className="atlas-compact-nav-icon" size={15} strokeWidth={2.3} />
+                </span>
+                <span>Buscar</span>
+              </button>
+            </li>
           </ul>
         </div>
       </div>
@@ -744,19 +775,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: '12px',
     padding: '0 16px',
-  },
-  rightSidePanel: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    width: '216px',
-    background:
-      'linear-gradient(180deg, rgba(209, 231, 255, 0.38) 0%, rgba(177, 209, 246, 0.34) 100%)',
-    backdropFilter: 'blur(7px)',
-    borderLeft: '1px solid rgba(193, 226, 255, 0.64)',
-    boxShadow: 'inset 0 0 18px rgba(236, 246, 255, 0.26)',
-    pointerEvents: 'none',
   },
   leftArea: {
     display: 'flex',
@@ -849,57 +867,35 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   rightArea: {
     display: 'flex',
-    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'stretch',
-    gap: '12px',
-    background: 'transparent',
-    borderRadius: 0,
-    border: 'none',
-    boxShadow: 'none',
-    paddingRight: 0,
-    paddingLeft: 0,
-    paddingTop: '8px',
-    paddingBottom: '8px',
   },
   universityLogo: {
-    width: '104px',
-    height: '104px',
+    width: '166px',
+    height: '166px',
     objectFit: 'contain',
     objectPosition: 'center center',
     borderRadius: '50%',
-    boxShadow: '0 7px 16px rgba(8, 24, 58, 0.35)',
+    boxShadow: '0 10px 22px rgba(8, 24, 58, 0.38)',
+    filter: 'drop-shadow(0 12px 20px rgba(7, 38, 83, 0.42))',
   },
   rightLogoAura: {
-    width: '122px',
-    height: '122px',
+    width: '180px',
+    height: '180px',
     borderRadius: '50%',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     background:
-      'radial-gradient(circle at 32% 30%, rgba(231, 245, 255, 0.64) 0%, rgba(137, 185, 233, 0.4) 52%, rgba(34, 88, 156, 0.34) 100%)',
-    boxShadow: '0 8px 18px rgba(8, 36, 86, 0.34), inset 0 0 14px rgba(229, 244, 255, 0.3)',
-    border: '1px solid rgba(201, 228, 252, 0.74)',
+      'radial-gradient(circle at 32% 30%, rgba(233, 246, 255, 0.72) 0%, rgba(131, 183, 233, 0.48) 48%, rgba(31, 83, 151, 0.4) 100%)',
+    boxShadow: '0 10px 24px rgba(5, 30, 80, 0.34), inset 0 0 18px rgba(226, 243, 255, 0.4)',
+    border: '1px solid rgba(201, 228, 252, 0.78)',
     transition: 'transform 180ms ease, box-shadow 220ms ease, filter 220ms ease',
   },
   rightLogoAuraHover: {
-    transform: 'scale(1.04)',
-    filter: 'brightness(1.05)',
-    boxShadow: '0 12px 24px rgba(8, 36, 86, 0.4), inset 0 0 16px rgba(236, 247, 255, 0.48)',
-  },
-  searchButton: {
-    width: '54px',
-    height: '40px',
-    borderRadius: '999px',
-    border: '1px solid rgba(220, 239, 255, 0.95)',
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(220,236,255,0.12) 100%)',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backdropFilter: 'blur(2px)',
+    transform: 'scale(1.035)',
+    filter: 'brightness(1.045)',
+    boxShadow: '0 14px 28px rgba(5, 30, 80, 0.4), inset 0 0 20px rgba(236, 247, 255, 0.52)',
   },
   lockedActionButton: {
     opacity: 0.55,
@@ -1023,20 +1019,22 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   navList: {
     listStyle: 'none',
-    margin: 0,
+    margin: '0 auto',
     padding: 0,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
+    justifyContent: 'center',
+    gap: '8px',
     width: '100%',
-    flexWrap: 'nowrap',
+    maxWidth: '1280px',
+    flexWrap: 'wrap',
   },
   navItem: {
     margin: 0,
     padding: 0,
-    flex: '1 1 0',
-    minWidth: 0,
+    flex: '0 0 auto',
+    minWidth: 'max-content',
+    display: 'flex',
   },
   navButton: {
     display: 'inline-flex',
@@ -1047,14 +1045,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: 'transparent',
     cursor: 'pointer',
     color: '#1a315e',
-    textTransform: 'uppercase',
-    fontSize: '16px',
-    letterSpacing: '0.3px',
-    fontWeight: 500,
+    textTransform: 'none',
+    fontSize: '15px',
+    letterSpacing: '0.02em',
+    fontWeight: 600,
     fontFamily: '"Montserrat", "Segoe UI", sans-serif',
-    padding: '4px 1px',
-    width: '100%',
+    padding: '5px 10px',
+    width: 'auto',
     whiteSpace: 'nowrap',
+    overflow: 'visible',
+    flexShrink: 0,
   },
   compactBar: {
     position: 'fixed',
@@ -1137,44 +1137,48 @@ const styles: { [key: string]: React.CSSProperties } = {
   compactNavScroller: {
     flex: 1,
     minWidth: 0,
-    overflowX: 'hidden',
+    overflowX: 'auto',
     overflowY: 'hidden',
+    scrollbarWidth: 'none',
   },
   compactNavList: {
     listStyle: 'none',
     margin: 0,
-    padding: 0,
+    padding: '0 4px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-evenly',
-    gap: '8px',
-    width: '100%',
-    minWidth: 0,
+    justifyContent: 'flex-start',
+    gap: '10px',
+    width: 'max-content',
+    minWidth: '100%',
     whiteSpace: 'nowrap',
   },
   compactNavItem: {
     margin: 0,
     padding: 0,
-    flex: 1,
-    minWidth: 0,
+    flex: '0 0 auto',
+    minWidth: 'max-content',
   },
   compactNavButton: {
     border: 'none',
     background: 'transparent',
     color: '#1a315e',
     borderRadius: 0,
-    padding: '4px 1px',
-    fontSize: '15px',
-    fontWeight: 400,
-    letterSpacing: '0.3px',
-    textTransform: 'uppercase',
+    padding: '4px 6px',
+    fontSize: '13.5px',
+    fontWeight: 550,
+    letterSpacing: '0.02em',
+    textTransform: 'none',
     fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: '6px',
-    width: '100%',
+    width: 'auto',
+    whiteSpace: 'nowrap',
+    overflow: 'visible',
+    flexShrink: 0,
     transition: 'color 160ms ease, transform 160ms ease, text-shadow 180ms ease',
   },
 };
