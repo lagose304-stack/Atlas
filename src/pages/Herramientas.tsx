@@ -8,43 +8,32 @@ import {
   Microscope,
   Move,
   Sparkles,
-  Wrench,
   ZoomIn,
 } from 'lucide-react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import BackButton from '../components/BackButton';
-import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 const Herramientas: React.FC = () => {
-  const goBack = useSmartBackNavigation('/');
-
   return (
     <div style={s.page}>
       <Header />
       <main style={s.main}>
-        <BackButton onClick={goBack} />
-
-        <section className="herramientas-hero" style={s.hero} aria-labelledby="herramientas-title">
-          <div style={s.heroGlowOne} aria-hidden="true" />
-          <div style={s.heroGlowTwo} aria-hidden="true" />
-          <div style={s.heroContent}>
-            <div style={s.eyebrowRow}>
-              <span style={s.eyebrow}>
-                <Sparkles size={13} /> Utilidades didácticas
-              </span>
-            </div>
-            <h1 id="herramientas-title" style={s.title}>
-              Herramientas
-            </h1>
-            <p style={s.heroText}>
-              Recursos interactivos y utilidades de apoyo para el estudio y análisis de placas histológicas.
-            </p>
-          </div>
-          <div className="herramientas-hero-mark" style={s.heroMark} aria-hidden="true">
-            <Wrench size={26} strokeWidth={2} />
-          </div>
-        </section>
+        <h1
+          id="herramientas-title"
+          style={{
+            position: 'absolute',
+            width: '1px',
+            height: '1px',
+            padding: 0,
+            margin: '-1px',
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0,
+          }}
+        >
+          Herramientas — Atlas de Histología
+        </h1>
 
         {/* Tools Catalog Grid */}
         <section style={s.toolsGrid} aria-label="Catálogo de herramientas">

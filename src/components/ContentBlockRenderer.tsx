@@ -13,6 +13,7 @@ import {
   HistologyPillarsBlock,
   HistologyStainsBlock,
 } from './histology-blocks';
+import examenIllustration from '../assets/imagenes/examen.png';
 
 const RichTextValue: React.FC<{ value: string; className?: string; style?: React.CSSProperties }> = ({ value, className, style }) => {
   if (!value) return null;
@@ -1212,6 +1213,425 @@ const BlockItem: React.FC<{
                   </span>
                 </figcaption>
               )}
+            </figure>
+          </div>
+        </article>
+      );
+    }
+
+    case 'exam_week': {
+      const accent = c.exam_accent || '#0284c7';
+      const bg = c.exam_bg || '#eef8ff';
+      const imageRight = (c.exam_image_position || 'right') === 'right';
+      const widthMap: Record<string, string> = { full: '100%', wide: '1080px', medium: '880px' };
+      const style = c.exam_style || 'premium';
+      const activeParcial = c.parcial || 'primer';
+      const parcialNames: Record<string, string> = {
+        primer: 'Primer Parcial',
+        segundo: 'Segundo Parcial',
+        tercer: 'Tercer Parcial',
+      };
+
+      return (
+        <article
+          className="cb-weekly-publication cb-exam-week-block"
+          style={{
+            ['--weekly-accent' as string]: accent,
+            width: `min(100%, ${widthMap[c.exam_width || 'full'] || '100%'})`,
+            marginInline: 'auto',
+            overflow: 'hidden',
+            position: 'relative',
+            boxSizing: 'border-box',
+            borderRadius: 'clamp(20px, 2.6vw, 30px)',
+            border: style === 'outline' ? `1.5px solid ${accent}` : '1.5px solid rgba(147, 213, 248, 0.85)',
+            background: style === 'clean'
+              ? '#ffffff'
+              : style === 'outline'
+              ? 'transparent'
+              : `radial-gradient(circle at 8% 15%, rgba(186, 230, 253, 0.65), transparent 40%), radial-gradient(circle at 45% 85%, rgba(221, 214, 254, 0.45), transparent 45%), linear-gradient(135deg, ${bg} 0%, #fbfdff 42%, #f0f7fc 100%)`,
+            boxShadow: style === 'outline'
+              ? 'none'
+              : '0 24px 54px -12px rgba(12, 69, 104, 0.15), 0 8px 24px rgba(12, 69, 104, 0.06), inset 0 1.5px 0 #ffffff, inset 0 0 0 1px rgba(255, 255, 255, 0.8)',
+          }}
+        >
+          {/* Barra lateral izquierda con gradiente continuo y brillo */}
+          <span aria-hidden style={{ position: 'absolute', inset: '0 auto 0 0', width: '6px', background: 'linear-gradient(180deg, #0284c7 0%, #38bdf8 45%, #818cf8 80%, #6366f1 100%)', zIndex: 3 }} />
+
+          {/* Elementos decorativos científicos de fondo */}
+          <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+            {/* Auras luminosas difusas con respiración suave */}
+            <span style={{ position: 'absolute', width: '340px', height: '340px', left: '-70px', top: '-90px', borderRadius: '50%', background: `radial-gradient(circle, ${accent}33, transparent 70%)`, filter: 'blur(30px)' }} />
+            <span style={{ position: 'absolute', width: '300px', height: '300px', left: '24%', bottom: '-90px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(167, 139, 250, 0.28), transparent 70%)', filter: 'blur(32px)' }} />
+            <span style={{ position: 'absolute', width: '240px', height: '240px', right: '32%', top: '10%', borderRadius: '50%', background: `radial-gradient(circle, #38bdf82a, transparent 70%)`, filter: 'blur(24px)' }} />
+
+            {/* Malla de micropuntos científica */}
+            <span style={{ position: 'absolute', left: '16px', bottom: '12px', width: '130px', height: '80px', opacity: 0.45, backgroundImage: `radial-gradient(${accent} 1.4px, transparent 1.4px)`, backgroundSize: '14px 14px' }} />
+            <span style={{ position: 'absolute', right: '36%', bottom: '16px', width: '100px', height: '60px', opacity: 0.32, backgroundImage: `radial-gradient(${accent} 1.4px, transparent 1.4px)`, backgroundSize: '14px 14px' }} />
+
+            {/* Estructura química / molecular SVG en marca de agua suave */}
+            <svg style={{ position: 'absolute', right: '35%', bottom: '18px', width: '110px', height: '95px', opacity: 0.22 }} viewBox="0 0 90 80" fill="none" stroke={accent} strokeWidth="1.3">
+              <polygon points="30,10 50,10 60,27 50,44 30,44 20,27" />
+              <polygon points="50,44 70,44 80,61 70,78 50,78 40,61" />
+              <circle cx="30" cy="10" r="2.8" fill={accent} />
+              <circle cx="50" cy="10" r="2.8" fill={accent} />
+              <circle cx="60" cy="27" r="2.8" fill={accent} />
+              <circle cx="50" cy="44" r="2.8" fill={accent} />
+              <circle cx="70" cy="44" r="2.8" fill={accent} />
+              <circle cx="80" cy="61" r="2.8" fill={accent} />
+            </svg>
+
+            {/* Destellos animados de estudio */}
+            <span className="cb-exam-sparkle-anim-1" style={{ position: 'absolute', left: '16%', top: '16px', color: accent, fontSize: '16px' }}>✦</span>
+            <span className="cb-exam-sparkle-anim-2" style={{ position: 'absolute', right: '34%', top: '44%', color: accent, fontSize: '13px' }}>✦</span>
+            <span className="cb-exam-sparkle-anim-3" style={{ position: 'absolute', left: '7%', bottom: '38%', color: '#818cf8', fontSize: '12px' }}>✧</span>
+
+            {/* Retícula óptica y coordenadas HUD en esquina superior izquierda */}
+            <svg style={{ position: 'absolute', left: '14px', top: '12px', width: '22px', height: '22px', opacity: 0.45 }} viewBox="0 0 20 20">
+              <path d="M10 0v20M0 10h20" stroke={accent} strokeWidth="1.3" />
+              <circle cx="10" cy="10" r="4" stroke={accent} strokeWidth="0.9" fill="none" />
+            </svg>
+            <span style={{ position: 'absolute', left: '42px', top: '16px', fontSize: '0.64rem', fontWeight: 800, color: '#0369a1', opacity: 0.7, letterSpacing: '0.09em' }}>
+              ATLAS·HISTOLOGY LAB ⌖ 2026
+            </span>
+
+            {/* Escala micrométrica de laboratorio */}
+            <div style={{ position: 'absolute', right: '35%', top: '16px', display: 'flex', alignItems: 'center', gap: '5px', opacity: 0.55 }}>
+              <span style={{ width: '45px', height: '1.5px', background: accent, borderRadius: '1px' }} />
+              <span style={{ fontSize: '0.62rem', fontWeight: 850, color: accent, letterSpacing: '0.04em' }}>50 µm</span>
+            </div>
+          </div>
+
+          {/* Barra superior con gradiente brillante animado */}
+          <div aria-hidden style={{ position: 'absolute', zIndex: 2, inset: '0 0 auto', height: '4px', background: `linear-gradient(90deg, ${accent}, #38bdf8 30%, #818cf8 65%, #0284c7 100%)`, backgroundSize: '200% 100%', animation: 'exam-shimmer 4.5s linear infinite' }} />
+
+          <div
+            className="cb-weekly-publication-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: imageRight ? 'minmax(0, 1.22fr) minmax(310px, 0.78fr)' : 'minmax(310px, 0.78fr) minmax(0, 1.22fr)',
+              gap: 0,
+              padding: 0,
+              alignItems: 'stretch',
+              minHeight: 'clamp(300px, 29vw, 380px)',
+            }}
+          >
+            {/* Columna de contenido */}
+            <div
+              style={{
+                order: imageRight ? 1 : 2,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                padding: 'clamp(24px, 3.2vw, 38px) clamp(24px, 3.5vw, 44px)',
+                fontFamily: '"Montserrat", "Segoe UI", sans-serif',
+                position: 'relative',
+                zIndex: 2,
+              }}
+            >
+              {/* Badge superior con punto pulsante */}
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '9px',
+                  padding: '6px 14px',
+                  borderRadius: '999px',
+                  background: 'rgba(2, 132, 199, 0.08)',
+                  border: '1.2px solid rgba(2, 132, 199, 0.25)',
+                  color: '#0369a1',
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.07em',
+                  width: 'fit-content',
+                  marginBottom: '12px',
+                  boxShadow: '0 2px 8px rgba(2, 132, 199, 0.06)',
+                }}
+              >
+                <span className="cb-exam-pulse-dot" style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#0284c7' }} />
+                <span aria-hidden style={{ fontSize: '0.88rem' }}>📅</span>
+                <RichTextValue value={c.eyebrow || 'Periodo Oficial de Evaluaciones'} />
+              </div>
+
+              {/* Título principal con realce de alto impacto */}
+              <div style={{ position: 'relative', width: '100%', marginBottom: '10px' }}>
+                <h2 style={{ margin: 0, fontSize: 'clamp(1.45rem, 2.5vw, 2.15rem)', fontWeight: 850, color: '#071b31', lineHeight: '1.2', letterSpacing: '-0.025em' }}>
+                  {c.title ? (
+                    <RichTextValue value={c.title} />
+                  ) : (
+                    <>
+                      Semana de Exámenes:{' '}
+                      <span
+                        style={{
+                          background: 'linear-gradient(135deg, #0284c7 0%, #0ea5e9 45%, #6366f1 100%)',
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                          display: 'inline-block',
+                          textShadow: '0 0 18px rgba(14, 165, 233, 0.15)',
+                        }}
+                      >
+                        {parcialNames[activeParcial] || 'Primer Parcial'}
+                      </span>
+                    </>
+                  )}
+                </h2>
+              </div>
+
+              {/* Doble línea decorativa de acento con diamante central */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px' }}>
+                <div style={{ width: '52px', height: '3.5px', borderRadius: '999px', background: `linear-gradient(90deg, ${accent}, #38bdf8)` }} />
+                <span style={{ color: accent, fontSize: '11px', opacity: 0.85 }}>◆</span>
+                <div style={{ width: '22px', height: '3.5px', borderRadius: '999px', background: '#818cf8', opacity: 0.7 }} />
+              </div>
+
+              {/* Mensaje motivacional en tarjeta de cristal editorial */}
+              <div
+                style={{
+                  margin: '0 0 18px',
+                  padding: '13px 18px',
+                  borderRadius: '14px',
+                  background: 'linear-gradient(135deg, rgba(240, 249, 255, 0.9) 0%, rgba(255, 255, 255, 0.94) 100%)',
+                  border: '1.2px solid rgba(147, 213, 248, 0.75)',
+                  borderLeft: `4px solid ${accent}`,
+                  boxShadow: '0 6px 18px rgba(12, 69, 104, 0.05), inset 0 1px 0 #ffffff',
+                  color: '#1e3a5f',
+                  fontSize: 'clamp(0.9rem, 1.05vw, 0.98rem)',
+                  lineHeight: '1.55',
+                  fontWeight: 500,
+                  maxWidth: '640px',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '11px', alignItems: 'flex-start' }}>
+                  <span aria-hidden style={{ fontSize: '1.2rem', lineHeight: 1, marginTop: '2px' }}>💡</span>
+                  <div style={{ flex: 1 }}>
+                    <RichTextValue value={c.subtitle || '¡Mucho éxito en tus evaluaciones! Repasa los conceptos clave y practica con las placas del laboratorio.'} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de acción rápida centrados con micro-animaciones */}
+              <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', marginTop: '6px' }}>
+                <a
+                  href={c.btn_temario_url || `/temario?parcial=${activeParcial}`}
+                  className="cb-exam-primary-btn"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '11px 24px',
+                    borderRadius: '13px',
+                    background: 'linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%)',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '0.92rem',
+                    textDecoration: 'none',
+                    boxShadow: '0 8px 24px -4px rgba(2, 132, 199, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.35)',
+                  }}
+                >
+                  <span aria-hidden style={{ fontSize: '1.05rem' }}>📖</span>
+                  <span>{c.btn_temario_text || 'Repasar temario'}</span>
+                  <span aria-hidden style={{ fontSize: '1.15em', marginLeft: '4px', transition: 'transform 0.2s ease' }}>→</span>
+                </a>
+
+                <a
+                  href={c.btn_evaluaciones_url || '/evaluaciones'}
+                  className="cb-exam-secondary-btn"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '11px 22px',
+                    borderRadius: '13px',
+                    background: 'rgba(255, 255, 255, 0.95)',
+                    color: '#0369a1',
+                    border: '1.5px solid rgba(147, 213, 248, 0.9)',
+                    fontWeight: 750,
+                    fontSize: '0.92rem',
+                    textDecoration: 'none',
+                    boxShadow: '0 4px 14px rgba(12, 69, 104, 0.06), inset 0 1px 0 #ffffff',
+                  }}
+                >
+                  <span aria-hidden style={{ fontSize: '1.05rem' }}>📝</span>
+                  <span>{c.btn_evaluaciones_text || 'Evaluaciones prácticas'}</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Columna de imagen / Estación de estudio de Snoopy */}
+            <figure
+              style={{
+                order: imageRight ? 2 : 1,
+                position: 'relative',
+                margin: 0,
+                width: '100%',
+                height: '100%',
+                minHeight: '310px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                background: 'radial-gradient(circle at 50% 45%, rgba(224, 242, 254, 0.7) 0%, rgba(240, 249, 255, 0.96) 75%, #f8fafc 100%)',
+                borderLeft: imageRight ? '1.5px solid rgba(186, 230, 253, 0.8)' : undefined,
+                borderRight: !imageRight ? '1.5px solid rgba(186, 230, 253, 0.8)' : undefined,
+                padding: '24px 20px',
+                boxSizing: 'border-box',
+              }}
+            >
+              {/* Sistema de retícula óptica concéntrica de microscopio */}
+              <span aria-hidden style={{ position: 'absolute', width: '270px', height: '270px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(14, 165, 233, 0.18) 0%, transparent 70%)', filter: 'blur(22px)', pointerEvents: 'none' }} />
+              <span className="cb-exam-reticle-spin" aria-hidden style={{ position: 'absolute', width: '230px', height: '230px', borderRadius: '50%', border: '1.5px dashed rgba(14, 165, 233, 0.35)', pointerEvents: 'none' }} />
+              <span className="cb-exam-reticle-spin-rev" aria-hidden style={{ position: 'absolute', width: '180px', height: '180px', borderRadius: '50%', border: '1.2px dotted rgba(99, 102, 241, 0.3)', pointerEvents: 'none' }} />
+
+              {/* Insignia científica flotante superior derecha */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '14px',
+                  right: '16px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 12px',
+                  borderRadius: '999px',
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  border: '1px solid rgba(147, 213, 248, 0.85)',
+                  color: '#0369a1',
+                  fontSize: '0.68rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.05em',
+                  boxShadow: '0 2px 8px rgba(12, 69, 104, 0.06)',
+                  zIndex: 3,
+                }}
+              >
+                <span>🔬</span>
+                <span>ATLAS LAB · 2026</span>
+              </div>
+
+              {/* Retícula óptica superior izquierda */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '15px',
+                  left: '18px',
+                  fontSize: '0.66rem',
+                  fontWeight: 800,
+                  color: '#0284c7',
+                  opacity: 0.7,
+                  letterSpacing: '0.06em',
+                  zIndex: 3,
+                }}
+              >
+                ⊞ OPTICAL 40X
+              </div>
+
+              {/* Micro-badge flotante 1 (izquierda de Snoopy) */}
+              <div
+                className="cb-exam-float-badge-1"
+                style={{
+                  position: 'absolute',
+                  left: '18px',
+                  top: '40%',
+                  zIndex: 3,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  background: 'rgba(255, 255, 255, 0.95)',
+                  border: '1.2px solid rgba(251, 191, 36, 0.6)',
+                  boxShadow: '0 4px 12px rgba(217, 119, 6, 0.12)',
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                  color: '#b45309',
+                }}
+              >
+                <span>⭐</span>
+                <span>¡Tú puedes!</span>
+              </div>
+
+              {/* Micro-badge flotante 2 (derecha de Snoopy) */}
+              <div
+                className="cb-exam-float-badge-2"
+                style={{
+                  position: 'absolute',
+                  right: '18px',
+                  top: '46%',
+                  zIndex: 3,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  background: 'rgba(255, 255, 255, 0.95)',
+                  border: '1.2px solid rgba(147, 213, 248, 0.8)',
+                  boxShadow: '0 4px 12px rgba(2, 132, 199, 0.12)',
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                  color: '#0284c7',
+                }}
+              >
+                <span>📚</span>
+                <span>Enfoque 100%</span>
+              </div>
+
+              {/* Contenedor de Snoopy con su sombra dinámica sincronizada */}
+              <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2 }}>
+                {/* Ilustración de Snoopy con animación flotante continua */}
+                <img
+                  className="cb-exam-snoopy-img"
+                  src={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : examenIllustration}
+                  alt={c.image_caption || 'Ilustración semana de exámenes'}
+                  style={{
+                    maxWidth: '265px',
+                    maxHeight: '215px',
+                    width: 'auto',
+                    height: 'auto',
+                    objectFit: 'contain',
+                    filter: 'drop-shadow(0 14px 26px rgba(12, 69, 104, 0.18))',
+                    position: 'relative',
+                    zIndex: 2,
+                  }}
+                />
+
+                {/* Sombra de levitación 3D bajo Snoopy (se reduce cuando Snoopy sube) */}
+                <div
+                  className="cb-exam-shadow"
+                  aria-hidden
+                  style={{
+                    width: '140px',
+                    height: '14px',
+                    borderRadius: '50%',
+                    background: 'radial-gradient(ellipse at center, rgba(12, 69, 104, 0.4) 0%, rgba(12, 69, 104, 0) 72%)',
+                    marginTop: '-4px',
+                    zIndex: 1,
+                  }}
+                />
+              </div>
+
+              {/* Insignia inferior translúcida con punto verde activo */}
+              <figcaption
+                style={{
+                  position: 'relative',
+                  zIndex: 3,
+                  marginTop: '12px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 16px',
+                  borderRadius: '999px',
+                  background: 'rgba(255, 255, 255, 0.95)',
+                  border: '1.3px solid rgba(147, 213, 248, 0.9)',
+                  boxShadow: '0 4px 14px rgba(12, 69, 104, 0.08), inset 0 1px 0 #ffffff',
+                  color: '#0369a1',
+                  fontSize: '0.78rem',
+                  fontWeight: 750,
+                  fontFamily: '"Montserrat", "Segoe UI", sans-serif',
+                }}
+              >
+                <span style={{ display: 'inline-block', width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px rgba(16, 185, 129, 0.7)' }} />
+                <RichTextValue value={c.image_caption || 'Modo estudio activado 🔬'} />
+              </figcaption>
             </figure>
           </div>
         </article>

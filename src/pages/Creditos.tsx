@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { BookOpenCheck, Code2, FlaskConical, Heart, Sparkles, UserRound, type LucideIcon } from 'lucide-react';
+import { Code2, FlaskConical, Heart, Sparkles, UserRound, type LucideIcon } from 'lucide-react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import BackButton from '../components/BackButton';
-import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { loadCredits, type CreditContributor, type CreditProfile, type CreditProfileKey } from '../services/credits';
 
@@ -60,7 +58,6 @@ const initialsFor = (person: CreditPerson) => person.initials ?? person.name
   .join('');
 
 const Creditos: React.FC = () => {
-  const goBack = useSmartBackNavigation('/');
   const [profiles, setProfiles] = useState<CreditProfile[]>([]);
   const [contributors, setContributors] = useState<CreditContributor[]>([]);
   const [failedProfiles, setFailedProfiles] = useState<Record<string, boolean>>({});
@@ -82,18 +79,22 @@ const Creditos: React.FC = () => {
     <div style={s.page}>
       <Header />
       <main style={s.main}>
-        <BackButton onClick={goBack} />
-
-        <section className="credits-hero" style={s.hero} aria-labelledby="creditos-title">
-          <div style={s.heroGlowOne} aria-hidden="true" />
-          <div style={s.heroGlowTwo} aria-hidden="true" />
-          <div style={s.heroContent}>
-            <span style={s.eyebrow}><Sparkles size={15} /> Las personas detrás del atlas</span>
-            <h1 id="creditos-title" style={s.title}>Créditos</h1>
-            <div style={s.heroRule} />
-          </div>
-          <div className="credits-hero-mark" style={s.heroMark} aria-hidden="true"><BookOpenCheck size={54} strokeWidth={1.7} /></div>
-        </section>
+        <h1
+          id="creditos-title"
+          style={{
+            position: 'absolute',
+            width: '1px',
+            height: '1px',
+            padding: 0,
+            margin: '-1px',
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0,
+          }}
+        >
+          Créditos — Atlas de Histología
+        </h1>
 
         <section style={s.intro}>
           <div style={s.introIcon}><Heart size={25} fill="currentColor" /></div>

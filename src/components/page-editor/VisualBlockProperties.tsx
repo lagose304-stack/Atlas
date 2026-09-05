@@ -270,6 +270,49 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
         <label className="visual-properties-field"><span>Texto del botón</span><input value={content.weekly_test_button || ''} onChange={event => onChange({ weekly_test_button: event.target.value })} /></label>
       </>;
     }
+    if (block.block_type === 'exam_week') {
+      const handleParcialChange = (parcial: string) => {
+        const parcialNames: Record<string, string> = {
+          primer: 'Primer Parcial',
+          segundo: 'Segundo Parcial',
+          tercer: 'Tercer Parcial',
+        };
+        const name = parcialNames[parcial] || 'Parcial';
+        const isDefaultTitle = !content.title || content.title.startsWith('Semana de Exámenes:');
+        onChange({
+          parcial,
+          btn_temario_url: `/temario?parcial=${parcial}`,
+          ...(isDefaultTitle ? { title: `Semana de Exámenes: ${name}` } : {}),
+        });
+      };
+
+      return <>
+        <SelectField
+          label="Examen del Parcial"
+          value={content.parcial || 'primer'}
+          options={[
+            { value: 'primer', label: 'Primer Parcial' },
+            { value: 'segundo', label: 'Segundo Parcial' },
+            { value: 'tercer', label: 'Tercer Parcial' },
+          ]}
+          onChange={handleParcialChange}
+        />
+        <TextAreaField label="Etiqueta superior" value={content.eyebrow ?? ''} onChange={eyebrow => onChange({ eyebrow })} />
+        <TextAreaField label="Título principal" value={content.title ?? ''} onChange={title => onChange({ title })} />
+        <TextAreaField label="Mensaje motivacional / Descripción" value={content.subtitle ?? ''} onChange={subtitle => onChange({ subtitle })} />
+        <ImageField
+          url={content.image_url ?? ''}
+          onPick={() => onPickImage('image_url')}
+          onClear={() => onChange({ image_url: '' })}
+        />
+        <p className="visual-properties-hint" style={{ marginTop: '-4px', marginBottom: '8px', fontSize: '0.8rem', color: '#64748b' }}>
+          Si no seleccionas una imagen, se usará automáticamente la ilustración de Snoopy estudiando.
+        </p>
+        <TextAreaField label="Insignia / Pie de la imagen" value={content.image_caption ?? ''} onChange={image_caption => onChange({ image_caption })} />
+        <label className="visual-properties-field"><span>Texto botón de temario</span><input value={content.btn_temario_text || ''} placeholder="Repasar temario" onChange={e => onChange({ btn_temario_text: e.target.value })} /></label>
+        <label className="visual-properties-field"><span>Texto botón de evaluaciones</span><input value={content.btn_evaluaciones_text || ''} placeholder="Evaluaciones prácticas" onChange={e => onChange({ btn_evaluaciones_text: e.target.value })} /></label>
+      </>;
+    }
     if (block.block_type === 'image') {
       return (
         <>
@@ -523,7 +566,7 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
     return <p className="visual-properties-hint">Este bloque no contiene texto ni imágenes editables.</p>;
   };
 
-  const hasLayoutOptions = ['section', 'columns_2', 'image', 'text_image', 'two_images', 'three_images', 'callout', 'weekly_publication', 'weekly_test', 'list', 'divider', 'carousel', 'text_carousel', 'double_carousel'].includes(block.block_type);
+  const hasLayoutOptions = ['section', 'columns_2', 'image', 'text_image', 'two_images', 'three_images', 'callout', 'weekly_publication', 'weekly_test', 'exam_week', 'list', 'divider', 'carousel', 'text_carousel', 'double_carousel'].includes(block.block_type);
   const renderLayoutFields = () => {
     if (block.block_type === 'section') {
       return <>
@@ -606,6 +649,12 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
           onChange({ weekly_test_style, weekly_test_accent: preset.accent, weekly_test_bg: preset.bg });
         }} />
         <SelectField label="Ancho" value={content.weekly_test_width || 'full'} options={[{ value: 'full', label: 'Todo el ancho' }, { value: 'wide', label: 'Amplio' }, { value: 'medium', label: 'Medio' }]} onChange={weekly_test_width => onChange({ weekly_test_width })} />
+      </>;
+    }
+    if (block.block_type === 'exam_week') {
+      return <>
+        <SelectField label="Posición de la imagen" value={content.exam_image_position || 'right'} options={[{ value: 'right', label: 'Imagen a la derecha' }, { value: 'left', label: 'Imagen a la izquierda' }]} onChange={exam_image_position => onChange({ exam_image_position })} />
+        <SelectField label="Ancho del componente" value={content.exam_width || 'full'} options={[{ value: 'full', label: 'Todo el ancho' }, { value: 'wide', label: 'Amplio (1050 px)' }, { value: 'medium', label: 'Medio (850 px)' }]} onChange={exam_width => onChange({ exam_width })} />
       </>;
     }
     if (block.block_type === 'list') {
@@ -902,6 +951,12 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       <h4>Diseño de la pruebita semanal</h4>
       <ColorField label="Color de acento" value={content.weekly_test_accent || ''} fallback="#0ea5e9" onChange={weekly_test_accent => onChange({ weekly_test_accent })} />
       <ColorField label="Color de fondo" value={content.weekly_test_bg || ''} fallback="#f0f9ff" onChange={weekly_test_bg => onChange({ weekly_test_bg })} />
+    </div>;
+    if (block.block_type === 'exam_week') return <div className="visual-properties-specific-style">
+      <h4>Diseño de semana de exámenes</h4>
+      <SelectField label="Estilo visual" value={content.exam_style || 'premium'} options={[{ value: 'premium', label: 'Editorial Atlas' }, { value: 'clean', label: 'Blanco y limpio' }, { value: 'outline', label: 'Contorno elegante' }]} onChange={exam_style => onChange({ exam_style })} />
+      <ColorField label="Color de acento" value={content.exam_accent || ''} fallback="#0284c7" onChange={exam_accent => onChange({ exam_accent })} />
+      <ColorField label="Color de fondo" value={content.exam_bg || ''} fallback="#eef8ff" onChange={exam_bg => onChange({ exam_bg })} />
     </div>;
     if (block.block_type === 'weekly_publication') return <div className="visual-properties-specific-style">
       <h4>Diseño de la publicación semanal</h4>

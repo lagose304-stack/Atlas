@@ -9,6 +9,7 @@ export type BlockType =
   | 'callout'
   | 'weekly_publication'
   | 'weekly_test'
+  | 'exam_week'
   | 'list'
   | 'divider'
   | 'carousel'

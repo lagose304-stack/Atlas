@@ -63,4 +63,40 @@ describe('evaluaciones weekly filters', () => {
       },
     ]);
   });
+
+  it('cuando no hay publicación semanal y hay bloque exam_week, devuelve los temas del parcial en orden de sort_order', () => {
+    const blocks = [
+      {
+        block_type: 'exam_week',
+        content: {
+          parcial: 'primer',
+          title: 'Semana de Exámenes: Primer Parcial',
+        },
+      },
+    ];
+
+    const catalogTemas = [
+      { id: 34, nombre: 'Tejido Nervioso', parcial: 'primer', sort_order: 8 },
+      { id: 29, nombre: 'Epitelios', parcial: 'primer', sort_order: 2 },
+      { id: 38, nombre: 'Tejido Sanguíneo', parcial: 'segundo', sort_order: 0 },
+      { id: 31, nombre: 'Tejidos Conectivos', parcial: 'primer', sort_order: 4 },
+      { id: 62, nombre: 'Microscopía', parcial: 'primer', sort_order: 0 },
+    ];
+
+    const ids = collectWeeklyThemeIds(blocks as any, catalogTemas);
+    // Debe devolver sólo temas del primer parcial y en orden de sort_order (0, 2, 4, 8)
+    expect(ids).toEqual([62, 29, 31, 34]);
+  });
+
+  it('ordena las pruebas respetando el orden del temario del parcial durante la semana de exámenes', () => {
+    const tests = [
+      { id: 'nervioso', tema_id: 34, created_at: '2026-08-01' },
+      { id: 'epitelios', tema_id: 29, created_at: '2026-08-01' },
+      { id: 'microscopia', tema_id: 62, created_at: '2026-08-01' },
+      { id: 'conectivo', tema_id: 31, created_at: '2026-08-01' },
+    ];
+
+    const ordered = orderTestsByWeeklyPriority(tests as any, [62, 29, 31, 34]);
+    expect(ordered.map(t => t.id)).toEqual(['microscopia', 'epitelios', 'conectivo', 'nervioso']);
+  });
 });

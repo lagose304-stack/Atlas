@@ -4716,3 +4716,212 @@ body {
   pointer-events: none;
   height: 0;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Banner de Semana de Exámenes (exam_week) — Estilo Premium Atlas
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.cb-exam-week-block {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease;
+}
+
+.cb-exam-week-block:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 48px -10px rgba(12, 69, 104, 0.14), 0 6px 18px rgba(12, 69, 104, 0.06), inset 0 1px 0 #ffffff !important;
+}
+
+@keyframes exam-float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-7px) rotate(0.6deg);
+  }
+}
+
+@keyframes exam-pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.5);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.15);
+    box-shadow: 0 0 0 6px rgba(14, 165, 233, 0);
+  }
+}
+
+@keyframes exam-sparkle-twinkle {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.15);
+  }
+}
+
+.cb-exam-snoopy-img {
+  animation: exam-float 4.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+.cb-exam-pulse-dot {
+  animation: exam-pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.cb-exam-sparkle-anim-1 {
+  animation: exam-sparkle-twinkle 3s ease-in-out infinite;
+}
+
+.cb-exam-sparkle-anim-2 {
+  animation: exam-sparkle-twinkle 3.8s ease-in-out infinite 1.2s;
+}
+
+.cb-exam-sparkle-anim-3 {
+  animation: exam-sparkle-twinkle 4.5s ease-in-out infinite 2s;
+}
+
+.cb-exam-primary-btn {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s ease;
+}
+
+.cb-exam-primary-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px -4px rgba(2, 132, 199, 0.52), 0 4px 12px rgba(2, 132, 199, 0.25) !important;
+}
+
+.cb-exam-primary-btn::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -60%;
+  width: 40%;
+  height: 200%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: rotate(25deg);
+  transition: none;
+}
+
+.cb-exam-primary-btn:hover::after {
+  left: 140%;
+  transition: left 0.75s ease-in-out;
+}
+
+.cb-exam-secondary-btn {
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.cb-exam-secondary-btn:hover {
+  transform: translateY(-2px);
+  background-color: #f0f9ff !important;
+  border-color: #0284c7 !important;
+  box-shadow: 0 8px 20px rgba(2, 132, 199, 0.12) !important;
+}
+
+@keyframes exam-shadow-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.32;
+  }
+  50% {
+    transform: scale(0.72);
+    opacity: 0.14;
+  }
+}
+
+@keyframes exam-reticle-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes exam-reticle-spin-rev {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes exam-badge-float-1 {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(-1.5deg);
+  }
+}
+
+@keyframes exam-badge-float-2 {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(2deg);
+  }
+}
+
+@keyframes exam-glow-drift {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(8px, -6px) scale(1.08);
+  }
+}
+
+.cb-exam-shadow {
+  animation: exam-shadow-pulse 4.2s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.cb-exam-reticle-spin {
+  animation: exam-reticle-spin 45s linear infinite;
+  will-change: transform;
+}
+
+.cb-exam-reticle-spin-rev {
+  animation: exam-reticle-spin-rev 35s linear infinite;
+  will-change: transform;
+}
+
+.cb-exam-float-badge-1 {
+  animation: exam-badge-float-1 3.6s ease-in-out infinite;
+}
+
+.cb-exam-float-badge-2 {
+  animation: exam-badge-float-2 4.4s ease-in-out infinite 0.8s;
+}
+
+.cb-exam-feature-pill {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.cb-exam-feature-pill:hover {
+  transform: translateY(-1.5px);
+  border-color: #0284c7 !important;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.12) !important;
+}
+
+@media (max-width: 768px) {
+  .cb-exam-week-block .cb-weekly-publication-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .cb-exam-week-block figure {
+    min-height: 240px !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-top: 1.5px solid rgba(186, 230, 253, 0.7) !important;
+  }
+}
+
+

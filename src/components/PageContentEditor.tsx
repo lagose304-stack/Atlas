@@ -26,6 +26,7 @@ import {
   HistologyStainsInlineEditor,
 } from './page-editor/HistologyBlockEditors';
 import type { BlockType, ContentBlock } from '../types/contentBlocks';
+import examenIllustration from '../assets/imagenes/examen.png';
 
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -226,7 +227,7 @@ export interface PageContentEditorHandle {
 const BLOCK_TOOLBAR_GROUPS: Array<{ title: string; types: BlockType[] }> = [
   {
     title: 'Texto',
-    types: ['heading', 'subheading', 'paragraph', 'list', 'callout', 'weekly_publication', 'weekly_test'],
+    types: ['heading', 'subheading', 'paragraph', 'list', 'callout', 'weekly_publication', 'exam_week', 'weekly_test'],
   },
   {
     title: 'Imagenes y galerias',
@@ -263,6 +264,7 @@ const BLOCK_TYPE_VISUAL_ICON: Record<BlockType, string> = {
   three_images: '3IMG',
   callout: 'TIP',
   weekly_publication: 'SEM',
+  exam_week: 'EXAM',
   weekly_test: 'TEST',
   list: 'LIST',
   divider: 'SEP',
@@ -2272,6 +2274,84 @@ const MemoBlockContentEditor = React.memo(({
             {block.content.image_url ? <img src={getCloudinaryImageUrl(block.content.image_url, 'cardWideSmall')} alt="Placa semanal" style={{ width: '100%', height: '135px', objectFit: 'cover', borderRadius: '14px', border: '1px solid #bfdbfe' }} /> : <div style={{ display: 'grid', placeItems: 'center', minHeight: '135px', border: '2px dashed #93c5fd', borderRadius: '14px', color: '#53789d', background: '#fff' }}>Selecciona la placa semanal</div>}
             <button type="button" style={es.selectionBtn} onClick={() => onOpenImageModal(block.id, 'image_url')}>{block.content.image_url ? 'Cambiar imagen' : 'Subir o elegir imagen'}</button>
             <AutoTextarea editorId={`${block.id}:caption`} showToolbar={false} value={block.content.image_caption ?? ''} onChange={image_caption => onUpdateBlockContent(block.id, { image_caption })} placeholder="Nombre o descripción de la placa" />
+          </div>
+        </div>
+      )}
+
+      {block.block_type === 'exam_week' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(220px, .85fr)', gap: '18px', padding: '18px', border: '1.5px solid rgba(147, 213, 248, 0.75)', borderRadius: '18px', background: 'linear-gradient(135deg, #f0f8ff, #ffffff)' }}>
+          <div style={{ display: 'grid', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Parcial activo:</span>
+              {(['primer', 'segundo', 'tercer'] as const).map(par => {
+                const isSelected = (block.content.parcial || 'primer') === par;
+                const labels: Record<string, string> = { primer: '1° Parcial', segundo: '2° Parcial', tercer: '3° Parcial' };
+                const titles: Record<string, string> = { primer: 'Primer Parcial', segundo: 'Segundo Parcial', tercer: 'Tercer Parcial' };
+                return (
+                  <button
+                    key={par}
+                    type="button"
+                    onClick={() => {
+                      const isDefaultTitle = !block.content.title || block.content.title.startsWith('Semana de Exámenes:');
+                      onUpdateBlockContent(block.id, {
+                        parcial: par,
+                        btn_temario_url: `/temario?parcial=${par}`,
+                        ...(isDefaultTitle ? { title: `Semana de Exámenes: ${titles[par]}` } : {}),
+                      });
+                    }}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      border: isSelected ? '1.5px solid #0284c7' : '1px solid #bae6fd',
+                      background: isSelected ? '#0284c7' : '#ffffff',
+                      color: isSelected ? '#ffffff' : '#0369a1',
+                      fontWeight: 700,
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    {labels[par]}
+                  </button>
+                );
+              })}
+            </div>
+            <AutoTextarea editorId={`${block.id}:eyebrow`} showToolbar={false} value={block.content.eyebrow ?? ''} onChange={eyebrow => onUpdateBlockContent(block.id, { eyebrow })} placeholder="Etiqueta superior (ej: Periodo de Evaluaciones)" />
+            <AutoTextarea editorId={`${block.id}:title`} showToolbar={false} extraStyle={{ fontSize: '1.2em', fontWeight: 800, color: '#071b31' }} value={block.content.title ?? ''} onChange={title => onUpdateBlockContent(block.id, { title })} placeholder="Título del banner" />
+            <AutoTextarea editorId={`${block.id}:subtitle`} showToolbar={false} value={block.content.subtitle ?? ''} onChange={subtitle => onUpdateBlockContent(block.id, { subtitle })} placeholder="Mensaje motivacional para los alumnos..." />
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.78rem', color: '#0369a1', padding: '5px 10px', borderRadius: '6px', background: 'rgba(2, 132, 199, 0.08)', border: '1px solid rgba(2, 132, 199, 0.2)' }}>
+                📖 {block.content.btn_temario_text || 'Repasar temario'} ({block.content.btn_temario_url || `/temario?parcial=${block.content.parcial || 'primer'}`})
+              </span>
+              <span style={{ fontSize: '0.78rem', color: '#6366f1', padding: '5px 10px', borderRadius: '6px', background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                📝 {block.content.btn_evaluaciones_text || 'Evaluaciones prácticas'}
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'grid', alignContent: 'center', gap: '9px' }}>
+            <div style={{ position: 'relative', width: '100%', height: '140px', borderRadius: '14px', border: '1.5px solid rgba(147, 213, 248, 0.8)', background: '#ffffff', overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+              <img
+                src={block.content.image_url ? getCloudinaryImageUrl(block.content.image_url, 'cardWideSmall') : examenIllustration}
+                alt="Ilustración del examen"
+                style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '6px' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button type="button" style={{ ...es.selectionBtn, flex: 1 }} onClick={() => onOpenImageModal(block.id, 'image_url')}>
+                {block.content.image_url ? 'Cambiar imagen' : 'Elegir otra imagen'}
+              </button>
+              {block.content.image_url && (
+                <button
+                  type="button"
+                  style={{ ...es.selectionBtn, background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' }}
+                  onClick={() => onUpdateBlockContent(block.id, { image_url: '' })}
+                  title="Volver a la ilustración de Snoopy"
+                >
+                  Snoopy
+                </button>
+              )}
+            </div>
+            <AutoTextarea editorId={`${block.id}:caption`} showToolbar={false} value={block.content.image_caption ?? ''} onChange={image_caption => onUpdateBlockContent(block.id, { image_caption })} placeholder="Insignia / Pie (ej: Modo estudio activado 🔬)" />
           </div>
         </div>
       )}

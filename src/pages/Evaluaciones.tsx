@@ -7,8 +7,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { getRenderableBlocks } from '../services/contentPublication';
-import { collectWeeklyThemeIds, groupHistoricalTestsByPartial, orderTestsByWeeklyPriority } from './evaluacionesUtils';
-import { ArrowRight, BookOpenCheck, CalendarDays, ClipboardCheck, Sparkles, Shield } from 'lucide-react';
+import {
+  collectWeeklyThemeIds,
+  getActiveExamParcial,
+  groupHistoricalTestsByPartial,
+  orderTestsByWeeklyPriority,
+} from './evaluacionesUtils';
+import { getCachedTemas, type CatalogTema } from '../services/catalogService';
+import { ArrowRight, BookOpenCheck, CalendarDays, Shield } from 'lucide-react';
 import {
   canBypassMaintenance,
   fetchSiteMaintenanceStatus,
@@ -230,17 +236,29 @@ const Evaluaciones: React.FC = () => {
   const [pruebas, setPruebas] = React.useState<PruebaPublica[]>([]);
   const [maintenanceStatus, setMaintenanceStatus] = React.useState<SiteMaintenanceStatus | null>(null);
   const [weeklyThemeIds, setWeeklyThemeIds] = React.useState<number[]>([]);
+  const [activeExamParcial, setActiveExamParcial] = React.useState<string | null>(null);
+  const [allTemasMap, setAllTemasMap] = React.useState<Map<number, CatalogTema>>(new Map());
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState('');
 
   React.useEffect(() => {
     const loadWeeklyThemes = async () => {
       try {
-        const blocks = await getRenderableBlocks('home_page', 0);
-        setWeeklyThemeIds(collectWeeklyThemeIds(blocks));
+        const [blocks, temas] = await Promise.all([
+          getRenderableBlocks('home_page', 0),
+          getCachedTemas(),
+        ]);
+        const map = new Map<number, CatalogTema>();
+        temas.forEach((t) => map.set(t.id, t));
+        setAllTemasMap(map);
+
+        const examParcial = getActiveExamParcial(blocks);
+        setActiveExamParcial(examParcial);
+        setWeeklyThemeIds(collectWeeklyThemeIds(blocks, temas));
       } catch (loadError) {
         console.warn('No se pudieron cargar los temas activos de la semana.', loadError);
         setWeeklyThemeIds([]);
+        setActiveExamParcial(null);
       }
     };
 
@@ -358,8 +376,20 @@ const Evaluaciones: React.FC = () => {
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         }),
       }))
-      .sort((a, b) => a.temaNombre.localeCompare(b.temaNombre, 'es'));
-  }, [weeklyThemeIds]);
+      .sort((a, b) => {
+        const idA = Number(a.key);
+        const idB = Number(b.key);
+        const idxA = weeklyThemeIds.indexOf(idA);
+        const idxB = weeklyThemeIds.indexOf(idB);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        const sortA = allTemasMap.get(idA)?.sort_order;
+        const sortB = allTemasMap.get(idB)?.sort_order;
+        if (sortA != null && sortB != null) return sortA - sortB;
+        return a.temaNombre.localeCompare(b.temaNombre, 'es');
+      });
+  }, [weeklyThemeIds, allTemasMap]);
 
   const hasAnyPublishedTest = parcialSections.some(
     (section) => section.parcialTests.length || section.temaTests.length || section.subtemaTests.length,
@@ -389,18 +419,22 @@ const Evaluaciones: React.FC = () => {
       `}</style>
       <Header />
       <main style={s.main}>
-        <section className="evaluaciones-hero" style={s.hero}>
-          <div style={s.heroGlow} aria-hidden="true" />
-          <div style={s.heroIcon}><ClipboardCheck size={30} strokeWidth={2} aria-hidden="true" /></div>
-          <div style={s.heroCopy}>
-            <p style={s.kicker}><Sparkles size={14} aria-hidden="true" /> Zona de reto académico</p>
-            <h1 className="evaluaciones-title" style={s.title}>Pon a prueba lo que has aprendido</h1>
-          </div>
-          <div className="evaluaciones-hero-stat" style={s.heroStat}>
-            <strong>{pruebas.length}</strong>
-            <span>{pruebas.length === 1 ? 'evaluación disponible' : 'evaluaciones disponibles'}</span>
-          </div>
-        </section>
+        <h1
+          id="evaluaciones-main-title"
+          style={{
+            position: 'absolute',
+            width: '1px',
+            height: '1px',
+            padding: 0,
+            margin: '-1px',
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0,
+          }}
+        >
+          Evaluaciones — Atlas de Histología
+        </h1>
 
         <section style={s.card}>
           {isLoading ? (
@@ -461,7 +495,13 @@ const Evaluaciones: React.FC = () => {
 
                           return (
                             <div className="evaluaciones-scope" style={s.scopeBlock}>
-                              <h3 style={s.scopeTitle}>{weeklyThemeIds.length > 0 ? 'Contenido actual de la semana' : 'Pruebas por parcial'}</h3>
+                              <h3 style={s.scopeTitle}>
+                                {activeExamParcial === section.key
+                                  ? `🎯 Temas del ${section.title} — Semana de Exámenes`
+                                  : weeklyThemeIds.length > 0
+                                  ? 'Contenido actual de la semana'
+                                  : 'Pruebas por parcial'}
+                              </h3>
                               <div style={{ display: 'grid', gap: '12px' }}>
                                 {weeklyThemeGroups.map((themeGroup) => {
                                   const parcialItems = themeGroup.items.filter((prueba) => prueba.scope === 'parcial');
@@ -557,7 +597,14 @@ const Evaluaciones: React.FC = () => {
                                         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
                                       }),
                                     }))
-                                    .sort((a, b) => a.temaNombre.localeCompare(b.temaNombre, 'es'));
+                                    .sort((a, b) => {
+                                      const idA = Number(a.key);
+                                      const idB = Number(b.key);
+                                      const sortA = allTemasMap.get(idA)?.sort_order;
+                                      const sortB = allTemasMap.get(idB)?.sort_order;
+                                      if (sortA != null && sortB != null) return sortA - sortB;
+                                      return a.temaNombre.localeCompare(b.temaNombre, 'es');
+                                    });
 
                                   return (
                                     <details key={`${section.key}-${partialGroup.key}`} style={s.historyAccordion}>

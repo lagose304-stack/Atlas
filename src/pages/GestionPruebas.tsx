@@ -361,7 +361,7 @@ const GestionPruebas: React.FC = () => {
     const loadWeeklyThemes = async () => {
       try {
         const blocks = await getRenderableBlocks('home_page', 0);
-        setWeeklyThemeIds(collectWeeklyThemeIds(blocks));
+        setWeeklyThemeIds(collectWeeklyThemeIds(blocks, allTemas));
       } catch (loadError) {
         console.warn('No se pudieron cargar los temas activos de la semana.', loadError);
         setWeeklyThemeIds([]);
@@ -369,7 +369,7 @@ const GestionPruebas: React.FC = () => {
     };
 
     void loadWeeklyThemes();
-  }, []);
+  }, [allTemas]);
 
   // Cargar todas las pruebas
   const fetchPruebas = useCallback(async () => {

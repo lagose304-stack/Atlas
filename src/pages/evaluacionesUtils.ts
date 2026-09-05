@@ -4,24 +4,60 @@ export type WeeklyThemeTest = {
   created_at?: string;
 };
 
-export const collectWeeklyThemeIds = (blocks: Array<{ block_type?: string; content?: Record<string, string> }> = []): number[] => {
-  const ids = new Set<number>();
+export interface SimpleTemaCatalog {
+  id: number;
+  parcial: string;
+  sort_order?: number | null;
+  nombre?: string;
+}
 
-  blocks.forEach((block) => {
-    if (block.block_type !== 'weekly_publication') return;
+export const collectWeeklyThemeIds = (
+  blocks: Array<{ block_type?: string; content?: Record<string, string> }> = [],
+  allTemas: SimpleTemaCatalog[] = []
+): number[] => {
+  const hasWeekly = blocks.some((block) => block.block_type === 'weekly_publication');
 
-    const content = block.content ?? {};
-    const topicIds = [content.topic_1_id, content.topic_2_id, content.topic_3_id];
+  if (hasWeekly) {
+    const ids = new Set<number>();
 
-    topicIds.forEach((rawId) => {
-      const numericId = Number(rawId);
-      if (Number.isFinite(numericId) && numericId > 0) {
-        ids.add(numericId);
-      }
+    blocks.forEach((block) => {
+      if (block.block_type !== 'weekly_publication') return;
+
+      const content = block.content ?? {};
+      const topicIds = [content.topic_1_id, content.topic_2_id, content.topic_3_id];
+
+      topicIds.forEach((rawId) => {
+        const numericId = Number(rawId);
+        if (Number.isFinite(numericId) && numericId > 0) {
+          ids.add(numericId);
+        }
+      });
     });
-  });
 
-  return Array.from(ids);
+    return Array.from(ids);
+  }
+
+  // Si el componente de temas de la semana no está en la plantilla, revisar si está el de semana de exámenes
+  const examBlock = blocks.find((block) => block.block_type === 'exam_week');
+  if (examBlock && allTemas.length > 0) {
+    const parcial = examBlock.content?.parcial || 'primer';
+    return allTemas
+      .filter((t) => t.parcial === parcial)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map((t) => t.id);
+  }
+
+  return [];
+};
+
+export const getActiveExamParcial = (
+  blocks: Array<{ block_type?: string; content?: Record<string, string> }> = []
+): string | null => {
+  const hasWeekly = blocks.some((block) => block.block_type === 'weekly_publication');
+  if (hasWeekly) return null;
+
+  const examBlock = blocks.find((block) => block.block_type === 'exam_week');
+  return examBlock ? (examBlock.content?.parcial || 'primer') : null;
 };
 
 export const orderTestsByWeeklyPriority = <T extends WeeklyThemeTest>(tests: T[], weeklyThemeIds: number[] = []): T[] => {
