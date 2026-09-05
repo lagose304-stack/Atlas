@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BadgeInfo, BookOpen, ClipboardList, House, Search, Wrench } from 'lucide-react';
+import { BadgeInfo, BookOpen, ClipboardList, GraduationCap, House, Search, Wrench } from 'lucide-react';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail, OPEN_HEADER_SEARCH_EVENT } from '../constants/uiEvents';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -20,6 +20,7 @@ const MENU_ITEMS = [
   { key: 'temario', label: 'Temario', icon: BookOpen, path: '/temario' },
   { key: 'evaluaciones', label: 'Evaluaciones', icon: ClipboardList, path: '/evaluaciones' },
   { key: 'herramientas', label: 'Herramientas', icon: Wrench, path: '/herramientas' },
+  { key: 'registro', label: 'Registro', icon: GraduationCap, path: 'https://registro-histolab.7w7.workers.dev/' },
   { key: 'creditos', label: 'Créditos', icon: BadgeInfo, path: '/creditos' },
 ] as const;
 
@@ -212,7 +213,9 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
     }
     if (key === 'evaluaciones') return pathname === '/evaluaciones' || pathname.startsWith('/evaluaciones/');
     if (key === 'herramientas') return pathname === '/herramientas' || pathname.startsWith('/herramientas/');
-    return pathname === '/creditos';
+    if (key === 'registro') return false;
+    if (key === 'creditos') return pathname === '/creditos';
+    return false;
   }, [pathname]);
 
   const isInAdminEditingFlow = React.useMemo(() => {
@@ -236,6 +239,11 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
 
   const navigateFromHeader = React.useCallback((targetPath: string) => {
     if (isHeaderLocked) {
+      return;
+    }
+
+    if (/^https?:\/\//i.test(targetPath)) {
+      window.open(targetPath, '_blank', 'noopener,noreferrer');
       return;
     }
 
@@ -606,6 +614,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
           <ul className="atlas-header-nav-list" style={styles.navList}>
             {MENU_ITEMS.map((item) => {
               const Icon = item.icon;
+              const isExternal = /^https?:\/\//i.test(item.path);
               return (
                 <li className="atlas-header-nav-item" key={item.key} style={styles.navItem}>
                   <button
@@ -614,9 +623,10 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
                     style={{ ...styles.navButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
                     disabled={isHeaderLocked}
                     aria-current={isMenuItemActive(item.key) ? 'page' : undefined}
-                  onClick={() => {
-                    if ('path' in item && item.path) navigateFromHeader(item.path);
-                  }}
+                    title={isExternal ? `${item.label} (abre en nueva pestaña)` : undefined}
+                    onClick={() => {
+                      if ('path' in item && item.path) navigateFromHeader(item.path);
+                    }}
                   >
                     <span className="atlas-header-nav-icon-shell" aria-hidden="true">
                       <Icon size={17} strokeWidth={2.3} />
@@ -659,6 +669,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
           <ul className="atlas-compact-nav-list" style={styles.compactNavList}>
             {MENU_ITEMS.map((item) => {
               const Icon = item.icon;
+              const isExternal = /^https?:\/\//i.test(item.path);
               return (
               <li className="atlas-compact-nav-item" key={`compact-${item.key}`} style={styles.compactNavItem}>
                 <button
@@ -667,6 +678,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
                   style={{ ...styles.compactNavButton, ...(isHeaderLocked ? styles.lockedActionButton : {}) }}
                   disabled={isHeaderLocked}
                   aria-current={isMenuItemActive(item.key) ? 'page' : undefined}
+                  title={isExternal ? `${item.label} (abre en nueva pestaña)` : undefined}
                   onClick={() => {
                     if ('path' in item && item.path) navigateFromHeader(item.path);
                   }}
