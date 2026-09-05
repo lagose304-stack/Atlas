@@ -804,7 +804,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, []);
   const [useZoomSource, setUseZoomSource] = useState(false);
   const [zoomSourceFailed, setZoomSourceFailed] = useState(false);
-  const [isPlateImageLoading, setIsPlateImageLoading] = useState(false);
+  const [isPlateImageLoading, setIsPlateImageLoading] = useState(true);
 
   const [zoomLevel, setZoomLevel]   = useState(1);
   const [position, setPosition]     = useState({ x: 0, y: 0 });
@@ -1313,6 +1313,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, [perceptualEnhanceLevel]);
 
   useEffect(() => {
+    setIsPlateImageLoading(true);
+
     const imageEl = imageRef.current;
     if (imageEl) {
       if (imageEl.complete && imageEl.naturalWidth > 0) {
@@ -1324,8 +1326,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     const observer = new ResizeObserver(() => updateImageSize());
     if (imageEl) observer.observe(imageEl);
 
+    // Timeout de seguridad en caso de fallo de red prolongado
+    const safetyTimer = setTimeout(() => {
+      setIsPlateImageLoading(false);
+    }, 12000);
+
     window.addEventListener('resize', updateImageSize);
     return () => {
+      clearTimeout(safetyTimer);
       observer.disconnect();
       window.removeEventListener('resize', updateImageSize);
     };
