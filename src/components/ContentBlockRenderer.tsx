@@ -1286,16 +1286,16 @@ const BlockItem: React.FC<{
             <span className="cb-exam-sparkle-anim-3" style={{ position: 'absolute', left: '7%', bottom: '38%', color: '#818cf8', fontSize: '12px' }}>✧</span>
 
             {/* Retícula óptica y coordenadas HUD en esquina superior izquierda */}
-            <svg style={{ position: 'absolute', left: '14px', top: '12px', width: '22px', height: '22px', opacity: 0.45 }} viewBox="0 0 20 20">
+            <svg className="cb-exam-bg-hud" style={{ position: 'absolute', left: '14px', top: '12px', width: '22px', height: '22px', opacity: 0.45 }} viewBox="0 0 20 20">
               <path d="M10 0v20M0 10h20" stroke={accent} strokeWidth="1.3" />
               <circle cx="10" cy="10" r="4" stroke={accent} strokeWidth="0.9" fill="none" />
             </svg>
-            <span style={{ position: 'absolute', left: '42px', top: '16px', fontSize: '0.64rem', fontWeight: 800, color: '#0369a1', opacity: 0.7, letterSpacing: '0.09em' }}>
+            <span className="cb-exam-bg-hud" style={{ position: 'absolute', left: '42px', top: '16px', fontSize: '0.64rem', fontWeight: 800, color: '#0369a1', opacity: 0.7, letterSpacing: '0.09em' }}>
               ATLAS·HISTOLOGY LAB ⌖ 2026
             </span>
 
             {/* Escala micrométrica de laboratorio */}
-            <div style={{ position: 'absolute', right: '35%', top: '16px', display: 'flex', alignItems: 'center', gap: '5px', opacity: 0.55 }}>
+            <div className="cb-exam-bg-scale" style={{ position: 'absolute', right: '35%', top: '16px', display: 'flex', alignItems: 'center', gap: '5px', opacity: 0.55 }}>
               <span style={{ width: '45px', height: '1.5px', background: accent, borderRadius: '1px' }} />
               <span style={{ fontSize: '0.62rem', fontWeight: 850, color: accent, letterSpacing: '0.04em' }}>50 µm</span>
             </div>
@@ -1304,72 +1304,25 @@ const BlockItem: React.FC<{
           {/* Barra superior con gradiente brillante animado */}
           <div aria-hidden style={{ position: 'absolute', zIndex: 2, inset: '0 0 auto', height: '4px', background: `linear-gradient(90deg, ${accent}, #38bdf8 30%, #818cf8 65%, #0284c7 100%)`, backgroundSize: '200% 100%', animation: 'exam-shimmer 4.5s linear infinite' }} />
 
-          <div
-            className="cb-weekly-publication-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: imageRight ? 'minmax(0, 1.22fr) minmax(310px, 0.78fr)' : 'minmax(310px, 0.78fr) minmax(0, 1.22fr)',
-              gap: 0,
-              padding: 0,
-              alignItems: 'stretch',
-              minHeight: 'clamp(300px, 29vw, 380px)',
-            }}
-          >
+          <div className={`cb-weekly-publication-grid cb-exam-grid ${!imageRight ? 'cb-exam-image-left' : ''}`}>
             {/* Columna de contenido */}
-            <div
-              style={{
-                order: imageRight ? 1 : 2,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                padding: 'clamp(24px, 3.2vw, 38px) clamp(24px, 3.5vw, 44px)',
-                fontFamily: '"Montserrat", "Segoe UI", sans-serif',
-                position: 'relative',
-                zIndex: 2,
-              }}
-            >
+            <div className="cb-exam-content-col" style={{ order: imageRight ? 1 : 2 }}>
               {/* Badge superior con punto pulsante */}
-              <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '9px',
-                  padding: '6px 14px',
-                  borderRadius: '999px',
-                  background: 'rgba(2, 132, 199, 0.08)',
-                  border: '1.2px solid rgba(2, 132, 199, 0.25)',
-                  color: '#0369a1',
-                  fontSize: '0.74rem',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.07em',
-                  width: 'fit-content',
-                  marginBottom: '12px',
-                  boxShadow: '0 2px 8px rgba(2, 132, 199, 0.06)',
-                }}
-              >
+              <div className="cb-exam-badge">
                 <span className="cb-exam-pulse-dot" style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#0284c7' }} />
                 <span aria-hidden style={{ fontSize: '0.88rem' }}>📅</span>
                 <RichTextValue value={c.eyebrow || 'Periodo Oficial de Evaluaciones'} />
               </div>
 
               {/* Título principal con realce de alto impacto */}
-              <div style={{ position: 'relative', width: '100%', marginBottom: '10px' }}>
-                <h2 style={{ margin: 0, fontSize: 'clamp(1.45rem, 2.5vw, 2.15rem)', fontWeight: 850, color: '#071b31', lineHeight: '1.2', letterSpacing: '-0.025em' }}>
+              <div className="cb-exam-title-wrap">
+                <h2 className="cb-exam-title">
                   {c.title ? (
                     <RichTextValue value={c.title} />
                   ) : (
                     <>
                       Semana de Exámenes:{' '}
-                      <span
-                        style={{
-                          background: 'linear-gradient(135deg, #0284c7 0%, #0ea5e9 45%, #6366f1 100%)',
-                          WebkitBackgroundClip: 'text',
-                          WebkitTextFillColor: 'transparent',
-                          display: 'inline-block',
-                          textShadow: '0 0 18px rgba(14, 165, 233, 0.15)',
-                        }}
-                      >
+                      <span className="cb-exam-parcial-text">
                         {parcialNames[activeParcial] || 'Primer Parcial'}
                       </span>
                     </>
@@ -1378,57 +1331,29 @@ const BlockItem: React.FC<{
               </div>
 
               {/* Doble línea decorativa de acento con diamante central */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px' }}>
-                <div style={{ width: '52px', height: '3.5px', borderRadius: '999px', background: `linear-gradient(90deg, ${accent}, #38bdf8)` }} />
+              <div className="cb-exam-divider">
+                <div className="cb-exam-divider-bar-1" style={{ background: `linear-gradient(90deg, ${accent}, #38bdf8)` }} />
                 <span style={{ color: accent, fontSize: '11px', opacity: 0.85 }}>◆</span>
-                <div style={{ width: '22px', height: '3.5px', borderRadius: '999px', background: '#818cf8', opacity: 0.7 }} />
+                <div className="cb-exam-divider-bar-2" />
               </div>
 
               {/* Mensaje motivacional en tarjeta de cristal editorial */}
-              <div
-                style={{
-                  margin: '0 0 18px',
-                  padding: '13px 18px',
-                  borderRadius: '14px',
-                  background: 'linear-gradient(135deg, rgba(240, 249, 255, 0.9) 0%, rgba(255, 255, 255, 0.94) 100%)',
-                  border: '1.2px solid rgba(147, 213, 248, 0.75)',
-                  borderLeft: `4px solid ${accent}`,
-                  boxShadow: '0 6px 18px rgba(12, 69, 104, 0.05), inset 0 1px 0 #ffffff',
-                  color: '#1e3a5f',
-                  fontSize: 'clamp(0.9rem, 1.05vw, 0.98rem)',
-                  lineHeight: '1.55',
-                  fontWeight: 500,
-                  maxWidth: '640px',
-                }}
-              >
-                <div style={{ display: 'flex', gap: '11px', alignItems: 'flex-start' }}>
-                  <span aria-hidden style={{ fontSize: '1.2rem', lineHeight: 1, marginTop: '2px' }}>💡</span>
+              <div className="cb-exam-card" style={{ borderLeftColor: accent }}>
+                <div className="cb-exam-card-inner">
+                  <span className="cb-exam-card-icon" aria-hidden>💡</span>
                   <div style={{ flex: 1 }}>
                     <RichTextValue value={c.subtitle || '¡Mucho éxito en tus evaluaciones! Repasa los conceptos clave y practica con las placas del laboratorio.'} />
                   </div>
                 </div>
               </div>
 
-              {/* Botones de acción rápida centrados con micro-animaciones */}
-              <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', marginTop: '6px' }}>
+              {/* Botones de acción rápida fluidos */}
+              <div className="cb-exam-actions">
                 <a
                   href={c.btn_temario_url || `/temario?parcial=${activeParcial}`}
                   className="cb-exam-primary-btn"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '11px 24px',
-                    borderRadius: '13px',
-                    background: 'linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%)',
-                    color: '#ffffff',
-                    fontWeight: 800,
-                    fontSize: '0.92rem',
-                    textDecoration: 'none',
-                    boxShadow: '0 8px 24px -4px rgba(2, 132, 199, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.35)',
-                  }}
                 >
-                  <span aria-hidden style={{ fontSize: '1.05rem' }}>📖</span>
+                  <span aria-hidden style={{ fontSize: '1.05em' }}>📖</span>
                   <span>{c.btn_temario_text || 'Repasar temario'}</span>
                   <span aria-hidden style={{ fontSize: '1.15em', marginLeft: '4px', transition: 'transform 0.2s ease' }}>→</span>
                 </a>
@@ -1436,22 +1361,8 @@ const BlockItem: React.FC<{
                 <a
                   href={c.btn_evaluaciones_url || '/evaluaciones'}
                   className="cb-exam-secondary-btn"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '11px 22px',
-                    borderRadius: '13px',
-                    background: 'rgba(255, 255, 255, 0.95)',
-                    color: '#0369a1',
-                    border: '1.5px solid rgba(147, 213, 248, 0.9)',
-                    fontWeight: 750,
-                    fontSize: '0.92rem',
-                    textDecoration: 'none',
-                    boxShadow: '0 4px 14px rgba(12, 69, 104, 0.06), inset 0 1px 0 #ffffff',
-                  }}
                 >
-                  <span aria-hidden style={{ fontSize: '1.05rem' }}>📝</span>
+                  <span aria-hidden style={{ fontSize: '1.05em' }}>📝</span>
                   <span>{c.btn_evaluaciones_text || 'Evaluaciones prácticas'}</span>
                 </a>
               </div>
@@ -1459,176 +1370,56 @@ const BlockItem: React.FC<{
 
             {/* Columna de imagen / Estación de estudio de Snoopy */}
             <figure
+              className="cb-exam-figure-col"
               style={{
                 order: imageRight ? 2 : 1,
-                position: 'relative',
-                margin: 0,
-                width: '100%',
-                height: '100%',
-                minHeight: '310px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-                background: 'radial-gradient(circle at 50% 45%, rgba(224, 242, 254, 0.7) 0%, rgba(240, 249, 255, 0.96) 75%, #f8fafc 100%)',
                 borderLeft: imageRight ? '1.5px solid rgba(186, 230, 253, 0.8)' : undefined,
                 borderRight: !imageRight ? '1.5px solid rgba(186, 230, 253, 0.8)' : undefined,
-                padding: '24px 20px',
-                boxSizing: 'border-box',
               }}
             >
               {/* Sistema de retícula óptica concéntrica de microscopio */}
-              <span aria-hidden style={{ position: 'absolute', width: '270px', height: '270px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(14, 165, 233, 0.18) 0%, transparent 70%)', filter: 'blur(22px)', pointerEvents: 'none' }} />
-              <span className="cb-exam-reticle-spin" aria-hidden style={{ position: 'absolute', width: '230px', height: '230px', borderRadius: '50%', border: '1.5px dashed rgba(14, 165, 233, 0.35)', pointerEvents: 'none' }} />
-              <span className="cb-exam-reticle-spin-rev" aria-hidden style={{ position: 'absolute', width: '180px', height: '180px', borderRadius: '50%', border: '1.2px dotted rgba(99, 102, 241, 0.3)', pointerEvents: 'none' }} />
+              <span className="cb-exam-reticle-outer" aria-hidden />
+              <span className="cb-exam-reticle-mid cb-exam-reticle-spin" aria-hidden />
+              <span className="cb-exam-reticle-inner cb-exam-reticle-spin-rev" aria-hidden />
 
               {/* Insignia científica flotante superior derecha */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '14px',
-                  right: '16px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '5px 12px',
-                  borderRadius: '999px',
-                  background: 'rgba(255, 255, 255, 0.9)',
-                  border: '1px solid rgba(147, 213, 248, 0.85)',
-                  color: '#0369a1',
-                  fontSize: '0.68rem',
-                  fontWeight: 800,
-                  letterSpacing: '0.05em',
-                  boxShadow: '0 2px 8px rgba(12, 69, 104, 0.06)',
-                  zIndex: 3,
-                }}
-              >
+              <div className="cb-exam-badge-lab">
                 <span>🔬</span>
                 <span>ATLAS LAB · 2026</span>
               </div>
 
               {/* Retícula óptica superior izquierda */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '15px',
-                  left: '18px',
-                  fontSize: '0.66rem',
-                  fontWeight: 800,
-                  color: '#0284c7',
-                  opacity: 0.7,
-                  letterSpacing: '0.06em',
-                  zIndex: 3,
-                }}
-              >
+              <div className="cb-exam-badge-opt">
                 ⊞ OPTICAL 40X
               </div>
 
               {/* Micro-badge flotante 1 (izquierda de Snoopy) */}
-              <div
-                className="cb-exam-float-badge-1"
-                style={{
-                  position: 'absolute',
-                  left: '18px',
-                  top: '40%',
-                  zIndex: 3,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  padding: '4px 10px',
-                  borderRadius: '999px',
-                  background: 'rgba(255, 255, 255, 0.95)',
-                  border: '1.2px solid rgba(251, 191, 36, 0.6)',
-                  boxShadow: '0 4px 12px rgba(217, 119, 6, 0.12)',
-                  fontSize: '0.7rem',
-                  fontWeight: 800,
-                  color: '#b45309',
-                }}
-              >
+              <div className="cb-exam-float-badge-1">
                 <span>⭐</span>
                 <span>¡Tú puedes!</span>
               </div>
 
               {/* Micro-badge flotante 2 (derecha de Snoopy) */}
-              <div
-                className="cb-exam-float-badge-2"
-                style={{
-                  position: 'absolute',
-                  right: '18px',
-                  top: '46%',
-                  zIndex: 3,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  padding: '4px 10px',
-                  borderRadius: '999px',
-                  background: 'rgba(255, 255, 255, 0.95)',
-                  border: '1.2px solid rgba(147, 213, 248, 0.8)',
-                  boxShadow: '0 4px 12px rgba(2, 132, 199, 0.12)',
-                  fontSize: '0.7rem',
-                  fontWeight: 800,
-                  color: '#0284c7',
-                }}
-              >
+              <div className="cb-exam-float-badge-2">
                 <span>📚</span>
                 <span>Enfoque 100%</span>
               </div>
 
               {/* Contenedor de Snoopy con su sombra dinámica sincronizada */}
-              <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2 }}>
+              <div className="cb-exam-snoopy-wrap">
                 {/* Ilustración de Snoopy con animación flotante continua */}
                 <img
                   className="cb-exam-snoopy-img"
                   src={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : examenIllustration}
                   alt={c.image_caption || 'Ilustración semana de exámenes'}
-                  style={{
-                    maxWidth: '265px',
-                    maxHeight: '215px',
-                    width: 'auto',
-                    height: 'auto',
-                    objectFit: 'contain',
-                    filter: 'drop-shadow(0 14px 26px rgba(12, 69, 104, 0.18))',
-                    position: 'relative',
-                    zIndex: 2,
-                  }}
                 />
 
                 {/* Sombra de levitación 3D bajo Snoopy (se reduce cuando Snoopy sube) */}
-                <div
-                  className="cb-exam-shadow"
-                  aria-hidden
-                  style={{
-                    width: '140px',
-                    height: '14px',
-                    borderRadius: '50%',
-                    background: 'radial-gradient(ellipse at center, rgba(12, 69, 104, 0.4) 0%, rgba(12, 69, 104, 0) 72%)',
-                    marginTop: '-4px',
-                    zIndex: 1,
-                  }}
-                />
+                <div className="cb-exam-shadow" aria-hidden />
               </div>
 
               {/* Insignia inferior translúcida con punto verde activo */}
-              <figcaption
-                style={{
-                  position: 'relative',
-                  zIndex: 3,
-                  marginTop: '12px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '6px 16px',
-                  borderRadius: '999px',
-                  background: 'rgba(255, 255, 255, 0.95)',
-                  border: '1.3px solid rgba(147, 213, 248, 0.9)',
-                  boxShadow: '0 4px 14px rgba(12, 69, 104, 0.08), inset 0 1px 0 #ffffff',
-                  color: '#0369a1',
-                  fontSize: '0.78rem',
-                  fontWeight: 750,
-                  fontFamily: '"Montserrat", "Segoe UI", sans-serif',
-                }}
-              >
+              <figcaption className="cb-exam-caption">
                 <span style={{ display: 'inline-block', width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px rgba(16, 185, 129, 0.7)' }} />
                 <RichTextValue value={c.image_caption || 'Modo estudio activado 🔬'} />
               </figcaption>

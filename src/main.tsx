@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import './styles/utopia.css';
 import './style.css';
 import './styles/temario-typography.css';
 

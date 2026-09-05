@@ -753,4 +753,48 @@ describe('ContentBlockRenderer', () => {
     expect(screen.getByText('azul/violeta')).toBeInTheDocument();
     expect(screen.getByText('Carbohidratos y mucinas')).toBeInTheDocument();
   });
+
+  it('renderiza correctamente el bloque de semana de examenes con clases fluidas y responsive container queries', () => {
+    const examBlocks: ContentBlock[] = [
+      {
+        id: 'block-exam-1',
+        entity_type: 'home_page',
+        entity_id: 0,
+        block_type: 'exam_week',
+        sort_order: 0,
+        content: {
+          parcial: 'primer',
+          eyebrow: 'Periodo Oficial de Evaluaciones',
+          subtitle: '¡Mucho éxito en tus evaluaciones! Repasa con las placas del laboratorio.',
+          btn_temario_text: 'Repasar temario',
+          btn_evaluaciones_text: 'Evaluaciones prácticas',
+          image_caption: 'Modo estudio activado 🔬',
+        },
+      },
+    ];
+
+    const { container } = render(<ContentBlockRenderer blocks={examBlocks} />);
+
+    // Verifica que el contenedor tiene la clase del sistema de Container Queries
+    const article = container.querySelector('.cb-exam-week-block');
+    expect(article).toBeInTheDocument();
+
+    const grid = container.querySelector('.cb-exam-grid');
+    expect(grid).toBeInTheDocument();
+
+    // Textos clave del banner
+    expect(screen.getByText('Periodo Oficial de Evaluaciones')).toBeInTheDocument();
+    expect(screen.getByText(/Semana de Exámenes: Primer Parcial/i)).toBeInTheDocument();
+    expect(screen.getByText('¡Mucho éxito en tus evaluaciones! Repasa con las placas del laboratorio.')).toBeInTheDocument();
+
+    // Botones de navegación
+    expect(screen.getByRole('link', { name: /Repasar temario/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Evaluaciones prácticas/i })).toBeInTheDocument();
+
+    // Elementos de la estación de estudio de Snoopy
+    expect(screen.getByText('ATLAS LAB · 2026')).toBeInTheDocument();
+    expect(screen.getByText('¡Tú puedes!')).toBeInTheDocument();
+    expect(screen.getByText('Enfoque 100%')).toBeInTheDocument();
+    expect(screen.getByText('Modo estudio activado 🔬')).toBeInTheDocument();
+  });
 });
