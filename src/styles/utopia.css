@@ -39,54 +39,46 @@
   --space-2xl-3xl: clamp(4rem, 3.0435rem + 4.7826vw, 6.75rem);
 }
 
-/* ─── Tipografía Fluida Global ────────────────────────────────────────────── */
-h1:not([class*="no-fluid"]),
+/* ─── Clases Utilitarias Fluidas Opt-in (Utopia) ─────────────────────────────
+   Nota: NO aplicar selectores globales a elementos html como h1, h2, h3, p
+   para no romper la tipografía de componentes existentes y temario-typography.css.
+   Usar estas clases de manera explícita (opt-in) o sus variables (--step-*).
+   ─────────────────────────────────────────────────────────────────────────── */
 .u-h1 {
   font-size: var(--step-4);
   line-height: 1.15;
   letter-spacing: -0.025em;
 }
 
-h2:not([class*="no-fluid"]),
 .u-h2 {
   font-size: var(--step-3);
   line-height: 1.2;
   letter-spacing: -0.02em;
 }
 
-h3:not([class*="no-fluid"]),
 .u-h3 {
   font-size: var(--step-2);
   line-height: 1.25;
   letter-spacing: -0.015em;
 }
 
-h4:not([class*="no-fluid"]),
 .u-h4 {
   font-size: var(--step-1);
   line-height: 1.3;
 }
 
-/* ─── Contenedores Globales Fluidos ───────────────────────────────────────── */
-.atlas-home-main,
-.public-editor-main {
-  padding-inline: var(--space-s-m) !important;
-  box-sizing: border-box;
-}
-
-/* Contenedor principal de bloques de contenido */
+/* Contenedores de bloques de contenido */
 .cb-container {
   container-type: inline-size;
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box !important;
-  gap: var(--space-m-l) !important;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .cb-shell {
   container-type: inline-size;
-  width: 100% !important;
-  box-sizing: border-box !important;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* ─── CSS Container Queries Engine ────────────────────────────────────────── */
@@ -99,7 +91,7 @@ h4:not([class*="no-fluid"]),
 
 /* Tokens de Container Query calculados mediante cqw */
 @container (min-width: 0px) {
-  :where(.cq-container, [data-container="inline"], .cb-container, .cb-shell, .cb-exam-week-block, .home-bento-grid, .home-bento-card) {
+  :where(.cq-container, [data-container="inline"], .cb-container, .cb-shell, .cb-exam-week-block) {
     /* Tipografía fluida relativa al ancho del contenedor */
     --cq-step--2: clamp(0.62rem, 1.6cqw, 0.75rem);
     --cq-step--1: clamp(0.75rem, 2.1cqw, 0.92rem);
@@ -120,32 +112,13 @@ h4:not([class*="no-fluid"]),
   }
 }
 
-/* ─── Grid Bento y Secciones de Inicio con Container Queries ──────────────── */
-.home-bento-grid {
-  container-type: inline-size;
-  gap: var(--space-s-m) !important;
-}
-
-.home-bento-card {
-  container-type: inline-size;
-  padding: var(--space-m) var(--space-s-m) !important;
-  border-radius: clamp(14px, 2.2cqw, 22px) !important;
-}
-
-/* Adaptación automática de Bento Grid por ancho de contenedor */
-@container (max-width: 660px) {
-  .home-bento-grid {
-    grid-template-columns: 1fr !important;
-  }
-}
-
 /* Prevención global de desbordamiento horizontal en multimedia */
 img, picture, video, canvas {
   max-width: 100%;
   height: auto;
 }
 
-/* ─── Clases Utilitarias Fluidas Utopia ───────────────────────────────────── */
+/* ─── Clases Utilitarias de Escala de Pasos Fluidos ────────────────────────── */
 .u-step--2 { font-size: var(--step--2); }
 .u-step--1 { font-size: var(--step--1); }
 .u-step-0  { font-size: var(--step-0); }

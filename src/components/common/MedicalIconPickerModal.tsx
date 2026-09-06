@@ -1,6 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, X, Sparkles } from 'lucide-react';
-import { MEDICAL_ICONS_CATALOG, MedicalIcon } from './MedicalIcon';
+import { Search, X, Sparkles, Layers } from 'lucide-react';
+import {
+  MEDICAL_ICONS_CATALOG,
+  MedicalIcon,
+  HISTOLOGY_TOPIC_LABELS,
+  HistologyTopicCategory,
+} from './MedicalIcon';
 
 export interface MedicalIconPickerModalProps {
   isOpen: boolean;
@@ -10,30 +15,20 @@ export interface MedicalIconPickerModalProps {
   title?: string;
 }
 
-type IconCategory = 'all' | 'anatomy' | 'physiology' | 'lab' | 'clinical';
-
-const CATEGORY_LABELS: Record<IconCategory, string> = {
-  all: '🌟 Todos',
-  anatomy: '🫀 Órganos & Anatomía',
-  physiology: '⚡ Fisiología & Procesos',
-  lab: '🔬 Laboratorio & Célula',
-  clinical: '🩺 Clínica & Símbolos',
-};
-
 export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
   isOpen,
   onClose,
   onSelectIcon,
   selectedIconId,
-  title = 'Seleccionar Ícono Médico',
+  title = 'Seleccionar Ícono Médico e Histológico',
 }) => {
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<IconCategory>('all');
+  const [selectedTopic, setSelectedTopic] = useState<HistologyTopicCategory>('all');
 
   useEffect(() => {
     if (isOpen) {
       setSearch('');
-      setSelectedCategory('all');
+      setSelectedTopic('all');
     }
   }, [isOpen]);
 
@@ -51,23 +46,28 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
     const term = search.trim().toLowerCase();
 
     return MEDICAL_ICONS_CATALOG.filter(icon => {
-      // Filtro por categoría
-      if (selectedCategory !== 'all' && icon.category !== selectedCategory) {
+      // Filtro por tema histológico
+      if (selectedTopic !== 'all' && icon.topic !== selectedTopic) {
         return false;
       }
 
-      // Filtro por término de búsqueda
+      // Filtro por término de búsqueda (nombre, id, keywords, categoría)
       if (!term) return true;
 
+      const topicLabel = HISTOLOGY_TOPIC_LABELS[icon.topic]?.label.toLowerCase() || '';
       return (
         icon.name.toLowerCase().includes(term) ||
         icon.id.toLowerCase().includes(term) ||
+        icon.topic.toLowerCase().includes(term) ||
+        topicLabel.includes(term) ||
         icon.keywords.some(k => k.toLowerCase().includes(term))
       );
     });
-  }, [search, selectedCategory]);
+  }, [search, selectedTopic]);
 
   if (!isOpen) return null;
+
+  const topicEntries = Object.entries(HISTOLOGY_TOPIC_LABELS) as [HistologyTopicCategory, { label: string; icon: string }][];
 
   return (
     <div
@@ -90,8 +90,8 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
       <div
         style={{
           width: '100%',
-          maxWidth: '680px',
-          maxHeight: '85vh',
+          maxWidth: '760px',
+          maxHeight: '88vh',
           backgroundColor: '#ffffff',
           borderRadius: '24px',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
@@ -117,7 +117,7 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
             <h3
               style={{
                 margin: 0,
-                fontSize: '1.15rem',
+                fontSize: '1.18rem',
                 fontWeight: 800,
                 color: '#0f172a',
                 display: 'flex',
@@ -125,22 +125,23 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
                 gap: '8px',
               }}
             >
-              <Sparkles size={19} color="#4f46e5" />
+              <Sparkles size={20} color="#4f46e5" />
               {title}
             </h3>
-            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#64748b' }}>
-              Elige entre más de 80 íconos médicos y fisiológicos especializados para tu plantilla
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+              Biblioteca con más de 120 íconos para los 20 temas de histología y correlación médica
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
+            aria-label="Cerrar modal"
             style={{
               background: '#f1f5f9',
               border: 'none',
               borderRadius: '50%',
-              width: '34px',
-              height: '34px',
+              width: '36px',
+              height: '36px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -161,8 +162,17 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
           </button>
         </div>
 
-        {/* Buscador & Categorías */}
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* Buscador & Selector de Temas Histológicos */}
+        <div
+          style={{
+            padding: '16px 24px',
+            borderBottom: '1px solid #f1f5f9',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            background: '#ffffff',
+          }}
+        >
           {/* Input de búsqueda */}
           <div style={{ position: 'relative' }}>
             <Search
@@ -181,7 +191,7 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por nombre, órgano o función (ej: riñón, pulmón, filtro, adn, célula)..."
+              placeholder="Buscar por tema, órgano, célula o término (ej: epitelio, tiroides, adiposo, hueso, neurona, frotis, mama, ojo)..."
               style={{
                 width: '100%',
                 padding: '11px 40px 11px 42px',
@@ -205,6 +215,7 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
               <button
                 type="button"
                 onClick={() => setSearch('')}
+                aria-label="Limpiar búsqueda"
                 style={{
                   position: 'absolute',
                   right: '12px',
@@ -223,37 +234,60 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
             )}
           </div>
 
-          {/* Categorías en chips */}
+          {/* Selector horizontal de los 20 temas de histología */}
           <div
             style={{
               display: 'flex',
               gap: '6px',
               overflowX: 'auto',
-              paddingBottom: '2px',
+              paddingBottom: '6px',
+              scrollbarWidth: 'thin',
             }}
           >
-            {(Object.keys(CATEGORY_LABELS) as IconCategory[]).map(cat => {
-              const isActive = selectedCategory === cat;
+            {topicEntries.map(([topicKey, meta]) => {
+              const isActive = selectedTopic === topicKey;
+              const count = topicKey === 'all'
+                ? MEDICAL_ICONS_CATALOG.length
+                : MEDICAL_ICONS_CATALOG.filter(i => i.topic === topicKey).length;
+
               return (
                 <button
-                  key={cat}
+                  key={topicKey}
                   type="button"
-                  onClick={() => setSelectedCategory(cat)}
+                  onClick={() => setSelectedTopic(topicKey)}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '8px',
+                    borderRadius: '10px',
                     border: '1px solid',
                     borderColor: isActive ? '#4f46e5' : '#e2e8f0',
                     background: isActive ? '#4f46e5' : '#f8fafc',
-                    color: isActive ? '#ffffff' : '#475569',
-                    fontSize: '0.78rem',
+                    color: isActive ? '#ffffff' : '#334155',
+                    fontSize: '0.76rem',
                     fontWeight: 700,
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
                     transition: 'all 0.15s ease',
+                    flexShrink: 0,
                   }}
+                  title={meta.label}
                 >
-                  {CATEGORY_LABELS[cat]}
+                  <span>{meta.icon}</span>
+                  <span>{meta.label}</span>
+                  <span
+                    style={{
+                      background: isActive ? 'rgba(255,255,255,0.25)' : '#e2e8f0',
+                      color: isActive ? '#ffffff' : '#64748b',
+                      fontSize: '0.68rem',
+                      padding: '1px 5px',
+                      borderRadius: '999px',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {count}
+                  </span>
                 </button>
               );
             })}
@@ -267,7 +301,7 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
             overflowY: 'auto',
             padding: '20px 24px',
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(136px, 1fr))',
             gap: '12px',
             alignContent: 'start',
           }}
@@ -277,19 +311,21 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
               style={{
                 gridColumn: '1 / -1',
                 textAlign: 'center',
-                padding: '40px 16px',
+                padding: '48px 16px',
                 color: '#64748b',
               }}
             >
-              <Search size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
-              <p style={{ margin: 0, fontWeight: 700 }}>No se encontraron íconos</p>
-              <small style={{ color: '#94a3b8' }}>
-                Intenta con otro término (ej: 'riñón', 'corazón', 'escudo', 'célula')
+              <Search size={36} style={{ opacity: 0.3, marginBottom: '10px' }} />
+              <p style={{ margin: 0, fontWeight: 700, fontSize: '1rem' }}>No se encontraron íconos</p>
+              <small style={{ color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                Intenta con otro término o selecciona "🌟 Todos los Íconos"
               </small>
             </div>
           ) : (
             filteredIcons.map(icon => {
               const isSelected = selectedIconId === icon.id;
+              const topicMeta = HISTOLOGY_TOPIC_LABELS[icon.topic];
+
               return (
                 <button
                   key={icon.id}
@@ -303,15 +339,16 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '8px',
-                    padding: '14px 10px',
+                    gap: '7px',
+                    padding: '12px 8px',
                     borderRadius: '16px',
                     border: '1.5px solid',
                     borderColor: isSelected ? '#4f46e5' : '#f1f5f9',
                     background: isSelected ? '#eef2ff' : '#ffffff',
                     cursor: 'pointer',
                     transition: 'all 0.18s ease',
-                    boxShadow: isSelected ? '0 4px 12px rgba(79, 70, 229, 0.15)' : 'none',
+                    boxShadow: isSelected ? '0 4px 14px rgba(79, 70, 229, 0.18)' : '0 1px 2px rgba(0,0,0,0.02)',
+                    position: 'relative',
                   }}
                   onMouseEnter={e => {
                     if (!isSelected) {
@@ -327,11 +364,12 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
                       e.currentTarget.style.transform = 'translateY(0)';
                     }
                   }}
+                  title={`${icon.name} (${topicMeta?.label || icon.topic})`}
                 >
                   <div
                     style={{
-                      width: '42px',
-                      height: '42px',
+                      width: '44px',
+                      height: '44px',
                       borderRadius: '12px',
                       background: isSelected ? '#4f46e5' : '#f8fafc',
                       color: isSelected ? '#ffffff' : '#334155',
@@ -339,25 +377,47 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
                       alignItems: 'center',
                       justifyContent: 'center',
                       transition: 'all 0.18s ease',
+                      border: isSelected ? 'none' : '1px solid #e2e8f0',
                     }}
                   >
-                    <MedicalIcon name={icon.id} size={22} color={isSelected ? '#ffffff' : '#4f46e5'} />
+                    <MedicalIcon name={icon.id} size={23} color={isSelected ? '#ffffff' : '#4f46e5'} />
                   </div>
+
                   <span
                     style={{
-                      fontSize: '0.74rem',
+                      fontSize: '0.72rem',
                       fontWeight: 700,
-                      color: isSelected ? '#3730a3' : '#334155',
+                      color: isSelected ? '#3730a3' : '#1e293b',
                       textAlign: 'center',
-                      lineHeight: 1.2,
+                      lineHeight: 1.25,
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
                       overflow: 'hidden',
+                      padding: '0 2px',
                     }}
                   >
                     {icon.name}
                   </span>
+
+                  {topicMeta && icon.topic !== 'all' && (
+                    <span
+                      style={{
+                        fontSize: '0.62rem',
+                        fontWeight: 650,
+                        color: isSelected ? '#4338ca' : '#64748b',
+                        background: isSelected ? '#e0e7ff' : '#f1f5f9',
+                        padding: '1px 6px',
+                        borderRadius: '999px',
+                        maxWidth: '92%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {topicMeta.icon} {topicMeta.label}
+                    </span>
+                  )}
                 </button>
               );
             })
@@ -378,24 +438,12 @@ export const MedicalIconPickerModal: React.FC<MedicalIconPickerModalProps> = ({
           }}
         >
           <span>
-            Mostrando <strong>{filteredIcons.length}</strong> de {MEDICAL_ICONS_CATALOG.length} íconos disponibles
+            Mostrando <strong>{filteredIcons.length}</strong> de <strong>{MEDICAL_ICONS_CATALOG.length}</strong> íconos disponibles
           </span>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              padding: '7px 16px',
-              borderRadius: '999px',
-              border: '1px solid #cbd5e1',
-              background: '#ffffff',
-              color: '#334155',
-              fontSize: '0.78rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            Cerrar
-          </button>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+            <Layers size={13} color="#4f46e5" />
+            20 temas de histología integrados
+          </span>
         </div>
       </div>
     </div>
