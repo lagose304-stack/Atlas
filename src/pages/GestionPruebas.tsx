@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import BackButton from '../components/BackButton';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
@@ -12,12 +12,14 @@ import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { supabase } from '../services/supabase';
 import { deleteOwnedTestReferenceImages } from '../services/testReferenceImages';
 import { logAuditEvent } from '../services/unifiedAuditService';
-import { collectWeeklyThemeIds, groupHistoricalTestsByPartial, orderTestsByWeeklyPriority } from './evaluacionesUtils';
+import { collectWeeklyThemeIds, getActiveExamParcial, groupHistoricalTestsByPartial, orderTestsByWeeklyPriority } from './evaluacionesUtils';
 import { usePreservedParam } from '../hooks/usePreservedParam';
 import {
   BookOpenCheck,
   CalendarDays,
   Check,
+  ChevronsDownUp,
+  ChevronsUpDown,
   ClipboardCheck,
   Eye,
   EyeOff,
@@ -107,6 +109,7 @@ interface TestCardAdminProps {
   badge: string;
   badges?: string[];
   isUpdating: boolean;
+  isHighlighted?: boolean;
   onTogglePublication: (prueba: AdminPrueba) => void;
   onReclassify: (prueba: AdminPrueba) => void;
   onRunTest: (prueba: AdminPrueba) => void;
@@ -119,6 +122,7 @@ const AdminTestCard: React.FC<TestCardAdminProps> = ({
   badge,
   badges = [],
   isUpdating,
+  isHighlighted = false,
   onTogglePublication,
   onReclassify,
   onRunTest,
@@ -152,7 +156,22 @@ const AdminTestCard: React.FC<TestCardAdminProps> = ({
   const badgeStyle = badge === 'Tema' ? s.badgeTema : badge === 'Subtema' ? s.badgeSubtema : s.badge;
 
   return (
-    <article className="evaluacion-test-card" style={s.testCard}>
+    <article
+      id={`test-card-${prueba.id}`}
+      className={`evaluacion-test-card ${isHighlighted ? 'test-card-highlighted' : ''}`}
+      style={{
+        ...s.testCard,
+        ...(isHighlighted
+          ? {
+              outline: '3px solid #3b82f6',
+              outlineOffset: '2px',
+              boxShadow: '0 0 25px rgba(59, 130, 246, 0.45)',
+              transform: 'scale(1.01)',
+              transition: 'all 300ms ease',
+            }
+          : {}),
+      }}
+    >
       <div
         className="evaluacion-test-image"
         style={{
@@ -306,13 +325,101 @@ const AdminTestCard: React.FC<TestCardAdminProps> = ({
   );
 };
 
+const WeekThemeThumbnail: React.FC<{
+  themeGroup: { temaNombre: string; items: AdminPrueba[] };
+}> = ({ themeGroup }) => {
+  const candidateImages = useMemo(() => {
+    const list: string[] = [];
+    themeGroup.items.forEach((item) => {
+      if (item.tema?.logo_url) list.push(item.tema.logo_url);
+      if (item.subtema?.logo_url) list.push(item.subtema.logo_url);
+      if (item.image_url) list.push(item.image_url);
+    });
+    return Array.from(new Set(list.filter((url): url is string => Boolean(url && typeof url === 'string' && url.trim().length > 0))));
+  }, [themeGroup.items]);
+
+  const [imageIndex, setImageIndex] = useState(0);
+  const [failed, setFailed] = useState(false);
+
+  const currentUrl = candidateImages[imageIndex];
+  const logoSrc = currentUrl ? getCloudinaryImageUrl(currentUrl, 'thumb') : '';
+
+  const handleError = () => {
+    if (imageIndex + 1 < candidateImages.length) {
+      setImageIndex((prev) => prev + 1);
+    } else {
+      setFailed(true);
+    }
+  };
+
+  if (!logoSrc || failed) {
+    return <span style={s.weekThemeThumbFallback}>{(themeGroup.temaNombre || 'T').slice(0, 1).toUpperCase()}</span>;
+  }
+
+  return (
+    <img
+      src={logoSrc}
+      alt={themeGroup.temaNombre}
+      style={s.weekThemeThumb}
+      loading="lazy"
+      onError={handleError}
+    />
+  );
+};
+
+const ACCORDION_STORAGE_KEY = 'atlas_admin_tests_accordions';
+const TARGET_STORAGE_KEY = 'atlas_admin_tests_target_id';
+const SCROLL_STORAGE_KEY = 'atlas_admin_tests_scroll_y';
+
 const GestionPruebas: React.FC = () => {
   const handleGoBack = useSmartBackNavigation('/edicion');
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+
+  const [highlightedTestId, setHighlightedTestId] = useState<string | null>(null);
+  const hasRestoredScrollRef = useRef(false);
+
+  // Estados persistidos de los acordeones en localStorage
+  const [accordionStates, setAccordionStates] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem(ACCORDION_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const handleToggleAccordion = useCallback((key: string, isOpen: boolean) => {
+    setAccordionStates((prev) => {
+      if (prev[key] === isOpen) return prev;
+      const next = { ...prev, [key]: isOpen };
+      try {
+        localStorage.setItem(ACCORDION_STORAGE_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  // Guardar posición de scroll antes de navegar o desmontar
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 0) {
+        try {
+          sessionStorage.setItem(SCROLL_STORAGE_KEY, String(window.scrollY));
+        } catch {}
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      handleScroll();
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   const [pruebas, setPruebas] = useState<AdminPrueba[]>([]);
   const [weeklyThemeIds, setWeeklyThemeIds] = useState<number[]>([]);
+  const [activeExamParcial, setActiveExamParcial] = useState<string | null>(null);
   const [allTemas, setAllTemas] = useState<TemaOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -356,15 +463,23 @@ const GestionPruebas: React.FC = () => {
     void fetchAllTemas();
   }, []);
 
+  const allTemasMap = useMemo(() => {
+    const map = new Map<number, TemaOption>();
+    allTemas.forEach((t) => map.set(t.id, t));
+    return map;
+  }, [allTemas]);
+
   // Cargar temas semanales
   useEffect(() => {
     const loadWeeklyThemes = async () => {
       try {
         const blocks = await getRenderableBlocks('home_page', 0);
+        setActiveExamParcial(getActiveExamParcial(blocks));
         setWeeklyThemeIds(collectWeeklyThemeIds(blocks, allTemas));
       } catch (loadError) {
         console.warn('No se pudieron cargar los temas activos de la semana.', loadError);
         setWeeklyThemeIds([]);
+        setActiveExamParcial(null);
       }
     };
 
@@ -502,8 +617,20 @@ const GestionPruebas: React.FC = () => {
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         }),
       }))
-      .sort((a, b) => a.temaNombre.localeCompare(b.temaNombre, 'es'));
-  }, [weeklyThemeIds]);
+      .sort((a, b) => {
+        const idA = Number(a.key);
+        const idB = Number(b.key);
+        const idxA = weeklyThemeIds.indexOf(idA);
+        const idxB = weeklyThemeIds.indexOf(idB);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        const sortA = allTemasMap.get(idA)?.sort_order;
+        const sortB = allTemasMap.get(idB)?.sort_order;
+        if (sortA != null && sortB != null) return sortA - sortB;
+        return a.temaNombre.localeCompare(b.temaNombre, 'es');
+      });
+  }, [weeklyThemeIds, allTemasMap]);
 
   // Acciones administrativas
   const handleTogglePublication = async (prueba: AdminPrueba) => {
@@ -566,11 +693,188 @@ const GestionPruebas: React.FC = () => {
   };
 
   const handleRunTest = (prueba: AdminPrueba) => {
-    navigate(`/pruebas/ejecutar/${prueba.id}`, { state: { from: '/pruebas' } });
+    try {
+      sessionStorage.setItem(TARGET_STORAGE_KEY, prueba.id);
+      sessionStorage.setItem(SCROLL_STORAGE_KEY, String(window.scrollY));
+    } catch {}
+    const currentUrl = `${location.pathname}${location.search}`;
+    navigate(`/pruebas/ejecutar/${prueba.id}`, { state: { from: currentUrl, targetTestId: prueba.id } });
   };
 
   const handleEditTest = (prueba: AdminPrueba) => {
-    navigate(`/pruebas/editor/${prueba.id}`, { state: { from: '/pruebas' } });
+    try {
+      sessionStorage.setItem(TARGET_STORAGE_KEY, prueba.id);
+      sessionStorage.setItem(SCROLL_STORAGE_KEY, String(window.scrollY));
+    } catch {}
+    const currentUrl = `${location.pathname}${location.search}`;
+    navigate(`/pruebas/editor/${prueba.id}`, { state: { from: currentUrl, targetTestId: prueba.id } });
+  };
+
+  // Obtener target test ID que el usuario estaba editando o ejecutando
+  const targetTestId = useMemo(() => {
+    return (
+      (location.state as { targetTestId?: string } | null)?.targetTestId ||
+      (() => {
+        try {
+          return sessionStorage.getItem(TARGET_STORAGE_KEY) || null;
+        } catch {
+          return null;
+        }
+      })()
+    );
+  }, [location.state]);
+
+  // Claves de acordeones que deben abrirse sí o sí para mostrar la prueba editada
+  const targetAccordionKeys = useMemo(() => {
+    const keys = new Set<string>();
+    if (!targetTestId || pruebas.length === 0) return keys;
+
+    const target = pruebas.find((p) => p.id === targetTestId);
+    if (!target) return keys;
+
+    const isWeekly = target.tema_id != null && weeklyThemeIds.includes(target.tema_id);
+    if (isWeekly) {
+      const themeKey = String(target.tema_id ?? target.tema?.id ?? 'sin-tema');
+      keys.add(`week-${target.parcial_key}-${themeKey}`);
+    } else {
+      keys.add(`hist-partial-${target.parcial_key}-${target.parcial_key}`);
+      const themeKey = target.tema_id ?? target.tema?.id;
+      if (themeKey != null) {
+        keys.add(`hist-theme-${target.parcial_key}-${target.parcial_key}-${themeKey}`);
+      }
+    }
+    return keys;
+  }, [pruebas, targetTestId, weeklyThemeIds]);
+
+  // Asegurar que los acordeones que contienen la prueba objetivo se abran
+  useEffect(() => {
+    if (targetAccordionKeys.size > 0) {
+      setAccordionStates((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        targetAccordionKeys.forEach((key) => {
+          if (!next[key]) {
+            next[key] = true;
+            changed = true;
+          }
+        });
+        if (changed) {
+          try {
+            localStorage.setItem(ACCORDION_STORAGE_KEY, JSON.stringify(next));
+          } catch {}
+          return next;
+        }
+        return prev;
+      });
+    }
+  }, [targetAccordionKeys]);
+
+  const isAccordionOpen = useCallback(
+    (key: string, defaultOpen: boolean): boolean => {
+      if (search.trim()) return true;
+      if (targetAccordionKeys.has(key)) return true;
+      if (accordionStates[key] !== undefined) {
+        return accordionStates[key];
+      }
+      return defaultOpen;
+    },
+    [search, targetAccordionKeys, accordionStates]
+  );
+
+  // Restaurar el scroll y enfocar la prueba editada cuando los datos se cargan
+  useEffect(() => {
+    if (isLoading || pruebas.length === 0 || hasRestoredScrollRef.current) return;
+
+    const targetId = targetTestId;
+    let savedScrollY: string | null = null;
+    try {
+      savedScrollY = sessionStorage.getItem(SCROLL_STORAGE_KEY);
+    } catch {}
+
+    if (!targetId && !savedScrollY) return;
+
+    hasRestoredScrollRef.current = true;
+
+    const timer = setTimeout(() => {
+      let scrolled = false;
+
+      if (targetId) {
+        const cardEl = document.getElementById(`test-card-${targetId}`);
+        if (cardEl) {
+          cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setHighlightedTestId(targetId);
+          scrolled = true;
+          setTimeout(() => {
+            setHighlightedTestId(null);
+          }, 2500);
+        }
+      }
+
+      if (!scrolled && savedScrollY) {
+        const y = parseFloat(savedScrollY);
+        if (!isNaN(y) && y > 0) {
+          window.scrollTo({ top: y, behavior: 'smooth' });
+        }
+      }
+
+      try {
+        sessionStorage.removeItem(TARGET_STORAGE_KEY);
+        sessionStorage.removeItem(SCROLL_STORAGE_KEY);
+      } catch {}
+    }, 180);
+
+    return () => clearTimeout(timer);
+  }, [isLoading, pruebas.length, targetTestId]);
+
+  // Obtener todas las claves de acordeones presentes actualmente en la vista
+  const allCurrentAccordionKeys = useMemo(() => {
+    const keys: string[] = [];
+    parcialSections.forEach((section) => {
+      const weeklyThemeGroups = getWeeklyThemeGroups(section);
+      weeklyThemeGroups.forEach((themeGroup) => {
+        keys.push(`week-${section.key}-${themeGroup.key}`);
+      });
+      const historicalGroups = getHistoricalParcialGroups(section);
+      historicalGroups.forEach((partialGroup) => {
+        keys.push(`hist-partial-${section.key}-${partialGroup.key}`);
+        const groupedByTema = new Map<string, AdminPrueba[]>();
+        partialGroup.items.forEach((prueba) => {
+          const themeKey = prueba.tema_id ?? prueba.tema?.id;
+          if (themeKey == null) return;
+          groupedByTema.set(String(themeKey), []);
+        });
+        groupedByTema.forEach((_, themeKey) => {
+          keys.push(`hist-theme-${section.key}-${partialGroup.key}-${themeKey}`);
+        });
+      });
+    });
+    return keys;
+  }, [parcialSections, getWeeklyThemeGroups, getHistoricalParcialGroups]);
+
+  const handleExpandAll = () => {
+    setAccordionStates((prev) => {
+      const next = { ...prev };
+      allCurrentAccordionKeys.forEach((key) => {
+        next[key] = true;
+      });
+      try {
+        localStorage.setItem(ACCORDION_STORAGE_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleCollapseAll = () => {
+    setAccordionStates((prev) => {
+      const next = { ...prev };
+      allCurrentAccordionKeys.forEach((key) => {
+        next[key] = false;
+      });
+      try {
+        localStorage.setItem(ACCORDION_STORAGE_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   // Apertura del modal de reclasificación
@@ -841,6 +1145,24 @@ const GestionPruebas: React.FC = () => {
             grid-template-columns: 1fr 1fr !important;
           }
         }
+        @keyframes testCardHighlightPulse {
+          0% {
+            box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7);
+            transform: scale(1);
+          }
+          50% {
+            box-shadow: 0 0 0 10px rgba(37, 99, 235, 0.25);
+            transform: scale(1.02);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+            transform: scale(1);
+          }
+        }
+        .test-card-highlighted {
+          animation: testCardHighlightPulse 1.8s ease-in-out !important;
+          border-color: #2563eb !important;
+        }
       `}</style>
 
       <Header />
@@ -961,6 +1283,28 @@ const GestionPruebas: React.FC = () => {
                 Subtema
               </button>
             </div>
+
+            {/* Controles rápidos de acordeones */}
+            <div style={s.accordionControls}>
+              <button
+                type="button"
+                onClick={handleExpandAll}
+                style={s.accordionCtrlBtn}
+                title="Abrir todos los acordeones"
+              >
+                <ChevronsUpDown size={14} aria-hidden="true" />
+                <span>Expandir todo</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCollapseAll}
+                style={s.accordionCtrlBtn}
+                title="Cerrar todos los acordeones"
+              >
+                <ChevronsDownUp size={14} aria-hidden="true" />
+                <span>Colapsar todo</span>
+              </button>
+            </div>
           </div>
         </section>
 
@@ -1046,7 +1390,11 @@ const GestionPruebas: React.FC = () => {
                             return (
                               <div className="evaluaciones-scope" style={s.scopeBlock}>
                                 <h3 style={s.scopeTitle}>
-                                  {weeklyThemeIds.length > 0 ? 'Contenido actual de la semana' : 'Pruebas por parcial'}
+                                  {activeExamParcial === section.key
+                                    ? `🎯 Temas del ${section.title} — Semana de Exámenes`
+                                    : weeklyThemeIds.length > 0
+                                    ? 'Contenido actual de la semana'
+                                    : 'Pruebas por parcial'}
                                 </h3>
                                 <div style={{ display: 'grid', gap: '12px' }}>
                                   {weeklyThemeGroups.map((themeGroup) => {
@@ -1054,8 +1402,17 @@ const GestionPruebas: React.FC = () => {
                                     const temaItems = themeGroup.items.filter((prueba) => prueba.scope === 'tema');
                                     const subtemaItems = themeGroup.items.filter((prueba) => prueba.scope === 'subtema');
 
+                                    const accKey = `week-${section.key}-${themeGroup.key}`;
+
                                     return (
-                                      <details key={`${section.key}-${themeGroup.key}`} style={s.historyAccordion} open>
+                                      <details
+                                        key={`${section.key}-${themeGroup.key}`}
+                                        style={s.historyAccordion}
+                                        open={isAccordionOpen(accKey, true)}
+                                        onToggle={(e) => {
+                                          handleToggleAccordion(accKey, (e.currentTarget as HTMLDetailsElement).open);
+                                        }}
+                                      >
                                         <summary
                                           style={{
                                             ...s.historySummary,
@@ -1064,17 +1421,7 @@ const GestionPruebas: React.FC = () => {
                                         >
                                           <span style={s.weekThemeSummary}>
                                             <span style={s.weekThemeLabelWrap}>
-                                              {themeGroup.items[0]?.image_url ? (
-                                                <img
-                                                  src={getCloudinaryImageUrl(themeGroup.items[0].image_url, 'thumb')}
-                                                  alt={themeGroup.temaNombre}
-                                                  style={s.weekThemeThumb}
-                                                />
-                                              ) : (
-                                                <span style={s.weekThemeThumbFallback}>
-                                                  {(themeGroup.temaNombre || 'T').slice(0, 1).toUpperCase()}
-                                                </span>
-                                              )}
+                                              <WeekThemeThumbnail themeGroup={themeGroup} />
                                               <span style={s.weekThemeTitle}>{themeGroup.temaNombre}</span>
                                             </span>
                                             <span style={s.historySummaryMeta}>
@@ -1099,6 +1446,7 @@ const GestionPruebas: React.FC = () => {
                                                     prueba={prueba}
                                                     badge="Parcial"
                                                     isUpdating={updatingTestId === prueba.id}
+                                                    isHighlighted={highlightedTestId === prueba.id}
                                                     onTogglePublication={handleTogglePublication}
                                                     onReclassify={handleOpenReclassify}
                                                     onRunTest={handleRunTest}
@@ -1121,6 +1469,7 @@ const GestionPruebas: React.FC = () => {
                                                     badge="Tema"
                                                     badges={[prueba.tema?.nombre ?? 'Tema sin identificar']}
                                                     isUpdating={updatingTestId === prueba.id}
+                                                    isHighlighted={highlightedTestId === prueba.id}
                                                     onTogglePublication={handleTogglePublication}
                                                     onReclassify={handleOpenReclassify}
                                                     onRunTest={handleRunTest}
@@ -1146,6 +1495,7 @@ const GestionPruebas: React.FC = () => {
                                                       prueba.subtema?.nombre ?? 'Subtema sin identificar',
                                                     ]}
                                                     isUpdating={updatingTestId === prueba.id}
+                                                    isHighlighted={highlightedTestId === prueba.id}
                                                     onTogglePublication={handleTogglePublication}
                                                     onReclassify={handleOpenReclassify}
                                                     onRunTest={handleRunTest}
@@ -1202,8 +1552,17 @@ const GestionPruebas: React.FC = () => {
                                       }))
                                       .sort((a, b) => a.temaNombre.localeCompare(b.temaNombre, 'es'));
 
+                                    const partialAccKey = `hist-partial-${section.key}-${partialGroup.key}`;
+
                                     return (
-                                      <details key={`${section.key}-${partialGroup.key}`} style={s.historyAccordion} open={Boolean(search)}>
+                                      <details
+                                        key={`${section.key}-${partialGroup.key}`}
+                                        style={s.historyAccordion}
+                                        open={isAccordionOpen(partialAccKey, false)}
+                                        onToggle={(e) => {
+                                          handleToggleAccordion(partialAccKey, (e.currentTarget as HTMLDetailsElement).open);
+                                        }}
+                                      >
                                         <summary
                                           style={{
                                             ...s.historySummary,
@@ -1234,6 +1593,7 @@ const GestionPruebas: React.FC = () => {
                                                       prueba={prueba}
                                                       badge="Parcial"
                                                       isUpdating={updatingTestId === prueba.id}
+                                                      isHighlighted={highlightedTestId === prueba.id}
                                                       onTogglePublication={handleTogglePublication}
                                                       onReclassify={handleOpenReclassify}
                                                       onRunTest={handleRunTest}
@@ -1253,12 +1613,16 @@ const GestionPruebas: React.FC = () => {
                                                   const partialThemeItems = themeGroup.items.filter((prueba) => prueba.scope === 'parcial');
                                                   const temaItems = themeGroup.items.filter((prueba) => prueba.scope === 'tema');
                                                   const subtemaItems = themeGroup.items.filter((prueba) => prueba.scope === 'subtema');
+                                                  const themeAccKey = `hist-theme-${section.key}-${partialGroup.key}-${themeGroup.key}`;
 
                                                   return (
                                                     <details
                                                       key={`${section.key}-${partialGroup.key}-${themeGroup.key}`}
                                                       style={{ ...s.historyAccordion, borderRadius: '14px' }}
-                                                      open={Boolean(search)}
+                                                      open={isAccordionOpen(themeAccKey, false)}
+                                                      onToggle={(e) => {
+                                                        handleToggleAccordion(themeAccKey, (e.currentTarget as HTMLDetailsElement).open);
+                                                      }}
                                                     >
                                                       <summary
                                                         style={{
@@ -1291,6 +1655,7 @@ const GestionPruebas: React.FC = () => {
                                                                   prueba={prueba}
                                                                   badge="Parcial"
                                                                   isUpdating={updatingTestId === prueba.id}
+                                                                  isHighlighted={highlightedTestId === prueba.id}
                                                                   onTogglePublication={handleTogglePublication}
                                                                   onReclassify={handleOpenReclassify}
                                                                   onRunTest={handleRunTest}
@@ -1313,6 +1678,7 @@ const GestionPruebas: React.FC = () => {
                                                                   badge="Tema"
                                                                   badges={[prueba.tema?.nombre ?? 'Tema sin identificar']}
                                                                   isUpdating={updatingTestId === prueba.id}
+                                                                  isHighlighted={highlightedTestId === prueba.id}
                                                                   onTogglePublication={handleTogglePublication}
                                                                   onReclassify={handleOpenReclassify}
                                                                   onRunTest={handleRunTest}
@@ -1338,6 +1704,7 @@ const GestionPruebas: React.FC = () => {
                                                                     prueba.subtema?.nombre ?? 'Subtema sin identificar',
                                                                   ]}
                                                                   isUpdating={updatingTestId === prueba.id}
+                                                                  isHighlighted={highlightedTestId === prueba.id}
                                                                   onTogglePublication={handleTogglePublication}
                                                                   onReclassify={handleOpenReclassify}
                                                                   onRunTest={handleRunTest}
@@ -1836,6 +2203,28 @@ const s: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     fontFamily: 'inherit',
     boxShadow: '0 4px 10px rgba(37,99,235,0.12)',
+  },
+  accordionControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    marginLeft: 'auto',
+    flexWrap: 'wrap' as const,
+  },
+  accordionCtrlBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
+    border: '1px solid #cbd5e1',
+    borderRadius: '999px',
+    padding: '6px 12px',
+    background: '#ffffff',
+    color: '#475569',
+    fontSize: '0.78rem',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.15s ease',
   },
   kicker: {
     margin: 0,

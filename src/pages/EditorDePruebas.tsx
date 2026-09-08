@@ -762,11 +762,17 @@ const EditorDePruebas: React.FC = () => {
   const backTarget = (location.state as { from?: string } | null)?.from ?? '/pruebas';
 
   const selectedReferenceTema = referencePicker
-    ? pickerTemas.find(tema => tema.id === referencePicker.temaId) ?? null
+    ? pickerTemas.find(tema => tema.id === referencePicker.temaId) ??
+      (referencePicker.temaId && prueba?.tema_id === referencePicker.temaId && temaNombre
+        ? { id: prueba.tema_id, nombre: temaNombre, parcial: prueba.parcial_key, sort_order: 0 }
+        : null)
     : null;
 
   const selectedReferenceSubtema = referencePicker
-    ? pickerSubtemas.find(subtema => subtema.id === referencePicker.subtemaId) ?? null
+    ? pickerSubtemas.find(subtema => subtema.id === referencePicker.subtemaId) ??
+      (referencePicker.subtemaId && prueba?.subtema_id === referencePicker.subtemaId && subtemaNombre
+        ? { id: prueba.subtema_id, nombre: subtemaNombre, tema_id: prueba.tema_id ?? 0, sort_order: 0 }
+        : null)
     : null;
 
   const temasDisponibles = referencePicker
@@ -783,7 +789,7 @@ const EditorDePruebas: React.FC = () => {
       .order('sort_order', { ascending: true });
 
     if (fetchError) {
-      setReferencePicker(prev => (prev ? {
+      setReferencePicker(prev => (prev && prev.step === 'tema' ? {
         ...prev,
         loading: false,
         error: 'No se pudieron cargar todos los temas. Intenta nuevamente.',
@@ -792,7 +798,7 @@ const EditorDePruebas: React.FC = () => {
     }
 
     setPickerTemas((data ?? []) as TemaRow[]);
-    setReferencePicker(prev => (prev ? { ...prev, loading: false, error: '' } : prev));
+    setReferencePicker(prev => (prev && prev.step === 'tema' ? { ...prev, loading: false, error: '' } : prev));
   };
 
   useEffect(() => {
@@ -802,20 +808,79 @@ const EditorDePruebas: React.FC = () => {
   const openReferencePicker = async (questionId: string) => {
     if (!prueba) return;
 
-    setReferencePicker({
-      questionId,
-      mode: 'atlas',
-      partialKey: 'all',
-      temaId: null,
-      subtemaId: null,
-      step: 'tema',
-      placas: [],
-      loading: true,
-      error: '',
-    });
+    const partialKey: ReferencePartialKey = prueba.parcial_key || 'all';
+    const isSubtemaScope = prueba.scope === 'subtema' && Boolean(prueba.subtema_id);
+    const isTemaScope = (prueba.scope === 'tema' || (prueba.scope === 'subtema' && !prueba.subtema_id)) && Boolean(prueba.tema_id);
 
-    setPickerSubtemas([]);
-    await loadPickerTemas();
+    if (isSubtemaScope && prueba.subtema_id) {
+      const temaId = prueba.tema_id;
+      const subtemaId = prueba.subtema_id;
+
+      setReferencePicker({
+        questionId,
+        mode: 'atlas',
+        partialKey,
+        temaId,
+        subtemaId,
+        step: 'placa',
+        placas: [],
+        loading: true,
+        error: '',
+      });
+
+      if (temaId) {
+        const quick = getQuickSubtemas(temaId);
+        if (quick && quick.length > 0) {
+          setPickerSubtemas(quick as unknown as SubtemaRow[]);
+        }
+        void getCachedSubtemas(temaId).then(data => {
+          if (data && data.length > 0) {
+            setPickerSubtemas(data as unknown as SubtemaRow[]);
+          }
+        }).catch(() => { /* silent */ });
+      }
+
+      if (pickerTemas.length === 0) {
+        void loadPickerTemas();
+      }
+
+      await loadPlacasForSubtema(subtemaId);
+    } else if (isTemaScope && prueba.tema_id) {
+      const temaId = prueba.tema_id;
+
+      setReferencePicker({
+        questionId,
+        mode: 'atlas',
+        partialKey,
+        temaId,
+        subtemaId: null,
+        step: 'subtema',
+        placas: [],
+        loading: true,
+        error: '',
+      });
+
+      if (pickerTemas.length === 0) {
+        void loadPickerTemas();
+      }
+
+      await loadSubtemasForTema(temaId);
+    } else {
+      setReferencePicker({
+        questionId,
+        mode: 'atlas',
+        partialKey,
+        temaId: null,
+        subtemaId: null,
+        step: 'tema',
+        placas: [],
+        loading: true,
+        error: '',
+      });
+
+      setPickerSubtemas([]);
+      await loadPickerTemas();
+    }
   };
 
   const loadSubtemasForTema = async (temaId: number) => {
@@ -895,8 +960,12 @@ const EditorDePruebas: React.FC = () => {
   };
 
   const setQuestionReference = (questionId: string, placa: PlacaRow) => {
-    const temaName = pickerTemas.find(tema => tema.id === placa.tema_id)?.nombre ?? '';
-    const subtemaName = pickerSubtemas.find(subtema => subtema.id === placa.subtema_id)?.nombre ?? '';
+    const temaName =
+      pickerTemas.find(tema => tema.id === placa.tema_id)?.nombre ??
+      (placa.tema_id === prueba?.tema_id && temaNombre ? temaNombre : '');
+    const subtemaName =
+      pickerSubtemas.find(subtema => subtema.id === placa.subtema_id)?.nombre ??
+      (placa.subtema_id === prueba?.subtema_id && subtemaNombre ? subtemaNombre : '');
 
     setReferenceMarkerPicker({
       questionId,
@@ -1065,7 +1134,7 @@ const EditorDePruebas: React.FC = () => {
           ) : error ? (
             <div style={s.emptyState}>
               <p style={s.emptyTitle}>{error}</p>
-              <Link to={backTarget} style={s.secondaryButton}>
+              <Link to={backTarget} state={{ targetTestId: prueba?.id || pruebaId }} style={s.secondaryButton}>
                 Volver
               </Link>
             </div>
@@ -1155,7 +1224,7 @@ const EditorDePruebas: React.FC = () => {
                 </div>
 
                 <div style={s.buttonRow}>
-                  <Link to={backTarget} style={s.secondaryButton}>
+                  <Link to={backTarget} state={{ targetTestId: prueba?.id || pruebaId }} style={s.secondaryButton}>
                     Volver
                   </Link>
                   <button
@@ -1588,6 +1657,9 @@ const EditorDePruebas: React.FC = () => {
                       onClick={() => {
                         if (referencePicker.temaId) {
                           setReferencePicker(prev => (prev ? { ...prev, step: 'subtema', placas: [], error: '' } : prev));
+                          if (pickerSubtemas.length === 0 && referencePicker.temaId) {
+                            void loadSubtemasForTema(referencePicker.temaId);
+                          }
                         }
                       }}
                     >
@@ -1655,32 +1727,139 @@ const EditorDePruebas: React.FC = () => {
                     )}
                   </div>
                 ) : referencePicker.loading ? (
-                  <div style={s.referenceStateBox}>Cargando placas...</div>
+                  <div style={s.referenceStateBox}>Cargando...</div>
                 ) : referencePicker.error ? (
                   <div style={s.referenceStateBox}>{referencePicker.error}</div>
                 ) : referencePicker.step === 'placa' && referencePicker.placas.length > 0 ? (
-                  <div style={s.referenceGrid}>
-                    {referencePicker.placas.map(placa => (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                       <button
-                        key={placa.id}
                         type="button"
-                        style={s.referencePlateCard}
-                        onClick={() => setQuestionReference(referencePicker.questionId, placa)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '12px',
+                          padding: '7px 12px',
+                          background: '#fff',
+                          color: '#1e293b',
+                          fontSize: '0.84rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => {
+                          setReferencePicker(prev => (prev ? { ...prev, step: 'subtema', placas: [], error: '' } : prev));
+                          if (pickerSubtemas.length === 0 && referencePicker.temaId) {
+                            void loadSubtemasForTema(referencePicker.temaId);
+                          }
+                        }}
                       >
-                        <img
-                          src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
-                          alt="Placa disponible"
-                          style={s.referencePlateImg}
-                        />
-                        <span style={s.referencePlateLabel}>Seleccionar placa</span>
+                        <span>←</span>
+                        <span>Volver a subtemas ({selectedReferenceTema?.nombre || 'Tema'})</span>
                       </button>
-                    ))}
+                      <span style={{ fontSize: '0.84rem', color: '#475569', fontWeight: 600 }}>
+                        {selectedReferenceSubtema?.nombre} ({referencePicker.placas.length} {referencePicker.placas.length === 1 ? 'placa' : 'placas'})
+                      </span>
+                    </div>
+
+                    <div style={s.referenceGrid}>
+                      {referencePicker.placas.map(placa => (
+                        <button
+                          key={placa.id}
+                          type="button"
+                          style={s.referencePlateCard}
+                          onClick={() => setQuestionReference(referencePicker.questionId, placa)}
+                        >
+                          <img
+                            src={getCloudinaryImageUrl(placa.photo_url, 'thumb')}
+                            alt="Placa disponible"
+                            style={s.referencePlateImg}
+                          />
+                          <span style={s.referencePlateLabel}>Seleccionar placa</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 ) : referencePicker.step === 'placa' ? (
-                  <div style={s.referenceStateBox}>Este subtema no tiene placas disponibles.</div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '14px' }}>
+                      <button
+                        type="button"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '12px',
+                          padding: '7px 12px',
+                          background: '#fff',
+                          color: '#1e293b',
+                          fontSize: '0.84rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => {
+                          setReferencePicker(prev => (prev ? { ...prev, step: 'subtema', placas: [], error: '' } : prev));
+                          if (pickerSubtemas.length === 0 && referencePicker.temaId) {
+                            void loadSubtemasForTema(referencePicker.temaId);
+                          }
+                        }}
+                      >
+                        <span>←</span>
+                        <span>Volver a subtemas ({selectedReferenceTema?.nombre || 'Tema'})</span>
+                      </button>
+                    </div>
+                    <div style={s.referenceStateBox}>Este subtema no tiene placas disponibles.</div>
+                  </div>
+                ) : referencePicker.step === 'subtema' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+                        {selectedReferenceTema?.nombre ? `Subtemas de ${selectedReferenceTema.nombre}` : 'Subtemas disponibles'}
+                      </h4>
+                      <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.88rem' }}>
+                        Selecciona un subtema para ver sus placas de referencia:
+                      </p>
+                    </div>
+                    {referencePicker.loading ? (
+                      <div style={s.referenceStateBox}>Cargando subtemas...</div>
+                    ) : pickerSubtemas.length > 0 ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '12px' }}>
+                        {pickerSubtemas.map(subtema => (
+                          <button
+                            key={subtema.id}
+                            type="button"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '14px 16px',
+                              borderRadius: '16px',
+                              border: selectedReferenceSubtema?.id === subtema.id ? '2px solid #2563eb' : '1px solid #dbeafe',
+                              background: selectedReferenceSubtema?.id === subtema.id ? '#eff6ff' : '#ffffff',
+                              color: selectedReferenceSubtema?.id === subtema.id ? '#1d4ed8' : '#0f172a',
+                              fontWeight: 700,
+                              fontSize: '0.92rem',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              boxShadow: '0 4px 12px rgba(15,23,42,0.04)',
+                              transition: 'all 0.15s ease',
+                            }}
+                            onClick={() => handleSelectSubtema(subtema)}
+                          >
+                            <span>{subtema.nombre}</span>
+                            <span style={{ color: '#2563eb', fontWeight: 900, fontSize: '1rem', marginLeft: '8px' }}>→</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={s.referenceStateBox}>Este tema no tiene subtemas disponibles.</div>
+                    )}
+                  </div>
                 ) : (
                   <div style={s.referenceStateBox}>
-                    Selecciona un parcial, tema y subtema para ver las placas disponibles.
+                    Selecciona un tema en el panel lateral para ver sus subtemas y placas disponibles.
                   </div>
                 )}
               </section>
