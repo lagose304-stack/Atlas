@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
+import BackButton from '../components/BackButton';
 import SenaladoLocationPicker from '../components/SenaladoLocationPicker';
 import TestRichTextField from '../components/TestRichTextField';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
@@ -186,8 +187,41 @@ interface ReferenceMarkerState {
   ownsUploadPreview: boolean;
 }
 
+interface EditorSnapshot {
+  nombre: string;
+  instrucciones: string;
+  hasImageFile: boolean;
+  removeExistingImage: boolean;
+  questionsSerialized: string;
+}
+
+const serializeQuestions = (items: QuestionDraft[]): string => {
+  return JSON.stringify(
+    items.map(q => ({
+      id: q.id,
+      sortOrder: q.sortOrder,
+      title: (q.title ?? '').trim(),
+      retroalimentacion: (q.retroalimentacion ?? '').trim(),
+      required: Boolean(q.required),
+      options: (q.options ?? []).map(o => ({
+        id: o.id,
+        text: (o.text ?? '').trim(),
+        isCorrect: Boolean(o.isCorrect),
+        sortOrder: o.sortOrder,
+      })),
+      referencePlacaId: q.referencePlacaId ?? null,
+      referencePhotoUrl: q.referencePhotoUrl ?? null,
+      referenceTemaName: (q.referenceTemaName ?? '').trim(),
+      referenceSubtemaName: (q.referenceSubtemaName ?? '').trim(),
+      referenceSenaladoLocation: q.referenceSenaladoLocation ?? null,
+      hasUploadFile: Boolean(q.referenceUploadFile),
+    }))
+  );
+};
+
 const EditorDePruebas: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { pruebaId } = useParams();
   const { user } = useAuth();
   const [prueba, setPrueba] = useState<PruebaRow | null>(null);
@@ -209,6 +243,8 @@ const EditorDePruebas: React.FC = () => {
   const [pickerTemas, setPickerTemas] = useState<TemaRow[]>([]);
   const [pickerSubtemas, setPickerSubtemas] = useState<SubtemaRow[]>([]);
   const [referenceMarkerPicker, setReferenceMarkerPicker] = useState<ReferenceMarkerState | null>(null);
+  const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
+  const initialSnapshotRef = useRef<EditorSnapshot | null>(null);
   const persistedOwnedReferenceUrlsRef = useRef<Set<string>>(new Set());
   const localReferencePreviewUrlsRef = useRef<Set<string>>(new Set());
 
@@ -230,13 +266,24 @@ const EditorDePruebas: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!referencePicker && !referenceMarkerPicker) return;
+    if (!referencePicker && !referenceMarkerPicker && !showExitConfirmModal) return;
 
     acquireAtlasScrollLock();
     return () => {
       releaseAtlasScrollLock();
     };
-  }, [referencePicker, referenceMarkerPicker]);
+  }, [referencePicker, referenceMarkerPicker, showExitConfirmModal]);
+
+  useEffect(() => {
+    if (!showExitConfirmModal) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowExitConfirmModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showExitConfirmModal]);
 
   useEffect(() => {
     if (!saveToast) return;
@@ -248,7 +295,7 @@ const EditorDePruebas: React.FC = () => {
     return () => window.clearTimeout(timeoutId);
   }, [saveToast]);
 
-  const loadQuestionsFromDatabase = async (pruebaIdValue: string) => {
+  const loadQuestionsFromDatabase = async (pruebaIdValue: string): Promise<QuestionDraft[]> => {
     const { data: preguntasData, error: preguntasError } = await supabase
       .from('prueba_preguntas')
       .select('id, prueba_id, sort_order, tipo, titulo, retroalimentacion, required, reference_placa_id, reference_photo_url, reference_tema_name, reference_subtema_name, reference_senalado_x, reference_senalado_y, reference_senalado_start_x, reference_senalado_start_y')
@@ -256,7 +303,9 @@ const EditorDePruebas: React.FC = () => {
       .order('sort_order', { ascending: true });
 
     if (preguntasError) {
-      return;
+      const fallback = [createBlankQuestion()];
+      setQuestions(fallback);
+      return fallback;
     }
 
     const preguntas = (preguntasData ?? []) as PreguntaRow[];
@@ -266,8 +315,9 @@ const EditorDePruebas: React.FC = () => {
         .filter((url): url is string => isOwnedTestReferenceUrl(url, pruebaIdValue))
     );
     if (preguntas.length === 0) {
-      setQuestions([createBlankQuestion()]);
-      return;
+      const fallback = [createBlankQuestion()];
+      setQuestions(fallback);
+      return fallback;
     }
 
     const preguntaIds = preguntas.map(pregunta => pregunta.id);
@@ -278,7 +328,9 @@ const EditorDePruebas: React.FC = () => {
       .order('sort_order', { ascending: true });
 
     if (opcionesError) {
-      return;
+      const fallback = [createBlankQuestion()];
+      setQuestions(fallback);
+      return fallback;
     }
 
     const opcionesPorPregunta = new Map<string, OpcionRow[]>();
@@ -289,7 +341,7 @@ const EditorDePruebas: React.FC = () => {
       opcionesPorPregunta.set(row.pregunta_id, current);
     });
 
-    setQuestions(preguntas.map((pregunta) => {
+    const parsedQuestions = preguntas.map((pregunta) => {
       const opciones = opcionesPorPregunta.get(pregunta.id) ?? [];
 
       return {
@@ -325,7 +377,10 @@ const EditorDePruebas: React.FC = () => {
         referenceUploadFile: null,
         referenceUploadPreviewUrl: null,
       };
-    }));
+    });
+
+    setQuestions(parsedQuestions);
+    return parsedQuestions;
   };
 
   useEffect(() => {
@@ -384,13 +439,43 @@ const EditorDePruebas: React.FC = () => {
         setSubtemaNombre('No aplica');
       }
 
-      await loadQuestionsFromDatabase(nextPrueba.id);
+      const loadedQuestions = await loadQuestionsFromDatabase(nextPrueba.id);
+
+      initialSnapshotRef.current = {
+        nombre: (nextPrueba.nombre ?? '').trim(),
+        instrucciones: (nextPrueba.instrucciones ?? '').trim(),
+        hasImageFile: false,
+        removeExistingImage: false,
+        questionsSerialized: serializeQuestions(loadedQuestions),
+      };
 
       setIsLoading(false);
     };
 
     void fetchPrueba();
   }, [pruebaId]);
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (!initialSnapshotRef.current) return false;
+    const snap = initialSnapshotRef.current;
+    if (nombre.trim() !== snap.nombre) return true;
+    if (instrucciones.trim() !== snap.instrucciones) return true;
+    if (Boolean(pruebaImageFile) !== snap.hasImageFile) return true;
+    if (Boolean(removeExistingImage) !== snap.removeExistingImage) return true;
+    if (serializeQuestions(questions) !== snap.questionsSerialized) return true;
+    return false;
+  }, [nombre, instrucciones, pruebaImageFile, removeExistingImage, questions]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   const canSave = useMemo(() => {
     return Boolean(prueba) && nombre.trim().length > 0;
@@ -598,6 +683,13 @@ const EditorDePruebas: React.FC = () => {
 
     setQuestions(savedQuestions);
     setPrueba(prev => (prev ? { ...prev, nombre: nombre.trim(), instrucciones: instrucciones.trim() } : prev));
+    initialSnapshotRef.current = {
+      nombre: nombre.trim(),
+      instrucciones: instrucciones.trim(),
+      hasImageFile: false,
+      removeExistingImage: false,
+      questionsSerialized: serializeQuestions(savedQuestions),
+    };
     setMessage(saveSource === 'auto' ? 'Guardado automático.' : (cleanupWarning || 'Cambios guardados correctamente.'));
     setSaveToast(saveSource === 'auto' ? 'Guardado automático.' : (cleanupWarning || 'Cambios guardados.'));
     setIsSaving(false);
@@ -760,6 +852,19 @@ const EditorDePruebas: React.FC = () => {
     : '';
 
   const backTarget = (location.state as { from?: string } | null)?.from ?? '/pruebas';
+
+  const confirmGoBack = () => {
+    setShowExitConfirmModal(false);
+    navigate(backTarget, { state: { targetTestId: prueba?.id || pruebaId } });
+  };
+
+  const handleGoBack = () => {
+    if (hasUnsavedChanges) {
+      setShowExitConfirmModal(true);
+      return;
+    }
+    confirmGoBack();
+  };
 
   const selectedReferenceTema = referencePicker
     ? pickerTemas.find(tema => tema.id === referencePicker.temaId) ??
@@ -1102,6 +1207,8 @@ const EditorDePruebas: React.FC = () => {
       <Header disableInteractions />
 
       <main style={s.main} className="edicion-main">
+        <BackButton onClick={handleGoBack} />
+
         <section style={s.hero} className="edicion-card">
           <div style={s.heroText}>
             <p style={s.kicker}>Pruebas</p>
@@ -1118,15 +1225,6 @@ const EditorDePruebas: React.FC = () => {
             <h2 style={s.sectionTitle}>Datos de la prueba</h2>
           </div>
 
-          <div style={s.shortcutsInfo}>
-            <strong style={s.shortcutsInfoTitle}>Atajos de formato disponibles</strong>
-            <p style={s.shortcutsInfoText}>
-              En todos los campos de texto de este editor puedes usar: Ctrl/Cmd+N (negrita), Ctrl/Cmd+K (cursiva) y Ctrl/Cmd+S (subrayado).
-              Tambien funcionan los atajos universales Ctrl/Cmd+B, Ctrl/Cmd+I y Ctrl/Cmd+U.
-              Para corregir ortografia, haz clic derecho sobre la palabra subrayada en rojo y el navegador te mostrara sugerencias.
-            </p>
-          </div>
-
           {isLoading ? (
             <div style={s.emptyState}>
               <p style={s.emptyTitle}>Cargando prueba...</p>
@@ -1134,9 +1232,9 @@ const EditorDePruebas: React.FC = () => {
           ) : error ? (
             <div style={s.emptyState}>
               <p style={s.emptyTitle}>{error}</p>
-              <Link to={backTarget} state={{ targetTestId: prueba?.id || pruebaId }} style={s.secondaryButton}>
+              <button type="button" onClick={handleGoBack} style={s.secondaryButton}>
                 Volver
-              </Link>
+              </button>
             </div>
           ) : (
             <div style={s.editorGrid}>
@@ -1224,9 +1322,6 @@ const EditorDePruebas: React.FC = () => {
                 </div>
 
                 <div style={s.buttonRow}>
-                  <Link to={backTarget} state={{ targetTestId: prueba?.id || pruebaId }} style={s.secondaryButton}>
-                    Volver
-                  </Link>
                   <button
                     type="button"
                     disabled={!canSave || isSaving}
@@ -1285,19 +1380,44 @@ const EditorDePruebas: React.FC = () => {
         </section>
 
         <section style={s.builderSection} className="edicion-card">
-          <div style={s.sectionHeader}>
-            <span style={s.sectionDot} />
-            <h2 style={s.sectionTitle}>Constructor de preguntas</h2>
+          <div style={s.builderHeaderBar}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={s.sectionDot} />
+              <h2 style={s.sectionTitle}>Constructor de preguntas</h2>
+              <span style={s.builderCountPill}>
+                {questions.length} {questions.length === 1 ? 'pregunta' : 'preguntas'}
+              </span>
+            </div>
+            <button type="button" style={s.builderTopAddButton} onClick={addQuestion}>
+              ＋ Nueva pregunta
+            </button>
           </div>
 
           <div style={s.builderLayout}>
             <div style={s.builderCanvas}>
               {questions.map((question, questionIndex) => (
                 <article key={question.id} style={s.questionCard}>
+                  {/* Barra de acento superior que demarca inequívocamente el inicio de la tarjeta */}
+                  <div style={s.questionCardAccentBar} />
+
+                  {/* Cabecera distintiva de la pregunta */}
                   <div style={s.questionHeader}>
                     <div style={s.questionHeaderLeft}>
-                      <span style={s.questionIndex}>{questionIndex + 1}</span>
-                      <div style={s.questionTypePill}>Varias opciones</div>
+                      <div style={s.questionNumberBadge}>
+                        <span style={s.questionNumberPrefix}>PREGUNTA</span>
+                        <span style={s.questionNumberValue}>{questionIndex + 1}</span>
+                      </div>
+                      <div style={s.questionTypePill}>Opción múltiple</div>
+                      {question.required ? (
+                        <div style={s.requiredPill}>Obligatoria</div>
+                      ) : (
+                        <div style={s.optionalPill}>Opcional</div>
+                      )}
+                      {(question.referencePlacaId || question.referenceUploadPreviewUrl || question.referencePhotoUrl) ? (
+                        <div style={s.questionRefPillActive}>📷 Con imagen</div>
+                      ) : (
+                        <div style={s.questionRefPillMuted}>⚪ Sin imagen</div>
+                      )}
                     </div>
 
                     <div style={s.questionHeaderActions}>
@@ -1310,84 +1430,149 @@ const EditorDePruebas: React.FC = () => {
                         />
                         <span>Obligatoria</span>
                       </label>
-                      <button type="button" style={s.iconActionButton} onClick={() => duplicateQuestion(question.id)}>
-                        Duplicar
+                      <button
+                        type="button"
+                        style={s.iconActionButton}
+                        onClick={() => duplicateQuestion(question.id)}
+                        title="Duplicar esta pregunta"
+                      >
+                        <span style={{ marginRight: '4px' }}>📋</span> Duplicar
                       </button>
-                      <button type="button" style={s.iconActionButtonDanger} onClick={() => removeQuestion(question.id)}>
-                        Eliminar
+                      <button
+                        type="button"
+                        style={s.iconActionButtonDanger}
+                        onClick={() => removeQuestion(question.id)}
+                        title="Eliminar esta pregunta"
+                      >
+                        <span style={{ marginRight: '4px' }}>🗑️</span> Eliminar
                       </button>
                     </div>
                   </div>
 
+                  {/* Cuerpo de la pregunta */}
                   <div style={s.questionBody}>
                     <div style={s.questionMainColumn}>
+                      {/* Campo Enunciado */}
                       <div style={s.fieldGroup}>
-                        <label style={s.label}>Pregunta</label>
+                        <div style={s.fieldLabelRow}>
+                          <label style={s.fieldLabelMain}>
+                            <span style={s.fieldLabelIcon}>📝</span> Enunciado de la pregunta
+                          </label>
+                          <span style={s.fieldLabelHelper}>Requerido</span>
+                        </div>
                         <TestRichTextField
                           value={question.title}
                           onChange={value => updateQuestionField(question.id, 'title', value)}
-                          placeholder="Escribe la pregunta"
+                          placeholder="Escribe el enunciado de la pregunta aquí..."
                           ariaLabel={`Pregunta ${questionIndex + 1}`}
                           singleLine
-                          style={s.input}
+                          style={s.questionTitleInput}
                         />
                       </div>
 
+                      {/* Opciones de respuesta */}
                       <div style={s.optionsBlock}>
-                        {question.options.map((option, optionIndex) => (
-                          <div key={option.id} style={s.optionRow}>
-                            <label style={s.optionRadioWrap}>
-                              <input
-                                type="radio"
-                                name={`correct-${question.id}`}
-                                checked={option.isCorrect}
-                                onChange={() => setCorrectOption(question.id, option.id)}
-                                style={s.optionRadio}
-                              />
-                              <span style={s.optionRadioText}>{String.fromCharCode(65 + optionIndex)}</span>
-                            </label>
+                        <div style={s.fieldLabelRow}>
+                          <label style={s.fieldLabelMain}>
+                            <span style={s.fieldLabelIcon}>🎯</span> Opciones de respuesta
+                          </label>
+                          <span style={s.optionsHintText}>Marca el círculo de la opción que consideras correcta</span>
+                        </div>
 
-                            <TestRichTextField
-                              value={option.text}
-                              onChange={value => updateQuestionOption(question.id, option.id, value)}
-                              ariaLabel={`Opción ${String.fromCharCode(65 + optionIndex)} de la pregunta ${questionIndex + 1}`}
-                              singleLine
-                              style={s.optionInput}
-                            />
+                        <div style={s.optionsList}>
+                          {question.options.map((option, optionIndex) => {
+                            const isCorrect = option.isCorrect;
+                            const optionLetter = String.fromCharCode(65 + optionIndex);
+                            return (
+                              <div
+                                key={option.id}
+                                style={{
+                                  ...s.optionRow,
+                                  ...(isCorrect ? s.optionRowCorrect : {}),
+                                }}
+                              >
+                                <label style={s.optionRadioWrap} title={isCorrect ? 'Respuesta correcta' : 'Marcar como correcta'}>
+                                  <input
+                                    type="radio"
+                                    name={`correct-${question.id}`}
+                                    checked={isCorrect}
+                                    onChange={() => setCorrectOption(question.id, option.id)}
+                                    style={s.optionRadio}
+                                  />
+                                  <span style={isCorrect ? s.optionRadioTextCorrect : s.optionRadioText}>
+                                    {optionLetter}
+                                  </span>
+                                </label>
 
-                            <button
-                              type="button"
-                              style={s.optionDeleteButton}
-                              onClick={() => removeQuestionOption(question.id, option.id)}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
+                                <TestRichTextField
+                                  value={option.text}
+                                  onChange={value => updateQuestionOption(question.id, option.id, value)}
+                                  ariaLabel={`Opción ${optionLetter} de la pregunta ${questionIndex + 1}`}
+                                  singleLine
+                                  placeholder={`Texto de la opción ${optionLetter}...`}
+                                  style={isCorrect ? s.optionInputCorrect : s.optionInput}
+                                />
+
+                                {isCorrect && (
+                                  <span style={s.correctOptionBadge}>
+                                    ✓ Correcta
+                                  </span>
+                                )}
+
+                                <button
+                                  type="button"
+                                  style={s.optionDeleteButton}
+                                  title="Eliminar opción"
+                                  onClick={() => removeQuestionOption(question.id, option.id)}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div style={s.questionFooterActions}>
+                          <button type="button" style={s.addOptionButton} onClick={() => addQuestionOption(question.id)}>
+                            ＋ Añadir opción
+                          </button>
+                        </div>
                       </div>
 
-                      <div style={s.questionFooterActions}>
-                        <button type="button" style={s.addOptionButton} onClick={() => addQuestionOption(question.id)}>
-                          ＋ Añadir opción
-                        </button>
-                      </div>
-
-                      <div style={s.fieldGroup}>
-                        <label style={s.label}>Retroalimentación</label>
+                      {/* Retroalimentación */}
+                      <div style={s.feedbackBlock}>
+                        <div style={s.fieldLabelRow}>
+                          <label style={s.fieldLabelMain}>
+                            <span style={s.fieldLabelIcon}>💡</span> Retroalimentación / Justificación
+                          </label>
+                          <span style={s.fieldLabelHelper}>Opcional</span>
+                        </div>
+                        <p style={s.feedbackSubtext}>
+                          Esta explicación se le mostrará al estudiante al terminar o revisar su intento.
+                        </p>
                         <TestRichTextField
                           value={question.retroalimentacion}
                           onChange={value => updateQuestionField(question.id, 'retroalimentacion', value)}
-                          placeholder="Explica por qué la respuesta correcta es correcta o por qué la incorrecta no lo es"
+                          placeholder="Explica por qué la respuesta correcta es la adecuada y amplía conceptos clave..."
                           ariaLabel={`Retroalimentación de la pregunta ${questionIndex + 1}`}
                           style={s.questionFeedback}
                         />
                       </div>
                     </div>
 
+                    {/* Columna lateral: Referencia y resumen */}
                     <div style={s.questionMetaColumn}>
                       <div style={s.referenceCard}>
                         <div style={s.referenceCardHeader}>
-                          <span style={s.metaLabel}>Referencia visual</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '1rem' }}>🖼️</span>
+                            <span style={s.metaLabel}>Referencia visual</span>
+                          </div>
+                          {(question.referenceUploadPreviewUrl || question.referencePhotoUrl) && (
+                            <span style={s.referenceStatusBadge}>
+                              Asignada
+                            </span>
+                          )}
                         </div>
 
                         {(question.referenceUploadPreviewUrl || question.referencePhotoUrl) ? (
@@ -1399,23 +1584,33 @@ const EditorDePruebas: React.FC = () => {
                             />
                             <div style={s.referencePreviewText}>
                               <strong style={s.referencePreviewTitle}>
-                                {question.referencePlacaId ? 'Placa seleccionada' : 'Referencia subida'}
+                                {question.referencePlacaId ? 'Placa del Atlas' : 'Imagen subida'}
                               </strong>
                               {question.referencePlacaId ? (
                                 <>
-                                  <span style={s.referencePreviewMeta}>{question.referenceTemaName || 'Sin tema'} · {question.referenceSubtemaName || 'Sin subtema'}</span>
                                   <span style={s.referencePreviewMeta}>
-                                    {question.referenceSenaladoLocation ? 'Señalado configurado' : 'Sin señalado todavía'}
+                                    <strong>Tema:</strong> {question.referenceTemaName || 'Sin tema'}
+                                  </span>
+                                  <span style={s.referencePreviewMeta}>
+                                    <strong>Subtema:</strong> {question.referenceSubtemaName || 'Sin subtema'}
+                                  </span>
+                                  <span style={{
+                                    ...s.referencePreviewMeta,
+                                    color: question.referenceSenaladoLocation ? '#16a34a' : '#64748b',
+                                    fontWeight: 700,
+                                  }}>
+                                    {question.referenceSenaladoLocation ? '🎯 Señalado listo' : '⚪ Sin señalado'}
                                   </span>
                                 </>
                               ) : (
                                 <>
-                                  <span style={s.referencePreviewMeta}>Exclusiva de esta prueba</span>
-                                  <span style={s.referencePreviewMeta}>
-                                    {question.referenceUploadFile ? 'Se subirá cuando guardes' : 'Guardada en la prueba'}
-                                  </span>
-                                  <span style={s.referencePreviewMeta}>
-                                    {question.referenceSenaladoLocation ? 'Señalado configurado' : 'Sin señalado todavía'}
+                                  <span style={s.referencePreviewMeta}>Exclusiva de prueba</span>
+                                  <span style={{
+                                    ...s.referencePreviewMeta,
+                                    color: question.referenceSenaladoLocation ? '#16a34a' : '#64748b',
+                                    fontWeight: 700,
+                                  }}>
+                                    {question.referenceSenaladoLocation ? '🎯 Señalado listo' : '⚪ Sin señalado'}
                                   </span>
                                 </>
                               )}
@@ -1426,14 +1621,14 @@ const EditorDePruebas: React.FC = () => {
                                 style={s.referenceInlineActionButton}
                                 onClick={() => { void openReferencePicker(question.id); }}
                               >
-                                Cambiar referencia
+                                Cambiar
                               </button>
                               <button
                                 type="button"
                                 style={s.referenceInlineActionButton}
                                 onClick={() => handleEditReferenceMarker(question)}
                               >
-                                Editar señalado
+                                Señalado
                               </button>
                               <button
                                 type="button"
@@ -1445,33 +1640,76 @@ const EditorDePruebas: React.FC = () => {
                             </div>
                           </div>
                         ) : (
-                          <div style={s.referenceEmptyState}>
+                          <div style={s.questionRefEmptyState}>
+                            <div style={s.questionRefEmptyIcon}>📷</div>
                             <p style={s.referenceHint}>
-                              La imagen seleccionada aparecerá a un lado de esta pregunta.
+                              Puedes añadir una placa del Atlas o subir una imagen de apoyo para esta pregunta.
                             </p>
                             <button
                               type="button"
                               style={s.referenceActionButton}
                               onClick={() => { void openReferencePicker(question.id); }}
                             >
-                              Añadir referencia
+                              ＋ Seleccionar imagen
                             </button>
                           </div>
                         )}
                       </div>
 
                       <div style={s.metaCard}>
-                        <span style={s.metaLabel}>Tipo</span>
-                        <span style={s.metaValue}>Selección única</span>
+                        <span style={s.metaCardTitle}>Resumen de la pregunta</span>
+                        <div style={s.metaSummaryRow}>
+                          <span style={s.metaLabel}>Estado</span>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: question.required ? '#2563eb' : '#64748b' }}>
+                            {question.required ? 'Obligatoria' : 'Opcional'}
+                          </span>
+                        </div>
+                        <div style={s.metaSummaryRow}>
+                          <span style={s.metaLabel}>Total opciones</span>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0f172a' }}>
+                            {question.options.length} {question.options.length === 1 ? 'opción' : 'opciones'}
+                          </span>
+                        </div>
+                        <div style={s.metaSummaryRow}>
+                          <span style={s.metaLabel}>Respuesta correcta</span>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#16a34a' }}>
+                            {(() => {
+                              const correctIdx = question.options.findIndex(o => o.isCorrect);
+                              return correctIdx >= 0 ? `Opción ${String.fromCharCode(65 + correctIdx)}` : '⚠️ Sin asignar';
+                            })()}
+                          </span>
+                        </div>
                       </div>
-                      <div style={s.metaCard}>
-                        <span style={s.metaLabel}>Respuesta correcta</span>
-                        <span style={s.metaValue}>Marca solo una opción</span>
-                      </div>
-                      <div style={s.metaCard}>
-                        <span style={s.metaLabel}>Estado</span>
-                        <span style={s.metaValue}>{question.required ? 'Obligatoria' : 'Opcional'}</span>
-                      </div>
+                    </div>
+                  </div>
+
+                  {/* Barra inferior que marca el final inequívoco de la tarjeta de la pregunta */}
+                  <div style={s.questionCardFooter}>
+                    <div style={s.questionCardFooterLeft}>
+                      <span style={s.questionFooterIndicatorDot} />
+                      <span style={s.questionCardFooterText}>
+                        Fin de la pregunta <strong>#{questionIndex + 1}</strong> de {questions.length}
+                      </span>
+                    </div>
+                    <div style={s.questionCardFooterRight}>
+                      <button
+                        type="button"
+                        style={s.quickFooterActionBtn}
+                        onClick={() => duplicateQuestion(question.id)}
+                        title="Duplicar pregunta"
+                      >
+                        Duplicar
+                      </button>
+                      {questions.length > 1 && (
+                        <button
+                          type="button"
+                          style={s.quickFooterActionBtnDanger}
+                          onClick={() => removeQuestion(question.id)}
+                          title="Eliminar pregunta"
+                        >
+                          Eliminar
+                        </button>
+                      )}
                     </div>
                   </div>
                 </article>
@@ -1479,10 +1717,10 @@ const EditorDePruebas: React.FC = () => {
 
               <div style={s.builderFooterBar}>
                 <button type="button" style={s.builderFooterButton} onClick={addQuestion}>
-                  ＋ Añadir pregunta
+                  ＋ Añadir nueva pregunta
                 </button>
                 <p style={s.builderFooterHint}>
-                  Las preguntas aún no se guardan en base de datos. Esta es la estructura visual para replicar Google Forms.
+                  Organiza tantas preguntas como requiera tu evaluación. Los cambios se guardan al hacer clic en 'Guardar cambios' o automáticamente en segundo plano.
                 </p>
               </div>
             </div>
@@ -1879,6 +2117,54 @@ const EditorDePruebas: React.FC = () => {
         />
       )}
 
+      {showExitConfirmModal && (
+        <div
+          style={s.confirmModalOverlay}
+          onClick={() => setShowExitConfirmModal(false)}
+        >
+          <div
+            style={s.confirmModalCard}
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="unsaved-modal-title"
+          >
+            <div style={s.confirmModalHeaderRow}>
+              <div style={s.confirmModalIconWrap}>
+                <span style={{ fontSize: '1.45rem', lineHeight: 1 }}>⚠️</span>
+              </div>
+              <div>
+                <h3 id="unsaved-modal-title" style={s.confirmModalTitle}>
+                  ¿Salir sin guardar cambios?
+                </h3>
+                <p style={s.confirmModalSubtitle}>
+                  Tienes cambios sin guardar en esta prueba
+                </p>
+              </div>
+            </div>
+            <p style={s.confirmModalText}>
+              Si decides salir ahora, se perderán todas las modificaciones que hayas realizado desde el último guardado.
+            </p>
+            <div style={s.confirmModalActions}>
+              <button
+                type="button"
+                onClick={() => setShowExitConfirmModal(false)}
+                style={s.confirmModalCancelBtn}
+              >
+                Regresar
+              </button>
+              <button
+                type="button"
+                onClick={confirmGoBack}
+                style={s.confirmModalDangerBtn}
+              >
+                Salir sin guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Footer />
     </div>
   );
@@ -2106,40 +2392,79 @@ const s: Record<string, React.CSSProperties> = {
   builderSection: {
     borderRadius: '28px',
     border: '1px solid rgba(226,232,240,0.95)',
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.96) 100%)',
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)',
     boxShadow: '0 22px 60px rgba(15,23,42,0.10)',
     padding: '28px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '18px',
+    gap: '22px',
     width: '100%',
+  },
+  builderHeaderBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    flexWrap: 'wrap',
+    paddingBottom: '4px',
+  },
+  builderCountPill: {
+    background: '#ede9fe',
+    color: '#6d28d9',
+    padding: '4px 12px',
+    borderRadius: '999px',
+    fontSize: '0.82rem',
+    fontWeight: 800,
+  },
+  builderTopAddButton: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '12px',
+    padding: '9px 16px',
+    fontWeight: 800,
+    fontSize: '0.85rem',
+    cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(37,99,235,0.22)',
+    transition: 'all 0.15s ease',
   },
   builderLayout: {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr)',
-    gap: '18px',
+    gap: '20px',
     alignItems: 'start',
   },
   builderCanvas: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '14px',
+    gap: '32px',
   },
   questionCard: {
     borderRadius: '24px',
-    border: '1px solid #dbeafe',
-    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-    boxShadow: '0 14px 30px rgba(15,23,42,0.08)',
-    padding: '18px',
+    border: '1.5px solid #cbd5e1',
+    background: '#ffffff',
+    boxShadow: '0 12px 32px rgba(15,23,42,0.08), 0 2px 6px rgba(15,23,42,0.04)',
+    overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    gap: '14px',
+    transition: 'all 0.2s ease',
+  },
+  questionCardAccentBar: {
+    height: '5px',
+    width: '100%',
+    background: 'linear-gradient(90deg, #3b82f6 0%, #6366f1 35%, #8b5cf6 70%, #ec4899 100%)',
   },
   questionHeader: {
     display: 'flex',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: '12px',
+    padding: '16px 24px',
+    background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
+    borderBottom: '1.5px solid #e2e8f0',
     flexWrap: 'wrap',
   },
   questionHeaderLeft: {
@@ -2148,24 +2473,64 @@ const s: Record<string, React.CSSProperties> = {
     gap: '10px',
     flexWrap: 'wrap',
   },
-  questionIndex: {
-    width: '34px',
-    height: '34px',
-    borderRadius: '999px',
+  questionNumberBadge: {
     display: 'inline-flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-    color: '#fff',
+    gap: '6px',
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    color: '#ffffff',
+    borderRadius: '999px',
+    padding: '5px 14px',
+    boxShadow: '0 4px 10px rgba(79,70,229,0.25)',
+  },
+  questionNumberPrefix: {
+    fontSize: '0.68rem',
     fontWeight: 900,
-    boxShadow: '0 10px 22px rgba(99,102,241,0.18)',
+    letterSpacing: '0.08em',
+    opacity: 0.9,
+  },
+  questionNumberValue: {
+    fontSize: '0.9rem',
+    fontWeight: 900,
   },
   questionTypePill: {
     borderRadius: '999px',
-    padding: '6px 10px',
-    background: '#eef2ff',
-    color: '#4338ca',
+    padding: '4px 10px',
+    background: '#e0e7ff',
+    color: '#3730a3',
     fontWeight: 800,
+    fontSize: '0.78rem',
+  },
+  requiredPill: {
+    borderRadius: '999px',
+    padding: '4px 10px',
+    background: '#fee2e2',
+    color: '#991b1b',
+    fontWeight: 800,
+    fontSize: '0.78rem',
+  },
+  optionalPill: {
+    borderRadius: '999px',
+    padding: '4px 10px',
+    background: '#f1f5f9',
+    color: '#64748b',
+    fontWeight: 800,
+    fontSize: '0.78rem',
+  },
+  questionRefPillActive: {
+    borderRadius: '999px',
+    padding: '4px 10px',
+    background: '#dcfce7',
+    color: '#15803d',
+    fontWeight: 800,
+    fontSize: '0.78rem',
+  },
+  questionRefPillMuted: {
+    borderRadius: '999px',
+    padding: '4px 10px',
+    background: '#f1f5f9',
+    color: '#94a3b8',
+    fontWeight: 700,
     fontSize: '0.78rem',
   },
   questionHeaderActions: {
@@ -2180,22 +2545,26 @@ const s: Record<string, React.CSSProperties> = {
     gap: '8px',
     fontWeight: 800,
     color: '#334155',
-    fontSize: '0.88rem',
+    fontSize: '0.86rem',
+    cursor: 'pointer',
   },
   requiredToggleInput: {
     width: '16px',
     height: '16px',
     accentColor: '#2563eb',
+    cursor: 'pointer',
   },
   iconActionButton: {
     border: '1px solid #cbd5e1',
     borderRadius: '12px',
-    background: '#fff',
+    background: '#ffffff',
     color: '#334155',
     padding: '8px 12px',
     fontFamily: 'inherit',
     fontWeight: 800,
+    fontSize: '0.82rem',
     cursor: 'pointer',
+    transition: 'all 0.15s ease',
   },
   iconActionButtonDanger: {
     border: '1px solid #fecaca',
@@ -2205,125 +2574,91 @@ const s: Record<string, React.CSSProperties> = {
     padding: '8px 12px',
     fontFamily: 'inherit',
     fontWeight: 800,
+    fontSize: '0.82rem',
     cursor: 'pointer',
+    transition: 'all 0.15s ease',
   },
   questionBody: {
+    padding: '24px 22px',
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) minmax(220px, 250px)',
-    gap: '16px',
+    gridTemplateColumns: 'minmax(0, 1.4fr) minmax(280px, 0.7fr)',
+    gap: '24px',
   },
   questionMainColumn: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '14px',
+    gap: '18px',
   },
   questionMetaColumn: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
+    gap: '14px',
   },
-  referenceCard: {
-    borderRadius: '18px',
-    padding: '14px 16px',
-    border: '1px solid #dbeafe',
-    background: 'linear-gradient(180deg, #eff6ff 0%, #ffffff 100%)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-  },
-  referenceCardHeader: {
+  fieldLabelRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '10px',
-  },
-  referenceActionButton: {
-    border: 'none',
-    borderRadius: '999px',
-    padding: '8px 12px',
-    background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-    color: '#fff',
-    fontWeight: 900,
-    fontFamily: 'inherit',
-    fontSize: '0.8rem',
-    cursor: 'pointer',
-  },
-  referencePreviewWrap: {
-    display: 'grid',
-    gridTemplateColumns: '80px minmax(0, 1fr)',
-    gap: '12px',
-    alignItems: 'center',
-  },
-  referencePreviewImg: {
-    width: '80px',
-    height: '100px',
-    objectFit: 'cover',
-    borderRadius: '14px',
-    border: '1px solid #cbd5e1',
-    background: '#fff',
-  },
-  referencePreviewText: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  referencePreviewTitle: {
-    color: '#0f172a',
-    fontSize: '0.92rem',
-  },
-  referencePreviewMeta: {
-    color: '#475569',
-    lineHeight: 1.45,
-    fontSize: '0.84rem',
-  },
-  referenceClearButton: {
-    gridColumn: '1 / -1',
-    border: '1px solid #fca5a5',
-    borderRadius: '12px',
-    background: '#fff1f2',
-    color: '#be123c',
-    padding: '8px 10px',
-    fontFamily: 'inherit',
-    fontWeight: 900,
-    cursor: 'pointer',
-    justifySelf: 'start',
-  },
-  referenceActionRow: {
-    gridColumn: '1 / -1',
-    display: 'flex',
-    flexWrap: 'wrap',
     gap: '8px',
+    marginBottom: '3px',
   },
-  referenceInlineActionButton: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '12px',
-    background: '#fff',
-    color: '#334155',
-    padding: '8px 10px',
-    fontFamily: 'inherit',
-    fontWeight: 900,
-    cursor: 'pointer',
-  },
-  referenceHint: {
-    margin: 0,
-    color: '#475569',
-    lineHeight: 1.55,
+  fieldLabelMain: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
     fontSize: '0.9rem',
+    fontWeight: 800,
+    color: '#1e293b',
+  },
+  fieldLabelIcon: {
+    fontSize: '1rem',
+  },
+  fieldLabelHelper: {
+    fontSize: '0.76rem',
+    fontWeight: 700,
+    color: '#64748b',
+  },
+  questionTitleInput: {
+    width: '100%',
+    borderRadius: '14px',
+    border: '1.5px solid #cbd5e1',
+    padding: '13px 16px',
+    fontFamily: 'inherit',
+    fontSize: '0.98rem',
+    color: '#0f172a',
+    outline: 'none',
+    background: '#ffffff',
+    boxShadow: 'inset 0 1px 2px rgba(15,23,42,0.03)',
   },
   optionsBlock: {
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
   },
+  optionsHintText: {
+    fontSize: '0.78rem',
+    color: '#64748b',
+    fontWeight: 600,
+  },
+  optionsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
   optionRow: {
     display: 'grid',
-    gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+    gridTemplateColumns: 'auto minmax(0, 1fr) auto auto',
     gap: '10px',
     alignItems: 'center',
-    padding: '10px 12px',
+    padding: '10px 14px',
     borderRadius: '16px',
-    border: '1px solid #e2e8f0',
-    background: '#fff',
+    border: '1.5px solid #e2e8f0',
+    background: '#ffffff',
+    transition: 'all 0.15s ease',
+  },
+  optionRowCorrect: {
+    border: '1.5px solid #86efac',
+    background: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)',
+    boxShadow: '0 2px 8px rgba(34,197,94,0.1)',
   },
   optionRadioWrap: {
     display: 'inline-flex',
@@ -2331,16 +2666,38 @@ const s: Record<string, React.CSSProperties> = {
     gap: '8px',
     color: '#475569',
     fontWeight: 800,
+    cursor: 'pointer',
   },
   optionRadio: {
     width: '16px',
     height: '16px',
-    accentColor: '#2563eb',
+    accentColor: '#16a34a',
+    cursor: 'pointer',
   },
   optionRadioText: {
-    width: '20px',
-    textAlign: 'center',
-    fontSize: '0.85rem',
+    width: '24px',
+    height: '24px',
+    borderRadius: '999px',
+    background: '#f1f5f9',
+    color: '#475569',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '0.82rem',
+    fontWeight: 900,
+  },
+  optionRadioTextCorrect: {
+    width: '24px',
+    height: '24px',
+    borderRadius: '999px',
+    background: '#16a34a',
+    color: '#ffffff',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '0.82rem',
+    fontWeight: 900,
+    boxShadow: '0 2px 6px rgba(22,163,74,0.3)',
   },
   optionInput: {
     minWidth: 0,
@@ -2352,63 +2709,288 @@ const s: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: '#0f172a',
   },
+  optionInputCorrect: {
+    minWidth: 0,
+    borderRadius: '12px',
+    border: '1.5px solid #86efac',
+    background: '#ffffff',
+    padding: '10px 12px',
+    fontFamily: 'inherit',
+    fontWeight: 700,
+    color: '#0f172a',
+  },
+  correctOptionBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '3px 10px',
+    borderRadius: '999px',
+    background: '#dcfce7',
+    color: '#15803d',
+    fontSize: '0.74rem',
+    fontWeight: 900,
+    whiteSpace: 'nowrap',
+  },
   optionDeleteButton: {
     border: 'none',
     background: 'transparent',
     color: '#94a3b8',
     cursor: 'pointer',
     fontWeight: 900,
-    padding: '4px 6px',
+    padding: '6px 8px',
+    borderRadius: '8px',
+    fontSize: '0.85rem',
+    transition: 'color 0.15s ease',
   },
   questionFooterActions: {
     display: 'flex',
     justifyContent: 'flex-start',
   },
   addOptionButton: {
-    border: '1px dashed #93c5fd',
+    border: '1.5px dashed #93c5fd',
     borderRadius: '14px',
     background: '#eff6ff',
     color: '#1d4ed8',
-    padding: '10px 14px',
+    padding: '10px 16px',
     fontFamily: 'inherit',
     fontWeight: 800,
+    fontSize: '0.86rem',
     cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  feedbackBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    borderRadius: '18px',
+    border: '1px solid #e0e7ff',
+    background: 'linear-gradient(180deg, #f8faff 0%, #ffffff 100%)',
+    padding: '14px 16px',
+  },
+  feedbackSubtext: {
+    margin: '0 0 6px 0',
+    fontSize: '0.8rem',
+    color: '#64748b',
+    lineHeight: 1.4,
   },
   questionFeedback: {
     width: '100%',
-    borderRadius: '18px',
-    border: '1px solid #cbd5e1',
-    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-    padding: '14px 16px',
+    borderRadius: '14px',
+    border: '1.5px solid #cbd5e1',
+    background: '#ffffff',
+    padding: '12px 14px',
     fontFamily: 'inherit',
-    fontSize: '0.96rem',
-    lineHeight: 1.65,
+    fontSize: '0.94rem',
+    lineHeight: 1.6,
     color: '#0f172a',
     outline: 'none',
     resize: 'vertical',
-    minHeight: '120px',
-    boxShadow: 'inset 0 1px 2px rgba(15,23,42,0.04), 0 10px 22px rgba(15,23,42,0.04)',
+    minHeight: '96px',
+    boxShadow: 'inset 0 1px 2px rgba(15,23,42,0.03)',
+  },
+  referenceCard: {
+    borderRadius: '20px',
+    padding: '16px',
+    border: '1.5px solid #dbeafe',
+    background: 'linear-gradient(180deg, #eff6ff 0%, #ffffff 100%)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    boxShadow: '0 4px 14px rgba(37,99,235,0.06)',
+  },
+  referenceCardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+  },
+  referenceStatusBadge: {
+    fontSize: '0.72rem',
+    fontWeight: 800,
+    padding: '2px 8px',
+    borderRadius: '999px',
+    background: '#dcfce7',
+    color: '#15803d',
+  },
+  questionRefEmptyState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '16px 12px',
+    borderRadius: '16px',
+    border: '1.5px dashed #cbd5e1',
+    background: '#f8fafc',
+    textAlign: 'center',
+  },
+  questionRefEmptyIcon: {
+    fontSize: '1.8rem',
+  },
+  referenceActionButton: {
+    border: 'none',
+    borderRadius: '999px',
+    padding: '9px 14px',
+    background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+    color: '#fff',
+    fontWeight: 900,
+    fontFamily: 'inherit',
+    fontSize: '0.82rem',
+    cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(79,70,229,0.2)',
+  },
+  referencePreviewWrap: {
+    display: 'grid',
+    gridTemplateColumns: '84px minmax(0, 1fr)',
+    gap: '12px',
+    alignItems: 'center',
+  },
+  referencePreviewImg: {
+    width: '84px',
+    height: '108px',
+    objectFit: 'cover',
+    borderRadius: '14px',
+    border: '1.5px solid #cbd5e1',
+    background: '#0f172a',
+    boxShadow: '0 4px 10px rgba(15,23,42,0.1)',
+  },
+  referencePreviewText: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '5px',
+    minWidth: 0,
+  },
+  referencePreviewTitle: {
+    color: '#0f172a',
+    fontSize: '0.94rem',
+  },
+  referencePreviewMeta: {
+    color: '#475569',
+    lineHeight: 1.4,
+    fontSize: '0.82rem',
+  },
+  referenceActionRow: {
+    gridColumn: '1 / -1',
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    marginTop: '4px',
+  },
+  referenceInlineActionButton: {
+    border: '1px solid #cbd5e1',
+    borderRadius: '10px',
+    background: '#ffffff',
+    color: '#334155',
+    padding: '7px 10px',
+    fontFamily: 'inherit',
+    fontWeight: 800,
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+  },
+  referenceClearButton: {
+    border: '1px solid #fecaca',
+    borderRadius: '10px',
+    background: '#fff1f2',
+    color: '#be123c',
+    padding: '7px 10px',
+    fontFamily: 'inherit',
+    fontWeight: 800,
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+  },
+  referenceHint: {
+    margin: 0,
+    color: '#475569',
+    lineHeight: 1.5,
+    fontSize: '0.85rem',
   },
   metaCard: {
     borderRadius: '18px',
     padding: '14px 16px',
-    border: '1px solid #dbeafe',
+    border: '1px solid #e2e8f0',
     background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '5px',
+    gap: '6px',
+  },
+  metaCardTitle: {
+    fontSize: '0.74rem',
+    fontWeight: 900,
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    marginBottom: '2px',
+  },
+  metaSummaryRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '4px 0',
+    borderBottom: '1px solid #f1f5f9',
   },
   metaLabel: {
-    fontSize: '0.72rem',
+    fontSize: '0.74rem',
     textTransform: 'uppercase',
-    letterSpacing: '0.08em',
+    letterSpacing: '0.06em',
     color: '#64748b',
-    fontWeight: 900,
+    fontWeight: 800,
   },
   metaValue: {
     color: '#0f172a',
     fontWeight: 700,
     lineHeight: 1.5,
+  },
+  questionCardFooter: {
+    padding: '12px 24px',
+    background: '#f8fafc',
+    borderTop: '1.5px solid #e2e8f0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  questionCardFooterLeft: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  questionFooterIndicatorDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '999px',
+    background: '#6366f1',
+  },
+  questionCardFooterText: {
+    fontSize: '0.82rem',
+    color: '#64748b',
+    fontWeight: 600,
+  },
+  questionCardFooterRight: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+  },
+  quickFooterActionBtn: {
+    border: '1px solid #cbd5e1',
+    borderRadius: '10px',
+    background: '#ffffff',
+    color: '#334155',
+    padding: '6px 12px',
+    fontFamily: 'inherit',
+    fontWeight: 700,
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+  },
+  quickFooterActionBtnDanger: {
+    border: '1px solid #fecaca',
+    borderRadius: '10px',
+    background: '#fff1f2',
+    color: '#be123c',
+    padding: '6px 12px',
+    fontFamily: 'inherit',
+    fontWeight: 700,
+    fontSize: '0.8rem',
+    cursor: 'pointer',
   },
   referenceModalOverlay: {
     position: 'fixed',
@@ -2846,29 +3428,6 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: '0.92rem',
     maxWidth: '72ch',
   },
-  shortcutsInfo: {
-    borderRadius: '16px',
-    border: '1px solid #bfdbfe',
-    background: 'linear-gradient(135deg, #eff6ff, #ffffff)',
-    padding: '12px 14px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  shortcutsInfoTitle: {
-    margin: 0,
-    color: '#1d4ed8',
-    fontSize: '0.86rem',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    fontWeight: 900,
-  },
-  shortcutsInfoText: {
-    margin: 0,
-    color: '#334155',
-    lineHeight: 1.5,
-    fontSize: '0.9rem',
-  },
   successBox: {
     borderRadius: '16px',
     background: 'linear-gradient(135deg, #ecfdf5, #f0fdf4)',
@@ -2910,6 +3469,95 @@ const s: Record<string, React.CSSProperties> = {
     padding: '14px 16px',
     lineHeight: 1.6,
     fontSize: '0.92rem',
+  },
+  confirmModalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(15, 23, 42, 0.65)',
+    backdropFilter: 'blur(6px)',
+    display: 'grid',
+    placeItems: 'center',
+    zIndex: 2200,
+    padding: '16px',
+  },
+  confirmModalCard: {
+    width: 'min(460px, 100%)',
+    background: '#ffffff',
+    borderRadius: '24px',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 24px 70px rgba(15, 23, 42, 0.35)',
+    padding: '24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    boxSizing: 'border-box',
+  },
+  confirmModalHeaderRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+  },
+  confirmModalIconWrap: {
+    width: '46px',
+    height: '46px',
+    borderRadius: '16px',
+    background: '#fef2f2',
+    border: '1.5px solid #fee2e2',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  confirmModalTitle: {
+    margin: 0,
+    fontSize: '1.18rem',
+    fontWeight: 900,
+    color: '#0f172a',
+    letterSpacing: '-0.02em',
+  },
+  confirmModalSubtitle: {
+    margin: '2px 0 0 0',
+    fontSize: '0.82rem',
+    fontWeight: 700,
+    color: '#dc2626',
+  },
+  confirmModalText: {
+    margin: 0,
+    fontSize: '0.92rem',
+    color: '#64748b',
+    lineHeight: 1.55,
+  },
+  confirmModalActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '10px',
+    flexWrap: 'wrap',
+    marginTop: '6px',
+  },
+  confirmModalCancelBtn: {
+    border: '1.5px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#334155',
+    borderRadius: '14px',
+    padding: '11px 20px',
+    fontWeight: 800,
+    fontFamily: 'inherit',
+    fontSize: '0.9rem',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  confirmModalDangerBtn: {
+    border: 'none',
+    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+    color: '#ffffff',
+    borderRadius: '14px',
+    padding: '11px 20px',
+    fontWeight: 900,
+    fontFamily: 'inherit',
+    fontSize: '0.9rem',
+    cursor: 'pointer',
+    boxShadow: '0 8px 20px rgba(239, 68, 68, 0.28)',
+    transition: 'all 0.15s ease',
   },
 };
 
