@@ -97,6 +97,8 @@ export const getCloudinaryImageUrl = (
     .replace(/^atlas\//i, '')
     .replace(/^placas_sin_clasificar\//i, 'placas/sin_clasificar/')
     .replace(/^sin_clasificar\//i, 'placas/sin_clasificar/')
+    .replace(/^placas\/sin_clasificar\/atlas-content\//i, 'atlas-content/')
+    .replace(/^placas\/sin_clasificar\/general\//i, 'general/')
     .replace(/\.(jpe?g|png|bmp|tiff?)$/i, '.webp');
 
   if (!cleanKey.endsWith('.webp') && !cleanKey.includes('.')) {
@@ -104,10 +106,19 @@ export const getCloudinaryImageUrl = (
   }
 
   // Si no tiene prefijo de carpeta conocido, deducir la ruta correcta en Cloudflare R2
-  const knownPrefixes = ['placas/', 'temas/', 'subtemas/', 'creditos/', 'pruebas/'];
+  const knownPrefixes = [
+    'placas/',
+    'temas/',
+    'subtemas/',
+    'creditos/',
+    'pruebas/',
+    'atlas-content/',
+    'general/',
+    'test_references/',
+  ];
   const hasKnownPrefix = knownPrefixes.some(prefix => cleanKey.startsWith(prefix));
 
-  if (!hasKnownPrefix) {
+  if (!hasKnownPrefix && !cleanKey.includes('/')) {
     cleanKey = `placas/sin_clasificar/${cleanKey}`;
   }
 

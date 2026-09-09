@@ -24,6 +24,10 @@ import {
   HistologyGeneralitiesInlineEditor,
   HistologyPillarsInlineEditor,
   HistologyStainsInlineEditor,
+  HistologyTextCardsInlineEditor,
+  HistologyTextTableInlineEditor,
+  HistologyTextSimpleCardsInlineEditor,
+  HistologyExtraDataInlineEditor,
 } from './page-editor/HistologyBlockEditors';
 import type { BlockType, ContentBlock } from '../types/contentBlocks';
 import examenIllustration from '../assets/imagenes/examen.png';
@@ -243,6 +247,10 @@ const BLOCK_TOOLBAR_GROUPS: Array<{ title: string; types: BlockType[] }> = [
       'histology_generalities',
       'histology_pillars',
       'histology_stains',
+      'histology_text_cards',
+      'histology_text_table',
+      'histology_text_simple_cards',
+      'histology_extra_data',
     ],
   },
 ];
@@ -277,6 +285,10 @@ const BLOCK_TYPE_VISUAL_ICON: Record<BlockType, string> = {
   histology_generalities: 'GEN',
   histology_pillars: 'PIL',
   histology_stains: 'TINC',
+  histology_text_cards: 'TCAR',
+  histology_text_table: 'TTBL',
+  histology_text_simple_cards: 'TSMP',
+  histology_extra_data: 'DATO',
 };
 
 // ── Componente principal ─────────────────────────────────────────────────────
@@ -2424,6 +2436,42 @@ const MemoBlockContentEditor = React.memo(({
         />
       )}
 
+      {block.block_type === 'histology_text_cards' && (
+        <HistologyTextCardsInlineEditor
+          blockId={block.id}
+          content={block.content}
+          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'histology_text_table' && (
+        <HistologyTextTableInlineEditor
+          blockId={block.id}
+          content={block.content}
+          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'histology_text_simple_cards' && (
+        <HistologyTextSimpleCardsInlineEditor
+          blockId={block.id}
+          content={block.content}
+          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'histology_extra_data' && (
+        <HistologyExtraDataInlineEditor
+          blockId={block.id}
+          content={block.content}
+          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
       {showStyleEditor && <BlockCtaLinksEditor
         content={block.content}
         allTemas={allTemas}
@@ -4241,7 +4289,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
             {uploadingImage ? (
               <div style={es.uploadingState}>
                 <div style={es.spinner} />
-                <p style={{ color: '#64748b', margin: 0 }}>Subiendo imagen a Cloudinary...</p>
+                <p style={{ color: '#64748b', margin: 0 }}>Subiendo y optimizando imagen en Cloudflare R2...</p>
               </div>
             ) : (
               <div

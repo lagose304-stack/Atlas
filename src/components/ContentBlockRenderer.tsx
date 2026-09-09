@@ -12,6 +12,10 @@ import {
   HistologyGeneralitiesBlock,
   HistologyPillarsBlock,
   HistologyStainsBlock,
+  HistologyTextCardsBlock,
+  HistologyTextTableBlock,
+  HistologyTextSimpleCardsBlock,
+  HistologyExtraDataBlock,
 } from './histology-blocks';
 import examenIllustration from '../assets/imagenes/examen.png';
 
@@ -1757,13 +1761,27 @@ const BlockItem: React.FC<{
 
     case 'histology_pillars': {
       // Tarjeta 1: Función
-      const assocCount = Number(c.assoc_count) || (c.assoc_3_label ? 3 : c.assoc_2_label ? 2 : 3);
+      const assocCount =
+        Number(c.assoc_count) ||
+        (c.assoc_8_label || c.assoc_8_desc ? 8 :
+         c.assoc_7_label || c.assoc_7_desc ? 7 :
+         c.assoc_6_label || c.assoc_6_desc ? 6 :
+         c.assoc_5_label || c.assoc_5_desc ? 5 :
+         c.assoc_4_label || c.assoc_4_desc ? 4 :
+         c.assoc_3_label || c.assoc_3_desc ? 3 :
+         c.assoc_2_label || c.assoc_2_desc ? 2 :
+         c.assoc_1_label || c.assoc_1_desc ? 1 : 0);
       const associatedFunctions = [];
       for (let i = 1; i <= Math.max(1, assocCount); i++) {
-        const label = c[`assoc_${i}_label`];
+        const label = c[`assoc_${i}_label`] || c[`func_${i}_title`];
+        const detail = c[`assoc_${i}_desc`] || c[`func_${i}_desc`];
         const icon = (c[`assoc_${i}_icon`] || 'sparkles') as any;
-        if (label && label.trim() !== '') {
-          associatedFunctions.push({ label, icon });
+        if ((label && label.trim() !== '') || (detail && detail.trim() !== '')) {
+          associatedFunctions.push({
+            label: label || '',
+            detail: detail || '',
+            icon,
+          });
         }
       }
 
@@ -1803,7 +1821,7 @@ const BlockItem: React.FC<{
           showFunctionCard={c.show_function_card !== 'false'}
           showCriteriaCard={c.show_criteria_card !== 'false'}
           showLocationsCard={c.show_locations_card !== 'false'}
-          functionBadge={c.function_badge || 'Función'}
+          functionBadge={c.function_badge || ''}
           functionTitle={c.function_title || '2. Función Principal'}
           mainFunctionName={c.main_function_name || ''}
           mainFunctionDesc={c.main_function_desc || ''}
@@ -1812,11 +1830,11 @@ const BlockItem: React.FC<{
           functionImageCaption={c.function_image_caption || ''}
           associatedFunctions={associatedFunctions}
 
-          criteriaBadge={c.criteria_badge || 'Criterios Morfológicos'}
+          criteriaBadge={c.criteria_badge || ''}
           criteriaTitle={c.criteria_title || '3. Criterios Morfológicos'}
           criteria={criteria}
 
-          locationsBadge={c.locations_badge || 'Ubicaciones Anatómicas'}
+          locationsBadge={c.locations_badge || ''}
           locationsTitle={c.locations_title || '4. Ubicaciones Anatómicas'}
           locations={locations}
         />
@@ -1868,6 +1886,113 @@ const BlockItem: React.FC<{
           items={items.length > 0 ? items : undefined}
           colorKeyTip={c.color_tip || undefined}
           onOpenImageViewer={(url) => onZoom(url)}
+        />
+      );
+    }
+
+    case 'histology_text_cards': {
+      const count = Number(c.cards_count) ||
+        (c.card_5_title || c.card_5_desc ? 5 :
+         c.card_4_title || c.card_4_desc ? 4 :
+         c.card_3_title || c.card_3_desc ? 3 :
+         c.card_2_title || c.card_2_desc ? 2 :
+         c.card_1_title || c.card_1_desc ? 1 : 0);
+      const cards = [];
+      for (let i = 1; i <= count; i++) {
+        const cardTitle = c[`card_${i}_title`] || '';
+        const cardDesc = c[`card_${i}_desc`] || '';
+        const cardBadge = c[`card_${i}_badge`] || '';
+        if (cardTitle.trim() !== '' || cardDesc.trim() !== '') {
+          cards.push({
+            id: `card_${i}`,
+            title: cardTitle,
+            desc: cardDesc,
+            badge: cardBadge,
+          });
+        }
+      }
+
+      return (
+        <HistologyTextCardsBlock
+          badgeText={c.badge_text || undefined}
+          title={c.title || undefined}
+          text={c.text || ''}
+          cards={cards}
+          cardsAlign={c.cards_align || 'center'}
+        />
+      );
+    }
+
+    case 'histology_text_table': {
+      const colsCount = Number(c.cols_count) || (c.col_4_header ? 4 : c.col_3_header ? 3 : c.col_2_header ? 2 : c.col_1_header ? 1 : 0);
+      const rowsCount = Number(c.rows_count) || (c.cell_4_1 ? 4 : c.cell_3_1 ? 3 : c.cell_2_1 ? 2 : c.cell_1_1 ? 1 : 0);
+
+      const headers: string[] = [];
+      for (let ci = 1; ci <= colsCount; ci++) {
+        headers.push(c[`col_${ci}_header`] || '');
+      }
+
+      const rows: Array<Array<{ text: string; pill?: string }>> = [];
+      for (let ri = 1; ri <= rowsCount; ri++) {
+        const rowCells: Array<{ text: string; pill?: string }> = [];
+        for (let ci = 1; ci <= colsCount; ci++) {
+          rowCells.push({
+            text: c[`cell_${ri}_${ci}`] || '',
+            pill: c[`cell_${ri}_${ci}_pill`] || '',
+          });
+        }
+        rows.push(rowCells);
+      }
+
+      return (
+        <HistologyTextTableBlock
+          badgeText={c.badge_text || undefined}
+          title={c.title || undefined}
+          text={c.text || ''}
+          headers={headers}
+          rows={rows}
+        />
+      );
+    }
+
+    case 'histology_text_simple_cards': {
+      const c = block.content;
+      const cardsCount = Math.max(0, Number(c.cards_count) || (
+        c.card_6 ? 6 :
+        c.card_5 ? 5 :
+        c.card_4 ? 4 :
+        c.card_3 ? 3 :
+        c.card_2 ? 2 :
+        c.card_1 ? 1 : 0
+      ));
+
+      const cards: string[] = [];
+      for (let i = 1; i <= cardsCount; i++) {
+        const val = c[`card_${i}`];
+        if (val && val.trim() !== '') {
+          cards.push(val);
+        }
+      }
+
+      return (
+        <HistologyTextSimpleCardsBlock
+          badgeText={c.badge_text || undefined}
+          title={c.title || undefined}
+          text={c.text || ''}
+          cards={cards}
+          columns={c.columns || '3'}
+          cardsAlign={c.cards_align || 'center'}
+        />
+      );
+    }
+
+    case 'histology_extra_data': {
+      return (
+        <HistologyExtraDataBlock
+          title={c.title || undefined}
+          text={c.text || ''}
+          imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
+          imageCaption={c.image_caption || ''}
         />
       );
     }

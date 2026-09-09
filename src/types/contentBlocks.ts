@@ -20,7 +20,11 @@ export type BlockType =
   | 'columns_2'
   | 'histology_generalities'
   | 'histology_pillars'
-  | 'histology_stains';
+  | 'histology_stains'
+  | 'histology_text_cards'
+  | 'histology_text_table'
+  | 'histology_text_simple_cards'
+  | 'histology_extra_data';
 
 export type PageEntityType = 'subtemas_page' | 'placas_page' | 'home_page';
 

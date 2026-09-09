@@ -331,6 +331,48 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
       color_tip: '',
     },
   },
+  histology_text_cards: {
+    meta: { label: 'Texto con Tarjetas Clave', icon: 'TCAR', description: 'Párrafos explicativos y tarjetas de conceptos clave.', color: '#0284c7' },
+    schemaVersion: 1,
+    defaultContent: {
+      text: '',
+      cards_count: '0',
+      cards_align: 'center',
+    },
+  },
+  histology_text_table: {
+    meta: { label: 'Texto con Tabla Médica', icon: 'TTBL', description: 'Párrafos y tabla comparativa con columnas y filas configurables.', color: '#0369a1' },
+    schemaVersion: 1,
+    defaultContent: {
+      title: '',
+      badge_text: '',
+      text: '',
+      cols_count: '0',
+      rows_count: '0',
+    },
+  },
+  histology_text_simple_cards: {
+    meta: { label: 'Texto con Tarjetas Simples', icon: 'TSMP', description: 'Subtítulo, párrafos y cuadrícula de tarjetas simples de texto.', color: '#0284c7' },
+    schemaVersion: 1,
+    defaultContent: {
+      title: '',
+      badge_text: '',
+      text: '',
+      columns: '3',
+      cards_count: '0',
+      cards_align: 'center',
+    },
+  },
+  histology_extra_data: {
+    meta: { label: 'Dato Extra / Correlación Médica', icon: 'DATO', description: 'Caja destacada para aplicaciones biomédicas, correlaciones clínicas o datos extra.', color: '#0284c7' },
+    schemaVersion: 1,
+    defaultContent: {
+      title: '',
+      text: '',
+      image_url: '',
+      image_caption: '',
+    },
+  },
 };
 
 export const BLOCK_TYPES = Object.keys(BLOCK_REGISTRY) as BlockType[];

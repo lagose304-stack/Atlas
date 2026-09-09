@@ -563,6 +563,184 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
         </>
       );
     }
+    if (block.block_type === 'histology_text_cards') {
+      const cardsCount = Math.max(
+        0,
+        Number(content.cards_count) ||
+          (content.card_5_title || content.card_5_desc
+            ? 5
+            : content.card_4_title || content.card_4_desc
+            ? 4
+            : content.card_3_title || content.card_3_desc
+            ? 3
+            : content.card_2_title || content.card_2_desc
+            ? 2
+            : content.card_1_title || content.card_1_desc
+            ? 1
+            : 0)
+      );
+      const indices = Array.from({ length: cardsCount }, (_, i) => i + 1);
+
+      const handleAddCard = () => {
+        const next = cardsCount + 1;
+        onChange({ cards_count: String(next), [`card_${next}_title`]: '', [`card_${next}_desc`]: '' });
+      };
+
+      const handleRemoveCard = (delIdx: number) => {
+        if (cardsCount <= 0) return;
+        const updates: Record<string, string> = { cards_count: String(cardsCount - 1) };
+        for (let i = delIdx; i < cardsCount; i++) {
+          updates[`card_${i}_title`] = content[`card_${i + 1}_title`] ?? '';
+          updates[`card_${i}_desc`] = content[`card_${i + 1}_desc`] ?? '';
+        }
+        updates[`card_${cardsCount}_title`] = '';
+        updates[`card_${cardsCount}_desc`] = '';
+        onChange(updates);
+      };
+
+      return (
+        <>
+          <TextAreaField label="Etiqueta superior / Badge (Opcional)" editorId={`${block.id}:badge_text`} value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
+          <TextAreaField label="Título de la sección (Opcional)" editorId={`${block.id}:title`} value={content.title ?? ''} onChange={title => onChange({ title })} />
+          <TextAreaField label="Párrafos de texto" editorId={`${block.id}:text`} value={content.text ?? ''} onChange={text => onChange({ text })} />
+          <SelectField
+            label="Alineación de tarjetas"
+            value={content.cards_align || 'center'}
+            options={[
+              { value: 'center', label: 'Centradas en pantalla' },
+              { value: 'left', label: 'Alineadas a la izquierda' },
+            ]}
+            onChange={cards_align => onChange({ cards_align })}
+          />
+          <strong className="visual-properties-group-title">Tarjetas clave ({cardsCount})</strong>
+          {indices.map(num => (
+            <div key={num} style={{ marginTop: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '10px', background: '#f8fafc' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <strong style={{ fontSize: '0.85em', color: '#0284c7' }}>Tarjeta {num}</strong>
+                <button type="button" onClick={() => handleRemoveCard(num)} style={{ background: '#fee2e2', border: 'none', borderRadius: '4px', color: '#dc2626', fontSize: '0.75em', padding: '2px 6px', cursor: 'pointer' }}>
+                  ✕ Quitar
+                </button>
+              </div>
+              <label className="visual-properties-field"><span>Etiqueta o contador opcional</span><input value={content[`card_${num}_badge`] || ''} onChange={event => onChange({ [`card_${num}_badge`]: event.target.value })} placeholder="Texto..." /></label>
+              <label className="visual-properties-field"><span>Título / Dato clave</span><input value={content[`card_${num}_title`] || ''} onChange={event => onChange({ [`card_${num}_title`]: event.target.value })} placeholder="Texto..." /></label>
+              <TextAreaField label="Explicación / Detalle" editorId={`${block.id}:card_${num}_desc`} value={content[`card_${num}_desc`] || ''} onChange={val => onChange({ [`card_${num}_desc`]: val })} />
+            </div>
+          ))}
+          <button type="button" onClick={handleAddCard} style={{ marginTop: '8px', width: '100%', padding: '7px', borderRadius: '8px', background: '#e0f2fe', border: '1px dashed #7dd3fc', color: '#0369a1', fontWeight: 700, fontSize: '0.82em', cursor: 'pointer' }}>
+            + Añadir otra Tarjeta
+          </button>
+        </>
+      );
+    }
+    if (block.block_type === 'histology_text_table') {
+      const colsCount = Math.max(0, Number(content.cols_count) || (content.col_4_header ? 4 : content.col_3_header ? 3 : content.col_2_header ? 2 : content.col_1_header ? 1 : 0));
+      const rowsCount = Math.max(0, Number(content.rows_count) || (content.cell_4_1 ? 4 : content.cell_3_1 ? 3 : content.cell_2_1 ? 2 : content.cell_1_1 ? 1 : 0));
+
+      const colIndices = Array.from({ length: colsCount }, (_, i) => i + 1);
+
+      return (
+        <>
+          <TextAreaField label="Etiqueta superior / Badge (Opcional)" editorId={`${block.id}:badge_text`} value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
+          <TextAreaField label="Subtítulo / Título de la sección" editorId={`${block.id}:title`} value={content.title ?? ''} onChange={title => onChange({ title })} />
+          <TextAreaField label="Párrafos de texto" editorId={`${block.id}:text`} value={content.text ?? ''} onChange={text => onChange({ text })} />
+          <strong className="visual-properties-group-title">Tabla Clínica ({colsCount} columnas × {rowsCount} filas)</strong>
+          <p className="visual-properties-hint">Para una edición completa con formato de celdas y píldoras, utiliza la vista directa en el lienzo.</p>
+          {colIndices.map(ci => (
+            <label key={ci} className="visual-properties-field">
+              <span>Encabezado Columna {ci}</span>
+              <input value={content[`col_${ci}_header`] || ''} onChange={e => onChange({ [`col_${ci}_header`]: e.target.value })} placeholder="Texto..." />
+            </label>
+          ))}
+        </>
+      );
+    }
+    if (block.block_type === 'histology_text_simple_cards') {
+      const cardsCount = Math.max(0, Number(content.cards_count) || (content.card_6 ? 6 : content.card_5 ? 5 : content.card_4 ? 4 : content.card_3 ? 3 : content.card_2 ? 2 : content.card_1 ? 1 : 0));
+      const indices = Array.from({ length: cardsCount }, (_, i) => i + 1);
+
+      const handleAddCard = () => {
+        const next = cardsCount + 1;
+        onChange({ cards_count: String(next), [`card_${next}`]: '' });
+      };
+
+      const handleRemoveCard = (delIdx: number) => {
+        if (cardsCount <= 0) return;
+        const updates: Record<string, string> = { cards_count: String(cardsCount - 1) };
+        for (let i = delIdx; i < cardsCount; i++) {
+          updates[`card_${i}`] = content[`card_${i + 1}`] ?? '';
+        }
+        updates[`card_${cardsCount}`] = '';
+        onChange(updates);
+      };
+
+      return (
+        <>
+          <TextAreaField label="Etiqueta superior / Badge (Opcional)" editorId={`${block.id}:badge_text`} value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
+          <TextAreaField label="Subtítulo / Título de la sección" editorId={`${block.id}:title`} value={content.title ?? ''} onChange={title => onChange({ title })} />
+          <TextAreaField label="Párrafos de texto" editorId={`${block.id}:text`} value={content.text ?? ''} onChange={text => onChange({ text })} />
+          <SelectField
+            label="Columnas de la cuadrícula"
+            value={content.columns || '3'}
+            options={[
+              { value: '2', label: '2 Columnas' },
+              { value: '3', label: '3 Columnas (Recomendado)' },
+              { value: '4', label: '4 Columnas' },
+            ]}
+            onChange={columns => onChange({ columns })}
+          />
+          <SelectField
+            label="Alineación de tarjetas"
+            value={content.cards_align || 'center'}
+            options={[
+              { value: 'center', label: 'Centradas en pantalla' },
+              { value: 'left', label: 'Alineadas a la izquierda' },
+            ]}
+            onChange={cards_align => onChange({ cards_align })}
+          />
+          <strong className="visual-properties-group-title">Tarjetas Simples ({cardsCount})</strong>
+          {indices.map(num => (
+            <div key={num} style={{ marginTop: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '10px', background: '#f8fafc' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <strong style={{ fontSize: '0.85em', color: '#0284c7' }}>Tarjeta #{num}</strong>
+                <button type="button" onClick={() => handleRemoveCard(num)} style={{ background: '#fee2e2', border: 'none', borderRadius: '4px', color: '#dc2626', fontSize: '0.75em', padding: '2px 6px', cursor: 'pointer' }}>
+                  ✕ Quitar
+                </button>
+              </div>
+              <label className="visual-properties-field"><span>Texto de la tarjeta</span><input value={content[`card_${num}`] || ''} onChange={event => onChange({ [`card_${num}`]: event.target.value })} placeholder="Texto..." /></label>
+            </div>
+          ))}
+          <button type="button" onClick={handleAddCard} style={{ marginTop: '8px', width: '100%', padding: '7px', borderRadius: '8px', background: '#e0f2fe', border: '1px dashed #7dd3fc', color: '#0369a1', fontWeight: 700, fontSize: '0.82em', cursor: 'pointer' }}>
+            + Añadir Tarjeta
+          </button>
+        </>
+      );
+    }
+    if (block.block_type === 'histology_extra_data') {
+      return (
+        <>
+          <TextAreaField label="Título del Dato Extra" editorId={`${block.id}:title`} value={content.title ?? ''} onChange={title => onChange({ title })} />
+          <TextAreaField label="Contenido / Explicación" editorId={`${block.id}:text`} value={content.text ?? ''} onChange={text => onChange({ text })} />
+          <label className="visual-properties-field">
+            <span>Imagen Ilustrativa (Opcional)</span>
+            <ImageField
+              url={content.image_url ?? ''}
+              onPick={() => onPickImage('image_url')}
+              onClear={() => onChange({ image_url: '', image_caption: '' })}
+            />
+          </label>
+          {content.image_url && (
+            <label className="visual-properties-field">
+              <span>Pie de foto de la imagen</span>
+              <input
+                value={content.image_caption || ''}
+                onChange={event => onChange({ image_caption: event.target.value })}
+                placeholder="Texto..."
+              />
+            </label>
+          )}
+        </>
+      );
+    }
     return <p className="visual-properties-hint">Este bloque no contiene texto ni imágenes editables.</p>;
   };
 

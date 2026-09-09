@@ -11,6 +11,7 @@ export interface AssociatedFunctionItem {
   id?: string;
   label: string;
   icon?: string;
+  detail?: string;
 }
 
 export interface MorphologyCriterionItem {
@@ -76,7 +77,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
   locationsTitle = '4. Ubicaciones Anatómicas',
   locations = [],
 }) => {
-  const validAssocFunctions = associatedFunctions.filter(f => f.label && f.label.trim() !== '');
+  const validAssocFunctions = associatedFunctions.filter(f => (f.label && f.label.trim() !== '') || (f.detail && f.detail.trim() !== ''));
   const validCriteria = criteria.filter(c => (c.title && c.title.trim() !== '') || (c.detail && c.detail.trim() !== ''));
   const validLocations = locations.filter(l => (l.organ && l.organ.trim() !== '') || (l.detail && l.detail.trim() !== ''));
 
@@ -85,10 +86,247 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
     return null;
   }
 
+  // ─── FORMATO STANDALONE EXPANDIDO (CUANDO SOLO 1 DE LAS 3 TARJETAS QUEDA ACTIVA) ───
+  if (visibleCardsCount === 1) {
+    let singleTitle = '';
+    let singleItems: { id?: string; title: string; detail: string }[] = [];
+    let singleImage: { url?: string; caption?: string } | null = null;
+
+    if (showFunctionCard) {
+      singleTitle = functionTitle || 'Funciones Principales';
+      // Si hay funciones asociadas con o sin función rectora
+      if (validAssocFunctions.length > 0) {
+        if (
+          mainFunctionName &&
+          !validAssocFunctions.some(f => f.label.trim().toLowerCase() === mainFunctionName.trim().toLowerCase())
+        ) {
+          singleItems.push({
+            title: mainFunctionName,
+            detail: mainFunctionDesc || '',
+          });
+        }
+        validAssocFunctions.forEach(f => {
+          singleItems.push({
+            id: f.id,
+            title: f.label,
+            detail: f.detail || '',
+          });
+        });
+      } else if (mainFunctionName || mainFunctionDesc) {
+        singleItems.push({
+          title: mainFunctionName || '',
+          detail: mainFunctionDesc || '',
+        });
+      }
+      if (functionImageUrl) {
+        singleImage = { url: functionImageUrl, caption: functionImageCaption };
+      }
+    } else if (showCriteriaCard) {
+      singleTitle = criteriaTitle || 'Criterios Morfológicos';
+      validCriteria.forEach(c => {
+        singleItems.push({
+          id: c.id,
+          title: c.title,
+          detail: c.detail,
+        });
+      });
+    } else if (showLocationsCard) {
+      singleTitle = locationsTitle || 'Ubicaciones Anatómicas';
+      validLocations.forEach(l => {
+        singleItems.push({
+          id: l.id,
+          title: l.organ,
+          detail: l.detail,
+        });
+      });
+    }
+
+    return (
+      <div
+        className="histology-pillars-single-card"
+        style={{
+          position: 'relative',
+          width: '100%',
+          borderRadius: '24px',
+          background: 'radial-gradient(ellipse at 88% 18%, rgba(2, 132, 199, 0.05) 0%, transparent 60%), linear-gradient(180deg, #ffffff 0%, #f9fcff 100%)',
+          border: '1.5px solid rgba(186, 230, 253, 0.95)',
+          boxShadow: '0 14px 38px -6px rgba(2, 132, 199, 0.07), 0 2px 8px -2px rgba(0, 0, 0, 0.02), inset 0 1px 0 #ffffff',
+          fontFamily: '"Montserrat", "Segoe UI", sans-serif',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        {/* ─── Barra Superior de Acento Azul / Zafiro ─── */}
+        <div
+          style={{
+            height: '4px',
+            width: '100%',
+            background: 'linear-gradient(90deg, #0284c7 0%, #38bdf8 50%, #7dd3fc 100%)',
+            flexShrink: 0,
+          }}
+        />
+
+        {/* ─── Trama geométrica de laboratorio ─── */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundImage: 'radial-gradient(#0284c7 0.75px, transparent 0.75px)',
+            backgroundSize: '22px 22px',
+            opacity: 0.035,
+            pointerEvents: 'none',
+          }}
+        />
+
+        {/* ─── Contenido Interior ─── */}
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            padding: 'clamp(20px, 3vw, 32px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+          }}
+        >
+          {/* Cabecera: Título Principal */}
+          {singleTitle && singleTitle.trim() !== '' && (
+            <div>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: 'clamp(1.22rem, 2.2vw, 1.48rem)',
+                  fontWeight: 850,
+                  color: '#1e3a8a',
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1.25,
+                }}
+              >
+                {singleTitle}
+              </h3>
+            </div>
+          )}
+
+          {/* Listado de Elementos con Número Circular y Flujo Continuo Inline */}
+          {singleItems.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 'clamp(10px, 1.4vw, 13px)',
+              }}
+            >
+              {singleItems.map((item, idx) => {
+                const num = idx + 1;
+                const cleanTitle = item.title ? item.title.trim() : '';
+                const hasColon = cleanTitle.endsWith(':');
+
+                return (
+                  <div
+                    key={item.id ?? idx}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px',
+                      lineHeight: 1.55,
+                      fontSize: 'clamp(0.92rem, 1.35vw, 0.96rem)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '24px',
+                        height: '24px',
+                        minWidth: '24px',
+                        borderRadius: '50%',
+                        background: '#0284c7',
+                        color: '#ffffff',
+                        fontSize: '0.78rem',
+                        fontWeight: 850,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginTop: '1.5px',
+                        flexShrink: 0,
+                        boxShadow: '0 2px 5px rgba(2, 132, 199, 0.28)',
+                      }}
+                    >
+                      {num}
+                    </div>
+
+                    <div
+                      className="histology-single-item-text"
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        color: '#334155',
+                      }}
+                    >
+                      {cleanTitle && (
+                        <strong style={{ color: '#0f172a', fontWeight: 800 }}>
+                          {renderBoldText(cleanTitle)}
+                          {!hasColon && item.detail && item.detail.trim() !== '' ? ':' : ''}{' '}
+                        </strong>
+                      )}
+                      {item.detail && (
+                        <span
+                          className="histology-single-desc-inline"
+                          style={{ fontWeight: 500, color: '#334155' }}
+                        >
+                          {renderBoldText(item.detail)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Imagen de Referencia Opcional */}
+          {singleImage && singleImage.url && (
+            <div
+              style={{
+                marginTop: '10px',
+                borderRadius: '14px',
+                overflow: 'hidden',
+                border: '1.5px solid #e2e8f0',
+                maxWidth: '640px',
+                boxShadow: '0 3px 12px rgba(0, 0, 0, 0.05)',
+              }}
+            >
+              <img
+                src={singleImage.url}
+                alt={singleImage.caption || 'Imagen de referencia'}
+                style={{ width: '100%', height: 'auto', maxHeight: '300px', objectFit: 'cover', display: 'block' }}
+                loading="lazy"
+              />
+              {singleImage.caption && singleImage.caption.trim() !== '' && (
+                <div
+                  style={{
+                    padding: '7px 12px',
+                    background: '#f8fafc',
+                    fontSize: '0.78rem',
+                    color: '#475569',
+                    fontWeight: 600,
+                    borderTop: '1px solid #e2e8f0',
+                  }}
+                >
+                  🔬 {singleImage.caption}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const gridCols =
-    visibleCardsCount === 1
-      ? '1fr'
-      : visibleCardsCount === 2
+    visibleCardsCount === 2
       ? 'repeat(auto-fit, minmax(320px, 1fr))'
       : 'repeat(auto-fit, minmax(290px, 1fr))';
 

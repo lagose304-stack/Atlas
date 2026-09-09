@@ -754,6 +754,58 @@ describe('ContentBlockRenderer', () => {
     expect(screen.getByText('Carbohidratos y mucinas')).toBeInTheDocument();
   });
 
+  it('renderiza la tríada en formato expandido de tarjeta única (standalone) cuando solo queda una tarjeta visible', () => {
+    const singleBlock: ContentBlock[] = [
+      {
+        id: 'hist-single-pillar',
+        entity_type: 'placas_page',
+        entity_id: 201,
+        block_type: 'histology_pillars',
+        sort_order: 1,
+        content: {
+          show_function_card: 'true',
+          show_criteria_card: 'false',
+          show_locations_card: 'false',
+          function_title: 'Funciones Principales de la Piel',
+          assoc_count: '2',
+          assoc_1_label: 'Protección de barrera',
+          assoc_1_desc: 'Defensa mecánica y de permeabilidad.',
+          assoc_2_label: 'Homeostasis',
+          assoc_2_desc: 'Regulación de temperatura y agua.',
+        },
+      },
+    ];
+
+    render(<ContentBlockRenderer blocks={singleBlock} />);
+
+    expect(screen.getByText('Funciones Principales de la Piel')).toBeInTheDocument();
+    expect(screen.getByText(/Protección de barrera/)).toBeInTheDocument();
+    expect(screen.getByText(/Defensa mecánica y de permeabilidad\./)).toBeInTheDocument();
+    expect(screen.getByText(/Homeostasis/)).toBeInTheDocument();
+    expect(screen.getByText(/Regulación de temperatura y agua\./)).toBeInTheDocument();
+  });
+
+  it('renderiza correctamente el bloque de dato extra / correlación médica (histology_extra_data)', () => {
+    const extraBlock: ContentBlock[] = [
+      {
+        id: 'hist-extra-1',
+        entity_type: 'placas_page',
+        entity_id: 202,
+        block_type: 'histology_extra_data',
+        sort_order: 1,
+        content: {
+          title: 'Dato Extra de Laboratorio',
+          text: 'Las muestras deben fijarse en formalina para preservar la arquitectura tisular.',
+        },
+      },
+    ];
+
+    render(<ContentBlockRenderer blocks={extraBlock} />);
+
+    expect(screen.getByText('Dato Extra de Laboratorio')).toBeInTheDocument();
+    expect(screen.getByText(/Las muestras deben fijarse en formalina/)).toBeInTheDocument();
+  });
+
   it('renderiza correctamente el bloque de semana de examenes con clases fluidas y responsive container queries', () => {
     const examBlocks: ContentBlock[] = [
       {
@@ -796,5 +848,198 @@ describe('ContentBlockRenderer', () => {
     expect(screen.getByText('¡Tú puedes!')).toBeInTheDocument();
     expect(screen.getByText('Enfoque 100%')).toBeInTheDocument();
     expect(screen.getByText('Modo estudio activado 🔬')).toBeInTheDocument();
+  });
+
+  it('renderiza correctamente el nuevo componente de texto con tarjetas clave (histology_text_cards)', () => {
+    const textCardsBlocks: ContentBlock[] = [
+      {
+        id: 'hist-text-cards-1',
+        entity_type: 'subtemas_page',
+        entity_id: 101,
+        block_type: 'histology_text_cards',
+        sort_order: 1,
+        content: {
+          text: 'La piel y sus derivados constituyen el sistema tegumentario.',
+          cards_count: '3',
+          card_1_title: '1.8 m²',
+          card_1_desc: 'Superficie corporal aproximada',
+          card_2_title: '15 - 20 %',
+          card_2_desc: 'De la masa total del cuerpo',
+          card_3_title: '2 Estratos',
+          card_3_desc: 'Principales: Epidermis y Dermis',
+        },
+      },
+    ];
+
+    const { container } = render(<ContentBlockRenderer blocks={textCardsBlocks} />);
+
+    expect(screen.getByText('La piel y sus derivados constituyen el sistema tegumentario.')).toBeInTheDocument();
+    expect(screen.getByText('1.8 m²')).toBeInTheDocument();
+    expect(screen.getByText('Superficie corporal aproximada')).toBeInTheDocument();
+    expect(screen.getByText('15 - 20 %')).toBeInTheDocument();
+    expect(screen.getByText('De la masa total del cuerpo')).toBeInTheDocument();
+    expect(screen.getByText('2 Estratos')).toBeInTheDocument();
+    expect(screen.getByText('Principales: Epidermis y Dermis')).toBeInTheDocument();
+
+    const cardElements = container.querySelectorAll('.histology-text-card-item');
+    expect(cardElements).toHaveLength(3);
+  });
+
+  it('renderiza correctamente el componente de texto con tabla médica (histology_text_table)', () => {
+    const textTableBlocks: ContentBlock[] = [
+      {
+        id: 'hist-text-table-1',
+        entity_type: 'subtemas_page',
+        entity_id: 102,
+        block_type: 'histology_text_table',
+        sort_order: 1,
+        content: {
+          title: 'División y Capas de la Piel',
+          text: 'La piel se organiza en dos estratos principales situados sobre una base subcutánea adiposa:',
+          cols_count: '4',
+          rows_count: '3',
+          col_1_header: 'Capa',
+          col_2_header: 'Tipo de Tejido',
+          col_3_header: 'Origen',
+          col_4_header: 'Características Principales',
+
+          cell_1_1: 'Epidermis',
+          cell_1_2: 'Epitelio plano estratificado queratinizado',
+          cell_1_3: '[blue:Ectodermo]',
+          cell_1_4: 'Crece de forma continua y mantiene su espesor fisiológico.',
+
+          cell_2_1: 'Dermis',
+          cell_2_2: 'Tejido conjuntivo denso irregular',
+          cell_2_3: '[amber:Mesodermo]',
+          cell_2_4: 'Aporta sostén mecánico, resistencia y espesor.',
+
+          cell_3_1: 'Hipodermis (Fascia subcutánea)',
+          cell_3_2: 'Tejido adiposo en lobulillos',
+          cell_3_3: '—',
+          cell_3_4: 'Situada a mayor profundidad que la dermis.',
+        },
+      },
+    ];
+
+    const { container } = render(<ContentBlockRenderer blocks={textTableBlocks} />);
+
+    // Título y texto
+    expect(screen.getByText('División y Capas de la Piel')).toBeInTheDocument();
+    expect(screen.getByText('La piel se organiza en dos estratos principales situados sobre una base subcutánea adiposa:')).toBeInTheDocument();
+
+    // Encabezados
+    expect(screen.getByText('Capa')).toBeInTheDocument();
+    expect(screen.getByText('Tipo de Tejido')).toBeInTheDocument();
+    expect(screen.getByText('Origen')).toBeInTheDocument();
+    expect(screen.getByText('Características Principales')).toBeInTheDocument();
+
+    // Celdas de datos
+    expect(screen.getByText('Epidermis')).toBeInTheDocument();
+    expect(screen.getByText('Epitelio plano estratificado queratinizado')).toBeInTheDocument();
+    expect(screen.getByText('Ectodermo')).toBeInTheDocument();
+
+    expect(screen.getByText('Dermis')).toBeInTheDocument();
+    expect(screen.getByText('Tejido conjuntivo denso irregular')).toBeInTheDocument();
+    expect(screen.getByText('Mesodermo')).toBeInTheDocument();
+
+    expect(screen.getByText('Hipodermis')).toBeInTheDocument();
+    expect(screen.getByText('(Fascia subcutánea)')).toBeInTheDocument();
+
+    // Contenedor de tabla presente
+    const table = container.querySelector('.histology-text-table-block table');
+    expect(table).toBeInTheDocument();
+  });
+
+  it('renderiza píldoras asignadas a nivel de casilla completa (cell_ri_ci_pill) sin corchetes', () => {
+    const tableBlocks: ContentBlock[] = [
+      {
+        id: 'hist-table-pills-1',
+        entity_type: 'subtemas_page',
+        entity_id: 103,
+        block_type: 'histology_text_table',
+        sort_order: 1,
+        content: {
+          title: 'Clasificación Celular',
+          text: 'Descripción de las células:',
+          cols_count: '2',
+          rows_count: '2',
+          col_1_header: 'Tipo',
+          col_2_header: 'Función',
+          cell_1_1: 'Queratinocitos',
+          cell_1_2: 'Barrera mecánica',
+          cell_1_2_pill: 'blue',
+          cell_2_1: 'Melanocitos',
+          cell_2_2: 'Protección UV',
+          cell_2_2_pill: 'green',
+        },
+      },
+    ];
+
+    render(<ContentBlockRenderer blocks={tableBlocks} />);
+
+    expect(screen.getByText('Barrera mecánica')).toBeInTheDocument();
+    expect(screen.getByText('Protección UV')).toBeInTheDocument();
+  });
+
+  it('renderiza correctamente el componente de texto con tarjetas simples (histology_text_simple_cards)', () => {
+    const simpleCardsBlocks: ContentBlock[] = [
+      {
+        id: 'hist-simple-cards-1',
+        entity_type: 'subtemas_page',
+        entity_id: 104,
+        block_type: 'histology_text_simple_cards',
+        sort_order: 1,
+        content: {
+          title: 'Anejos Cutáneos (Derivados Epidérmicos)',
+          text: 'Estructuras y productos tegumentarios que complementan las funciones protectoras de la piel:',
+          columns: '3',
+          cards_count: '5',
+          card_1: 'Folículos pilosos y pelo',
+          card_2: 'Uñas',
+          card_3: 'Glándulas sudoríparas',
+          card_4: 'Glándulas sebáceas',
+          card_5: 'Glándulas mamarias',
+        },
+      },
+    ];
+
+    const { container } = render(<ContentBlockRenderer blocks={simpleCardsBlocks} />);
+
+    expect(screen.getByText('Anejos Cutáneos (Derivados Epidérmicos)')).toBeInTheDocument();
+    expect(screen.getByText('Estructuras y productos tegumentarios que complementan las funciones protectoras de la piel:')).toBeInTheDocument();
+
+    expect(screen.getByText('Folículos pilosos y pelo')).toBeInTheDocument();
+    expect(screen.getByText('Uñas')).toBeInTheDocument();
+    expect(screen.getByText('Glándulas sudoríparas')).toBeInTheDocument();
+    expect(screen.getByText('Glándulas sebáceas')).toBeInTheDocument();
+    expect(screen.getByText('Glándulas mamarias')).toBeInTheDocument();
+
+    const items = container.querySelectorAll('.histology-simple-card-item');
+    expect(items).toHaveLength(5);
+
+    const grid = container.querySelector('.histology-text-simple-cards-grid');
+    expect(grid).toHaveStyle({ justifyContent: 'center' });
+  });
+
+  it('permite alinear las tarjetas a la izquierda si cards_align es left', () => {
+    const blocks: ContentBlock[] = [
+      {
+        id: 'hist-simple-left-1',
+        entity_type: 'subtemas_page',
+        entity_id: 105,
+        block_type: 'histology_text_simple_cards',
+        sort_order: 1,
+        content: {
+          cards_count: '2',
+          card_1: 'Elemento A',
+          card_2: 'Elemento B',
+          cards_align: 'left',
+        },
+      },
+    ];
+
+    const { container } = render(<ContentBlockRenderer blocks={blocks} />);
+    const grid = container.querySelector('.histology-text-simple-cards-grid');
+    expect(grid).toHaveStyle({ justifyContent: 'flex-start' });
   });
 });

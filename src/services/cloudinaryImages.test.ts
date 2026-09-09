@@ -39,6 +39,21 @@ describe('getCloudinaryImageUrl', () => {
 
     expect(viewResult).toBe('https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Ojo/Cornea/1788064584813.webp');
   });
+
+  it('respeta la carpeta atlas-content sin anteponer placas/sin_clasificar', () => {
+    const r2Url = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/atlas-content/1788929744560_sample.webp';
+    const viewResult = getCloudinaryImageUrl(r2Url, 'view');
+    expect(viewResult).toBe('https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/atlas-content/1788929744560_sample.webp');
+
+    const thumbResult = getCloudinaryImageUrl(r2Url, 'thumb');
+    expect(thumbResult).toBe('https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/atlas-content/1788929744560_sample_thumb.webp');
+  });
+
+  it('corrige prefijos anidados accidentales como placas/sin_clasificar/atlas-content/', () => {
+    const corruptUrl = 'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/sin_clasificar/atlas-content/1788929744560_sample.webp';
+    const viewResult = getCloudinaryImageUrl(corruptUrl, 'view');
+    expect(viewResult).toBe('https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/atlas-content/1788929744560_sample.webp');
+  });
 });
 
 describe('getImageCandidateUrls', () => {

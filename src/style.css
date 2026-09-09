@@ -200,6 +200,7 @@ body {
 .histology-generalities-block p:not([style*="color"]),
 .histology-pillars-block p:not([style*="color"]),
 .histology-stains-block p:not([style*="color"]),
+.histology-text-cards-block p:not([style*="color"]),
 .atlas-rich-rendered p:not([style*="color"]) {
   color: var(--atlas-editor-text, #000000) !important;
 }
@@ -208,6 +209,7 @@ body {
 .histology-pillars-block p,
 .histology-generalities-block p,
 .histology-stains-block p,
+.histology-text-cards-block p,
 .histology-pillars-desc,
 .histology-pillars-desc p {
   margin: 0 !important;
@@ -216,8 +218,19 @@ body {
 
 .histology-pillars-block p + p,
 .histology-generalities-block p + p,
-.histology-stains-block p + p {
+.histology-stains-block p + p,
+.histology-text-cards-block p + p {
   margin-top: 0.35em !important;
+}
+
+.histology-text-card-item:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px -4px rgba(2, 132, 199, 0.16), 0 4px 10px -2px rgba(0, 0, 0, 0.04), inset 0 1px 0 #ffffff !important;
+  border-color: #7dd3fc !important;
+}
+
+.histology-text-card-item:hover > div:first-of-type {
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.65), 0 2px 8px rgba(2, 132, 199, 0.5) !important;
 }
 
 .tiptap-editor-content p:last-child {
@@ -5237,6 +5250,28 @@ body {
     flex-direction: column !important;
     align-items: stretch !important;
   }
+}
+
+/* Tarjetas simples de Fundamentos Histológicos */
+.histology-simple-card-item:hover {
+  border-color: #7dd3fc !important;
+  background: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px -2px rgba(2, 132, 199, 0.10), 0 2px 6px rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Modo Standalone de Tríada Histológica (Garantizar flujo inline continuo) */
+.histology-single-item-text p,
+.histology-single-item-text .atlas-rich-rendered,
+.histology-single-item-text .atlas-rich-rendered p,
+.histology-single-desc-inline,
+.histology-single-desc-inline p,
+.histology-single-desc-inline .atlas-rich-rendered,
+.histology-single-desc-inline .atlas-rich-rendered p {
+  display: inline !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: inherit !important;
 }
 
 
