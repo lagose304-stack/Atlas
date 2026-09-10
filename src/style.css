@@ -2436,6 +2436,7 @@ body {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   background: #f8fafc;
+  margin-top: clamp(14px, 1.8vw, 22px);
   border-top: 1.5px solid #cbd5e1;
   border-bottom: 2px solid #e2e8f0;
   padding: 0;

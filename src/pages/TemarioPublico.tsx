@@ -15,7 +15,7 @@ import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
-import { ArrowRight, Microscope, Shield, AlertTriangle } from 'lucide-react';
+import { ArrowRight, Microscope, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   canBypassMaintenance,
@@ -467,33 +467,6 @@ const TemarioPublico: React.FC = () => {
                   </div>
                 );
               })}
-            </div>
-          )}
-
-          {user?.rol === 'Administrador' && (
-            <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'center' }}>
-              <button
-                type="button"
-                onClick={() => navigate('/historial?entity=tema')}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '10px 20px',
-                  background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '12px',
-                  fontSize: '0.88em',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.25)',
-                }}
-                title="Ver historial y auditoría de creación y edición de temas"
-              >
-                <Shield size={16} />
-                <span>Ver Historial y Auditoría de Temas</span>
-              </button>
             </div>
           )}
         </section>
