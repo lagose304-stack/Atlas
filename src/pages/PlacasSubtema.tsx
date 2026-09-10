@@ -260,7 +260,8 @@ const PlacasSubtemaContent: React.FC = () => {
         if (maintenanceRes.status === 'fulfilled') {
           const maintenanceStatus = maintenanceRes.value;
           const canBypass = canBypassMaintenance(user, isAuthenticated);
-          if (!canBypass) {
+          const hasBypassAccess = Boolean(canBypass || isAuthenticated);
+          if (!hasBypassAccess) {
             if (maintenanceStatus.enabled) {
               setErrorMessage('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
               setLoading(false);

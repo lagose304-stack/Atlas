@@ -118,7 +118,8 @@ const StandardSubtemas: React.FC = () => {
       if (maintenanceResult.status === 'fulfilled') {
         const maintenanceStatus = maintenanceResult.value;
         const canBypass = canBypassMaintenance(user, isAuthenticated);
-        if (!canBypass && temaData) {
+        const hasBypassAccess = Boolean(canBypass || isAuthenticated);
+        if (!hasBypassAccess && temaData) {
           if (maintenanceStatus.enabled) {
             setLoadError('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
             setLoading(false);

@@ -15,7 +15,7 @@ import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
-import { ArrowRight, GraduationCap, Microscope, Shield, AlertTriangle } from 'lucide-react';
+import { ArrowRight, Microscope, Shield, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   canBypassMaintenance,
@@ -121,133 +121,122 @@ const buildTemasLoadError = (error: SupabaseQueryError | null | undefined): stri
   return 'No se pudo cargar el temario en este momento. Revisa tu conexion e intenta de nuevo.';
 };
 
-const TemaCard: React.FC<{ tema: Tema; onClick: () => void; isDisabled?: boolean }> = ({ tema, onClick, isDisabled }) => {
-  const [hovered, setHovered] = useState(false);
+const TemaCard: React.FC<{
+  tema: Tema;
+  index: number;
+  onClick: () => void;
+  isDisabled?: boolean;
+  isDeactivatedForPublic?: boolean;
+}> = ({ tema, index, onClick, isDisabled, isDeactivatedForPublic }) => {
   const [logoFailed, setLogoFailed] = useState(false);
+  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setLogoFailed(false);
+    setFallbackUrl(null);
   }, [tema.logo_url]);
-
-  const handleMouseEnter = () => {
-    setHovered(true);
-    prefetchTema(tema.id);
-  };
 
   return (
     <button
       type="button"
-      className="temario-topic-card"
-      style={{
-        borderRadius: '18px',
-        background: '#ffffff',
-        boxShadow: hovered
-          ? '0 18px 34px rgba(23, 65, 101, 0.16)'
-          : '0 8px 22px rgba(23, 65, 101, 0.08)',
-        cursor: isDisabled ? 'not-allowed' : 'pointer',
-        transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, filter 0.2s ease',
-        border: isDisabled
-          ? '1px dashed #f87171'
-          : hovered
-            ? '1px solid rgba(97, 143, 202, 0.56)'
-            : '1px solid rgba(199, 215, 232, 0.92)',
-        opacity: isDisabled ? 0.78 : 1,
-        position: 'relative',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'stretch',
-        textAlign: 'left',
-        fontFamily: 'inherit',
-        padding: 0,
-        width: '100%',
-        minHeight: '196px',
-        transform: hovered && !isDisabled ? 'translateY(-3px)' : 'translateY(0)',
-        filter: hovered && !isDisabled ? 'saturate(1.02)' : 'none',
-      }}
+      className={`temario-real-slide ${isDisabled ? 'is-disabled' : ''}`}
       onClick={onClick}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => prefetchTema(tema.id)}
       onTouchStart={() => prefetchTema(tema.id)}
+      disabled={isDisabled}
     >
-      {isDisabled && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '8px',
-            right: '8px',
-            zIndex: 3,
-            background: 'rgba(239, 68, 68, 0.92)',
-            color: '#ffffff',
-            fontSize: '0.68rem',
-            fontWeight: 800,
-            padding: '2px 7px',
-            borderRadius: '6px',
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-          }}
-        >
+      {/* Barra superior luminosa de acento cromático */}
+      <div className="slide-top-accent-bar" aria-hidden="true" />
+
+      {/* Reflejo dinámico del vidrio */}
+      <div className="slide-sheen-sweep" aria-hidden="true" />
+
+      {/* Tema desactivado para visitantes públicos, pero accesible con sesión iniciada */}
+      {isDeactivatedForPublic && !isDisabled && (
+        <div className="slide-session-access-badge" title="Tema desactivado para público. Acceso habilitado con sesión iniciada.">
           Desactivado
         </div>
       )}
-      <div
-        style={{
-          height: '138px',
-          width: '100%',
-          overflow: 'hidden',
-          borderBottom: '1px solid rgba(201, 217, 233, 0.92)',
-          background: 'linear-gradient(145deg, #e5f4fc, #d5e9f7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-        }}
-      >
-        {tema.logo_url && !logoFailed ? (
-          <img
-            src={getCloudinaryImageUrl(tema.logo_url, 'cardWide')}
-            alt={tema.nombre}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center' }}
-            loading="lazy"
-            decoding="async"
-            onError={() => setLogoFailed(true)}
-          />
-        ) : (
-          <span style={styles.topicFallback}><Microscope size={30} /><span>Atlas histológico</span></span>
-        )}
+
+      {/* Desactivado estricto para usuarios sin sesión iniciada */}
+      {isDisabled && (
+        <div className="slide-disabled-badge">
+          Desactivado
+        </div>
+      )}
+
+      {/* 1. RÓTULO ESMERILADO SUPERIOR */}
+      <div className="real-slide-label-top">
+        <div className="slide-label-frosted-texture" aria-hidden="true" />
+        <div className="slide-label-header">
+          <span className="slide-serial-badge">
+            <span className="slide-pulse-dot" />
+            {String(index + 1).padStart(2, '0')}
+          </span>
+          <h4 className="slide-label-title">
+            {tema.nombre}
+          </h4>
+          <div className="slide-action-btn" aria-hidden="true">
+            <ArrowRight size={15} />
+          </div>
+        </div>
       </div>
 
-      <h4
-        className="temario-card-title atlas-typo-card"
-        style={{
-          margin: '0',
-          minHeight: '56px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '10px',
-          padding: '10px 13px',
-          color: '#123b66',
-          fontSize: '0.94rem',
-          fontWeight: 800,
-          lineHeight: 1.25,
-        }}
-      >
-        <span
-          style={{
-            display: 'block',
-            width: '100%',
-            whiteSpace: 'normal',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            lineHeight: 1.25,
-          }}
-        >
-          {tema.nombre}
-        </span>
-        <ArrowRight className="temario-topic-arrow" size={17} aria-hidden="true" />
-      </h4>
+      {/* 2. CUERPO DE CRISTAL TRANSPARENTE CON MÁRGENES Y CUBREOBJETOS */}
+      <div className="real-slide-glass-body">
+        {/* Calibrador micrométrico óptico decorativo en el cristal */}
+        <div className="slide-micrometer-ruler" aria-hidden="true">
+          <span className="ruler-tick major" />
+          <span className="ruler-tick" />
+          <span className="ruler-tick" />
+          <span className="ruler-tick major" />
+          <span className="ruler-tick" />
+          <span className="ruler-tick" />
+          <span className="ruler-tick major" />
+        </div>
+
+        <div className="real-slide-coverslip">
+          {/* Sujetadores mecánicos de platina en las 4 esquinas */}
+          <span className="stage-clip clip-tl" aria-hidden="true" />
+          <span className="stage-clip clip-tr" aria-hidden="true" />
+          <span className="stage-clip clip-bl" aria-hidden="true" />
+          <span className="stage-clip clip-br" aria-hidden="true" />
+
+          {tema.logo_url && !logoFailed ? (
+            <div className="slide-tissue-wrap">
+              <img
+                src={fallbackUrl || getCloudinaryImageUrl(tema.logo_url, 'thumb')}
+                alt={tema.nombre}
+                className="slide-tissue-img"
+                loading="lazy"
+                decoding="async"
+                onError={() => {
+                  if (!fallbackUrl && tema.logo_url) {
+                    setFallbackUrl(tema.logo_url);
+                  } else {
+                    setLogoFailed(true);
+                  }
+                }}
+              />
+              <div className="slide-glass-glare" />
+            </div>
+          ) : (
+            <div className="slide-fallback-wrap">
+              <div className="slide-fallback-ambient" />
+              <div className="slide-fallback-icon-ring">
+                <Microscope size={34} />
+              </div>
+              <span className="slide-fallback-label">Histología</span>
+            </div>
+          )}
+
+          {/* Enfoque óptico interactivo en hover */}
+          <div className="slide-focus-overlay">
+            <span className="focus-crosshair">⊕</span>
+            <span>Enfocar</span>
+          </div>
+        </div>
+      </div>
     </button>
   );
 };
@@ -326,10 +315,10 @@ const TemarioPublico: React.FC = () => {
   }, [fetchTemas]);
 
   return (
-    <div className="atlas-temario-typography" style={styles.container}>
+    <div className="atlas-temario-page atlas-temario-typography" style={styles.container}>
       <Header />
 
-      <main style={styles.main}>
+      <main className="atlas-temario-main" style={styles.main}>
         {contentBlocks.length > 0 && (
           <section className="public-editor-content public-editor-content-before-system" style={styles.auxContentCard}>
             <ContentBlockRenderer blocks={contentBlocks} />
@@ -363,13 +352,14 @@ const TemarioPublico: React.FC = () => {
               </button>
             </div>
           ) : (
-            <div style={styles.temarioSectionsContainer}>
-              <nav className="temario-partial-nav" style={styles.partialNav} aria-label="Seleccionar parcial">
+            <div className="temario-unified-board">
+              <nav className="temario-partial-nav-integrated" aria-label="Seleccionar parcial">
                 {PARCIALES.map(({ key, label, num }) => {
                   const isActive = selectedParcial === key;
                   const isParcialOff = isParcialDisabled(key, maintenanceStatus?.disabledFeatures ?? []);
                   const temasParcial = temas.filter((tema) => tema.parcial === key);
-                  const visibleTemasCount = canBypass
+                  const hasBypassAccess = Boolean(canBypass || isAuthenticated);
+                  const visibleTemasCount = hasBypassAccess
                     ? temasParcial.length
                     : temasParcial.filter((t) => !isTemaDisabled(t.id, t.parcial, maintenanceStatus?.disabledFeatures ?? [])).length;
 
@@ -377,67 +367,66 @@ const TemarioPublico: React.FC = () => {
                     <button
                       key={key}
                       type="button"
-                      className={`temario-partial-tab ${isActive ? 'is-active' : ''}`}
-                      style={{
-                        ...styles.partialTab,
-                        ...(isActive ? styles.partialTabActive : {}),
-                        opacity: isParcialOff && !isActive ? 0.7 : 1,
-                      }}
+                      className={`temario-integrated-tab ${isActive ? 'is-active' : ''}`}
+                      style={{ opacity: isParcialOff && !isActive && !hasBypassAccess ? 0.7 : 1 }}
                       onClick={() => setSelectedParcial(key)}
                     >
-                      <span
-                        style={{
-                          ...styles.partialTabNumber,
-                          background: isActive ? 'rgba(255, 255, 255, 0.25)' : isParcialOff ? '#fee2e2' : '#e2e8f0',
-                          color: isActive ? '#ffffff' : isParcialOff ? '#b91c1c' : '#1e3a5f',
-                        }}
-                      >
+                      {isActive && <span className="integrated-tab-indicator" aria-hidden="true" />}
+                      <span className="integrated-tab-num">
                         {num}
                       </span>
-                      <span style={styles.partialTabCopy}>
-                        <strong style={{ color: isActive ? '#ffffff' : '#123b66', fontWeight: 800 }}>
+                      <span className="integrated-tab-copy">
+                        <strong className="integrated-tab-name">
                           {label}
                           {isParcialOff && (
-                            <span style={{ marginLeft: '6px', fontSize: '0.72rem', color: isActive ? '#fef08a' : '#ef4444' }}>
+                            <span className="temario-maint-tag">
                               (Mantenimiento)
                             </span>
                           )}
                         </strong>
-                        <small style={{ color: isActive ? 'rgba(255, 255, 255, 0.92)' : '#5c7897', fontWeight: 600 }}>
+                        <span className="integrated-tab-count">
                           {visibleTemasCount} {visibleTemasCount === 1 ? 'tema' : 'temas'}
-                        </small>
+                        </span>
                       </span>
                     </button>
                   );
                 })}
               </nav>
 
-              {PARCIALES.filter(({ key }) => key === selectedParcial).map(({ key, label, num }) => {
+              {PARCIALES.filter(({ key }) => key === selectedParcial).map(({ key, label }) => {
                 const isParcialOff = isParcialDisabled(key, maintenanceStatus?.disabledFeatures ?? []);
                 const temasParcial = temas.filter((tema) => tema.parcial === key);
-                const displayedTemas = canBypass
+                const hasBypassAccess = Boolean(canBypass || isAuthenticated);
+                const displayedTemas = hasBypassAccess
                   ? temasParcial
                   : temasParcial.filter((t) => !isTemaDisabled(t.id, t.parcial, maintenanceStatus?.disabledFeatures ?? []));
 
                 return (
-                  <div className="temario-main-section temario-section-enter" key={key} style={styles.temarioSection}>
-                    <div style={styles.parcialHeaderRow}>
-                      <span style={styles.parcialIconWrap}>{num}</span>
-                      <div style={styles.parcialHeadingCopy}>
-                        <span style={styles.parcialEyebrow}><GraduationCap size={14} /> Ruta de aprendizaje</span>
-                        <h3 className="temario-partial-title atlas-typo-section-title" style={styles.parcialTitle}>
-                          {label}
-                          {isParcialOff && (
-                            <span style={{ marginLeft: '8px', fontSize: '0.8rem', color: '#ef4444', fontWeight: 700 }}>
-                              · Desactivado temporalmente
-                            </span>
-                          )}
-                        </h3>
-                      </div>
-                      <span style={styles.parcialCount}>{displayedTemas.length} {displayedTemas.length === 1 ? 'tema' : 'temas'}</span>
-                    </div>
+                  <div className="temario-main-section temario-section-enter" key={key}>
+                    <h2
+                      style={{
+                        position: 'absolute',
+                        width: '1px',
+                        height: '1px',
+                        padding: 0,
+                        margin: '-1px',
+                        overflow: 'hidden',
+                        clip: 'rect(0, 0, 0, 0)',
+                        whiteSpace: 'nowrap',
+                        border: 0,
+                      }}
+                    >
+                      {label}
+                    </h2>
 
-                    {isParcialOff && !canBypass ? (
+                    {isParcialOff && hasBypassAccess && (
+                      <div style={{ padding: '10px 16px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.88rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <AlertTriangle size={18} color="#d97706" />
+                        <span>Este parcial está desactivado para el público, pero tienes acceso con tu sesión.</span>
+                      </div>
+                    )}
+
+                    {isParcialOff && !hasBypassAccess ? (
                       <div style={{ padding: '36px 20px', textAlign: 'center', background: '#fff5f5', borderRadius: '16px', border: '1px solid #fecaca', margin: '14px 0' }}>
                         <AlertTriangle size={36} color="#dc2626" style={{ margin: '0 auto 10px' }} />
                         <h4 style={{ margin: '0 0 6px', color: '#991b1b', fontSize: '1.1rem', fontWeight: 700 }}>
@@ -448,16 +437,19 @@ const TemarioPublico: React.FC = () => {
                         </p>
                       </div>
                     ) : displayedTemas.length > 0 ? (
-                      <div className="temario-grid-public" style={styles.temasGrid}>
-                        {displayedTemas.map((tema) => {
+                      <div className="temario-grid-public">
+                        {displayedTemas.map((tema, idx) => {
                           const isOff = isTemaDisabled(tema.id, tema.parcial, maintenanceStatus?.disabledFeatures ?? []);
+                          const isCardDisabled = isOff && !hasBypassAccess;
                           return (
                             <TemaCard
                               key={tema.id}
                               tema={tema}
-                              isDisabled={isOff}
+                              index={idx}
+                              isDisabled={isCardDisabled}
+                              isDeactivatedForPublic={isOff && hasBypassAccess}
                               onClick={() => {
-                                if (isOff && !canBypass) return;
+                                if (isCardDisabled) return;
                                 navigate(`/subtemas/${tema.id}`);
                               }}
                             />
@@ -518,25 +510,35 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    background: 'radial-gradient(circle at 8% 10%, rgba(186,230,253,.38), transparent 26%), linear-gradient(180deg, #f8fcff 0%, #eef6fc 55%, #f8fbfe 100%)',
+    background: 'transparent',
     color: '#0f172a',
     fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     boxSizing: 'border-box',
+    width: '100%',
+    padding: 'clamp(8px, 2vw, 24px)',
   },
   main: {
     width: '100%',
     maxWidth: '1600px',
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
     flexDirection: 'column',
     gap: 0,
-    padding: 'clamp(18px, 3vw, 34px) 14px 48px',
+    padding: 0,
+    margin: '0 auto',
+    background: '#ffffff',
+    borderLeft: '1px solid rgba(186, 225, 249, 0.92)',
+    borderRight: '1px solid rgba(186, 225, 249, 0.92)',
+    borderTop: 'none',
+    borderBottom: 'none',
+    boxShadow: '0 16px 42px rgba(8, 33, 75, 0.16)',
     boxSizing: 'border-box',
+    flex: 1,
   },
   auxContentCard: {
     width: '100%',
-    maxWidth: '1280px',
+    maxWidth: '100%',
     background: 'transparent',
     borderRadius: 0,
     border: 'none',
@@ -547,19 +549,14 @@ const styles: { [key: string]: React.CSSProperties } = {
   temarioCard: {
     position: 'relative',
     width: '100%',
-    maxWidth: '1280px',
-    background: 'transparent',
+    maxWidth: '100%',
+    background: '#ffffff',
     borderRadius: 0,
     padding: 0,
     boxShadow: 'none',
     border: 'none',
-    borderTop: 'none',
-    marginTop: 0,
-    marginLeft: 'auto',
-    marginRight: 'auto',
-    marginBottom: 0,
+    margin: 0,
     boxSizing: 'border-box',
-    overflow: 'hidden',
   },
   panelTexture: {
     position: 'absolute',

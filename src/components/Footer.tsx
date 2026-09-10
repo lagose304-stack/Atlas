@@ -266,6 +266,8 @@ const s: { [key: string]: React.CSSProperties } = {
     overflow: 'hidden',
     paddingTop: 0,
     width: '100%',
+    maxWidth: '1600px',
+    margin: '0 auto',
     alignSelf: 'stretch',
     position: 'relative',
     boxSizing: 'border-box' as const,
