@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Images,
   MousePointerClick,
+  Microscope,
 } from 'lucide-react';
 import Header from '../Header';
 import Footer from '../Footer';
@@ -407,25 +408,62 @@ const RealPageDraftViewer: React.FC<RealPageDraftViewerProps> = ({
             )}
 
             {selection.kind === 'tema' && (
-              <section style={{ marginTop: '30px' }}>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 850, color: '#0f172a', marginBottom: '16px' }}>
-                  Subtemas incluidos en {selection.label}
-                </h2>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
-                  {subtemas.map(st => (
-                    <div key={st.id} style={{
-                      padding: '20px',
-                      borderRadius: '16px',
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
-                    }}>
-                      <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '0 0 6px' }}>{st.nombre}</h3>
-                      {st.descripcion && <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>{st.descripcion}</p>}
+              <div className="subtemas-section-wrapper">
+                <div className="subtemas-centered-header">
+                  <h2 className="subtemas-section-title">Subtemas</h2>
+                  <div className="subtemas-title-accent-bar" />
+                </div>
+                <div className="subtemas-grid-page">
+                  {subtemas.map((st, idx) => (
+                    <div key={st.id} className="subtema-public-card" style={{ cursor: 'default' }}>
+                      <div className="subtema-accent-bar" />
+                      <div className="subtema-card-media">
+                        {st.logo_url ? (
+                          <div className="subtema-card-img-wrap">
+                            <img
+                              src={getCloudinaryImageUrl(st.logo_url, 'thumb')}
+                              alt={st.nombre}
+                              className="subtema-card-img"
+                              loading="lazy"
+                            />
+                            <div className="subtema-card-scrim" />
+                          </div>
+                        ) : (
+                          <div className="subtema-card-fallback-wrap">
+                            <div className="subtema-fallback-ambient" />
+                            <div className="subtema-fallback-icon-ring">
+                              <Microscope size={28} />
+                            </div>
+                            <span className="subtema-fallback-label">Histología Atlas</span>
+                          </div>
+                        )}
+
+                        <div className="subtema-media-badges">
+                          <span className="subtema-floating-pill">
+                            <span className="subtema-live-dot" />
+                            <span>Subtema</span>
+                          </span>
+                          <span className="subtema-index-badge">
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
+                        </div>
+
+                        <div className="subtema-hover-cue">
+                          <span>Explorar láminas</span>
+                          <Eye size={12} />
+                        </div>
+                      </div>
+
+                      <div className="subtema-public-copy">
+                        <h3 className="subtema-card-title">{st.nombre}</h3>
+                        {st.descripcion && (
+                          <p className="subtema-card-desc">{st.descripcion}</p>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
-              </section>
+              </div>
             )}
 
             {selection.kind === 'temario' && (

@@ -10,7 +10,7 @@ import { getRenderableBlocks } from '../services/contentPublication';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { logTemaView } from '../services/analytics';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
-import { ArrowLeft, ArrowRight, Layers3, Microscope, Shield } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, Microscope, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import MicroscopyTopicExperience from './MicroscopyTopicExperience';
 
@@ -68,7 +68,6 @@ const StandardSubtemas: React.FC = () => {
   const [tema, setTema] = useState<Tema | null>((initialTema as unknown as Tema) ?? null);
   const [subtemas, setSubtemas] = useState<Subtema[]>((initialSubtemas as unknown as Subtema[]) ?? []);
   const [loading, setLoading] = useState<boolean>(!hasCompleteInitialData);
-  const [hoveredSubtema, setHoveredSubtema] = useState<number | null>(null);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [temaLogoFailed, setTemaLogoFailed] = useState(false);
   const [temaLogoSrc, setTemaLogoSrc] = useState('');
@@ -304,64 +303,79 @@ const StandardSubtemas: React.FC = () => {
 
             {/* Grilla de subtemas */}
             {subtemas.length > 0 && (
-              <>
-                <h2 className="atlas-typo-section-title" style={styles.subtemasHeading}>Subtemas</h2>
+              <div className="subtemas-section-wrapper">
+                <div className="subtemas-centered-header">
+                  <h2 className="subtemas-section-title">Subtemas</h2>
+                  <div className="subtemas-title-accent-bar" />
+                </div>
                 <div className="subtemas-grid-page">
-                  {subtemas.map(subtema => (
+                  {subtemas.map((subtema, idx) => (
                     <button
                       type="button"
                       className="subtema-public-card"
                       key={subtema.id}
-                      style={{
-                        ...styles.subtemaCard,
-                        ...(hoveredSubtema === subtema.id ? styles.subtemaCardHover : {}),
-                        cursor: 'pointer',
-                        fontFamily: 'inherit',
-                      }}
-                      onMouseEnter={() => {
-                        setHoveredSubtema(subtema.id);
-                        prefetchSubtemaPlacas(subtema.id);
-                      }}
-                      onMouseLeave={() => setHoveredSubtema(null)}
+                      onMouseEnter={() => prefetchSubtemaPlacas(subtema.id)}
                       onTouchStart={() => prefetchSubtemaPlacas(subtema.id)}
                       onClick={() => navigate(`/ver-placas/${subtema.id}`)}
                     >
-                      <div style={styles.subtemaAccent} />
-                      {subtema.logo_url && !failedSubtemaLogos[subtema.id] ? (
-                        <div className="subtema-card-img-wrap" style={styles.subtemaLogoWrap}>
-                          <img
-                            src={subtemaFallbackUrls[subtema.id] || getCloudinaryImageUrl(subtema.logo_url, 'thumb')}
-                            alt={subtema.nombre}
-                            style={styles.subtemaLogo}
-                            loading="lazy"
-                            decoding="async"
-                            onError={() => {
-                              const fallbackUrl = subtema.logo_url;
-                              if (!subtemaFallbackUrls[subtema.id] && fallbackUrl) {
-                                setSubtemaFallbackUrls((prev) => ({ ...prev, [subtema.id]: fallbackUrl }));
-                              } else {
-                                setFailedSubtemaLogos((prev) => ({ ...prev, [subtema.id]: true }));
-                              }
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <div className="subtema-card-img-wrap" style={styles.subtemaIconFallback}>
-                          <Microscope size={30} aria-hidden="true" />
-                        </div>
-                      )}
-                      <div className="subtema-public-copy" style={styles.subtemaCopy}>
-                        <span style={styles.subtemaEyebrow}><Layers3 size={13} /> Subtema</span>
-                        <h3 className="subtema-card-label atlas-typo-card" style={styles.subtemaTitle}>{subtema.nombre}</h3>
-                        {subtema.descripcion && (
-                          <p className="atlas-typo-body" style={styles.subtemaDesc}>{subtema.descripcion}</p>
+                      <div className="subtema-accent-bar" />
+
+                      <div className="subtema-card-media">
+                        {subtema.logo_url && !failedSubtemaLogos[subtema.id] ? (
+                          <div className="subtema-card-img-wrap">
+                            <img
+                              src={subtemaFallbackUrls[subtema.id] || getCloudinaryImageUrl(subtema.logo_url, 'thumb')}
+                              alt={subtema.nombre}
+                              className="subtema-card-img"
+                              loading="lazy"
+                              decoding="async"
+                              onError={() => {
+                                const fallbackUrl = subtema.logo_url;
+                                if (!subtemaFallbackUrls[subtema.id] && fallbackUrl) {
+                                  setSubtemaFallbackUrls((prev) => ({ ...prev, [subtema.id]: fallbackUrl }));
+                                } else {
+                                  setFailedSubtemaLogos((prev) => ({ ...prev, [subtema.id]: true }));
+                                }
+                              }}
+                            />
+                            <div className="subtema-card-scrim" />
+                          </div>
+                        ) : (
+                          <div className="subtema-card-fallback-wrap">
+                            <div className="subtema-fallback-ambient" />
+                            <div className="subtema-fallback-icon-ring">
+                              <Microscope size={28} />
+                            </div>
+                            <span className="subtema-fallback-label">Histología Atlas</span>
+                          </div>
                         )}
-                        <span style={styles.subtemaAction}>Ver placas <ArrowRight size={15} /></span>
+
+                        <div className="subtema-media-badges">
+                          <span className="subtema-floating-pill">
+                            <span className="subtema-live-dot" />
+                            <span>Subtema</span>
+                          </span>
+                          <span className="subtema-index-badge">
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
+                        </div>
+
+                        <div className="subtema-hover-cue">
+                          <span>Explorar láminas</span>
+                          <Eye size={12} />
+                        </div>
+                      </div>
+
+                      <div className="subtema-public-copy">
+                        <h3 className="subtema-card-title">{subtema.nombre}</h3>
+                        {subtema.descripcion && (
+                          <p className="subtema-card-desc">{subtema.descripcion}</p>
+                        )}
                       </div>
                     </button>
                   ))}
                 </div>
-              </>
+              </div>
             )}
 
             {(navAnterior || navSiguiente) && (
