@@ -11,12 +11,13 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
   const [isHover, setIsHover] = React.useState(false);
   const [isPressed, setIsPressed] = React.useState(false);
   const [isFocused, setIsFocused] = React.useState(false);
-  const [showFloatingButton, setShowFloatingButton] = React.useState(false);
-  const [floatingTopOffset, setFloatingTopOffset] = React.useState(12);
-  const [floatingLeftOffset, setFloatingLeftOffset] = React.useState(12);
+  const [isScrolledPastHeader, setIsScrolledPastHeader] = React.useState(false);
+  const [floatingTopOffset, setFloatingTopOffset] = React.useState(62);
+  const [floatingLeftOffset, setFloatingLeftOffset] = React.useState(14);
   const [openImageViewerCount, setOpenImageViewerCount] = React.useState(0);
   const [isBodyScrollLocked, setIsBodyScrollLocked] = React.useState(false);
-  const inlineButtonRef = React.useRef<HTMLButtonElement>(null);
+  const anchorRef = React.useRef<HTMLSpanElement>(null);
+  const floatingButtonRef = React.useRef<HTMLButtonElement>(null);
   const isImageViewerOpen = openImageViewerCount > 0;
 
   React.useEffect(() => {
@@ -64,159 +65,152 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
   }, []);
 
   React.useEffect(() => {
-    const buttonEl = inlineButtonRef.current;
-    if (!buttonEl) return;
-
-    if (typeof IntersectionObserver !== 'undefined') {
-      const observer = new IntersectionObserver(
-        ([entry]) => {
-          const shouldFloat = !entry.isIntersecting && entry.boundingClientRect.top < 0;
-          setShowFloatingButton(shouldFloat);
-        },
-        { threshold: 0.05 }
-      );
-
-      observer.observe(buttonEl);
-      return () => observer.disconnect();
-    }
-
-    const updateFloatingVisibility = () => {
-      const rect = buttonEl.getBoundingClientRect();
-      setShowFloatingButton(rect.bottom < 0);
-    };
-
-    updateFloatingVisibility();
-    window.addEventListener('scroll', updateFloatingVisibility, { passive: true });
-    window.addEventListener('resize', updateFloatingVisibility);
-
-    return () => {
-      window.removeEventListener('scroll', updateFloatingVisibility);
-      window.removeEventListener('resize', updateFloatingVisibility);
-    };
-  }, []);
-
-  React.useEffect(() => {
     setIsHover(false);
     setIsPressed(false);
     setIsFocused(false);
-  }, [showFloatingButton, isImageViewerOpen]);
+  }, [isImageViewerOpen]);
 
   React.useEffect(() => {
+    let rafId: number | null = null;
+
     const updateFloatingOffsets = () => {
-      const defaultOffset = 12;
-      let nextTopOffset = defaultOffset;
+      const defaultOffset = 14;
+      let nextTopOffset = 62;
       let nextLeftOffset = defaultOffset;
 
-      const inlineButtonRect = inlineButtonRef.current?.getBoundingClientRect();
-      if (inlineButtonRect) {
-        nextLeftOffset = Math.max(defaultOffset, Math.round(inlineButtonRect.left));
+      const anchorEl = anchorRef.current;
+      if (anchorEl) {
+        const anchorRect = anchorEl.getBoundingClientRect();
+        if (anchorRect.left > 0) {
+          nextLeftOffset = Math.max(defaultOffset, Math.round(anchorRect.left));
+        } else if (anchorEl.parentElement) {
+          const parentRect = anchorEl.parentElement.getBoundingClientRect();
+          const parentPaddingLeft =
+            Number.parseFloat(window.getComputedStyle(anchorEl.parentElement).paddingLeft) || 0;
+          nextLeftOffset = Math.max(defaultOffset, Math.round(parentRect.left + parentPaddingLeft));
+        }
       }
 
       const compactBarEl = document.querySelector('.atlas-compact-bar');
-      if (compactBarEl instanceof HTMLElement) {
-        const computed = window.getComputedStyle(compactBarEl);
-        const compactBarVisible =
-          computed.visibility !== 'hidden' && Number.parseFloat(computed.opacity || '1') > 0.05;
+      const isCompactBarVisible =
+        compactBarEl instanceof HTMLElement &&
+        window.getComputedStyle(compactBarEl).visibility !== 'hidden' &&
+        Number.parseFloat(window.getComputedStyle(compactBarEl).opacity || '1') > 0.05;
 
-        if (compactBarVisible) {
-          const compactBarRect = compactBarEl.getBoundingClientRect();
-          if (compactBarRect.bottom > 0) {
-            nextTopOffset = Math.max(defaultOffset, Math.round(compactBarRect.bottom + 10));
-            nextLeftOffset = Math.max(nextLeftOffset, Math.round(compactBarRect.left + 12));
-          }
+      const headerEl =
+        document.querySelector('.atlas-header-wrapper') ||
+        document.querySelector('.atlas-header-hero') ||
+        document.querySelector('header');
+
+      const isHeaderPast =
+        isCompactBarVisible ||
+        (headerEl instanceof HTMLElement ? headerEl.getBoundingClientRect().bottom <= 40 : window.scrollY > 150);
+
+      setIsScrolledPastHeader((prev) => (prev === isHeaderPast ? prev : isHeaderPast));
+
+      if (isCompactBarVisible && compactBarEl) {
+        const compactBarRect = compactBarEl.getBoundingClientRect();
+        if (compactBarRect.bottom > 0) {
+          nextTopOffset = Math.round(compactBarRect.bottom + 10);
+          nextLeftOffset = Math.max(nextLeftOffset, Math.round(compactBarRect.left + 14));
         }
+      }
+
+      if (floatingButtonRef.current) {
+        floatingButtonRef.current.style.top = `calc(env(safe-area-inset-top, 0px) + ${nextTopOffset}px)`;
+        floatingButtonRef.current.style.left = `${nextLeftOffset}px`;
       }
 
       setFloatingTopOffset((prev) => (prev === nextTopOffset ? prev : nextTopOffset));
       setFloatingLeftOffset((prev) => (prev === nextLeftOffset ? prev : nextLeftOffset));
     };
 
+    const scheduleUpdate = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        updateFloatingOffsets();
+      });
+    };
+
     updateFloatingOffsets();
-    window.addEventListener('scroll', updateFloatingOffsets, { passive: true });
-    window.addEventListener('resize', updateFloatingOffsets);
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate);
 
     return () => {
-      window.removeEventListener('scroll', updateFloatingOffsets);
-      window.removeEventListener('resize', updateFloatingOffsets);
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener('scroll', scheduleUpdate);
+      window.removeEventListener('resize', scheduleUpdate);
     };
-  }, [showFloatingButton]);
+  }, []);
 
   const baseStyle: React.CSSProperties = {
-    alignSelf: 'flex-start',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '9px',
-    marginBottom: '12px',
-    padding: '8px 14px',
-    borderRadius: '11px',
-    border: '1px solid #fecaca',
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(254,242,242,0.94) 100%)',
-    color: '#1e293b',
-    fontSize: '0.84em',
-    fontWeight: 700,
-    letterSpacing: '0.02em',
+    justifyContent: 'center',
+    width: '40px',
+    height: '40px',
+    minWidth: '40px',
+    minHeight: '40px',
+    padding: 0,
+    margin: 0,
+    borderRadius: '999px',
+    border: '1.5px solid rgba(254, 202, 202, 0.45)',
+    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%)',
+    color: '#ffffff',
+    fontSize: '1.22em',
+    fontWeight: 800,
     lineHeight: 1,
     cursor: 'pointer',
     outline: 'none',
     appearance: 'none',
-    MozAppearance: 'none',
-    WebkitAppearance: 'none',
     WebkitTapHighlightColor: 'transparent',
-    backdropFilter: 'blur(6px)',
-    boxShadow: '0 2px 8px rgba(248, 113, 113, 0.16), inset 0 1px 0 rgba(255,255,255,0.86)',
-    transition: 'all 0.18s ease',
+    backdropFilter: 'blur(8px)',
+    boxShadow:
+      '0 6px 18px rgba(220, 38, 38, 0.38), 0 2px 6px rgba(185, 28, 28, 0.28), inset 0 1px 1px rgba(255, 255, 255, 0.45)',
+    transition:
+      'opacity 220ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease, background 180ms ease, border-color 180ms ease, filter 180ms ease',
     fontFamily: 'inherit',
+    position: 'fixed',
+    top: `calc(env(safe-area-inset-top, 0px) + ${floatingTopOffset}px)`,
+    left: `${floatingLeftOffset}px`,
+    zIndex: 1200,
   };
 
   const hoverStyle: React.CSSProperties = {
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.99) 0%, rgba(254,226,226,0.95) 100%)',
-    borderColor: '#fca5a5',
-    color: '#7f1d1d',
-    transform: 'translateY(-1px)',
-    boxShadow: '0 7px 15px rgba(248, 113, 113, 0.26), inset 0 1px 0 rgba(255,255,255,0.9)',
+    background: 'linear-gradient(135deg, #f87171 0%, #ef4444 50%, #dc2626 100%)',
+    borderColor: 'rgba(255, 255, 255, 0.75)',
+    color: '#ffffff',
+    transform: 'scale(1.1)',
+    boxShadow:
+      '0 10px 24px rgba(220, 38, 38, 0.5), 0 3px 8px rgba(185, 28, 28, 0.35), inset 0 1px 1.5px rgba(255, 255, 255, 0.65)',
   };
 
   const pressedStyle: React.CSSProperties = {
-    transform: 'translateY(0)',
-    boxShadow: '0 2px 6px rgba(248, 113, 113, 0.2), inset 0 1px 0 rgba(255,255,255,0.78)',
+    background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+    transform: 'scale(0.95)',
+    boxShadow: '0 2px 8px rgba(185, 28, 28, 0.4), inset 0 2px 4px rgba(0, 0, 0, 0.2)',
   };
 
   const focusStyle: React.CSSProperties = {
     outline: 'none',
-    boxShadow: '0 0 0 3px rgba(251, 113, 133, 0.34), 0 4px 12px rgba(248, 113, 113, 0.2), inset 0 1px 0 rgba(255,255,255,0.88)',
+    boxShadow:
+      '0 0 0 3px rgba(254, 202, 202, 0.65), 0 8px 22px rgba(220, 38, 38, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.45)',
   };
 
-  const iconStyle: React.CSSProperties = {
-    width: '20px',
-    height: '20px',
-    borderRadius: '999px',
-    background: isHover
-      ? 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)'
-      : 'linear-gradient(135deg, #f87171 0%, #dc2626 100%)',
-    color: '#ffffff',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '0.88em',
-    fontWeight: 800,
-    lineHeight: 1,
-    boxShadow: '0 2px 7px rgba(185, 28, 28, 0.42)',
-  };
-
-  const floatingStyle: React.CSSProperties = {
-    position: 'fixed',
-    top: `calc(env(safe-area-inset-top, 0px) + ${floatingTopOffset}px)`,
-    left: `${floatingLeftOffset}px`,
-    marginBottom: 0,
-    zIndex: 1200,
-    transition: 'opacity 200ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease',
-  };
-
-  const isFloatingVisible = showFloatingButton && !isImageViewerOpen && !isBodyScrollLocked;
+  const isFloatingVisible = isScrolledPastHeader && !isImageViewerOpen && !isBodyScrollLocked;
 
   const floatingVisibilityStyle: React.CSSProperties = {
     opacity: isFloatingVisible ? 1 : 0,
-    transform: isFloatingVisible ? 'translateY(0)' : 'translateY(-8px)',
+    transform: isFloatingVisible
+      ? isHover
+        ? 'scale(1.1)'
+        : isPressed
+          ? 'scale(0.95)'
+          : 'scale(1)'
+      : 'translateY(-10px) scale(0.9)',
     pointerEvents: isFloatingVisible ? 'auto' : 'none',
   };
 
@@ -239,39 +233,37 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
     ...(isHover ? hoverStyle : {}),
     ...(isPressed ? pressedStyle : {}),
     ...(isFocused ? focusStyle : {}),
-    border: isHover ? '1px solid #fca5a5' : '1px solid #fecaca',
+    border: isHover ? '1.5px solid rgba(255, 255, 255, 0.75)' : '1.5px solid rgba(254, 202, 202, 0.45)',
   };
 
   return (
     <>
-      <button
-        ref={inlineButtonRef}
-        type="button"
-        onClick={onClick}
+      <span
+        ref={anchorRef}
+        aria-hidden="true"
         style={{
-          ...baseStyle,
-          ...style,
-          ...interactiveStyle,
+          position: 'absolute',
+          width: 0,
+          height: 0,
+          margin: 0,
+          padding: 0,
+          border: 'none',
+          pointerEvents: 'none',
+          visibility: 'hidden',
         }}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-      >
-        <span style={iconStyle}>←</span>
-        <span>{label}</span>
-      </button>
+      />
 
       <button
+        ref={floatingButtonRef}
         type="button"
         onClick={onClick}
+        title={label || 'Regresar'}
+        aria-label={label || 'Regresar'}
         tabIndex={isFloatingVisible ? 0 : -1}
         aria-hidden={!isFloatingVisible}
         style={{
           ...baseStyle,
-          ...floatingStyle,
+          ...style,
           ...floatingVisibilityStyle,
           ...interactiveStyle,
         }}
@@ -282,8 +274,17 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
         onFocus={handleFocus}
         onBlur={handleBlur}
       >
-        <span style={iconStyle}>←</span>
-        <span>{label}</span>
+        <span
+          aria-hidden="true"
+          style={{
+            display: 'inline-block',
+            lineHeight: 1,
+            marginTop: '-1px',
+            textShadow: '0 1px 2px rgba(0, 0, 0, 0.35)',
+          }}
+        >
+          ←
+        </span>
       </button>
     </>
   );

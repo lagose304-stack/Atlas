@@ -16,6 +16,10 @@ export interface HistologyTextCardsProps {
   text?: string;
   cards?: HistologyCardItem[];
   cardsAlign?: 'center' | 'left' | string;
+  titleColor?: string;
+  lineColor?: string;
+  badgeColor?: string;
+  cardTitleColor?: string;
 }
 
 export const HistologyTextCardsBlock: React.FC<HistologyTextCardsProps> = ({
@@ -24,6 +28,10 @@ export const HistologyTextCardsBlock: React.FC<HistologyTextCardsProps> = ({
   text,
   cards = [],
   cardsAlign = 'center',
+  titleColor,
+  lineColor,
+  badgeColor,
+  cardTitleColor,
 }) => {
   const validCards = cards.filter(
     c => (c.title && c.title.trim() !== '') || (c.desc && c.desc.trim() !== '')
@@ -32,6 +40,11 @@ export const HistologyTextCardsBlock: React.FC<HistologyTextCardsProps> = ({
   const hasText = safeText !== '';
   const hasBadge = Boolean(badgeText && badgeText.trim() !== '');
   const hasTitle = Boolean(title && title.trim() !== '');
+
+  const effectiveTitleColor = titleColor?.trim() || '#0c4a6e';
+  const effectiveLineColor = lineColor?.trim() || 'linear-gradient(90deg, #0284c7 0%, #38bdf8 50%, #7dd3fc 100%)';
+  const effectiveBadgeColor = badgeColor?.trim() || '#0369a1';
+  const effectiveCardTitleColor = cardTitleColor?.trim() || '#0284c7';
 
   if (!hasText && validCards.length === 0 && !hasTitle && !hasBadge) {
     return null;
@@ -53,12 +66,12 @@ export const HistologyTextCardsBlock: React.FC<HistologyTextCardsProps> = ({
         overflow: 'hidden',
       }}
     >
-      {/* ─── Barra Superior de Acento Azul / Zafiro ─── */}
+      {/* ─── Barra Superior de Acento Personalizable ─── */}
       <div
         style={{
           height: '4px',
           width: '100%',
-          background: 'linear-gradient(90deg, #0284c7 0%, #38bdf8 50%, #7dd3fc 100%)',
+          background: effectiveLineColor,
           flexShrink: 0,
         }}
       />
@@ -103,7 +116,7 @@ export const HistologyTextCardsBlock: React.FC<HistologyTextCardsProps> = ({
                     fontWeight: 850,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
-                    color: '#0369a1',
+                    color: effectiveBadgeColor,
                     background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
                     padding: '4px 12px',
                     borderRadius: '999px',
@@ -111,8 +124,8 @@ export const HistologyTextCardsBlock: React.FC<HistologyTextCardsProps> = ({
                     boxShadow: '0 2px 8px rgba(2, 132, 199, 0.12)',
                   }}
                 >
-                  <Sparkles size={12} color="#0284c7" />
-                  <span>{badgeText}</span>
+                  <Sparkles size={12} color={effectiveBadgeColor} />
+                  <span>{renderBoldText(badgeText)}</span>
                 </span>
               </div>
             )}
@@ -123,12 +136,12 @@ export const HistologyTextCardsBlock: React.FC<HistologyTextCardsProps> = ({
                   margin: 0,
                   fontSize: 'clamp(1.25rem, 2.2vw, 1.55rem)',
                   fontWeight: 850,
-                  color: '#0c4a6e',
+                  color: effectiveTitleColor,
                   letterSpacing: '-0.025em',
                   lineHeight: 1.22,
                 }}
               >
-                {title}
+                {renderBoldText(title)}
               </h3>
             )}
           </div>
@@ -198,7 +211,7 @@ export const HistologyTextCardsBlock: React.FC<HistologyTextCardsProps> = ({
                     boxSizing: 'border-box',
                   }}
                 >
-                {/* Barra lateral azul redondeada con extremos libres */}
+                {/* Barra lateral personalizable con extremos libres */}
                 <div
                   style={{
                     position: 'absolute',
@@ -207,8 +220,8 @@ export const HistologyTextCardsBlock: React.FC<HistologyTextCardsProps> = ({
                     bottom: '10px',
                     width: '4px',
                     borderRadius: '0 999px 999px 0',
-                    background: 'linear-gradient(180deg, #38bdf8 0%, #0284c7 55%, #0369a1 100%)',
-                    boxShadow: '0 2px 6px rgba(2, 132, 199, 0.35)',
+                    background: effectiveCardTitleColor,
+                    boxShadow: `0 2px 6px ${effectiveCardTitleColor}40`,
                   }}
                 />
 
@@ -222,7 +235,7 @@ export const HistologyTextCardsBlock: React.FC<HistologyTextCardsProps> = ({
                       fontSize: '0.64rem',
                       fontWeight: 850,
                       letterSpacing: '0.04em',
-                      color: '#0284c7',
+                      color: effectiveCardTitleColor,
                       background: 'rgba(224, 242, 254, 0.85)',
                       border: '1px solid #bae6fd',
                       padding: '1px 6px',
@@ -248,7 +261,7 @@ export const HistologyTextCardsBlock: React.FC<HistologyTextCardsProps> = ({
                       style={{
                         fontSize: 'clamp(1.18rem, 1.7vw, 1.38rem)',
                         fontWeight: 850,
-                        color: '#075985',
+                        color: effectiveCardTitleColor,
                         letterSpacing: '-0.02em',
                         lineHeight: 1.18,
                       }}

@@ -284,8 +284,8 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
     meta: { label: 'Generalidades del Tejido', icon: 'GEN', description: 'Introducción, micrografía e idea clave en 3 columnas.', color: '#4f46e5' },
     schemaVersion: 2,
     defaultContent: {
-      title: '1. Generalidades del Tejido',
-      badge_text: 'Generalidades',
+      title: '',
+      badge_text: '',
       intro_text: '',
       image_url: '',
       image_badge: '',
@@ -303,7 +303,7 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
       show_locations_card: 'true',
 
       function_badge: '',
-      function_title: '2. Función Principal',
+      function_title: '',
       main_function_name: '',
       main_function_desc: '',
       main_function_icon: 'exchange',
@@ -312,11 +312,11 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
       assoc_count: '0',
 
       criteria_badge: '',
-      criteria_title: '3. Criterios Morfológicos',
+      criteria_title: '',
       crit_count: '0',
 
       locations_badge: '',
-      locations_title: '4. Ubicaciones Anatómicas',
+      locations_title: '',
       loc_count: '0',
     },
   },
@@ -324,8 +324,8 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
     meta: { label: 'Tinciones Histológicas', icon: 'TINC', description: 'Mini-tarjetas con colorimetría y fotos de muestras.', color: '#9333ea' },
     schemaVersion: 2,
     defaultContent: {
-      title: '5. Tinciones Histológicas',
-      badge_text: 'Tinciones',
+      title: '',
+      badge_text: '',
       intro_text: '',
       items_count: '0',
       color_tip: '',
@@ -347,6 +347,7 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
       title: '',
       badge_text: '',
       text: '',
+      header_bg_color: '#f0f7ff',
       cols_count: '0',
       rows_count: '0',
     },
@@ -363,6 +364,25 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
       cards_align: 'center',
     },
   },
+  histology_bullet_cards: {
+    meta: { label: 'Tarjetas con Viñetas', icon: 'TVIN', description: 'Título, texto explicativo y tarjetas comparativas con viñetas.', color: '#005953' },
+    schemaVersion: 1,
+    defaultContent: {
+      title: '',
+      text: '',
+      columns: '2',
+      cards_count: '0',
+    },
+  },
+  histology_horizontal_cards: {
+    meta: { label: 'Tarjetas Horizontales', icon: 'THOR', description: 'Título, texto explicativo y tarjetas horizontales con subtítulo, etiqueta de color y descripción.', color: '#005953' },
+    schemaVersion: 1,
+    defaultContent: {
+      title: '',
+      text: '',
+      cards_count: '0',
+    },
+  },
   histology_extra_data: {
     meta: { label: 'Dato Extra / Correlación Médica', icon: 'DATO', description: 'Caja destacada para aplicaciones biomédicas, correlaciones clínicas o datos extra.', color: '#0284c7' },
     schemaVersion: 1,
@@ -371,6 +391,21 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
       text: '',
       image_url: '',
       image_caption: '',
+    },
+  },
+  topic_divisions: {
+    meta: { label: 'Divisiones de Tema (Pestañas)', icon: 'DIV', description: 'Sub-páginas con navegación por pestañas estilo Temario.', color: '#0284c7' },
+    schemaVersion: 1,
+    defaultContent: {
+      divisions_count: '0',
+      division_1_title: '',
+      division_1_subtitle: '',
+      division_2_title: '',
+      division_2_subtitle: '',
+      division_3_title: '',
+      division_3_subtitle: '',
+      accent_color: '#0284c7',
+      nav_style: 'temario',
     },
   },
 };

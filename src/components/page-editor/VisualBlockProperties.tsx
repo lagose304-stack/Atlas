@@ -643,6 +643,7 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
           <TextAreaField label="Etiqueta superior / Badge (Opcional)" editorId={`${block.id}:badge_text`} value={content.badge_text ?? ''} onChange={badge_text => onChange({ badge_text })} />
           <TextAreaField label="Subtítulo / Título de la sección" editorId={`${block.id}:title`} value={content.title ?? ''} onChange={title => onChange({ title })} />
           <TextAreaField label="Párrafos de texto" editorId={`${block.id}:text`} value={content.text ?? ''} onChange={text => onChange({ text })} />
+          <ColorField label="Color de fondo de encabezados" value={content.header_bg_color || ''} fallback="#f0f7ff" onChange={val => onChange({ header_bg_color: val })} />
           <strong className="visual-properties-group-title">Tabla Clínica ({colsCount} columnas × {rowsCount} filas)</strong>
           <p className="visual-properties-hint">Para una edición completa con formato de celdas y píldoras, utiliza la vista directa en el lienzo.</p>
           {colIndices.map(ci => (
@@ -738,6 +739,61 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
               />
             </label>
           )}
+        </>
+      );
+    }
+    if (block.block_type === 'topic_divisions') {
+      const rawCount = Number(content.divisions_count);
+      const divisionsCount = Number.isFinite(rawCount) && rawCount > 0 ? rawCount : 3;
+      const indices = Array.from({ length: divisionsCount }, (_, i) => i + 1);
+
+      return (
+        <>
+          <label className="visual-properties-field">
+            <span>Cantidad de Divisiones ({divisionsCount})</span>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {[2, 3, 4, 5].map(num => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => onChange({ divisions_count: String(num) })}
+                  style={{
+                    flex: 1,
+                    padding: '6px',
+                    borderRadius: '6px',
+                    border: divisionsCount === num ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                    background: divisionsCount === num ? '#eff6ff' : '#ffffff',
+                    fontWeight: 700,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {num}
+                </button>
+              ))}
+            </div>
+          </label>
+          <ColorField
+            label="Color de acento de pestañas"
+            value={content.accent_color || ''}
+            fallback="#0284c7"
+            onChange={val => onChange({ accent_color: val })}
+          />
+          {indices.map(i => (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#f8fafc' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0369a1' }}>División #{i}</span>
+              <input
+                value={content[`division_${i}_title`] || ''}
+                onChange={e => onChange({ [`division_${i}_title`]: e.target.value })}
+                placeholder={`Título ${i}...`}
+              />
+              <input
+                value={content[`division_${i}_subtitle`] || ''}
+                onChange={e => onChange({ [`division_${i}_subtitle`]: e.target.value })}
+                placeholder={`Subtítulo ${i}...`}
+              />
+            </div>
+          ))}
         </>
       );
     }

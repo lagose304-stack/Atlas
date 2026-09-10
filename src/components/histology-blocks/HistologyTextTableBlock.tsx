@@ -16,6 +16,11 @@ export interface HistologyTextTableProps {
   text?: string;
   headers?: string[];
   rows?: Array<Array<HistologyTableCellData>>;
+  titleColor?: string;
+  lineColor?: string;
+  badgeColor?: string;
+  headerColor?: string;
+  headerBgColor?: string;
 }
 
 export function renderTableCellContent(cellData: HistologyTableCellData, isFirstCol = false): React.ReactNode {
@@ -186,6 +191,11 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
   text,
   headers = [],
   rows = [],
+  titleColor,
+  lineColor,
+  badgeColor,
+  headerColor,
+  headerBgColor,
 }) => {
   const safeText = text?.trim() || '';
   const hasText = safeText !== '';
@@ -196,6 +206,12 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
     const val = typeof c === 'object' && c !== null ? c.text : c;
     return val && val.trim() !== '';
   }));
+
+  const effectiveTitleColor = titleColor?.trim() || '#0c4a6e';
+  const effectiveLineColor = lineColor?.trim() || 'linear-gradient(90deg, #0284c7 0%, #38bdf8 50%, #7dd3fc 100%)';
+  const effectiveBadgeColor = badgeColor?.trim() || '#0369a1';
+  const effectiveHeaderColor = headerColor?.trim() || '#0369a1';
+  const effectiveHeaderBgColor = headerBgColor?.trim() || 'linear-gradient(180deg, #f0f7ff 0%, #e8f4fc 100%)';
 
   if (!hasText && !hasHeaders && !hasRows && !hasTitle && !hasBadge) {
     return null;
@@ -217,12 +233,12 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
         overflow: 'hidden',
       }}
     >
-      {/* ─── Barra Superior de Acento Azul / Zafiro ─── */}
+      {/* ─── Barra Superior de Acento Personalizable ─── */}
       <div
         style={{
           height: '4px',
           width: '100%',
-          background: 'linear-gradient(90deg, #0284c7 0%, #38bdf8 50%, #7dd3fc 100%)',
+          background: effectiveLineColor,
           flexShrink: 0,
         }}
       />
@@ -267,7 +283,7 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
                     fontWeight: 850,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
-                    color: '#0369a1',
+                    color: effectiveBadgeColor,
                     background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
                     padding: '4px 12px',
                     borderRadius: '999px',
@@ -275,8 +291,8 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
                     boxShadow: '0 2px 8px rgba(2, 132, 199, 0.12)',
                   }}
                 >
-                  <Sparkles size={12} color="#0284c7" />
-                  <span>{badgeText}</span>
+                  <Sparkles size={12} color={effectiveBadgeColor} />
+                  <span>{renderBoldText(badgeText)}</span>
                 </span>
               </div>
             )}
@@ -287,12 +303,12 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
                   margin: 0,
                   fontSize: 'clamp(1.25rem, 2.2vw, 1.55rem)',
                   fontWeight: 850,
-                  color: '#0c4a6e',
+                  color: effectiveTitleColor,
                   letterSpacing: '-0.025em',
                   lineHeight: 1.22,
                 }}
               >
-                {title}
+                {renderBoldText(title)}
               </h3>
             )}
           </div>
@@ -349,7 +365,7 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
                 <thead>
                   <tr
                     style={{
-                      background: 'linear-gradient(180deg, #f0f7ff 0%, #e8f4fc 100%)',
+                      background: effectiveHeaderBgColor,
                       borderBottom: '2px solid #bae6fd',
                     }}
                   >
@@ -358,7 +374,7 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
                         key={hIdx}
                         style={{
                           padding: '13px 18px',
-                          color: '#0369a1',
+                          color: effectiveHeaderColor,
                           fontWeight: 800,
                           fontSize: '0.88rem',
                           letterSpacing: '0.01em',

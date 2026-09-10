@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Search, X, Layers, ChevronDown, ChevronUp, Pencil, Check, Eye, Copy, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, X, Layers, ChevronDown, ChevronUp, Pencil, Check, Eye, Copy, Trash2, ArrowUp, ArrowDown, Scissors, ClipboardPaste } from 'lucide-react';
 import { Extension, type Editor } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -28,6 +28,9 @@ import {
   HistologyTextTableInlineEditor,
   HistologyTextSimpleCardsInlineEditor,
   HistologyExtraDataInlineEditor,
+  HistologyBulletCardsInlineEditor,
+  HistologyHorizontalCardsInlineEditor,
+  TopicDivisionsInlineEditor,
 } from './page-editor/HistologyBlockEditors';
 import type { BlockType, ContentBlock } from '../types/contentBlocks';
 import examenIllustration from '../assets/imagenes/examen.png';
@@ -239,17 +242,20 @@ const BLOCK_TOOLBAR_GROUPS: Array<{ title: string; types: BlockType[] }> = [
   },
   {
     title: 'Estructura',
-    types: ['section', 'columns_2', 'divider'],
+    types: ['section', 'columns_2', 'topic_divisions', 'divider'],
   },
   {
     title: 'Fundamentos Histológicos',
     types: [
+      'topic_divisions',
       'histology_generalities',
       'histology_pillars',
       'histology_stains',
       'histology_text_cards',
       'histology_text_table',
       'histology_text_simple_cards',
+      'histology_bullet_cards',
+      'histology_horizontal_cards',
       'histology_extra_data',
     ],
   },
@@ -288,7 +294,10 @@ const BLOCK_TYPE_VISUAL_ICON: Record<BlockType, string> = {
   histology_text_cards: 'TCAR',
   histology_text_table: 'TTBL',
   histology_text_simple_cards: 'TSMP',
+  histology_bullet_cards: 'TVIN',
+  histology_horizontal_cards: 'THOR',
   histology_extra_data: 'DATO',
+  topic_divisions: 'DIV',
 };
 
 // ── Componente principal ─────────────────────────────────────────────────────
@@ -319,6 +328,8 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
   const [compactToolbar, setCompactToolbar] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [, setHistoryRevision] = useState(0);
+  const [cutBlockIds, setCutBlockIds] = useState<string[]>([]);
+  const cutBlockId = cutBlockIds[0] || null;
 
   // Modal selector de imagen
   const [imageModal, setImageModal] = useState<{
@@ -800,6 +811,27 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     setHasChanges(true);
   }, [blocks.length, entityId, entityType]);
 
+  const addBlockToDivision = useCallback((parentId: string, divisionIndex: number, type: BlockType) => {
+    if (type === 'columns_2' || type === 'section' || type === 'section_end' || type === 'topic_divisions') return;
+    const newBlock: EditorBlock = {
+      id: crypto.randomUUID(),
+      entity_type: entityType,
+      entity_id: entityId,
+      block_type: type,
+      sort_order: blocks.length,
+      content: {
+        ...createDefaultBlockContent(type),
+        layout_parent_id: parentId,
+        layout_tab: String(divisionIndex),
+        layout_column: String(divisionIndex),
+      },
+      _isNew: true,
+    };
+    setBlocks(prev => [...prev, newBlock].map((block, index) => ({ ...block, sort_order: index })));
+    setCollapsedBlockIds(prev => { const next = new Set(prev); next.delete(newBlock.id); return next; });
+    setHasChanges(true);
+  }, [blocks.length, entityId, entityType]);
+
   const insertSectionEnd = useCallback((insertAfterId: string) => {
     setBlocks(prev => {
       const index = prev.findIndex(block => block.id === insertAfterId);
@@ -866,6 +898,13 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
             const maxColumn = Math.max(2, Math.min(4, Number(updates.columns)));
             return { ...b, content: { ...b.content, layout_column: String(Math.min(maxColumn, Number(b.content.layout_column || 1))) } };
           }
+          if (b.content.layout_parent_id === blockId && updates.divisions_count) {
+            const maxDiv = Math.max(1, Number(updates.divisions_count));
+            const currentTab = Number(b.content.layout_tab || b.content.layout_column || 1);
+            if (currentTab > maxDiv) {
+              return { ...b, content: { ...b.content, layout_tab: String(maxDiv), layout_column: String(maxDiv) } };
+            }
+          }
           if (b.id !== blockId) return b;
 
           Object.entries(updates).forEach(([key, nextValue]) => {
@@ -888,10 +927,92 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     []
   );
 
+  const moveBlockToDivision = useCallback((blockId: string, divisionIndex: number) => {
+    updateBlockContent(blockId, {
+      layout_tab: String(divisionIndex),
+      layout_column: String(divisionIndex),
+    });
+  }, [updateBlockContent]);
+
+  const removeBlockFromContainer = useCallback((blockId: string) => {
+    updateBlockContent(blockId, {
+      layout_parent_id: '',
+      layout_tab: '',
+      layout_column: '',
+    });
+  }, [updateBlockContent]);
+
+  const toggleCutBlock = useCallback((blockId: string) => {
+    setCutBlockIds(prev => (prev.includes(blockId) ? prev.filter(id => id !== blockId) : [...prev, blockId]));
+  }, []);
+
+  const cutSelectedBlocks = useCallback(() => {
+    const validIds = blocks
+      .filter(b => selectedBlockIds.has(b.id) && b.block_type !== 'topic_divisions' && b.block_type !== 'section' && b.block_type !== 'section_end')
+      .map(b => b.id);
+    if (validIds.length === 0) return;
+    setCutBlockIds(validIds);
+    setSelectedBlockIds(new Set());
+  }, [blocks, selectedBlockIds]);
+
+  const pasteBlocksIntoDivision = useCallback((containerId: string, divisionIndex: number) => {
+    if (cutBlockIds.length === 0) return;
+    const cutSet = new Set(cutBlockIds);
+    setBlocks(prev =>
+      prev.map(b => {
+        if (cutSet.has(b.id)) {
+          return {
+            ...b,
+            content: {
+              ...b.content,
+              layout_parent_id: containerId,
+              layout_tab: String(divisionIndex),
+              layout_column: String(divisionIndex),
+            },
+          };
+        }
+        return b;
+      })
+    );
+    setCutBlockIds([]);
+    setHasChanges(true);
+  }, [cutBlockIds]);
+
+  const pasteCutBlocksToIndex = useCallback((targetIndex: number) => {
+    if (cutBlockIds.length === 0) return;
+    const cutSet = new Set(cutBlockIds);
+    setBlocks(prev => {
+      const cutBlocksInOrder = prev.filter(b => cutSet.has(b.id)).map(b => ({
+        ...b,
+        content: {
+          ...b.content,
+          layout_parent_id: '',
+          layout_tab: '',
+          layout_column: '',
+        },
+      }));
+      const remaining = prev.filter(b => !cutSet.has(b.id));
+      let insertAt = 0;
+      if (targetIndex >= prev.length) {
+        insertAt = remaining.length;
+      } else {
+        const targetBlock = prev[targetIndex];
+        const foundInRemaining = remaining.findIndex(b => b.id === targetBlock?.id);
+        insertAt = foundInRemaining >= 0 ? foundInRemaining : remaining.length;
+      }
+      const next = [...remaining];
+      next.splice(insertAt, 0, ...cutBlocksInOrder);
+      return next.map((b, i) => ({ ...b, sort_order: i }));
+    });
+    setCutBlockIds([]);
+    setHasChanges(true);
+  }, [cutBlockIds]);
+
   const deleteBlock = useCallback((blockId: string) => {
+    if (cutBlockIds.includes(blockId)) setCutBlockIds(prev => prev.filter(id => id !== blockId));
     setBlocks(prev => {
       const toDelete = prev.find(b => b.id === blockId);
-      const deletingContainer = toDelete?.block_type === 'columns_2';
+      const deletingContainer = toDelete?.block_type === 'columns_2' || toDelete?.block_type === 'topic_divisions';
       let pairedSectionEndId = '';
       if (toDelete?.block_type === 'section') {
         const start = prev.findIndex(block => block.id === blockId);
@@ -1027,7 +1148,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
         content: { ...original.content },
         _isNew: true,
       };
-      const childClones = original.block_type === 'columns_2'
+      const childClones = (original.block_type === 'columns_2' || original.block_type === 'topic_divisions')
         ? prev.filter(block => block.content.layout_parent_id === original.id).map(child => ({ ...child, id: crypto.randomUUID(), content: { ...child.content, layout_parent_id: cloneId }, _isNew: true }))
         : [];
       const next = [...prev];
@@ -1607,9 +1728,37 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       </aside>
 
         <div style={es.builderMain} className="block-editor-main">
-          {experienceMode === 'advanced' && blocks.length > 0 && (
+          {/* Barra de selección múltiple */}
+          {(selectedBlockIds.size > 0 || (experienceMode === 'advanced' && blocks.length > 0)) && (
             <div style={es.selectionBar}>
-              <span style={es.selectionBarText}>Seleccionados: {selectedBlockIds.size}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span style={es.selectionBarText}>Seleccionados: {selectedBlockIds.size}</span>
+                {selectedBlockIds.size > 0 && (
+                  <button
+                    type="button"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 14px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      color: '#ffffff',
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      border: 'none',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(245, 158, 11, 0.35)',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onClick={cutSelectedBlocks}
+                    title="Cortar todos los componentes seleccionados para pegarlos juntos en una división"
+                  >
+                    <Scissors size={14} />
+                    <span>Cortar todos los seleccionados ({selectedBlockIds.size})</span>
+                  </button>
+                )}
+              </div>
               <div style={es.selectionBarActions} className="block-editor-selection-actions">
                 <button type="button" style={es.selectionBtn} onClick={selectAllBlocks}>Seleccionar todos</button>
                 <button type="button" style={es.selectionBtn} onClick={clearBlockSelection}>Limpiar selección</button>
@@ -1641,14 +1790,158 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
               </div>
             )}
 
+            {cutBlockIds.length > 0 && (() => {
+              const cutBlocks = blocks.filter(b => cutBlockIds.includes(b.id));
+              if (cutBlocks.length === 0) return null;
+
+              return (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 16px',
+                    background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+                    border: '1.5px solid #f59e0b',
+                    borderRadius: '12px',
+                    marginBottom: '14px',
+                    boxShadow: '0 6px 18px rgba(245, 158, 11, 0.15)',
+                    position: 'sticky',
+                    top: '10px',
+                    zIndex: 40,
+                    gap: '12px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '1.1rem' }}>✂️</span>
+                    <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#92400e' }}>
+                      {cutBlocks.length === 1 ? '1 componente cortado:' : `${cutBlocks.length} componentes cortados:`}
+                    </span>
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center', maxWidth: '440px' }}>
+                      {cutBlocks.map(cb => {
+                        const cbMeta = getBlockMeta(cb.block_type);
+                        return (
+                          <span
+                            key={cb.id}
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              background: cbMeta.color || '#b45309',
+                              color: '#ffffff',
+                              fontSize: '0.73rem',
+                              fontWeight: 800,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                            title={cb.content.title || cb.content.text || cbMeta.label}
+                          >
+                            <span>{cbMeta.icon}</span>
+                            <span>{cbMeta.label}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <span style={{ fontSize: '0.76rem', color: '#92400e' }}>
+                      — Haz clic en <strong>"Pegar aquí"</strong> dentro de una división o usa las opciones:
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    {blocks.filter(b => b.block_type === 'topic_divisions').length > 0 && (
+                      <select
+                        defaultValue=""
+                        onChange={e => {
+                          const [containerId, divIndex] = e.target.value.split(':');
+                          if (containerId && divIndex) {
+                            pasteBlocksIntoDivision(containerId, Number(divIndex));
+                          }
+                          e.currentTarget.value = '';
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          border: '1.5px solid #d97706',
+                          background: '#ffffff',
+                          color: '#92400e',
+                          fontSize: '0.80rem',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="">📋 Pegar {cutBlocks.length > 1 ? `todos (${cutBlocks.length})` : 'el componente'} en división...</option>
+                        {blocks.filter(b => b.block_type === 'topic_divisions').flatMap(container =>
+                          Array.from({ length: Math.max(1, Number(container.content.divisions_count || 1)) }, (_, dIdx) => ({
+                            value: `${container.id}:${dIdx + 1}`,
+                            label: `Pegar ${cutBlocks.length > 1 ? `los ${cutBlocks.length}` : ''} en: ${dIdx + 1}. ${container.content[`division_${dIdx + 1}_title`] || `División ${dIdx + 1}`}`,
+                          }))
+                        ).map(opt => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {cutBlocks.some(b => b.content.layout_parent_id) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cutSet = new Set(cutBlockIds);
+                          setBlocks(prev =>
+                            prev.map(b => (cutSet.has(b.id) ? { ...b, content: { ...b.content, layout_parent_id: '', layout_tab: '', layout_column: '' } } : b))
+                          );
+                          setCutBlockIds([]);
+                          setHasChanges(true);
+                        }}
+                        style={{
+                          padding: '6px 11px',
+                          borderRadius: '8px',
+                          border: '1px solid #d97706',
+                          background: '#ffffff',
+                          color: '#92400e',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Pegar en página principal ⏏
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setCutBlockIds([])}
+                      style={{
+                        padding: '6px 11px',
+                        borderRadius: '8px',
+                        border: '1px solid #cbd5e1',
+                        background: '#f8fafc',
+                        color: '#64748b',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancelar corte
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
             {blocks.map((block, idx) => {
               if (activeEditingBlock && block.id !== activeEditingBlock.id) return null;
               const meta = getBlockMeta(block.block_type);
+              const cutBlock = cutBlockId ? blocks.find(b => b.id === cutBlockId) : null;
               const isDragging = dragIdx === idx;
               const isDropBefore = dropIdx === idx;
               const isDropAfterLast = idx === blocks.length - 1 && dropIdx === blocks.length;
               const isCollapsed = collapsedBlockIds.has(block.id);
+              const isBlockCut = cutBlockIds.includes(block.id);
               const columnParent = block.content.layout_parent_id ? blocks.find(candidate => candidate.id === block.content.layout_parent_id && candidate.block_type === 'columns_2') : undefined;
+              const divisionsParent = block.content.layout_parent_id ? blocks.find(candidate => candidate.id === block.content.layout_parent_id && candidate.block_type === 'topic_divisions') : undefined;
               const parentColumnCount = columnParent ? Math.max(2, Math.min(4, Number(columnParent.content.columns || 2))) : 0;
               const currentSectionPos = getSectionPosForIndex(idx);
               const owningSection = block.block_type !== 'section' && block.block_type !== 'section_end' ? getOwningSectionForIndex(idx) : null;
@@ -1663,15 +1956,41 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
               return (
                 <React.Fragment key={block.id}>
                   {isDropBefore && <div style={es.dropIndicator} />}
+                  {cutBlockIds.length > 0 && !isBlockCut && (
+                    <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+                      <button
+                        type="button"
+                        onClick={() => pasteCutBlocksToIndex(idx)}
+                        style={{
+                          padding: '3px 12px',
+                          borderRadius: '20px',
+                          border: '1.5px dashed #f59e0b',
+                          background: '#fffbeb',
+                          color: '#b45309',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                        title={`Pegar ${cutBlockIds.length} componente${cutBlockIds.length > 1 ? 's' : ''} en esta posición`}
+                      >
+                        <ClipboardPaste size={12} /> Pegar aquí arriba {cutBlockIds.length > 1 ? `(${cutBlockIds.length})` : ''}
+                      </button>
+                    </div>
+                  )}
                   <div
                     id={`page-editor-block-${block.id}`}
                     style={{
                       ...es.blockCard,
                       borderLeft: `4px solid ${meta.color}`,
+                      border: isBlockCut ? '2px dashed #f59e0b' : undefined,
                       opacity: isDragging ? 0.3 : 1,
                       transform: isDragging ? 'scale(0.98)' : 'scale(1)',
-                      marginLeft: columnParent ? 'clamp(18px, 4vw, 52px)' : owningSection ? 'clamp(10px, 2vw, 24px)' : undefined,
-                      background: columnParent ? '#f8fbff' : owningSection ? '#fbfdff' : block.block_type === 'section_end' ? '#f8fafc' : undefined,
+                      marginLeft: (columnParent || divisionsParent) ? 'clamp(18px, 4vw, 52px)' : owningSection ? 'clamp(10px, 2vw, 24px)' : undefined,
+                      background: isBlockCut ? '#fffdf7' : (columnParent || divisionsParent) ? '#f8fbff' : owningSection ? '#fbfdff' : block.block_type === 'section_end' ? '#f8fafc' : undefined,
+                      boxShadow: isBlockCut ? '0 0 0 3px rgba(245, 158, 11, 0.22)' : es.blockCard.boxShadow,
                     }}
                     onDragOver={e => handleBlockDragOver(e, idx)}
                   >
@@ -1699,6 +2018,11 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
                           {meta.icon}
                         </span>
                         <span style={es.typeLabel}>{meta.label}</span>
+                        {isBlockCut && (
+                          <span style={{ padding: '2px 8px', borderRadius: '6px', background: '#fef3c7', color: '#b45309', fontSize: '0.72rem', fontWeight: 800, border: '1px solid #fde68a' }}>
+                            ✂️ Listo para pegar {cutBlockIds.length > 1 ? `(${cutBlockIds.indexOf(block.id) + 1}/${cutBlockIds.length})` : ''}
+                          </span>
+                        )}
                         {columnParent && <span style={es.previewStateBadge}>Dentro de {getBlockMeta(columnParent.block_type).label} · Col {block.content.layout_column || '1'}</span>}
                         {owningSection && !columnParent && <span style={es.previewStateBadge}>Dentro de: {owningSection.content.title || 'Sección sin título'}</span>}
                       </div>
@@ -1766,6 +2090,20 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
                           <ArrowDown size={12} />
                           <span>Sec</span>
                         </button>
+
+                        {/* Botón Cortar componente */}
+                        {block.block_type !== 'topic_divisions' && block.block_type !== 'section' && block.block_type !== 'section_end' && (
+                          <button
+                            type="button"
+                            style={isBlockCut ? es.cutBtnActive : es.cutBtn}
+                            onClick={() => toggleCutBlock(block.id)}
+                            title={isBlockCut ? 'Cancelar corte de este componente' : 'Cortar este componente para pegarlo dentro de una división o moverlo'}
+                          >
+                            <Scissors size={13} />
+                            <span>{isBlockCut ? 'Cortado' : 'Cortar'}</span>
+                          </button>
+                        )}
+
                         <button
                           style={es.duplicateBtn}
                           onClick={() => duplicateBlock(block.id)}
@@ -1858,10 +2196,77 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
                       </div>
                     )}
 
+                    {divisionsParent && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: '#f0f9ff', borderBottom: '1px solid #bae6fd', flexWrap: 'wrap' }}>
+                        <label style={{ fontSize: '.82em', fontWeight: 800, color: '#0369a1', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span>🗂️ División asignada:</span>
+                        </label>
+                        <select
+                          value={block.content.layout_tab || block.content.layout_column || '1'}
+                          onChange={event => updateBlockContent(block.id, { layout_tab: event.target.value, layout_column: event.target.value })}
+                          style={es.styleSelect}
+                        >
+                          {Array.from({ length: Math.max(1, Number(divisionsParent.content.divisions_count || 3)) }, (_, dIdx) => (
+                            <option key={dIdx} value={String(dIdx + 1)}>
+                              {dIdx + 1}. {divisionsParent.content[`division_${dIdx + 1}_title`] || `División ${dIdx + 1}`}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          style={es.selectionBtn}
+                          onClick={() => removeBlockFromContainer(block.id)}
+                          title="Sacar de esta división y mover a la página principal"
+                        >
+                          Sacar a página principal
+                        </button>
+                      </div>
+                    )}
+
+                    {!columnParent && !divisionsParent && block.block_type !== 'topic_divisions' && block.block_type !== 'section' && block.block_type !== 'section_end' && blocks.some(b => b.block_type === 'topic_divisions') && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+                        <small style={{ color: '#475569', fontSize: '0.74rem', fontWeight: 650 }}>
+                          📥 Mover adentro de:
+                        </small>
+                        <select
+                          defaultValue=""
+                          onChange={event => {
+                            const [containerId, divIndex] = event.target.value.split(':');
+                            if (containerId && divIndex) {
+                              updateBlockContent(block.id, { layout_parent_id: containerId, layout_tab: divIndex, layout_column: divIndex });
+                            }
+                            event.currentTarget.value = '';
+                          }}
+                          style={{ ...es.styleSelect, fontSize: '0.74rem', padding: '3px 8px', height: 'auto', background: '#ffffff' }}
+                        >
+                          <option value="">Elegir División...</option>
+                          {blocks.filter(b => b.block_type === 'topic_divisions').flatMap(container =>
+                            Array.from({ length: Math.max(1, Number(container.content.divisions_count || 3)) }, (_, dIdx) => ({
+                              value: `${container.id}:${dIdx + 1}`,
+                              label: `${dIdx + 1}. ${container.content[`division_${dIdx + 1}_title`] || `División ${dIdx + 1}`}`,
+                            }))
+                          ).map(opt => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     {/* Área de edición según tipo */}
                     {!isCollapsed && block.block_type !== 'section_end' && (
                       <MemoBlockContentEditor
                         block={block}
+                        allBlocks={blocks}
+                        onAddBlockToDivision={addBlockToDivision}
+                        onMoveBlockToDivision={moveBlockToDivision}
+                        onRemoveBlockFromContainer={removeBlockFromContainer}
+                        draggedBlockId={dragIdx !== null ? blocks[dragIdx]?.id : null}
+                        cutBlockId={cutBlockId}
+                        cutBlockCount={cutBlockIds.length}
+                        cutBlockLabel={cutBlockIds.length === 1 ? (cutBlock ? getBlockMeta(cutBlock.block_type).label : undefined) : `${cutBlockIds.length} componentes`}
+                        onPasteCutBlockToDivision={(targetDiv) => pasteBlocksIntoDivision(block.id, targetDiv)}
                         styleClipboard={styleClipboard}
                         selectedCount={selectedBlockIds.size}
                         stylePresets={stylePresets}
@@ -2043,6 +2448,15 @@ interface MemoBlockContentEditorProps {
   onOpenImageModal: (blockId: string, fieldKey: string) => void;
   experienceMode: 'simple' | 'advanced';
   showStyleEditor?: boolean;
+  allBlocks?: ContentBlock[];
+  onAddBlockToDivision?: (containerId: string, divisionIndex: number, type: BlockType) => void;
+  onMoveBlockToDivision?: (blockId: string, divisionIndex: number) => void;
+  onRemoveBlockFromContainer?: (blockId: string) => void;
+  draggedBlockId?: string | null;
+  cutBlockId?: string | null;
+  cutBlockCount?: number;
+  cutBlockLabel?: string;
+  onPasteCutBlockToDivision?: (divisionIndex: number) => void;
 }
 
 const MemoBlockContentEditor = React.memo(({
@@ -2064,6 +2478,15 @@ const MemoBlockContentEditor = React.memo(({
   onOpenImageModal,
   experienceMode,
   showStyleEditor = true,
+  allBlocks = [],
+  onAddBlockToDivision,
+  onMoveBlockToDivision,
+  onRemoveBlockFromContainer,
+  draggedBlockId,
+  cutBlockId,
+  cutBlockCount,
+  cutBlockLabel,
+  onPasteCutBlockToDivision,
 }: MemoBlockContentEditorProps) => {
   const editorSurfaceVars = {
     ['--atlas-editor-bg' as string]: block.content.style_bg || '#ffffff',
@@ -2469,6 +2892,42 @@ const MemoBlockContentEditor = React.memo(({
           content={block.content}
           onUpdate={changes => onUpdateBlockContent(block.id, changes)}
           onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'histology_bullet_cards' && (
+        <HistologyBulletCardsInlineEditor
+          blockId={block.id}
+          content={block.content}
+          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'histology_horizontal_cards' && (
+        <HistologyHorizontalCardsInlineEditor
+          blockId={block.id}
+          content={block.content}
+          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+        />
+      )}
+
+      {block.block_type === 'topic_divisions' && (
+        <TopicDivisionsInlineEditor
+          blockId={block.id}
+          content={block.content}
+          onUpdate={changes => onUpdateBlockContent(block.id, changes)}
+          onPickImage={field => onOpenImageModal(block.id, field)}
+          blocks={allBlocks}
+          onAddBlockToDivision={onAddBlockToDivision}
+          onMoveBlockToDivision={onMoveBlockToDivision}
+          onRemoveBlockFromContainer={onRemoveBlockFromContainer}
+          draggedBlockId={draggedBlockId}
+          cutBlockId={cutBlockId}
+          cutBlockCount={cutBlockCount}
+          cutBlockLabel={cutBlockLabel}
+          onPasteCutBlockToDivision={onPasteCutBlockToDivision}
         />
       )}
 
@@ -4633,6 +5092,37 @@ const es: Record<string, React.CSSProperties> = {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
+    transition: 'all 0.15s ease',
+  },
+  cutBtn: {
+    background: '#fffbeb',
+    border: '1px solid #fde68a',
+    cursor: 'pointer',
+    color: '#b45309',
+    fontSize: '0.78em',
+    fontWeight: 700,
+    padding: '5px 9px',
+    borderRadius: '7px',
+    lineHeight: 1,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    transition: 'all 0.15s ease',
+  },
+  cutBtnActive: {
+    background: '#f59e0b',
+    border: '1px solid #d97706',
+    cursor: 'pointer',
+    color: '#ffffff',
+    fontSize: '0.78em',
+    fontWeight: 800,
+    padding: '5px 9px',
+    borderRadius: '7px',
+    lineHeight: 1,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    boxShadow: '0 2px 8px rgba(245, 158, 11, 0.4)',
     transition: 'all 0.15s ease',
   },
   duplicateBtn: {

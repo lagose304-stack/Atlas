@@ -24,7 +24,10 @@ export type BlockType =
   | 'histology_text_cards'
   | 'histology_text_table'
   | 'histology_text_simple_cards'
-  | 'histology_extra_data';
+  | 'histology_bullet_cards'
+  | 'histology_horizontal_cards'
+  | 'histology_extra_data'
+  | 'topic_divisions';
 
 export type PageEntityType = 'subtemas_page' | 'placas_page' | 'home_page';
 

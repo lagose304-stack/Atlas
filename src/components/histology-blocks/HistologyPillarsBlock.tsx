@@ -206,7 +206,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                   lineHeight: 1.25,
                 }}
               >
-                {singleTitle}
+                {renderBoldText(singleTitle)}
               </h3>
             </div>
           )}
@@ -373,7 +373,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                   lineHeight: 1.2,
                 }}
               >
-                {functionTitle}
+                {renderBoldText(functionTitle)}
               </h3>
             )}
           </div>
@@ -423,7 +423,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                       lineHeight: 1.2,
                     }}
                   >
-                    {mainFunctionName}
+                    {renderBoldText(mainFunctionName)}
                   </strong>
                 )}
                 {mainFunctionDesc && (
@@ -498,7 +498,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                   }}
                 >
                   <span>🔬</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{functionImageCaption}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{renderBoldText(functionImageCaption)}</span>
                 </div>
               )}
             </div>
@@ -540,7 +540,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                     }}
                   >
                     <MedicalIcon name={item.icon || 'sparkles'} size={13} color="#059669" fallback={<Sparkles size={12} color="#059669" />} />
-                    <span>{item.label}</span>
+                    <span>{renderBoldText(item.label)}</span>
                   </span>
                 ))}
               </div>
@@ -582,7 +582,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                   lineHeight: 1.2,
                 }}
               >
-                {criteriaTitle}
+                {renderBoldText(criteriaTitle)}
               </h3>
             )}
           </div>
@@ -693,7 +693,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                   lineHeight: 1.2,
                 }}
               >
-                {locationsTitle}
+                {renderBoldText(locationsTitle)}
               </h3>
             )}
           </div>

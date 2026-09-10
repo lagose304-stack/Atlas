@@ -201,7 +201,11 @@ body {
 }
 
 .public-editor-content-before-system {
-  margin-bottom: clamp(28px, 4vw, 44px);
+  margin-bottom: clamp(12px, 1.8vw, 18px);
+}
+
+.public-editor-content-before-system .topic-divisions-block {
+  margin-bottom: 0 !important;
 }
 
 /* En la portada el contenido define la altura: así el aire sobre y bajo el
@@ -6179,6 +6183,49 @@ body {
   background: #ffffff !important;
   transform: translateY(-2px);
   box-shadow: 0 6px 16px -2px rgba(2, 132, 199, 0.10), 0 2px 6px rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Tarjetas con Viñetas de Fundamentos Histológicos */
+.histology-bullet-card-item:hover {
+  border-color: #5eead4 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px -3px rgba(0, 89, 83, 0.12), 0 3px 8px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Tarjetas Horizontales de Fundamentos Histológicos */
+.histology-horizontal-card-item:hover {
+  border-color: #99f6e4 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(0, 89, 83, 0.12), 0 3px 8px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Margen moderado entre bloques de fundamentos histológicos */
+.histology-bullet-cards-block,
+.histology-horizontal-cards-block {
+  margin-bottom: 22px !important;
+}
+
+.histology-bullet-cards-block .atlas-rich-rendered p,
+.histology-horizontal-cards-block .atlas-rich-rendered p {
+  margin-bottom: 4px !important;
+}
+
+@media (max-width: 640px) {
+  .histology-bullet-cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .histology-horizontal-card-item {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+  .histology-horizontal-card-left {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+  }
+  .histology-horizontal-card-divider {
+    width: 100% !important;
+    height: 2px !important;
+  }
 }
 
 /* Modo Standalone de Tríada Histológica (Garantizar flujo inline continuo) */

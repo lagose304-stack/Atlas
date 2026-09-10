@@ -6,7 +6,8 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
 import TextAlign from '@tiptap/extension-text-align';
-import { Bold, Italic, Underline, Palette, Highlighter, RemoveFormatting, Type } from 'lucide-react';
+import UnderlineExtension from '@tiptap/extension-underline';
+import { Bold, Italic, Underline as UnderlineIcon, Palette, Highlighter, RemoveFormatting, Type } from 'lucide-react';
 import SpanishEditorShortcuts from './SpanishEditorShortcuts';
 import { TextStyleCustomAttributes } from './TextStyleExtensions';
 
@@ -70,6 +71,7 @@ export const HistologyRichField: React.FC<HistologyRichFieldProps> = ({
       TextStyleCustomAttributes,
       Color,
       Highlight.configure({ multicolor: true }),
+      UnderlineExtension,
       SpanishEditorShortcuts,
     ],
     content: value || '',
@@ -293,7 +295,7 @@ export const HistologyRichField: React.FC<HistologyRichFieldProps> = ({
               }}
               title="Subrayado"
             >
-              <Underline size={13} />
+              <UnderlineIcon size={13} />
             </button>
 
             <span style={{ width: '1px', height: '14px', background: '#cbd5e1', margin: '0 2px' }} />

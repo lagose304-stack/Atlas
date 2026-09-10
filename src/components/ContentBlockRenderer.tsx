@@ -16,6 +16,9 @@ import {
   HistologyTextTableBlock,
   HistologyTextSimpleCardsBlock,
   HistologyExtraDataBlock,
+  HistologyBulletCardsBlock,
+  HistologyHorizontalCardsBlock,
+  TopicDivisionsBlock,
 } from './histology-blocks';
 import examenIllustration from '../assets/imagenes/examen.png';
 
@@ -293,17 +296,18 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
   };
 
   const safeBlocks = blocks || [];
-  const columnContainerIds = useMemo(() => new Set(safeBlocks.filter(block => block.block_type === 'columns_2').map(block => block.id)), [safeBlocks]);
+  const containerBlockTypes = useMemo(() => new Set(['columns_2', 'topic_divisions']), []);
+  const containerIds = useMemo(() => new Set(safeBlocks.filter(block => containerBlockTypes.has(block.block_type)).map(block => block.id)), [safeBlocks, containerBlockTypes]);
   const columnChildrenByParent = useMemo(() => {
     const map = new Map<string, ContentBlock[]>();
     safeBlocks.forEach(block => {
       const parentId = block.content.layout_parent_id;
-      if (!parentId || !columnContainerIds.has(parentId)) return;
+      if (!parentId || !containerIds.has(parentId)) return;
       map.set(parentId, [...(map.get(parentId) || []), block]);
     });
     return map;
-  }, [safeBlocks, columnContainerIds]);
-  const topLevelBlocks = useMemo(() => safeBlocks.filter(block => !block.content.layout_parent_id || !columnContainerIds.has(block.content.layout_parent_id)), [safeBlocks, columnContainerIds]);
+  }, [safeBlocks, containerIds]);
+  const topLevelBlocks = useMemo(() => safeBlocks.filter(block => !block.content.layout_parent_id || !containerIds.has(block.content.layout_parent_id)), [safeBlocks, containerIds]);
   const renderGroups = useMemo(() => buildRenderGroups(topLevelBlocks), [topLevelBlocks]);
   if (safeBlocks.length === 0) return null;
 
@@ -1755,6 +1759,9 @@ const BlockItem: React.FC<{
           imageBadge={c.image_badge !== undefined ? c.image_badge : '🔬 Micrografía de Referencia'}
           keyIdea={c.key_idea || undefined}
           onOpenImageViewer={() => onZoom(c.image_url, c.placa_id || c.weekly_placa_id)}
+          titleColor={c.title_color}
+          lineColor={c.line_color}
+          badgeColor={c.badge_color}
         />
       );
     }
@@ -1886,6 +1893,9 @@ const BlockItem: React.FC<{
           items={items.length > 0 ? items : undefined}
           colorKeyTip={c.color_tip || undefined}
           onOpenImageViewer={(url) => onZoom(url)}
+          titleColor={c.title_color}
+          lineColor={c.line_color}
+          badgeColor={c.badge_color}
         />
       );
     }
@@ -1919,6 +1929,10 @@ const BlockItem: React.FC<{
           text={c.text || ''}
           cards={cards}
           cardsAlign={c.cards_align || 'center'}
+          titleColor={c.title_color}
+          lineColor={c.line_color}
+          badgeColor={c.badge_color}
+          cardTitleColor={c.card_title_color}
         />
       );
     }
@@ -1951,6 +1965,11 @@ const BlockItem: React.FC<{
           text={c.text || ''}
           headers={headers}
           rows={rows}
+          titleColor={c.title_color}
+          lineColor={c.line_color}
+          badgeColor={c.badge_color}
+          headerColor={c.header_color}
+          headerBgColor={c.header_bg_color}
         />
       );
     }
@@ -1982,6 +2001,10 @@ const BlockItem: React.FC<{
           cards={cards}
           columns={c.columns || '3'}
           cardsAlign={c.cards_align || 'center'}
+          titleColor={c.title_color}
+          lineColor={c.line_color}
+          badgeColor={c.badge_color}
+          cardBorderColor={c.card_border_color}
         />
       );
     }
@@ -1993,6 +2016,148 @@ const BlockItem: React.FC<{
           text={c.text || ''}
           imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
           imageCaption={c.image_caption || ''}
+          barColor={c.bar_color}
+          titleColor={c.title_color}
+          bgColor={c.bg_color}
+          displayMode={c.display_mode}
+        />
+      );
+    }
+
+    case 'histology_bullet_cards': {
+      const detectedMax = Object.keys(c).reduce((max, key) => {
+        const m = key.match(/^card_(\d+)_(title|bullets)$/);
+        if (m) {
+          const idx = Number(m[1]);
+          if (Number.isFinite(idx) && idx > max) return idx;
+        }
+        return max;
+      }, 0);
+
+      const count = Number(c.cards_count);
+      const cardsCount = Number.isFinite(count) && count > 0 ? count : (detectedMax > 0 ? detectedMax : 2);
+
+      const cards: { id: string; title: string; bullets: string }[] = [];
+      for (let i = 1; i <= cardsCount; i++) {
+        const title = c[`card_${i}_title`] || '';
+        const bullets = c[`card_${i}_bullets`] || '';
+        if (title.trim() !== '' || bullets.trim() !== '') {
+          cards.push({
+            id: `card_${i}`,
+            title,
+            bullets,
+          });
+        }
+      }
+
+      return (
+        <HistologyBulletCardsBlock
+          title={c.title || undefined}
+          text={c.text || ''}
+          cards={cards}
+          columns={c.columns || '2'}
+          titleColor={c.title_color}
+          lineColor={c.line_color}
+          cardBorderColor={c.card_border_color}
+          cardTitleColor={c.card_title_color}
+        />
+      );
+    }
+
+    case 'histology_horizontal_cards': {
+      const detectedMax = Object.keys(c).reduce((max, key) => {
+        const m = key.match(/^card_(\d+)_(title|subtitle|badge|desc)$/);
+        if (m) {
+          const idx = Number(m[1]);
+          if (Number.isFinite(idx) && idx > max) return idx;
+        }
+        return max;
+      }, 0);
+
+      const count = Number(c.cards_count);
+      const cardsCount = Number.isFinite(count) && count > 0 ? count : (detectedMax > 0 ? detectedMax : 2);
+
+      const cards: {
+        id: string;
+        title: string;
+        subtitle?: string;
+        badge?: string;
+        badgeColor?: string;
+        description: string;
+      }[] = [];
+
+      for (let i = 1; i <= cardsCount; i++) {
+        const title = c[`card_${i}_title`] || '';
+        const subtitle = c[`card_${i}_subtitle`] || '';
+        const badge = c[`card_${i}_badge`] || '';
+        const badgeColor = c[`card_${i}_badge_color`] || 'amber';
+        const description = c[`card_${i}_desc`] || '';
+
+        if (title.trim() !== '' || subtitle.trim() !== '' || badge.trim() !== '' || description.trim() !== '') {
+          cards.push({
+            id: `hcard_${i}`,
+            title,
+            subtitle,
+            badge,
+            badgeColor,
+            description,
+          });
+        }
+      }
+
+      return (
+        <HistologyHorizontalCardsBlock
+          title={c.title || undefined}
+          text={c.text || ''}
+          cards={cards}
+          titleColor={c.title_color}
+          lineColor={c.line_color}
+          cardLineColor={c.card_line_color}
+          cardTitleColor={c.card_title_color}
+          cardSubtitleColor={c.card_subtitle_color}
+        />
+      );
+    }
+
+    case 'topic_divisions': {
+      const rawCount = Number(c.divisions_count);
+      const divisionsCount = Number.isFinite(rawCount) && rawCount >= 0 ? rawCount : 0;
+
+      const divisions: {
+        id: string;
+        index: number;
+        title: string;
+        subtitle?: string;
+      }[] = [];
+
+      for (let i = 1; i <= divisionsCount; i++) {
+        divisions.push({
+          id: `div_${i}`,
+          index: i,
+          title: c[`division_${i}_title`] || '',
+          subtitle: c[`division_${i}_subtitle`] || '',
+        });
+      }
+
+      return (
+        <TopicDivisionsBlock
+          divisionsCount={divisionsCount}
+          divisions={divisions}
+          accentColor={c.accent_color || '#0284c7'}
+          childrenBlocks={columnChildren || []}
+          editorMode={editorMode}
+          renderChildBlock={child => {
+            const childContent = normalizeBlockContent(child.block_type, child.content);
+            return (
+              <div
+                key={child.id}
+                className={`cb-shell cb-shell-${child.block_type}`}
+                style={getBlockShellStyle(childContent, child.block_type)}
+              >
+                <BlockWithCtas block={child} onZoom={onZoom} editorMode={editorMode} />
+              </div>
+            );
+          }}
         />
       );
     }

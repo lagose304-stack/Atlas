@@ -1,12 +1,17 @@
 import React from 'react';
 import { renderBoldText } from '../BoldField';
 import { getCloudinaryImageUrl } from '../../services/cloudinaryImages';
+import { hasHtmlMarkup, toSafeHtml } from '../../services/richText';
 
 export interface HistologyExtraDataProps {
   title?: string;
   text?: string;
   imageUrl?: string;
   imageCaption?: string;
+  barColor?: string;
+  titleColor?: string;
+  bgColor?: string;
+  displayMode?: 'inline' | 'stacked' | string;
 }
 
 export const HistologyExtraDataBlock: React.FC<HistologyExtraDataProps> = ({
@@ -14,6 +19,10 @@ export const HistologyExtraDataBlock: React.FC<HistologyExtraDataProps> = ({
   text,
   imageUrl,
   imageCaption,
+  barColor,
+  titleColor,
+  bgColor,
+  displayMode,
 }) => {
   const safeTitle = title?.trim() || '';
   const safeText = text?.trim() || '';
@@ -23,17 +32,23 @@ export const HistologyExtraDataBlock: React.FC<HistologyExtraDataProps> = ({
     return null;
   }
 
+  const effectiveBarColor = barColor?.trim() || '#005953';
+  const effectiveTitleColor = titleColor?.trim() || '#005953';
+  const effectiveBgColor = bgColor?.trim() || '#f0fdfa';
+  const isStacked = displayMode === 'stacked';
+
   return (
     <div
       className="histology-extra-data-block"
       style={{
         position: 'relative',
         width: '100%',
-        borderRadius: '18px',
-        background: 'linear-gradient(180deg, #f8fbff 0%, #f0f7ff 100%)',
-        border: '1.5px solid #bae6fd',
-        boxShadow: '0 4px 18px -2px rgba(2, 132, 199, 0.05)',
-        padding: 'clamp(18px, 2.5vw, 24px)',
+        borderRadius: '10px',
+        background: effectiveBgColor,
+        border: '1px solid #ccfbf1',
+        borderLeft: `5px solid ${effectiveBarColor}`,
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
+        padding: 'clamp(14px, 1.8vw, 18px) clamp(16px, 2.2vw, 22px)',
         fontFamily: '"Montserrat", "Segoe UI", sans-serif',
         display: 'flex',
         flexDirection: 'column',
@@ -45,37 +60,69 @@ export const HistologyExtraDataBlock: React.FC<HistologyExtraDataProps> = ({
         style={{
           display: 'flex',
           flexWrap: 'wrap',
-          gap: '20px',
+          gap: '18px',
           alignItems: 'center',
         }}
       >
-        <div style={{ flex: '1 1 320px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {safeTitle && (
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 'clamp(1.1rem, 1.8vw, 1.28rem)',
-                fontWeight: 850,
-                color: '#1e3a8a',
-                letterSpacing: '-0.015em',
-                lineHeight: 1.3,
-              }}
-            >
-              {renderBoldText(safeTitle)}
-            </h3>
-          )}
-
-          {safeText && (
+        <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+          {isStacked ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {safeTitle && (
+                <h4
+                  style={{
+                    margin: 0,
+                    fontSize: 'clamp(1.02rem, 1.4vw, 1.12rem)',
+                    fontWeight: 800,
+                    color: effectiveTitleColor,
+                    letterSpacing: '-0.01em',
+                    lineHeight: 1.35,
+                  }}
+                >
+                  {renderBoldText(safeTitle)}
+                </h4>
+              )}
+              {safeText && (
+                <div
+                  className="histology-extra-data-text"
+                  style={{
+                    fontSize: 'clamp(0.92rem, 1.3vw, 0.96rem)',
+                    color: '#334155',
+                    lineHeight: 1.65,
+                  }}
+                >
+                  {hasHtmlMarkup(safeText) ? (
+                    <span className="atlas-rich-rendered" dangerouslySetInnerHTML={{ __html: toSafeHtml(safeText) }} />
+                  ) : (
+                    renderBoldText(safeText)
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
             <div
               className="histology-extra-data-text"
               style={{
-                fontSize: 'clamp(0.92rem, 1.35vw, 0.96rem)',
+                fontSize: 'clamp(0.92rem, 1.3vw, 0.96rem)',
                 color: '#334155',
-                lineHeight: 1.62,
-                fontWeight: 450,
+                lineHeight: 1.68,
               }}
             >
-              {renderBoldText(safeText)}
+              {safeTitle && (
+                <strong
+                  style={{
+                    color: effectiveTitleColor,
+                    fontWeight: 800,
+                    marginRight: '6px',
+                  }}
+                >
+                  {renderBoldText(safeTitle.endsWith(':') ? safeTitle : `${safeTitle}:`)}
+                </strong>
+              )}
+              {hasHtmlMarkup(safeText) ? (
+                <span className="atlas-rich-rendered" dangerouslySetInnerHTML={{ __html: toSafeHtml(safeText) }} />
+              ) : (
+                renderBoldText(safeText)
+              )}
             </div>
           )}
         </div>
@@ -83,33 +130,33 @@ export const HistologyExtraDataBlock: React.FC<HistologyExtraDataProps> = ({
         {safeImage && (
           <div
             style={{
-              flex: '0 1 280px',
-              minWidth: '220px',
-              borderRadius: '14px',
+              flex: '0 1 240px',
+              minWidth: '200px',
+              borderRadius: '10px',
               overflow: 'hidden',
-              border: '1.2px solid #bae6fd',
-              boxShadow: '0 4px 14px rgba(2, 132, 199, 0.08)',
+              border: '1px solid #ccfbf1',
+              boxShadow: '0 2px 10px rgba(0, 89, 83, 0.08)',
               background: '#ffffff',
             }}
           >
             <img
               src={getCloudinaryImageUrl(safeImage, 'view')}
               alt={imageCaption || safeTitle || 'Ilustración'}
-              style={{ width: '100%', height: 'auto', maxHeight: '220px', objectFit: 'cover', display: 'block' }}
+              style={{ width: '100%', height: 'auto', maxHeight: '200px', objectFit: 'cover', display: 'block' }}
               loading="lazy"
             />
             {imageCaption && imageCaption.trim() !== '' && (
               <div
                 style={{
-                  padding: '6px 10px',
-                  background: '#f8fbff',
-                  borderTop: '1px solid #e0f2fe',
-                  fontSize: '0.76rem',
-                  color: '#64748b',
-                  fontWeight: 500,
+                  padding: '5px 8px',
+                  background: '#f0fdfa',
+                  borderTop: '1px solid #ccfbf1',
+                  fontSize: '0.74rem',
+                  color: '#475569',
+                  fontWeight: 600,
                 }}
               >
-                🔬 {imageCaption}
+                🔬 {renderBoldText(imageCaption)}
               </div>
             )}
           </div>
@@ -120,3 +167,4 @@ export const HistologyExtraDataBlock: React.FC<HistologyExtraDataProps> = ({
 };
 
 export default HistologyExtraDataBlock;
+

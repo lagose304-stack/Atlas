@@ -27,6 +27,9 @@ export interface HistologyStainsProps {
   imageBadge?: string;
   stainsTitle?: string;
   onOpenImageViewer?: (url: string) => void;
+  titleColor?: string;
+  lineColor?: string;
+  badgeColor?: string;
 }
 
 export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
@@ -36,6 +39,9 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
   items = [],
   colorKeyTip,
   onOpenImageViewer,
+  titleColor,
+  lineColor,
+  badgeColor,
 }) => {
   const validItems = items.filter(
     item =>
@@ -45,6 +51,10 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
       (item.nucleus && item.nucleus.trim() !== '') ||
       (item.highlights && item.highlights.trim() !== '')
   );
+
+  const effectiveTitleColor = titleColor?.trim() || '#3b0764';
+  const effectiveLineColor = lineColor?.trim() || 'linear-gradient(90deg, #7e22ce 0%, #9333ea 50%, #c084fc 100%)';
+  const effectiveBadgeColor = badgeColor?.trim() || '#7e22ce';
 
   return (
     <div
@@ -61,8 +71,8 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
         overflow: 'hidden',
       }}
     >
-      {/* Barra superior de acento amatista / púrpura */}
-      <div style={{ height: '4px', width: '100%', background: 'linear-gradient(90deg, #7e22ce 0%, #9333ea 50%, #c084fc 100%)', flexShrink: 0 }} />
+      {/* Barra superior de acento personalizable */}
+      <div style={{ height: '4px', width: '100%', background: effectiveLineColor, flexShrink: 0 }} />
 
       <div style={{ padding: 'clamp(20px, 3vw, 32px)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {/* ─── CABECERA: BADGE Y TÍTULO ─── */}
@@ -75,10 +85,10 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
                   alignItems: 'center',
                   gap: '6px',
                   fontSize: '0.70rem',
-                  fontWeight: 800,
+                  fontWeight: 850,
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase',
-                  color: '#7e22ce',
+                  color: effectiveBadgeColor,
                   background: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)',
                   padding: '3px 11px',
                   borderRadius: '999px',
@@ -86,8 +96,8 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
                   boxShadow: '0 2px 6px rgba(147, 51, 234, 0.10)',
                 }}
               >
-                <Palette size={12} />
-                <span>{badgeText}</span>
+                <Palette size={12} color={effectiveBadgeColor} />
+                <span>{renderBoldText(badgeText)}</span>
               </span>
             </div>
           )}
@@ -98,12 +108,12 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
                 margin: 0,
                 fontSize: 'clamp(1.2rem, 2.2vw, 1.55rem)',
                 fontWeight: 850,
-                color: '#3b0764',
+                color: effectiveTitleColor,
                 letterSpacing: '-0.025em',
                 lineHeight: 1.2,
               }}
             >
-              {title}
+              {renderBoldText(title)}
             </h3>
           )}
 

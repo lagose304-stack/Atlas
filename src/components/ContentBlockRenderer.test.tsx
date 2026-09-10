@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ContentBlockRenderer from './ContentBlockRenderer';
 import type { ContentBlock } from '../types/contentBlocks';
+import { createDefaultBlockContent } from './blocks/blockRegistry';
 
 vi.mock('./ImageViewerModal', () => ({
   default: () => null,
@@ -802,8 +803,126 @@ describe('ContentBlockRenderer', () => {
 
     render(<ContentBlockRenderer blocks={extraBlock} />);
 
-    expect(screen.getByText('Dato Extra de Laboratorio')).toBeInTheDocument();
+    expect(screen.getByText(/Dato Extra de Laboratorio/)).toBeInTheDocument();
     expect(screen.getByText(/Las muestras deben fijarse en formalina/)).toBeInTheDocument();
+  });
+
+  it('renderiza correctamente el bloque de tarjetas con viñetas (histology_bullet_cards)', () => {
+    const bulletCardsBlock: ContentBlock[] = [
+      {
+        id: 'hist-bullet-1',
+        entity_type: 'placas_page',
+        entity_id: 203,
+        block_type: 'histology_bullet_cards',
+        sort_order: 1,
+        content: {
+          title: 'Piel Gruesa vs. Piel Delgada',
+          text: 'El grosor total del manto cutáneo varía según la región corporal.',
+          columns: '2',
+          cards_count: '2',
+          card_1_title: 'Piel Gruesa',
+          card_1_bullets: 'Ubicación: Palmas de las manos y plantas de los pies.\nSuperficie: Sin pelo (glabra).',
+          card_2_title: 'Piel Delgada',
+          card_2_bullets: 'Ubicación: Resto de la superficie corporal.\nSuperficie: Contiene folículos pilosos.',
+        },
+      },
+    ];
+
+    render(<ContentBlockRenderer blocks={bulletCardsBlock} />);
+
+    expect(screen.getByText('Piel Gruesa vs. Piel Delgada')).toBeInTheDocument();
+    expect(screen.getByText(/El grosor total del manto cutáneo varía según la región corporal\./)).toBeInTheDocument();
+    expect(screen.getByText('Piel Gruesa')).toBeInTheDocument();
+    expect(screen.getByText('Piel Delgada')).toBeInTheDocument();
+    expect(screen.getByText(/Palmas de las manos y plantas de los pies\./)).toBeInTheDocument();
+    expect(screen.getByText(/Resto de la superficie corporal\./)).toBeInTheDocument();
+  });
+
+  it('renderiza correctamente el bloque de tarjetas horizontales (histology_horizontal_cards)', () => {
+    const horizontalCardsBlock: ContentBlock[] = [
+      {
+        id: 'hist-horiz-1',
+        entity_type: 'placas_page',
+        entity_id: 204,
+        block_type: 'histology_horizontal_cards',
+        sort_order: 1,
+        content: {
+          title: 'Estratos Epidérmicos: Del Fondo a la Superficie',
+          text: 'La epidermis es un epitelio plano estratificado queratinizado.',
+          cards_count: '2',
+          card_1_title: '1. Estrato Córneo',
+          card_1_subtitle: 'CAPA SUPERFICIAL',
+          card_1_badge: '',
+          card_1_badge_color: 'amber',
+          card_1_desc: 'Células escamosas muertas, anucleadas y repletas de queratina.',
+          card_2_title: '2. Estrato Lúcido',
+          card_2_subtitle: 'SUBDIVISIÓN CORNEAL',
+          card_2_badge: 'Solo piel gruesa',
+          card_2_badge_color: 'amber',
+          card_2_desc: 'Banda delgada muy refringente y poco teñida.',
+        },
+      },
+    ];
+
+    render(<ContentBlockRenderer blocks={horizontalCardsBlock} />);
+
+    expect(screen.getByText('Estratos Epidérmicos: Del Fondo a la Superficie')).toBeInTheDocument();
+    expect(screen.getByText(/La epidermis es un epitelio plano estratificado queratinizado\./)).toBeInTheDocument();
+    expect(screen.getByText('1. Estrato Córneo')).toBeInTheDocument();
+    expect(screen.getByText('CAPA SUPERFICIAL')).toBeInTheDocument();
+    expect(screen.getByText('2. Estrato Lúcido')).toBeInTheDocument();
+    expect(screen.getByText('SUBDIVISIÓN CORNEAL')).toBeInTheDocument();
+    expect(screen.getByText('Solo piel gruesa')).toBeInTheDocument();
+    expect(screen.getByText(/Células escamosas muertas, anucleadas y repletas de queratina\./)).toBeInTheDocument();
+    expect(screen.getByText(/Banda delgada muy refringente y poco teñida\./)).toBeInTheDocument();
+  });
+
+  it('aplica personalización de colores en los bloques de fundamentos histológicos', () => {
+    const coloredBlocks: ContentBlock[] = [
+      {
+        id: 'hist-extra-colored',
+        entity_type: 'placas_page',
+        entity_id: 205,
+        block_type: 'histology_extra_data',
+        sort_order: 0,
+        content: {
+          title: 'Aclaración anatómica',
+          text: 'Texto de prueba con barra personalizada.',
+          bar_color: '#059669',
+          title_color: '#059669',
+          bg_color: '#f0fdf4',
+        },
+      },
+      {
+        id: 'hist-bullet-colored',
+        entity_type: 'placas_page',
+        entity_id: 205,
+        block_type: 'histology_bullet_cards',
+        sort_order: 1,
+        content: {
+          title: 'Título de Tarjetas con Viñetas',
+          cards_count: '1',
+          card_1_title: 'Tarjeta 1',
+          card_1_bullets: 'Punto A',
+          title_color: '#e11d48',
+          line_color: '#fda4af',
+          card_border_color: '#e11d48',
+          card_title_color: '#e11d48',
+        },
+      },
+    ];
+
+    const { container } = render(<ContentBlockRenderer blocks={coloredBlocks} />);
+
+    // Verifica que el bloque de dato extra tiene la barra lateral verde #059669 y fondo #f0fdf4
+    const extraDataEl = container.querySelector('.histology-extra-data-block') as HTMLElement;
+    expect(extraDataEl).toBeInTheDocument();
+    expect(extraDataEl.style.borderLeft).toMatch(/#059669|rgb\(5, 150, 105\)/);
+    expect(extraDataEl.style.background).toMatch(/#f0fdf4|rgb\(240, 253, 244\)/);
+
+    // Verifica que el título de viñetas tiene el color personalizado
+    const bulletTitle = screen.getByText('Título de Tarjetas con Viñetas');
+    expect(bulletTitle.style.color).toMatch(/#e11d48|rgb\(225, 29, 72\)/);
   });
 
   it('renderiza correctamente el bloque de semana de examenes con clases fluidas y responsive container queries', () => {
@@ -1042,4 +1161,224 @@ describe('ContentBlockRenderer', () => {
     const grid = container.querySelector('.histology-text-simple-cards-grid');
     expect(grid).toHaveStyle({ justifyContent: 'flex-start' });
   });
+
+  it('permite personalizar el color de fondo del encabezado de la tabla (header_bg_color)', () => {
+    const blocks: ContentBlock[] = [
+      {
+        id: 'hist-table-header-color',
+        entity_type: 'subtemas_page',
+        entity_id: 106,
+        block_type: 'histology_text_table',
+        sort_order: 1,
+        content: {
+          title: 'Tabla con color personalizado',
+          header_bg_color: '#dbeafe',
+          cols_count: '2',
+          rows_count: '1',
+          col_1_header: 'Columna A',
+          col_2_header: 'Columna B',
+          cell_1_1: 'Valor 1',
+          cell_1_2: 'Valor 2',
+        },
+      },
+    ];
+
+    const { container } = render(<ContentBlockRenderer blocks={blocks} />);
+    const theadTr = container.querySelector('.histology-text-table-block thead tr');
+    expect(theadTr).toBeInTheDocument();
+    expect(theadTr).toHaveStyle({ background: '#dbeafe' });
+  });
+
+  it('renderiza texto en negrita y renglón aparte (br) en tarjetas y celdas', () => {
+    const blocks: ContentBlock[] = [
+      {
+        id: 'hist-bold-br',
+        entity_type: 'subtemas_page',
+        entity_id: 107,
+        block_type: 'histology_text_simple_cards',
+        sort_order: 1,
+        content: {
+          cards_count: '1',
+          card_1: 'Primera línea **en negrita**\nSegunda línea en renglón aparte',
+        },
+      },
+    ];
+
+    const { container } = render(<ContentBlockRenderer blocks={blocks} />);
+    const strongEl = container.querySelector('strong');
+    expect(strongEl).toBeInTheDocument();
+    expect(strongEl?.textContent).toBe('en negrita');
+
+    const brEl = container.querySelector('br');
+    expect(brEl).toBeInTheDocument();
+  });
+
+  it('renderiza el contenedor de divisiones de tema (topic_divisions) y conmuta las sub-páginas por pestaña', () => {
+    const blocks: ContentBlock[] = [
+      {
+        id: 'container-divisions-1',
+        entity_type: 'subtemas_page',
+        entity_id: 108,
+        block_type: 'topic_divisions',
+        sort_order: 1,
+        content: {
+          divisions_count: '3',
+          division_1_title: 'Epidermis',
+          division_1_subtitle: 'Capa córnea y basal',
+          division_2_title: 'Dermis',
+          division_2_subtitle: 'Tejido conjuntivo denso',
+          division_3_title: 'Hipodermis',
+          division_3_subtitle: 'Tejido adiposo subcutáneo',
+          accent_color: '#0284c7',
+        },
+      },
+      // Hijo en división 1: Epidermis
+      {
+        id: 'child-block-epidermis',
+        entity_type: 'subtemas_page',
+        entity_id: 108,
+        block_type: 'paragraph',
+        sort_order: 2,
+        content: {
+          text: 'Contenido exclusivo del estrato epidérmico.',
+          layout_parent_id: 'container-divisions-1',
+          layout_tab: '1',
+        },
+      },
+      // Hijo en división 2: Dermis
+      {
+        id: 'child-block-dermis',
+        entity_type: 'subtemas_page',
+        entity_id: 108,
+        block_type: 'paragraph',
+        sort_order: 3,
+        content: {
+          text: 'Contenido exclusivo de la dermis papilar y reticular.',
+          layout_parent_id: 'container-divisions-1',
+          layout_tab: '2',
+        },
+      },
+    ];
+
+    render(<ContentBlockRenderer blocks={blocks} />);
+
+    // Verifica que los botones de navegación con los títulos existen
+    expect(screen.getByText('Epidermis')).toBeInTheDocument();
+    expect(screen.getByText('Capa córnea y basal')).toBeInTheDocument();
+    expect(screen.getByText('Dermis')).toBeInTheDocument();
+    expect(screen.getByText('Tejido conjuntivo denso')).toBeInTheDocument();
+    expect(screen.getByText('Hipodermis')).toBeInTheDocument();
+
+    // En la división 1 (activa por defecto), el contenido de Epidermis debe estar presente
+    expect(screen.getByText('Contenido exclusivo del estrato epidérmico.')).toBeInTheDocument();
+
+    // El contenido de Dermis no debe ser visible inicialmente
+    expect(screen.queryByText('Contenido exclusivo de la dermis papilar y reticular.')).not.toBeInTheDocument();
+
+    // Hace clic en la pestaña de Dermis
+    const dermisTabBtn = screen.getByTitle('Ver división: Dermis');
+    fireEvent.click(dermisTabBtn);
+
+    // Ahora debe mostrarse el contenido de Dermis y ocultarse el de Epidermis
+    expect(screen.getByText('Contenido exclusivo de la dermis papilar y reticular.')).toBeInTheDocument();
+    expect(screen.queryByText('Contenido exclusivo del estrato epidérmico.')).not.toBeInTheDocument();
+  });
+
+  it('crea las plantillas con campos de texto completamente vacíos y maneja fallback visual en pestañas', () => {
+    // 1. Verificar que los valores por defecto son vacíos
+    const defaultTopicDivisions = createDefaultBlockContent('topic_divisions');
+    expect(defaultTopicDivisions.division_1_title).toBe('');
+    expect(defaultTopicDivisions.division_1_subtitle).toBe('');
+    expect(defaultTopicDivisions.divisions_count).toBe('0');
+
+    const defaultGeneralities = createDefaultBlockContent('histology_generalities');
+    expect(defaultGeneralities.title).toBe('');
+    expect(defaultGeneralities.badge_text).toBe('');
+
+    // 2. Renderizar topic_divisions con 2 divisiones con títulos vacíos
+    const blocksWithEmptyTitles: ContentBlock[] = [
+      {
+        id: 'div-empty-titles',
+        entity_type: 'subtemas_page',
+        entity_id: 108,
+        block_type: 'topic_divisions',
+        sort_order: 1,
+        content: {
+          divisions_count: '2',
+          division_1_title: '',
+          division_1_subtitle: '',
+          division_2_title: '',
+          division_2_subtitle: '',
+        },
+      },
+    ];
+
+    render(<ContentBlockRenderer blocks={blocksWithEmptyTitles} />);
+    // Debe mostrar fallback visual 'División 1' y 'División 2' para que los botones sean accesibles
+    expect(screen.getByText('División 1')).toBeInTheDocument();
+    expect(screen.getByText('División 2')).toBeInTheDocument();
+  });
+
+  it('renderiza múltiples componentes movidos juntos a una división sin perder ninguno', () => {
+    const parentContainerId = 'container-multi-cut';
+    const testBlocks: ContentBlock[] = [
+      {
+        id: parentContainerId,
+        entity_type: 'subtemas_page',
+        entity_id: 109,
+        block_type: 'topic_divisions',
+        sort_order: 0,
+        content: {
+          divisions_count: '2',
+          division_1_title: 'Estrato Córneo',
+          division_2_title: 'Estrato Basal',
+        },
+      },
+      {
+        id: 'child-1',
+        entity_type: 'subtemas_page',
+        entity_id: 109,
+        block_type: 'paragraph',
+        sort_order: 1,
+        content: {
+          layout_parent_id: parentContainerId,
+          layout_tab: '1',
+          text: '<p>Primer componente cortado y pegado</p>',
+        },
+      },
+      {
+        id: 'child-2',
+        entity_type: 'subtemas_page',
+        entity_id: 109,
+        block_type: 'paragraph',
+        sort_order: 2,
+        content: {
+          layout_parent_id: parentContainerId,
+          layout_tab: '1',
+          text: '<p>Segundo componente cortado y pegado</p>',
+        },
+      },
+      {
+        id: 'child-3',
+        entity_type: 'subtemas_page',
+        entity_id: 109,
+        block_type: 'paragraph',
+        sort_order: 3,
+        content: {
+          layout_parent_id: parentContainerId,
+          layout_tab: '1',
+          text: '<p>Tercer componente cortado y pegado</p>',
+        },
+      },
+    ];
+
+    render(<ContentBlockRenderer blocks={testBlocks} />);
+
+    // Los 3 componentes deben estar presentes simultáneamente en la pestaña 1
+    expect(screen.getByText('Primer componente cortado y pegado')).toBeInTheDocument();
+    expect(screen.getByText('Segundo componente cortado y pegado')).toBeInTheDocument();
+    expect(screen.getByText('Tercer componente cortado y pegado')).toBeInTheDocument();
+  });
 });
+
+

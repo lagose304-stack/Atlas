@@ -40,21 +40,29 @@ function fromHtml(html: string): string {
     .replace(/\n+$/, '');
 }
 
-/** Renderiza **texto** como <strong> o HTML formateado (colores, tamaños, estilos) en vistas de solo lectura */
+/** Renderiza **texto** como <strong> o HTML formateado (colores, tamaños, estilos) en vistas de solo lectura, con soporte de saltos de línea (\n -> <br />) */
 export function renderBoldText(text: string | null | undefined): React.ReactNode {
   if (!text) return '';
   if (hasHtmlMarkup(text)) {
-    return <span className="atlas-rich-rendered" style={{ color: '#000000' }} dangerouslySetInnerHTML={{ __html: toSafeHtml(text) }} />;
+    return <span className="atlas-rich-rendered" style={{ color: 'inherit' }} dangerouslySetInnerHTML={{ __html: toSafeHtml(text) }} />;
   }
-  if (!text.includes('**')) return text;
-  const parts = text.split(/(\*\*[\s\S]*?\*\*)/g);
+  const normalized = text.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
   return (
     <>
-      {parts.map((part, i) =>
-        part.startsWith('**') && part.endsWith('**') && part.length >= 5
-          ? <strong key={i}>{part.slice(2, -2)}</strong>
-          : part
-      )}
+      {lines.map((line, lineIdx) => {
+        const parts = line.includes('**') ? line.split(/(\*\*[\s\S]*?\*\*)/g) : [line];
+        return (
+          <React.Fragment key={lineIdx}>
+            {lineIdx > 0 && <br />}
+            {parts.map((part, i) =>
+              part.startsWith('**') && part.endsWith('**') && part.length >= 5
+                ? <strong key={i}>{part.slice(2, -2)}</strong>
+                : part
+            )}
+          </React.Fragment>
+        );
+      })}
     </>
   );
 }

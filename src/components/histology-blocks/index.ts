@@ -8,6 +8,8 @@ export { HistologyTextCardsBlock } from './HistologyTextCardsBlock';
 export { HistologyTextTableBlock } from './HistologyTextTableBlock';
 export { HistologyTextSimpleCardsBlock } from './HistologyTextSimpleCardsBlock';
 export { HistologyExtraDataBlock } from './HistologyExtraDataBlock';
+export { HistologyBulletCardsBlock } from './HistologyBulletCardsBlock';
+export { HistologyHorizontalCardsBlock } from './HistologyHorizontalCardsBlock';
 
 export type { HistologyGeneralitiesProps, GeneralitiesPoint } from './HistologyGeneralitiesBlock';
 export type {
@@ -23,4 +25,12 @@ export type { HistologyStainsProps, HistologyStainItem } from './HistologyStains
 export type { HistologyTextCardsProps, HistologyCardItem } from './HistologyTextCardsBlock';
 export type { HistologyTextTableProps } from './HistologyTextTableBlock';
 export type { HistologyTextSimpleCardsProps } from './HistologyTextSimpleCardsBlock';
+export type { HistologyBulletCardsProps, HistologyBulletCardItem } from './HistologyBulletCardsBlock';
+export type {
+  HistologyHorizontalCardsProps,
+  HistologyHorizontalCardItem,
+  BadgeColorVariant,
+} from './HistologyHorizontalCardsBlock';
 export type { HistologyExtraDataProps } from './HistologyExtraDataBlock';
+export { TopicDivisionsBlock } from './TopicDivisionsBlock';
+export type { TopicDivisionsBlockProps, DivisionItem } from './TopicDivisionsBlock';

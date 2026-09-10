@@ -23,6 +23,9 @@ export interface HistologyGeneralitiesProps {
   imageBadge?: string;
   keyIdea?: string;
   onOpenImageViewer?: (url: string) => void;
+  titleColor?: string;
+  lineColor?: string;
+  badgeColor?: string;
 }
 
 export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = ({
@@ -37,8 +40,15 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
   imageBadge = '🔬 Micrografía de Referencia · H&E',
   keyIdea,
   onOpenImageViewer,
+  titleColor,
+  lineColor,
+  badgeColor,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+
+  const effectiveTitleColor = titleColor?.trim() || '#1e1b4b';
+  const effectiveLineColor = lineColor?.trim() || 'linear-gradient(90deg, #4338ca 0%, #6366f1 50%, #818cf8 100%)';
+  const effectiveBadgeColor = badgeColor?.trim() || '#4338ca';
 
   const getIcon = (iconName?: string) => {
     switch (iconName) {
@@ -82,8 +92,8 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
         overflow: 'hidden',
       }}
     >
-      {/* Barra superior de acento índigo */}
-      <div style={{ height: '4px', width: '100%', background: 'linear-gradient(90deg, #4338ca 0%, #6366f1 50%, #818cf8 100%)', flexShrink: 0 }} />
+      {/* Barra superior de acento personalizable */}
+      <div style={{ height: '4px', width: '100%', background: effectiveLineColor, flexShrink: 0 }} />
 
       {/* Trama de cuadrícula geométrica sutil (estilo laboratorio) */}
       <div
@@ -125,7 +135,7 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                       fontWeight: 850,
                       letterSpacing: '0.07em',
                       textTransform: 'uppercase',
-                      color: '#4338ca',
+                      color: effectiveBadgeColor,
                       background: 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)',
                       padding: '4px 12px',
                       borderRadius: '999px',
@@ -134,7 +144,7 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                     }}
                   >
                     <BookOpen size={13} />
-                    <span>{badgeText}</span>
+                    <span>{renderBoldText(badgeText)}</span>
                   </span>
                 </div>
               )}
@@ -146,12 +156,12 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                     margin: 0,
                     fontSize: 'clamp(1.25rem, 2.3vw, 1.6rem)',
                     fontWeight: 900,
-                    color: '#1e1b4b',
+                    color: effectiveTitleColor,
                     letterSpacing: '-0.028em',
                     lineHeight: 1.2,
                   }}
                 >
-                  {title}
+                  {renderBoldText(title)}
                 </h3>
               )}
 
