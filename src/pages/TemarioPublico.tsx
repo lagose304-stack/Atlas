@@ -13,7 +13,8 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../types/contentBlocks';
-import { getRenderableBlocks } from '../services/contentPublication';
+import { getRenderableBlocks, getCachedRenderableBlocks } from '../services/contentPublication';
+import { determineActiveWeeklyParcial } from './evaluacionesUtils';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { ArrowRight, Microscope, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -252,7 +253,19 @@ const TemarioPublico: React.FC = () => {
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [temasLoadError, setTemasLoadError] = useState<string | null>(null);
   const [temasLoadDebug, setTemasLoadDebug] = useState<string | null>(null);
-  const [selectedParcial, setSelectedParcial] = usePreservedParam<(typeof PARCIALES)[number]['key']>('parcial', 'primer');
+  const hasUserManuallySelectedRef = React.useRef(false);
+  const initialUrlParcial = React.useRef(
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('parcial') : null
+  ).current;
+
+  // Intentar obtener de forma sincrónica el parcial activo si el catálogo y los bloques de inicio ya están en caché
+  const initialHomeBlocks = getCachedRenderableBlocks('home_page', 0);
+  const syncActiveParcial = (!initialUrlParcial && initialHomeBlocks && initialTemas)
+    ? determineActiveWeeklyParcial(initialHomeBlocks, initialTemas)
+    : null;
+
+  const defaultParcial = (initialUrlParcial as (typeof PARCIALES)[number]['key']) || syncActiveParcial || 'primer';
+  const [selectedParcial, setSelectedParcial] = usePreservedParam<(typeof PARCIALES)[number]['key']>('parcial', defaultParcial);
 
   const fetchTemas = useCallback(async () => {
     setTemasLoadError(null);
@@ -314,6 +327,35 @@ const TemarioPublico: React.FC = () => {
     void fetchSiteMaintenanceStatus().then(setMaintenanceStatus);
   }, [fetchTemas]);
 
+  // Sincronizar dinámicamente el parcial activo de la semana si no se especificó en la URL ni por interacción manual
+  useEffect(() => {
+    if (hasUserManuallySelectedRef.current || initialUrlParcial) return;
+
+    let isMounted = true;
+    const syncWeeklyParcial = async () => {
+      try {
+        const [homeBlocks, temasList] = await Promise.all([
+          getRenderableBlocks('home_page', 0),
+          getCachedTemas(),
+        ]);
+
+        if (!isMounted || hasUserManuallySelectedRef.current) return;
+
+        const activeParcial = determineActiveWeeklyParcial(homeBlocks, temasList);
+        if (activeParcial && activeParcial !== selectedParcial) {
+          setSelectedParcial(activeParcial);
+        }
+      } catch (err) {
+        console.warn('No se pudo sincronizar el parcial activo de la semana:', err);
+      }
+    };
+
+    void syncWeeklyParcial();
+    return () => {
+      isMounted = false;
+    };
+  }, [initialUrlParcial, selectedParcial, setSelectedParcial]);
+
   return (
     <div className="atlas-temario-page atlas-temario-typography" style={styles.container}>
       <Header />
@@ -369,7 +411,10 @@ const TemarioPublico: React.FC = () => {
                       type="button"
                       className={`temario-integrated-tab ${isActive ? 'is-active' : ''}`}
                       style={{ opacity: isParcialOff && !isActive && !hasBypassAccess ? 0.7 : 1 }}
-                      onClick={() => setSelectedParcial(key)}
+                      onClick={() => {
+                        hasUserManuallySelectedRef.current = true;
+                        setSelectedParcial(key);
+                      }}
                     >
                       {isActive && <span className="integrated-tab-indicator" aria-hidden="true" />}
                       <span className="integrated-tab-num">

@@ -14,6 +14,7 @@ import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } fr
 import logoFacultad from '../assets/logos/facultad.png';
 import microscopioHeader from '../assets/logos/laboratorio.png';
 import fondoHeader from '../assets/imagenes/fondo.webp';
+import banderaHonduras from '../assets/imagenes/honduras.svg';
 
 const MENU_ITEMS = [
   { key: 'inicio', label: 'Inicio', icon: House, path: '/' },
@@ -489,7 +490,36 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
             </div>
 
             <div className="atlas-header-center-area" style={styles.centerArea}>
-              <h1 className="atlas-header-title" style={styles.title}>Atlas de Histología</h1>
+              <h1 className="atlas-header-title" style={styles.title}>
+                <span className="atlas-header-title-text">
+                  Atlas de Histología
+                  <span
+                    className="atlas-header-flag-stamp"
+                    title="¡Felices Fiestas Patrias! 🇭🇳 Honduras"
+                    aria-label="Estampa de la Bandera de Honduras - Mes Patrio"
+                    role="img"
+                  >
+                    {/* Confeti festivo y destellos patrios de celebración */}
+                    <span className="atlas-header-confetti-cluster" aria-hidden="true">
+                      <span className="atlas-confetti-item c1" />
+                      <span className="atlas-confetti-item c2" />
+                      <span className="atlas-confetti-item c3" />
+                      <span className="atlas-confetti-item c4" />
+                      <span className="atlas-confetti-item c5" />
+                      <span className="atlas-confetti-item c6" />
+                      <span className="atlas-confetti-item c7" />
+                      <span className="atlas-confetti-item c8" />
+                    </span>
+
+                    <img
+                      src={banderaHonduras}
+                      alt="Bandera de Honduras"
+                      className="atlas-header-flag-img"
+                      draggable={false}
+                    />
+                  </span>
+                </span>
+              </h1>
               <p className="atlas-header-subtitle" style={styles.subtitle}>Laboratorio de Histología - Dr. Rafael Perdomo Vaquero</p>
               <div className="atlas-header-separator" style={styles.separator} />
               <p className="atlas-header-subtitle2" style={styles.subtitle2}>Facultad de Ciencias Médicas - UNAH</p>

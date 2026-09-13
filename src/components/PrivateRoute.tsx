@@ -18,7 +18,7 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles, req
 
   // Mostrar loading mientras se verifica la autenticación
   if (isLoading) {
-    return <AtlasLoadingScreen label="Verificando acceso…" />;
+    return <AtlasLoadingScreen fullScreen label="Verificando acceso…" />;
   }
 
   // Si no está autenticado, redirigir a home

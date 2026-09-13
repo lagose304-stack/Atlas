@@ -60,6 +60,57 @@ export const getActiveExamParcial = (
   return examBlock ? (examBlock.content?.parcial || 'primer') : null;
 };
 
+/**
+ * Determina dinámicamente cuál es el parcial activo según el componente
+ * de publicación semanal de inicio o, en su defecto, semana de exámenes.
+ */
+export const determineActiveWeeklyParcial = (
+  blocks: Array<{ block_type?: string; content?: Record<string, string> }> = [],
+  allTemas: SimpleTemaCatalog[] = []
+): 'primer' | 'segundo' | 'tercer' | null => {
+  const weeklyBlock = blocks.find((block) => block.block_type === 'weekly_publication');
+  if (weeklyBlock?.content) {
+    const c = weeklyBlock.content;
+    const topicIds = [c.topic_1_id, c.topic_2_id, c.topic_3_id]
+      .map(Number)
+      .filter((id) => Number.isFinite(id) && id > 0);
+
+    for (const id of topicIds) {
+      const tema = allTemas.find((t) => t.id === id);
+      if (tema?.parcial) {
+        const p = tema.parcial.toLowerCase().trim();
+        if (p === 'primer' || p === 'segundo' || p === 'tercer') {
+          return p as 'primer' | 'segundo' | 'tercer';
+        }
+      }
+    }
+
+    const topicNames = [c.topic_1, c.topic_2, c.topic_3]
+      .filter((n): n is string => Boolean(n && typeof n === 'string'))
+      .map((n) => n.toLowerCase().trim());
+
+    for (const name of topicNames) {
+      const tema = allTemas.find((t) => t.nombre?.toLowerCase().trim() === name);
+      if (tema?.parcial) {
+        const p = tema.parcial.toLowerCase().trim();
+        if (p === 'primer' || p === 'segundo' || p === 'tercer') {
+          return p as 'primer' | 'segundo' | 'tercer';
+        }
+      }
+    }
+  }
+
+  const examBlock = blocks.find((block) => block.block_type === 'exam_week');
+  if (examBlock?.content?.parcial) {
+    const p = examBlock.content.parcial.toLowerCase().trim();
+    if (p === 'primer' || p === 'segundo' || p === 'tercer') {
+      return p as 'primer' | 'segundo' | 'tercer';
+    }
+  }
+
+  return null;
+};
+
 export const orderTestsByWeeklyPriority = <T extends WeeklyThemeTest>(tests: T[], weeklyThemeIds: number[] = []): T[] => {
   if (!weeklyThemeIds.length) {
     return [...tests].sort((a, b) => {

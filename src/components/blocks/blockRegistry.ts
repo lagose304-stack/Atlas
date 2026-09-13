@@ -166,8 +166,8 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
     meta: { label: 'Publicación semanal', icon: 'SEM', description: 'Presenta los temas y la placa destacada de la semana.', color: '#2563eb' },
     schemaVersion: 1,
     defaultContent: {
-      eyebrow: 'Esta semana en el laboratorio',
-      title: 'Explora lo que estudiaremos esta semana',
+      eyebrow: 'Del 14 al 18 de septiembre',
+      title: 'TEMA DE LA SEMANA:',
       topic_1: '',
       topic_2: '',
       topic_3: '',
@@ -180,7 +180,7 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
       image_url: '',
       weekly_image_source: '',
       weekly_placa_id: '',
-      image_caption: 'Placa de la semana',
+      image_caption: '🥇 Placa de la semana 🏆',
       image_subtitle: 'Descubre y explora la placa destacada del laboratorio.',
       weekly_style: 'premium',
       weekly_image_position: 'right',
@@ -442,3 +442,14 @@ export const normalizeBlockContent = (
     __schema_version: String(BLOCK_REGISTRY[type].schemaVersion),
   };
 };
+
+export const normalizeWeeklyDates = (raw: string | null | undefined): string => {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  if (trimmed === 'Esta semana en el laboratorio') return '';
+  return trimmed
+    .replace(/^📅\s*/, '')
+    .replace(/^semana\s*:\s*/i, '')
+    .trim();
+};
+

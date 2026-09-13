@@ -42,6 +42,10 @@ const Home: React.FC = () => {
         }
       } catch (error) {
         console.error('Error fetching home content blocks:', error);
+      } finally {
+        if (isMounted) {
+          window.dispatchEvent(new CustomEvent('atlas:page-ready'));
+        }
       }
     };
 

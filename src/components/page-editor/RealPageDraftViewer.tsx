@@ -439,10 +439,6 @@ const RealPageDraftViewer: React.FC<RealPageDraftViewerProps> = ({
                         )}
 
                         <div className="subtema-media-badges">
-                          <span className="subtema-floating-pill">
-                            <span className="subtema-live-dot" />
-                            <span>Subtema</span>
-                          </span>
                           <span className="subtema-index-badge">
                             {String(idx + 1).padStart(2, '0')}
                           </span>

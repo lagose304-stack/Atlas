@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AlignCenter, AlignLeft, AlignRight, Bold, Copy, ImagePlus, Italic, Link2, List, ListOrdered, Palette, RemoveFormatting, RotateCcw, SlidersHorizontal, Strikethrough, Trash2, Type, Underline, X } from 'lucide-react';
-import { getBlockMeta } from '../blocks/blockRegistry';
+import { getBlockMeta, normalizeWeeklyDates } from '../blocks/blockRegistry';
 import { getCloudinaryImageUrl } from '../../services/cloudinaryImages';
 import { supabase } from '../../services/supabase';
 import type { ContentBlock } from '../../types/contentBlocks';
@@ -253,13 +253,23 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
     }
     if (block.block_type === 'weekly_publication') {
       return <>
-        <TextAreaField label="Etiqueta superior" value={content.eyebrow ?? ''} onChange={eyebrow => onChange({ eyebrow })} />
-        <TextAreaField label="Título principal" value={content.title ?? ''} onChange={title => onChange({ title })} />
+        <TextAreaField
+          label="Título de la publicación (plantilla fija)"
+          value={content.title ?? 'TEMA DE LA SEMANA:'}
+          placeholder="TEMA DE LA SEMANA:"
+          onChange={title => onChange({ title })}
+        />
         <TextAreaField label="Primer tema de la semana" value={content.topic_1 ?? ''} onChange={topic_1 => onChange({ topic_1 })} />
         <TextAreaField label="Segundo tema (opcional)" value={content.topic_2 ?? ''} onChange={topic_2 => onChange({ topic_2 })} />
         <TextAreaField label="Tercer tema (opcional)" value={content.topic_3 ?? ''} onChange={topic_3 => onChange({ topic_3 })} />
+        <TextAreaField
+          label="Fechas de la semana (prefijo fijo: 📅 Semana:)"
+          value={normalizeWeeklyDates(content.eyebrow ?? '')}
+          placeholder="Del 14 al 18 de septiembre"
+          onChange={eyebrow => onChange({ eyebrow })}
+        />
         <ImageField url={content.image_url ?? ''} onPick={() => onPickImage('image_url')} onClear={() => onChange({ image_url: '', weekly_image_source: '', weekly_placa_id: '' })} />
-        <TextAreaField label="Nombre de la placa semanal" value={content.image_caption ?? ''} onChange={image_caption => onChange({ image_caption })} />
+        <TextAreaField label="Nombre de la placa semanal" value={content.image_caption ?? ''} placeholder="🥇 Placa de la semana 🏆" onChange={image_caption => onChange({ image_caption })} />
       </>;
     }
     if (block.block_type === 'weekly_test') {

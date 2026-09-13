@@ -6,7 +6,7 @@ import { renderBoldText } from './BoldField';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { getCloudinaryPublicId } from '../services/cloudinary';
 import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
-import { normalizeBlockContent } from './blocks/blockRegistry';
+import { normalizeBlockContent, normalizeWeeklyDates } from './blocks/blockRegistry';
 import { supabase } from '../services/supabase';
 import {
   HistologyGeneralitiesBlock,
@@ -947,9 +947,6 @@ const BlockItem: React.FC<{
       const imageRight = (c.weekly_image_position || 'right') === 'right';
       const widthMap: Record<string, string> = { full: '100%', wide: '1050px', medium: '850px' };
       const style = c.weekly_style || 'premium';
-      const captionTransparency = Math.max(0, Math.min(100, Number(c.weekly_caption_transparency ?? 45)));
-      const captionOpacity = 100 - captionTransparency;
-      const captionBackground = `color-mix(in srgb, ${c.weekly_caption_bg || '#0f2a43'} ${captionOpacity}%, transparent)`;
       const weeklyTextStyle: React.CSSProperties = {
         textAlign: (c.weekly_text_align || 'left') as React.CSSProperties['textAlign'],
         fontFamily: c.weekly_font_family || '"Montserrat", "Segoe UI", sans-serif',
@@ -964,6 +961,30 @@ const BlockItem: React.FC<{
         { id: c.topic_2_id, name: c.topic_2, logo: c.topic_2_logo },
         { id: c.topic_3_id, name: c.topic_3, logo: c.topic_3_logo },
       ].filter(topic => topic.name);
+      const topicCount = Math.max(1, Math.min(3, topics.length));
+      const adaptiveGridMinHeight = topicCount === 1
+        ? 'clamp(130px, 13vw, 160px)'
+        : topicCount === 2
+          ? 'clamp(148px, 14.8vw, 185px)'
+          : 'clamp(168px, 16.5vw, 210px)';
+
+      const adaptiveContentPadding = topicCount === 1
+        ? 'clamp(8px, 1.2vw, 14px) clamp(20px, 2.5vw, 30px)'
+        : topicCount === 2
+          ? 'clamp(6px, 1vw, 12px) clamp(18px, 2.2vw, 28px)'
+          : 'clamp(5px, 0.8vw, 10px) clamp(16px, 2vw, 26px)';
+
+      const adaptiveTitleMarginBottom = topicCount === 1 ? '18px' : topicCount === 2 ? '14px' : '11px';
+      const adaptiveTopicGap = topicCount === 1 ? '0px' : topicCount === 2 ? '6px' : '4px';
+      const adaptiveDateMarginTop = topicCount === 1 ? '18px' : topicCount === 2 ? '14px' : '11px';
+      const adaptiveTopicPadding = topicCount === 1
+        ? '8px 14px 8px 14px'
+        : topicCount === 2
+          ? '6px 12px 6px 13px'
+          : '5px 10px 5px 12px';
+      const adaptiveTopicLogoSize = topicCount === 1 ? '42px' : topicCount === 2 ? '38px' : '35px';
+      const adaptiveTopicCols = topicCount === 1 ? '48px minmax(0, 1fr) 28px' : topicCount === 2 ? '44px minmax(0, 1fr) 28px' : '41px minmax(0, 1fr) 28px';
+
       return (
         <article
           className="cb-weekly-publication"
@@ -1038,7 +1059,7 @@ const BlockItem: React.FC<{
               gap: 0,
               padding: 0,
               alignItems: 'stretch',
-              minHeight: 'clamp(260px, 26vw, 340px)',
+              minHeight: adaptiveGridMinHeight,
             }}
           >
             {/* Columna de contenido */}
@@ -1048,35 +1069,44 @@ const BlockItem: React.FC<{
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center',
-                padding: 'clamp(18px, 2.5vw, 30px) clamp(22px, 3vw, 36px)',
+                padding: adaptiveContentPadding,
                 ...weeklyTextStyle,
               }}
             >
               {/* Título centrado */}
-              <div style={{ position: 'relative', width: '100%', marginBottom: '8px', textAlign: (c.weekly_text_align || 'center') as React.CSSProperties['textAlign'] }}>
-                <RichTextValue
-                  value={c.title || 'Explora lo que estudiaremos esta semana'}
-                  style={{
-                    width: '100%',
-                    margin: '0',
-                    color: c.weekly_title_color || c.style_text || '#071b31',
-                    fontSize: c.weekly_title_size || 'clamp(1.35rem, 2.2vw, 1.95rem)',
-                    fontWeight: Number(c.weekly_title_weight || 800),
-                    fontFamily: 'inherit',
-                    lineHeight: '1.15',
-                    letterSpacing: '-.025em',
-                    textTransform: 'inherit',
-                    fontStyle: 'inherit',
-                    textDecoration: 'inherit',
-                  }}
-                />
-              </div>
+              {(() => {
+                const defaultTitle = topics.length > 1 ? 'TEMAS DE LA SEMANA:' : 'TEMA DE LA SEMANA:';
+                const rawTitle = (c.title || '').trim();
+                const isGenericTitle = !rawTitle || rawTitle === 'Explora lo que estudiaremos esta semana';
+                const resolvedTitle = isGenericTitle ? defaultTitle : rawTitle;
 
-              {/* Línea decorativa centrada */}
-              <div style={{ alignSelf: c.weekly_text_align === 'left' ? 'flex-start' : c.weekly_text_align === 'right' ? 'flex-end' : 'center', width: '38px', height: '3px', borderRadius: '999px', background: `linear-gradient(90deg, ${accent}, #7dd3fc)`, marginBottom: '14px' }} />
+                return (
+                  <div style={{ position: 'relative', width: '100%', marginBottom: '3px', textAlign: (c.weekly_text_align || 'center') as React.CSSProperties['textAlign'] }}>
+                    <RichTextValue
+                      value={resolvedTitle}
+                      style={{
+                        width: '100%',
+                        margin: '0',
+                        color: c.weekly_title_color || c.style_text || '#071b31',
+                        fontSize: c.weekly_title_size || 'clamp(1.12rem, 1.6vw, 1.45rem)',
+                        fontWeight: Number(c.weekly_title_weight || 850),
+                        fontFamily: 'inherit',
+                        lineHeight: '1.15',
+                        letterSpacing: '-.02em',
+                        textTransform: 'inherit',
+                        fontStyle: 'inherit',
+                        textDecoration: 'inherit',
+                      }}
+                    />
+                  </div>
+                );
+              })()}
 
-              {/* Lista de temas */}
-              <div style={{ display: 'grid', gap: '9px' }}>
+              {/* Línea decorativa centrada con separación vertical adaptativa */}
+              <div style={{ alignSelf: c.weekly_text_align === 'left' ? 'flex-start' : c.weekly_text_align === 'right' ? 'flex-end' : 'center', width: '30px', height: '2px', borderRadius: '999px', background: `linear-gradient(90deg, ${accent}, #7dd3fc)`, marginBottom: adaptiveTitleMarginBottom }} />
+
+              {/* Lista de temas adaptativa */}
+              <div style={{ display: 'grid', gap: adaptiveTopicGap }}>
                   {topics.map((topic, index) => (
                     <a
                       className="cb-weekly-topic"
@@ -1086,66 +1116,75 @@ const BlockItem: React.FC<{
                         ['--weekly-accent' as string]: accent,
                         position: 'relative',
                         display: 'grid',
-                        gridTemplateColumns: '46px minmax(0, 1fr) 30px',
+                        gridTemplateColumns: adaptiveTopicCols,
                         alignItems: 'center',
                         gap: '12px',
-                        padding: '9px 12px 9px 14px',
+                        padding: adaptiveTopicPadding,
                         overflow: 'hidden',
-                        borderRadius: '14px',
+                        borderRadius: '12px',
                         background: 'linear-gradient(115deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 250, 255, 0.9) 100%)',
-                        border: '1.4px solid rgba(147, 213, 248, 0.7)',
-                        boxShadow: '0 4px 16px rgba(12, 69, 104, 0.06), inset 0 1px 0 #ffffff',
+                        border: '1.3px solid rgba(147, 213, 248, 0.7)',
+                        boxShadow: '0 2px 10px rgba(12, 69, 104, 0.04), inset 0 1px 0 #ffffff',
                         color: c.weekly_topic_color || '#071b31',
-                        fontSize: c.weekly_topic_size || '.92rem',
+                        fontSize: c.weekly_topic_size || '1.08rem',
                         textDecoration: 'none',
                         transition: 'transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease',
                       }}
                     >
-                      <span aria-hidden style={{ position: 'absolute', inset: '6px auto 6px 0', width: '3.5px', borderRadius: '0 99px 99px 0', background: `linear-gradient(180deg, ${accent}, #38bdf8)` }} />
+                      <span aria-hidden style={{ position: 'absolute', inset: '4px auto 4px 0', width: '3px', borderRadius: '0 99px 99px 0', background: `linear-gradient(180deg, ${accent}, #38bdf8)` }} />
                       {topic.logo ? (
                         <img
                           src={getCloudinaryImageUrl(topic.logo, 'thumbSmall')}
                           alt=""
                           style={{
-                            width: '42px',
-                            height: '42px',
+                            width: adaptiveTopicLogoSize,
+                            height: adaptiveTopicLogoSize,
                             objectFit: 'cover',
-                            borderRadius: '11px',
-                            border: '2px solid #ffffff',
-                            boxShadow: `0 3px 10px ${accent}25`,
+                            borderRadius: '9px',
+                            border: '1.2px solid #ffffff',
+                            boxShadow: `0 2px 6px ${accent}25`,
                           }}
                         />
                       ) : (
-                        <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: '42px', height: '42px', borderRadius: '11px', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: '1.15em' }}>
+                        <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: adaptiveTopicLogoSize, height: adaptiveTopicLogoSize, borderRadius: '9px', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: '1.15em' }}>
                           🔬
                         </span>
                       )}
                       <span style={{ display: 'grid', gap: '2px', minWidth: 0 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', width: 'fit-content', padding: '1px 6px', borderRadius: '4px', background: `${accent}14`, color: accent, fontSize: '.62em', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', width: 'fit-content', padding: '1px 6px', borderRadius: '4px', background: `${accent}14`, color: accent, fontSize: '.75em', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>
                           Tema {String(index + 1).padStart(2, '0')}
                         </span>
-                        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: Number(c.weekly_topic_weight || 750), lineHeight: 1.25 }}>
+                        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: Number(c.weekly_topic_weight || 750), lineHeight: 1.22 }}>
                           {topic.name}
                         </strong>
                       </span>
-                      <span className="cb-weekly-topic-arrow" aria-hidden style={{ display: 'grid', placeItems: 'center', width: '28px', height: '28px', borderRadius: '50%', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: '1.1em', fontWeight: 700 }}>
+                      <span className="cb-weekly-topic-arrow" aria-hidden style={{ display: 'grid', placeItems: 'center', width: '28px', height: '28px', borderRadius: '50%', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: '1.15em', fontWeight: 700 }}>
                         ›
                       </span>
                     </a>
                   ))}
                 </div>
 
-              {/* Fecha abajo y centrada */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '13px', color: '#64748b', fontSize: '0.72rem', fontWeight: 550, letterSpacing: '0.01em' }}>
-                <span aria-hidden style={{ color: '#0284c7', fontSize: '0.8rem', opacity: 0.85 }}>📅</span>
-                <RichTextValue value={c.eyebrow || 'Esta semana en el laboratorio'} style={{ minWidth: 0 }} />
-              </div>
+              {/* Fecha abajo y centrada con badge elegante y margen vertical adaptativo */}
+              {(() => {
+                const cleanDates = normalizeWeeklyDates(c.eyebrow);
+                if (!cleanDates) return null;
+                return (
+                  <div className="cb-weekly-date-badge" style={{ marginTop: adaptiveDateMarginTop }}>
+                    <span className="cb-weekly-date-icon" aria-hidden="true">📅</span>
+                    <span className="cb-weekly-date-label">Semana:</span>
+                    <span className="cb-weekly-date-value">
+                      <RichTextValue value={cleanDates} style={{ minWidth: 0, fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }} />
+                    </span>
+                  </div>
+                );
+              })()}
 
             </div>
 
-            {/* Figura / Placa que abarca del borde superior al inferior */}
+            {/* Figura / Placa con barra lateral vertical y foto limpia sin obstrucciones */}
             <figure
-              className={c.image_url ? 'cb-zoom-trigger' : undefined}
+              className={c.image_url ? 'cb-zoom-trigger cb-weekly-plate-figure' : 'cb-weekly-plate-figure'}
               role={c.image_url ? 'button' : undefined}
               tabIndex={c.image_url ? 0 : undefined}
               onClick={c.image_url ? () => onZoom(c.image_url, c.weekly_placa_id || undefined) : undefined}
@@ -1157,70 +1196,62 @@ const BlockItem: React.FC<{
                 margin: 0,
                 width: '100%',
                 height: '100%',
-                minHeight: '260px',
+                minHeight: adaptiveGridMinHeight,
                 overflow: 'hidden',
                 cursor: c.image_url ? 'zoom-in' : 'default',
+                display: 'flex',
+                flexDirection: 'row',
+                alignItems: 'stretch',
                 background: `linear-gradient(145deg, ${accent}15, #e0f2fe)`,
-                borderLeft: imageRight ? '1px solid rgba(186, 230, 253, 0.7)' : undefined,
-                borderRight: !imageRight ? '1px solid rgba(186, 230, 253, 0.7)' : undefined,
+                borderLeft: imageRight ? '1.5px solid rgba(186, 230, 253, 0.7)' : undefined,
+                borderRight: !imageRight ? '1.5px solid rgba(186, 230, 253, 0.7)' : undefined,
               }}
             >
-              {c.image_url ? (
-                <img
-                  src={getCloudinaryImageUrl(c.image_url, 'view')}
-                  alt={c.image_caption || 'Placa semanal del laboratorio'}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: (c.weekly_image_fit || 'cover') as React.CSSProperties['objectFit'],
-                    background: c.weekly_image_fit === 'contain' ? bg : undefined,
-                    display: 'block',
-                    transition: 'transform 0.5s ease',
-                  }}
-                />
-              ) : (
-                <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: accent, fontWeight: 800 }}>
-                  Placa semanal
-                </div>
-              )}
+              {/* Barra lateral vertical con diseño integrado y texto en dorado */}
+              {(() => {
+                const rawCaption = (c.image_caption || '').trim();
+                const cleanedCustomCaption = rawCaption.replace(/^[🥇🏆\s]+/, '').replace(/[🥇🏆\s]+$/, '').trim();
+                const displayCaption = cleanedCustomCaption || rawCaption || (topics[0]?.name ? `${topics[0].name}` : 'Placa de la semana');
 
-              {/* Esquina decorativa sobre la imagen */}
-              <div aria-hidden style={{ position: 'absolute', top: '10px', right: '10px', width: '24px', height: '24px', pointerEvents: 'none', opacity: 0.35 }}>
-                <svg viewBox="0 0 24 24" width="24" height="24"><path d="M24 0v8M16 0h8" stroke="#ffffff" strokeWidth="2" fill="none" /></svg>
+                return (
+                  <div className="cb-weekly-vertical-bar">
+                    <div className="cb-weekly-vertical-top">
+                      <span className="cb-weekly-vertical-icon" aria-hidden="true" title="Preparación histológica">🔬</span>
+                      <span className="cb-weekly-vertical-spark" aria-hidden="true">✦</span>
+                    </div>
+                    <div className="cb-weekly-vertical-text-wrap" title={displayCaption}>
+                      <span className="cb-weekly-vertical-text">
+                        <RichTextValue value={displayCaption} style={{ minWidth: 0, fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }} />
+                      </span>
+                    </div>
+                    <div className="cb-weekly-vertical-bottom">
+                      <span className="cb-weekly-vertical-spark" aria-hidden="true">✧</span>
+                      <span className="cb-weekly-vertical-action" aria-hidden="true" title="Ampliar placa">↗</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Contenedor de la placa histológica 100% visible sin obstrucciones */}
+              <div className="cb-weekly-plate-image-wrap">
+                {c.image_url ? (
+                  <img
+                    src={getCloudinaryImageUrl(c.image_url, 'view')}
+                    alt={c.image_caption || 'Placa de la semana'}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: (c.weekly_image_fit || 'cover') as React.CSSProperties['objectFit'],
+                      background: c.weekly_image_fit === 'contain' ? bg : undefined,
+                      display: 'block',
+                    }}
+                  />
+                ) : (
+                  <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: accent, fontWeight: 750, fontSize: '0.9rem', background: '#f0f9ff' }}>
+                    Placa semanal
+                  </div>
+                )}
               </div>
-              <div aria-hidden style={{ position: 'absolute', bottom: '50px', left: '10px', width: '24px', height: '24px', pointerEvents: 'none', opacity: 0.25 }}>
-                <svg viewBox="0 0 24 24" width="24" height="24"><path d="M0 24v-8M8 24H0" stroke="#ffffff" strokeWidth="2" fill="none" /></svg>
-              </div>
-
-              {/* Degradado para dar profundidad al pie */}
-              <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(15,42,67,0.08) 0%, transparent 40%, rgba(15,42,67,0.45) 100%)' }} />
-
-              {/* Pie de foto / Caption */}
-              {c.image_caption && (
-                <figcaption
-                  style={{
-                    position: 'absolute',
-                    inset: 'auto 12px 12px 12px',
-                    display: 'grid',
-                    gridTemplateColumns: '14px minmax(0, 1fr) 26px',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '7px 11px',
-                    borderRadius: '11px',
-                    color: c.weekly_caption_color || '#ffffff',
-                    background: captionBackground,
-                    border: '1px solid rgba(255, 255, 255, 0.28)',
-                    boxShadow: '0 6px 18px rgba(8, 48, 82, 0.22)',
-                    backdropFilter: 'blur(14px) saturate(1.2)',
-                  }}
-                >
-                  <span aria-hidden style={{ justifySelf: 'center', width: '7px', height: '7px', borderRadius: '50%', background: '#38bdf8', boxShadow: '0 0 8px #38bdf8' }} />
-                  <RichTextValue value={c.image_caption} style={{ minWidth: 0, fontSize: 'clamp(.76rem, 1vw, .9rem)', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700 }} />
-                  <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: '26px', height: '26px', borderRadius: '8px', background: 'rgba(255,255,255,.9)', color: '#0369a1', border: '1px solid rgba(255,255,255,.8)', fontSize: '.85em', fontWeight: 850 }}>
-                    ↗
-                  </span>
-                </figcaption>
-              )}
             </figure>
           </div>
         </article>

@@ -8,7 +8,9 @@ import MaintenanceGate from './components/MaintenanceGate';
 import { logClientError } from './services/adminControlCenter';
 import AtlasLoadingScreen from './components/AtlasLoadingScreen';
 
-const Home = lazy(() => import('./pages/Home'));
+// Pre-cargar la página de inicio en paralelo con la verificación de mantenimiento y auth
+const homePromise = import('./pages/Home');
+const Home = lazy(() => homePromise);
 const Edicion = lazy(() => import('./pages/Edicion'));
 const TemarioPublico = lazy(() => import('./pages/TemarioPublico'));
 const Temario = lazy(() => import('./pages/Temario'));
@@ -42,7 +44,7 @@ const Creditos = lazy(() => import('./pages/Creditos'));
 const ROLE_ADMIN = 'Administrador' as const;
 const ROLE_MICRO = 'Microscopía' as const;
 
-const RouteLoadingFallback = () => <AtlasLoadingScreen label="Cargando sección…" />;
+const RouteLoadingFallback = () => <AtlasLoadingScreen fullScreen label="Preparando el sitio…" />;
 
 import { saveScrollPosition, restoreScrollPosition } from './services/navigationStateKeeper';
 

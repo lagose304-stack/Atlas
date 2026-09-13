@@ -47,6 +47,14 @@ const normalizeBlocks = (rows: unknown[] | null | undefined): PublicationBlock[]
 const renderableBlocksCache = new Map<string, { timestamp: number; blocks: PublicationBlock[] }>();
 const CACHE_TTL_MS = 60_000;
 
+export const getCachedRenderableBlocks = (entityType: PageEntityType, entityId: number): PublicationBlock[] | null => {
+  const cached = renderableBlocksCache.get(`${entityType}:${entityId}`);
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+    return cached.blocks;
+  }
+  return null;
+};
+
 export const clearRenderableBlocksCache = (entityType?: PageEntityType, entityId?: number) => {
   if (entityType !== undefined && entityId !== undefined) {
     renderableBlocksCache.delete(`${entityType}:${entityId}`);

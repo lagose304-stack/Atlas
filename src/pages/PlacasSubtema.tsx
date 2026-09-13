@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Eye, Images, Microscope, MousePointerClick, Shield } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -9,6 +9,7 @@ import Footer from '../components/Footer';
 import ImageViewerModal from '../components/ImageViewerModal';
 import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
+import AtlasLoadingScreen from '../components/AtlasLoadingScreen';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { getRenderableBlocks } from '../services/contentPublication';
@@ -26,6 +27,7 @@ import {
   getQuickPlacasForSubtema,
   getQuickSubtemaById,
   getQuickSubtemas,
+  getQuickTemaById,
   prefetchSubtemaPlacas,
 } from '../services/catalogService';
 import { getPreservedSearchParam, syncUrlSearchParam } from '../services/navigationStateKeeper';
@@ -172,7 +174,7 @@ const PlacasSubtemaContent: React.FC = () => {
     ? ((initialPlacasBundle.placas as unknown as Placa[]).find((p) => p.id === initialPlacaIdParam) ?? null)
     : null;
 
-  const [loading, setLoading] = useState<boolean>(!hasCompleteInitialData);
+  const [_loading, setLoading] = useState<boolean>(!hasCompleteInitialData);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedPlaca, setSelectedPlaca] = useState<Placa | null>(initialSelectedPlaca);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
@@ -183,6 +185,28 @@ const PlacasSubtemaContent: React.FC = () => {
   const [allSubtemas, setAllSubtemas] = useState<SubtemaNav[]>(
     (initialSiblingSubtemas as unknown as SubtemaNav[]) ?? []
   );
+
+  const [showOverlay, setShowOverlay] = useState(true);
+  const [isOverlayExiting, setIsOverlayExiting] = useState(false);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const startTimeRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (!isDataLoaded) return;
+    const MIN_DISPLAY_MS = 500;
+    const elapsed = Date.now() - startTimeRef.current;
+    const remaining = Math.max(0, MIN_DISPLAY_MS - elapsed);
+
+    const timer = window.setTimeout(() => {
+      setIsOverlayExiting(true);
+      const exitTimer = window.setTimeout(() => {
+        setShowOverlay(false);
+      }, 360);
+      return () => window.clearTimeout(exitTimer);
+    }, remaining);
+
+    return () => window.clearTimeout(timer);
+  }, [isDataLoaded]);
 
   // Restaurar placa seleccionada cuando el bundle o catálogo asíncrono termine de cargar
   useEffect(() => {
@@ -217,7 +241,10 @@ const PlacasSubtemaContent: React.FC = () => {
   }, [placas]);
 
   useEffect(() => {
-    if (!numSubtemaId) return;
+    if (!numSubtemaId) {
+      setIsDataLoaded(true);
+      return;
+    }
 
     let isMounted = true;
 
@@ -265,11 +292,13 @@ const PlacasSubtemaContent: React.FC = () => {
             if (maintenanceStatus.enabled) {
               setErrorMessage('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
               setLoading(false);
+              setIsDataLoaded(true);
               return;
             }
             if (isFeatureDisabled('public_catalog', maintenanceStatus.disabledFeatures)) {
               setErrorMessage('El catálogo de temas y placas se encuentra temporalmente deshabilitado por mantenimiento.');
               setLoading(false);
+              setIsDataLoaded(true);
               return;
             }
             if (subtemaData) {
@@ -278,6 +307,7 @@ const PlacasSubtemaContent: React.FC = () => {
               if (isTemaDisabled(subtemaData.tema_id, temaParcial, maintenanceStatus.disabledFeatures)) {
                 setErrorMessage('Este tema se encuentra temporalmente fuera de servicio por mantenimiento o actualización.');
                 setLoading(false);
+                setIsDataLoaded(true);
                 return;
               }
             }
@@ -316,6 +346,10 @@ const PlacasSubtemaContent: React.FC = () => {
       } catch (err) {
         console.error('Error cargando placas del subtema:', err);
         setLoading(false);
+      } finally {
+        if (isMounted) {
+          setIsDataLoaded(true);
+        }
       }
     };
 
@@ -328,9 +362,17 @@ const PlacasSubtemaContent: React.FC = () => {
 
   const handleGoBack = useSmartBackNavigation('/');
 
-  const temaNombre = Array.isArray(subtema?.temas)
-    ? (subtema?.temas[0]?.nombre ?? '')
-    : (subtema?.temas?.nombre ?? '');
+  const temaNombre = useMemo(() => {
+    const fromRel = Array.isArray(subtema?.temas)
+      ? (subtema?.temas[0]?.nombre ?? '')
+      : (subtema?.temas?.nombre ?? '');
+    if (fromRel && fromRel.trim() !== '') return fromRel.trim();
+    if (subtema?.tema_id) {
+      const quick = getQuickTemaById(subtema.tema_id);
+      if (quick?.nombre) return quick.nombre.trim();
+    }
+    return '';
+  }, [subtema]);
 
   const currentSubtemaId = Number(subtemaId ?? 0);
 
@@ -745,23 +787,35 @@ const PlacasSubtemaContent: React.FC = () => {
             )}
             <div style={styles.sectionTitleWrap}>
               <h1 style={styles.title}>
-                {loading ? 'Cargando...' : subtema?.nombre ?? 'Placas'}
+                {temaNombre && subtema?.tema_id ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/subtemas/${subtema.tema_id}`)}
+                      className="placas-tema-parent-link"
+                      style={styles.temaParentLink}
+                      title={`Volver al tema: ${temaNombre}`}
+                    >
+                      {temaNombre}
+                    </button>
+                    <span style={styles.titleColon}> : </span>
+                    <span style={styles.subtemaTitleText}>{subtema?.nombre ?? 'Placas'}</span>
+                  </>
+                ) : (
+                  subtema?.nombre ?? 'Placas'
+                )}
               </h1>
             </div>
           </div>
 
           {/* Bloques de contenido editorial */}
-          {!loading && contentBlocks.length > 0 && (
+          {contentBlocks.length > 0 && (
             <div className="public-editor-content public-editor-content-before-system">
               <ContentBlockRenderer blocks={contentBlocks} />
             </div>
           )}
 
-          {loading ? (
-            <div style={styles.spinnerWrap}>
-              <div style={styles.spinner} />
-            </div>
-          ) : errorMessage ? (
+          {errorMessage ? (
             <div style={{ padding: '36px 20px', textAlign: 'center', background: '#fff5f5', borderRadius: '16px', border: '1px solid #fecaca', margin: '20px 0' }}>
               <p style={{ margin: '0 0 16px', color: '#991b1b', fontSize: '1rem', fontWeight: 600 }}>{errorMessage}</p>
               <button
@@ -957,7 +1011,7 @@ const PlacasSubtemaContent: React.FC = () => {
             </div>
           ) : null}
 
-          {!loading && (navAnterior || navSiguiente) && (
+          {(navAnterior || navSiguiente) && (
             <section aria-label="Navegación entre subtemas" style={styles.navigationPanel}>
               <div style={styles.navigationButtonGrid}>
                 {navAnterior && (
@@ -1087,6 +1141,14 @@ const PlacasSubtemaContent: React.FC = () => {
           }}
         />
       )}
+
+      {showOverlay && (
+        <AtlasLoadingScreen
+          fullScreen
+          label="Cargando placas…"
+          isExiting={isOverlayExiting}
+        />
+      )}
     </div>
   );
 };
@@ -1166,6 +1228,33 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 800,
     color: '#000000',
     letterSpacing: '-0.02em',
+    lineHeight: 1.25,
+  },
+  temaParentLink: {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    margin: 0,
+    font: 'inherit',
+    fontSize: 'inherit',
+    fontWeight: 'inherit',
+    color: '#0284c7',
+    cursor: 'pointer',
+    textDecoration: 'none',
+    display: 'inline',
+    lineHeight: 'inherit',
+    textAlign: 'left',
+  },
+  titleColon: {
+    color: '#64748b',
+    fontWeight: 600,
+    margin: '0 5px',
+    display: 'inline',
+  },
+  subtemaTitleText: {
+    color: '#0f172a',
+    fontWeight: 800,
+    display: 'inline',
   },
   countBadge: {
     background: 'linear-gradient(135deg, #bfdbfe, #e0e7ff)',

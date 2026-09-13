@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Wrench } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,11 +13,20 @@ import LoginForm from './LoginForm';
 import AtlasLoadingScreen from './AtlasLoadingScreen';
 import laboratoryLogo from '../assets/logos/laboratorio.png';
 
+let hasShownInitialSitePreparation = false;
+
 const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   const location = useLocation();
   const [status, setStatus] = useState<SiteMaintenanceStatus | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+
+  const isTestEnv = typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test';
+
+  const [showInitialSplash, setShowInitialSplash] = useState(() => !hasShownInitialSitePreparation && !isTestEnv);
+  const [isSplashExiting, setIsSplashExiting] = useState(false);
+  const [componentsReady, setComponentsReady] = useState(() => isTestEnv || hasShownInitialSitePreparation);
+  const startTimeRef = useRef<number>(Date.now());
 
   // Carga inicial y suscripción a cambios en tiempo real + sondeo
   useEffect(() => {
@@ -42,6 +51,62 @@ const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
     document.body.classList.toggle('atlas-search-disabled', Boolean(searchDisabled));
     return () => document.body.classList.remove('atlas-search-disabled');
   }, [canBypass, status]);
+
+  // Escuchar cuando los componentes iniciales (como Home) terminan de cargar sus datos
+  useEffect(() => {
+    if (!showInitialSplash || componentsReady) return;
+
+    const handlePageReady = () => {
+      setComponentsReady(true);
+    };
+
+    window.addEventListener('atlas:page-ready', handlePageReady, { once: true });
+
+    // Fallback de seguridad: si la ruta no despacha el evento en 750ms, asumir componentes listos
+    const fallbackTimer = window.setTimeout(() => {
+      setComponentsReady(true);
+    }, 750);
+
+    return () => {
+      window.removeEventListener('atlas:page-ready', handlePageReady);
+      window.clearTimeout(fallbackTimer);
+    };
+  }, [showInitialSplash, componentsReady]);
+
+  // Transición suave de salida solo cuando:
+  // 1. La autenticación y estado de mantenimiento están confirmados
+  // 2. Los componentes del sitio han terminado de cargar
+  // 3. Se ha cumplido el tiempo mínimo para ver la animación completa sin parpadeos
+  useEffect(() => {
+    if (!showInitialSplash || isSplashExiting) return;
+    if (authLoading || status === null) return;
+
+    // Si el sitio está en mantenimiento y el usuario no tiene bypass, no esperar componentes
+    if (status.enabled && !canBypass) {
+      setShowInitialSplash(false);
+      hasShownInitialSitePreparation = true;
+      return;
+    }
+
+    if (!componentsReady) return;
+
+    const MIN_SPLASH_TIME = 850;
+    const elapsedTime = Date.now() - startTimeRef.current;
+    const remainingTime = Math.max(0, MIN_SPLASH_TIME - elapsedTime);
+
+    const exitTimer = window.setTimeout(() => {
+      setIsSplashExiting(true);
+      const removeTimer = window.setTimeout(() => {
+        setShowInitialSplash(false);
+        hasShownInitialSitePreparation = true;
+      }, 360);
+      return () => window.clearTimeout(removeTimer);
+    }, remainingTime);
+
+    return () => {
+      window.clearTimeout(exitTimer);
+    };
+  }, [showInitialSplash, isSplashExiting, authLoading, status, canBypass, componentsReady]);
 
   if (authLoading || status === null) {
     return <AtlasLoadingScreen fullScreen label="Preparando el sitio…" />;
@@ -82,6 +147,13 @@ const MaintenanceGate: React.FC<React.PropsWithChildren> = ({ children }) => {
           </div>
         )}
         {children}
+        {showInitialSplash && (
+          <AtlasLoadingScreen
+            fullScreen
+            label="Preparando el sitio…"
+            isExiting={isSplashExiting}
+          />
+        )}
       </>
     );
   }

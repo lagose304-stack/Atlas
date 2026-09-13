@@ -4,16 +4,18 @@ import laboratoryLogo from '../assets/logos/laboratorio.png';
 interface AtlasLoadingScreenProps {
   label?: string;
   fullScreen?: boolean;
+  isExiting?: boolean;
 }
 
 const AtlasLoadingScreen: React.FC<AtlasLoadingScreenProps> = ({
   label = 'Preparando el Atlas de Histología…',
-  fullScreen = false,
+  fullScreen = true,
+  isExiting = false,
 }) => (
   <div
     role="status"
     aria-live="polite"
-    className={`atlas-loading-screen${fullScreen ? ' atlas-loading-screen--full' : ''}`}
+    className={`atlas-loading-screen${fullScreen ? ' atlas-loading-screen--full' : ' atlas-loading-screen--inline'}${isExiting ? ' atlas-loading-screen--exiting' : ''}`}
   >
     <div className="atlas-loading-glow" aria-hidden="true" />
     <div className="atlas-loading-card">

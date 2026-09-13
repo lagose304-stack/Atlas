@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import AtlasLoadingScreen from '../components/AtlasLoadingScreen';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks } from '../services/contentPublication';
@@ -67,7 +68,7 @@ const StandardSubtemas: React.FC = () => {
 
   const [tema, setTema] = useState<Tema | null>((initialTema as unknown as Tema) ?? null);
   const [subtemas, setSubtemas] = useState<Subtema[]>((initialSubtemas as unknown as Subtema[]) ?? []);
-  const [loading, setLoading] = useState<boolean>(!hasCompleteInitialData);
+  const [_loading, setLoading] = useState<boolean>(!hasCompleteInitialData);
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const [temaLogoFailed, setTemaLogoFailed] = useState(false);
   const [temaLogoSrc, setTemaLogoSrc] = useState('');
@@ -76,12 +77,36 @@ const StandardSubtemas: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [allTemas, setAllTemas] = useState<Tema[]>((initialAllTemas as unknown as Tema[]) ?? []);
 
+  const [showOverlay, setShowOverlay] = useState(true);
+  const [isOverlayExiting, setIsOverlayExiting] = useState(false);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const startTimeRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (!isDataLoaded || isOverlayExiting || !showOverlay) return;
+
+    const MIN_DISPLAY_MS = 500;
+    const elapsed = Date.now() - startTimeRef.current;
+    const remaining = Math.max(0, MIN_DISPLAY_MS - elapsed);
+
+    const exitTimer = window.setTimeout(() => {
+      setIsOverlayExiting(true);
+      const removeTimer = window.setTimeout(() => {
+        setShowOverlay(false);
+      }, 360);
+      return () => window.clearTimeout(removeTimer);
+    }, remaining);
+
+    return () => window.clearTimeout(exitTimer);
+  }, [isDataLoaded, isOverlayExiting, showOverlay]);
+
   const fetchData = useCallback(async () => {
     if (!currentTemaId) {
       setTema(null);
       setSubtemas([]);
       setLoadError('No se recibio un tema valido para mostrar.');
       setLoading(false);
+      setIsDataLoaded(true);
       return;
     }
 
@@ -163,10 +188,10 @@ const StandardSubtemas: React.FC = () => {
       if (!temaData && !initialTema) {
         setLoadError('No se pudo cargar la información de este tema. Revisa tu conexión a internet.');
       }
-
-      setLoading(false);
     } catch (err) {
       console.error('Error general cargando subtemas:', err);
+    } finally {
+      setIsDataLoaded(true);
       setLoading(false);
     }
   }, [currentTemaId, user, isAuthenticated, initialTema]);
@@ -240,12 +265,7 @@ const StandardSubtemas: React.FC = () => {
       <main style={styles.main}>
         <BackButton onClick={handleGoBack} />
 
-        {loading ? (
-          <div style={styles.loadingWrap}>
-            <div style={styles.spinner} />
-            <p className="atlas-typo-body" style={styles.loadingText}>Cargando subtemas...</p>
-          </div>
-        ) : loadError ? (
+        {loadError ? (
           <section style={styles.card}>
             <div style={styles.errorState}>
               <span style={styles.errorIcon}>⚠️</span>
@@ -352,10 +372,6 @@ const StandardSubtemas: React.FC = () => {
                         )}
 
                         <div className="subtema-media-badges">
-                          <span className="subtema-floating-pill">
-                            <span className="subtema-live-dot" />
-                            <span>Subtema</span>
-                          </span>
                           <span className="subtema-index-badge">
                             {String(idx + 1).padStart(2, '0')}
                           </span>
@@ -456,6 +472,14 @@ const StandardSubtemas: React.FC = () => {
       </main>
 
       <Footer />
+
+      {showOverlay && (
+        <AtlasLoadingScreen
+          fullScreen
+          label="Cargando tema…"
+          isExiting={isOverlayExiting}
+        />
+      )}
     </div>
   );
 };

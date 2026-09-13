@@ -12,7 +12,7 @@ import Highlight from '@tiptap/extension-highlight';
 import { supabase } from '../services/supabase';
 import { deleteFromCloudinary, getCloudinaryPublicId, uploadToCloudinary } from '../services/cloudinary';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
-import { BLOCK_TYPES, createDefaultBlockContent, getBlockMeta, normalizeBlockContent } from './blocks/blockRegistry';
+import { BLOCK_TYPES, createDefaultBlockContent, getBlockMeta, normalizeBlockContent, normalizeWeeklyDates } from './blocks/blockRegistry';
 import { getPublicationInfo, setPublicationDraft } from '../services/contentPublication';
 import { savePageVersionBlocks, type PageVersionRow } from '../services/pageVersionsService';
 import LoadingToast from './LoadingToast';
@@ -2699,16 +2699,132 @@ const MemoBlockContentEditor = React.memo(({
       {block.block_type === 'weekly_publication' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(220px, .85fr)', gap: '18px', padding: '18px', border: '1px solid #bfdbfe', borderRadius: '18px', background: 'linear-gradient(135deg,#eef8ff,#ffffff)' }}>
           <div style={{ display: 'grid', gap: '10px' }}>
-            <AutoTextarea editorId={`${block.id}:eyebrow`} showToolbar={false} value={block.content.eyebrow ?? ''} onChange={eyebrow => onUpdateBlockContent(block.id, { eyebrow })} placeholder="Fecha, por ejemplo: 13–17 de julio de 2026" />
-            <AutoTextarea editorId={`${block.id}:title`} showToolbar={false} extraStyle={{ fontSize: '1.2em', fontWeight: 800 }} value={block.content.title ?? ''} onChange={title => onUpdateBlockContent(block.id, { title })} placeholder="Título de la publicación" />
-            <WeeklyTemaPicker label="Primer tema de la semana" value={block.content.topic_1_id ?? ''} temas={allTemas} onSelect={tema => onUpdateBlockContent(block.id, { topic_1_id: tema ? String(tema.id) : '', topic_1: tema?.nombre || '', topic_1_logo: tema?.logo_url || '' })} />
-            <WeeklyTemaPicker label="Segundo tema (opcional)" value={block.content.topic_2_id ?? ''} temas={allTemas} optional onSelect={tema => onUpdateBlockContent(block.id, { topic_2_id: tema ? String(tema.id) : '', topic_2: tema?.nombre || '', topic_2_logo: tema?.logo_url || '' })} />
-            <WeeklyTemaPicker label="Tercer tema (opcional)" value={block.content.topic_3_id ?? ''} temas={allTemas} optional onSelect={tema => onUpdateBlockContent(block.id, { topic_3_id: tema ? String(tema.id) : '', topic_3: tema?.nombre || '', topic_3_logo: tema?.logo_url || '' })} />
+            {/* Título de la plantilla */}
+            <div style={{ display: 'grid', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Título de la plantilla
+                </span>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateBlockContent(block.id, { title: 'TEMA DE LA SEMANA:' })}
+                    style={{
+                      fontSize: '0.72rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid #bae6fd',
+                      background: (!block.content.title || block.content.title === 'TEMA DE LA SEMANA:') ? '#0284c7' : '#ffffff',
+                      color: (!block.content.title || block.content.title === 'TEMA DE LA SEMANA:') ? '#ffffff' : '#0369a1',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    1 Tema
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateBlockContent(block.id, { title: 'TEMAS DE LA SEMANA:' })}
+                    style={{
+                      fontSize: '0.72rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid #bae6fd',
+                      background: block.content.title === 'TEMAS DE LA SEMANA:' ? '#0284c7' : '#ffffff',
+                      color: block.content.title === 'TEMAS DE LA SEMANA:' ? '#ffffff' : '#0369a1',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Varios Temas
+                  </button>
+                </div>
+              </div>
+              <AutoTextarea
+                editorId={`${block.id}:title`}
+                showToolbar={false}
+                extraStyle={{ fontSize: '1.15em', fontWeight: 800, color: '#071b31' }}
+                value={block.content.title || 'TEMA DE LA SEMANA:'}
+                onChange={title => onUpdateBlockContent(block.id, { title })}
+                placeholder="TEMA DE LA SEMANA:"
+              />
+            </div>
+
+            {/* Selector de temas */}
+            <WeeklyTemaPicker
+              label="Primer tema de la semana"
+              value={block.content.topic_1_id ?? ''}
+              temas={allTemas}
+              onSelect={tema => onUpdateBlockContent(block.id, { topic_1_id: tema ? String(tema.id) : '', topic_1: tema?.nombre || '', topic_1_logo: tema?.logo_url || '' })}
+            />
+            <WeeklyTemaPicker
+              label="Segundo tema (opcional)"
+              value={block.content.topic_2_id ?? ''}
+              temas={allTemas}
+              optional
+              onSelect={tema => {
+                const hasMultiple = Boolean(tema || block.content.topic_3_id);
+                const updates: Record<string, string> = {
+                  topic_2_id: tema ? String(tema.id) : '',
+                  topic_2: tema?.nombre || '',
+                  topic_2_logo: tema?.logo_url || '',
+                };
+                if (hasMultiple && (!block.content.title || block.content.title === 'TEMA DE LA SEMANA:')) {
+                  updates.title = 'TEMAS DE LA SEMANA:';
+                }
+                onUpdateBlockContent(block.id, updates);
+              }}
+            />
+            <WeeklyTemaPicker
+              label="Tercer tema (opcional)"
+              value={block.content.topic_3_id ?? ''}
+              temas={allTemas}
+              optional
+              onSelect={tema => {
+                const hasMultiple = Boolean(tema || block.content.topic_2_id);
+                const updates: Record<string, string> = {
+                  topic_3_id: tema ? String(tema.id) : '',
+                  topic_3: tema?.nombre || '',
+                  topic_3_logo: tema?.logo_url || '',
+                };
+                if (hasMultiple && (!block.content.title || block.content.title === 'TEMA DE LA SEMANA:')) {
+                  updates.title = 'TEMAS DE LA SEMANA:';
+                }
+                onUpdateBlockContent(block.id, updates);
+              }}
+            />
+
+            {/* Fechas de la semana al pie con prefijo fijo */}
+            <div style={{ display: 'grid', gap: '4px', marginTop: '2px' }}>
+              <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Fechas de la semana
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#ffffff', border: '1.5px solid #bae6fd', borderRadius: '12px', padding: '8px 14px', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.03)' }}>
+                <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0284c7', display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', userSelect: 'none' }}>
+                  📅 Semana:
+                </span>
+                <input
+                  type="text"
+                  value={normalizeWeeklyDates(block.content.eyebrow ?? '')}
+                  onChange={e => onUpdateBlockContent(block.id, { eyebrow: e.target.value })}
+                  placeholder="Del 14 al 18 de septiembre"
+                  style={{
+                    border: 'none',
+                    outline: 'none',
+                    width: '100%',
+                    fontSize: '0.94rem',
+                    color: '#0f172a',
+                    fontWeight: 600,
+                    background: 'transparent',
+                  }}
+                />
+              </div>
+            </div>
           </div>
           <div style={{ display: 'grid', alignContent: 'center', gap: '9px' }}>
             {block.content.image_url ? <img src={getCloudinaryImageUrl(block.content.image_url, 'cardWideSmall')} alt="Placa semanal" style={{ width: '100%', height: '135px', objectFit: 'cover', borderRadius: '14px', border: '1px solid #bfdbfe' }} /> : <div style={{ display: 'grid', placeItems: 'center', minHeight: '135px', border: '2px dashed #93c5fd', borderRadius: '14px', color: '#53789d', background: '#fff' }}>Selecciona la placa semanal</div>}
             <button type="button" style={es.selectionBtn} onClick={() => onOpenImageModal(block.id, 'image_url')}>{block.content.image_url ? 'Cambiar imagen' : 'Subir o elegir imagen'}</button>
-            <AutoTextarea editorId={`${block.id}:caption`} showToolbar={false} value={block.content.image_caption ?? ''} onChange={image_caption => onUpdateBlockContent(block.id, { image_caption })} placeholder="Nombre o descripción de la placa" />
+            <AutoTextarea editorId={`${block.id}:caption`} showToolbar={false} value={block.content.image_caption ?? ''} onChange={image_caption => onUpdateBlockContent(block.id, { image_caption })} placeholder="Nombre o descripción de la placa (ej: 🥇 Placa de la semana 🏆)" />
           </div>
         </div>
       )}

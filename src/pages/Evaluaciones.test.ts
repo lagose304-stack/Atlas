@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { collectWeeklyThemeIds, groupHistoricalTestsByPartial, orderTestsByWeeklyPriority } from './evaluacionesUtils';
+import {
+  collectWeeklyThemeIds,
+  determineActiveWeeklyParcial,
+  groupHistoricalTestsByPartial,
+  orderTestsByWeeklyPriority,
+} from './evaluacionesUtils';
 
 describe('evaluaciones weekly filters', () => {
   it('extrae los temas activos de la publicación semanal', () => {
@@ -98,5 +103,64 @@ describe('evaluaciones weekly filters', () => {
 
     const ordered = orderTestsByWeeklyPriority(tests as any, [62, 29, 31, 34]);
     expect(ordered.map(t => t.id)).toEqual(['microscopia', 'epitelios', 'conectivo', 'nervioso']);
+  });
+
+  describe('determineActiveWeeklyParcial', () => {
+    const catalogTemas = [
+      { id: 10, nombre: 'Tejido Epitelial', parcial: 'primer' },
+      { id: 25, nombre: 'Sistema Cardiovascular', parcial: 'segundo' },
+      { id: 40, nombre: 'Sistema Nervioso Central', parcial: 'tercer' },
+    ];
+
+    it('detecta segundo parcial cuando la publicación semanal tiene un tema del segundo parcial', () => {
+      const blocks = [
+        {
+          block_type: 'weekly_publication',
+          content: {
+            topic_1_id: '25',
+            topic_1: 'Sistema Cardiovascular',
+          },
+        },
+      ];
+
+      expect(determineActiveWeeklyParcial(blocks as any, catalogTemas)).toBe('segundo');
+    });
+
+    it('detecta tercer parcial por nombre de tema si no hay topic_id numérico', () => {
+      const blocks = [
+        {
+          block_type: 'weekly_publication',
+          content: {
+            topic_1: 'Sistema Nervioso Central',
+          },
+        },
+      ];
+
+      expect(determineActiveWeeklyParcial(blocks as any, catalogTemas)).toBe('tercer');
+    });
+
+    it('detecta el parcial del bloque exam_week si no hay publicación semanal', () => {
+      const blocks = [
+        {
+          block_type: 'exam_week',
+          content: {
+            parcial: 'segundo',
+          },
+        },
+      ];
+
+      expect(determineActiveWeeklyParcial(blocks as any, catalogTemas)).toBe('segundo');
+    });
+
+    it('devuelve null si no hay bloques de publicación semanal ni examen', () => {
+      const blocks = [
+        {
+          block_type: 'paragraph',
+          content: { text: 'Hola' },
+        },
+      ];
+
+      expect(determineActiveWeeklyParcial(blocks as any, catalogTemas)).toBeNull();
+    });
   });
 });

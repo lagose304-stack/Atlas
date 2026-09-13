@@ -662,6 +662,30 @@ describe('ContentBlockRenderer', () => {
     expect(topic3Link).toHaveAttribute('href', '/subtemas/12');
   });
 
+  it('renderiza la publicación semanal con plantilla fija TEMA DE LA SEMANA y prefijo de Semana', () => {
+    const weeklySingleTopic: ContentBlock = {
+      id: 'block-weekly-single',
+      entity_type: 'home_page',
+      entity_id: 0,
+      block_type: 'weekly_publication',
+      sort_order: 0,
+      content: {
+        eyebrow: 'Semana: Del 14 al 18 de septiembre',
+        topic_1_id: '1',
+        topic_1: 'Sistema Linfoide',
+        image_url: 'https://example.com/linfoide.jpg',
+        image_caption: 'Placa de la semana',
+      },
+    };
+
+    render(<ContentBlockRenderer blocks={[weeklySingleTopic]} />);
+
+    expect(screen.getByText('TEMA DE LA SEMANA:')).toBeInTheDocument();
+    expect(screen.getByText('Semana:')).toBeInTheDocument();
+    expect(screen.getByText('Del 14 al 18 de septiembre')).toBeInTheDocument();
+    expect(screen.getAllByText('Sistema Linfoide').length).toBeGreaterThanOrEqual(1);
+  });
+
   it('renderiza la nueva tríada de fundamentos histológicos (histology_pillars) y generalidades con idea clave', () => {
     const blocks: ContentBlock[] = [
       {

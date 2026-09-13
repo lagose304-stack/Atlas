@@ -21,6 +21,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import BackButton from '../components/BackButton';
 import ImageViewerModal from '../components/ImageViewerModal';
+import AtlasLoadingScreen from '../components/AtlasLoadingScreen';
 import InteractiveMapViewerModal, {
   type InteractiveMapViewerSection,
 } from '../components/InteractiveMapViewerModal';
@@ -709,12 +710,7 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
   if (loading) {
     return (
       <div className="microscopy-page atlas-temario-typography">
-        <Header />
-        <main className="microscopy-shell microscopy-loading-state" aria-live="polite">
-          <div className="microscopy-loader" />
-          <p>Preparando el laboratorio interactivo…</p>
-        </main>
-        <Footer />
+        <AtlasLoadingScreen fullScreen label="Cargando tema…" />
       </div>
     );
   }
