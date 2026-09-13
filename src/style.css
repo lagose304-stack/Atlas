@@ -6757,15 +6757,47 @@ body {
   box-shadow: 0 8px 24px -4px rgba(0, 89, 83, 0.12), 0 3px 8px rgba(0, 0, 0, 0.04) !important;
 }
 
-/* Margen moderado entre bloques de fundamentos histológicos */
+/* Margen unificado y ancho 100% entre bloques de fundamentos histológicos (-40% superior e inferior) */
+.histology-generalities-block,
+.histology-pillars-block,
+.histology-pillars-single-card,
+.histology-stains-block,
+.histology-text-cards-block,
+.histology-text-table-block,
+.histology-text-simple-cards-block,
 .histology-bullet-cards-block,
-.histology-horizontal-cards-block {
-  margin-bottom: 22px !important;
+.histology-horizontal-cards-block,
+.topic-divisions-block {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin-top: 0 !important;
+  margin-bottom: 14px !important;
 }
 
+/* Bloque Dato Extra (+25% margen superior e inferior) */
+.histology-extra-data-block {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin-top: 10px !important;
+  margin-bottom: 30px !important;
+}
+
+.histology-generalities-block .atlas-rich-rendered p,
 .histology-bullet-cards-block .atlas-rich-rendered p,
-.histology-horizontal-cards-block .atlas-rich-rendered p {
-  margin-bottom: 4px !important;
+.histology-horizontal-cards-block .atlas-rich-rendered p,
+.histology-text-cards-block .atlas-rich-rendered p,
+.histology-extra-data-block .atlas-rich-rendered p {
+  margin-top: 0 !important;
+  margin-bottom: 6px !important;
+}
+.histology-generalities-block .atlas-rich-rendered p:last-child,
+.histology-bullet-cards-block .atlas-rich-rendered p:last-child,
+.histology-horizontal-cards-block .atlas-rich-rendered p:last-child,
+.histology-text-cards-block .atlas-rich-rendered p:last-child,
+.histology-extra-data-block .atlas-rich-rendered p:last-child {
+  margin-bottom: 0 !important;
 }
 
 @media (max-width: 640px) {
@@ -6814,6 +6846,140 @@ body {
   text-decoration-thickness: 2.5px !important;
   text-underline-offset: 4px !important;
 }
+
+/* ==========================================================================
+   DOSSIER CONTINUO HISTOLÓGICO (Vistas Públicas)
+   Efecto de lámina unificada para bloques histológicos contiguos
+   ========================================================================== */
+.histology-dossier-wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin-top: 0 !important;
+  margin-bottom: 15px !important;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px !important;
+  box-shadow: 0 10px 30px -4px rgba(15, 23, 42, 0.05), 0 2px 8px -2px rgba(15, 23, 42, 0.03);
+  overflow: hidden;
+  position: relative;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.histology-dossier-wrapper:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 14px 34px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+}
+
+/* Los bloques individuales dentro del dossier se desprenden de su marco exterior */
+.histology-dossier-wrapper .histology-generalities-block,
+.histology-dossier-wrapper .histology-pillars-block,
+.histology-dossier-wrapper .histology-pillars-single-card,
+.histology-dossier-wrapper .histology-stains-block,
+.histology-dossier-wrapper .histology-text-cards-block,
+.histology-dossier-wrapper .histology-text-table-block,
+.histology-dossier-wrapper .histology-text-simple-cards-block,
+.histology-dossier-wrapper .histology-bullet-cards-block,
+.histology-dossier-wrapper .histology-horizontal-cards-block {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* Shell interno de bloque en dossier */
+.histology-dossier-wrapper .cb-shell.histology-dossier-child {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* La barra superior de acento se oculta ÚNICAMENTE en los bloques intermedios y finales dentro del dossier.
+   El PRIMER bloque del dossier sí conserva su barra superior si la tiene para coronar la lámina continua. */
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-generalities-block > div:first-child,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-stains-block > div:first-child,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-horizontal-cards-block > div:first-child,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-bullet-cards-block > div:first-child,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-text-cards-block > div:first-child,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-text-table-block > div:first-child,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-text-simple-cards-block > div:first-child,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-pillars-single-card > div:first-child,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-pillars-block > div:first-child,
+.histology-dossier-child:not([data-dossier-position="first"]) [style*="height: 4px"],
+.histology-dossier-child:not([data-dossier-position="first"]) [style*="height:4px"] {
+  display: none !important;
+}
+
+/* El primer bloque dentro del dossier muestra su barra superior de acento con normalidad */
+.histology-dossier-child[data-dossier-position="first"] .histology-generalities-block > div:first-child,
+.histology-dossier-child[data-dossier-position="first"] .histology-stains-block > div:first-child,
+.histology-dossier-child[data-dossier-position="first"] .histology-horizontal-cards-block > div:first-child,
+.histology-dossier-child[data-dossier-position="first"] .histology-bullet-cards-block > div:first-child,
+.histology-dossier-child[data-dossier-position="first"] .histology-text-cards-block > div:first-child,
+.histology-dossier-child[data-dossier-position="first"] .histology-text-table-block > div:first-child,
+.histology-dossier-child[data-dossier-position="first"] .histology-text-simple-cards-block > div:first-child,
+.histology-dossier-child[data-dossier-position="first"] .histology-pillars-single-card > div:first-child,
+.histology-dossier-child[data-dossier-position="first"] .histology-pillars-block > div:first-child,
+.histology-dossier-child[data-dossier-position="first"] [style*="height: 4px"],
+.histology-dossier-child[data-dossier-position="first"] [style*="height:4px"] {
+  display: block !important;
+}
+
+/* Equilibrio vertical de espaciado interno entre bloques adyacentes según posición (-40%) */
+.histology-dossier-child:not([data-dossier-position="last"]) .histology-generalities-block,
+.histology-dossier-child:not([data-dossier-position="last"]) .histology-pillars-block,
+.histology-dossier-child:not([data-dossier-position="last"]) .histology-stains-block,
+.histology-dossier-child:not([data-dossier-position="last"]) .histology-text-cards-block,
+.histology-dossier-child:not([data-dossier-position="last"]) .histology-text-table-block,
+.histology-dossier-child:not([data-dossier-position="last"]) .histology-text-simple-cards-block,
+.histology-dossier-child:not([data-dossier-position="last"]) .histology-bullet-cards-block,
+.histology-dossier-child:not([data-dossier-position="last"]) .histology-horizontal-cards-block {
+  padding-bottom: clamp(7px, 1vw, 11px) !important;
+}
+
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-generalities-block,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-pillars-block,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-stains-block,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-text-cards-block,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-text-table-block,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-text-simple-cards-block,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-bullet-cards-block,
+.histology-dossier-child:not([data-dossier-position="first"]) .histology-horizontal-cards-block {
+  padding-top: clamp(7px, 1vw, 11px) !important;
+}
+
+/* Bloque Extra Data dentro del Dossier (+25% margen superior e inferior) */
+.histology-dossier-wrapper .histology-extra-data-block {
+  margin-top: 10px !important;
+  margin-bottom: 25px !important;
+  width: calc(100% - clamp(24px, 4vw, 44px)) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Transición entre bloques dentro del Dossier Continuo: únicamente la raya divisoria */
+.histology-dossier-transition {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px clamp(20px, 3.5vw, 36px);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  user-select: none;
+  pointer-events: none;
+}
+
+.histology-dossier-line {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(203, 213, 225, 0.6) 12%, rgba(148, 163, 184, 0.45) 50%, rgba(203, 213, 225, 0.6) 88%, transparent 100%);
+  pointer-events: none;
+}
+
 
 
 

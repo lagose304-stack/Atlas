@@ -72,6 +72,7 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
 
   React.useEffect(() => {
     let rafId: number | null = null;
+    let trailingTimer: NodeJS.Timeout | null = null;
 
     const updateFloatingOffsets = () => {
       const defaultOffset = 14;
@@ -102,9 +103,23 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
         document.querySelector('.atlas-header-hero') ||
         document.querySelector('header');
 
-      const isHeaderPast =
-        isCompactBarVisible ||
-        (headerEl instanceof HTMLElement ? headerEl.getBoundingClientRect().bottom <= 40 : window.scrollY > 150);
+      const hasHeaderEl = headerEl instanceof HTMLElement;
+      const headerBottom = hasHeaderEl ? headerEl.getBoundingClientRect().bottom : null;
+
+      // Si el encabezado completo está visible o estamos cerca de la parte superior,
+      // el botón flotante NUNCA debe mostrarse para evitar que tape el logo.
+      const isHeaderInView =
+        (hasHeaderEl && headerBottom !== null && headerBottom > 20) ||
+        (hasHeaderEl && window.scrollY <= 40);
+
+      let isHeaderPast = false;
+      if (!isHeaderInView) {
+        if (hasHeaderEl) {
+          isHeaderPast = headerBottom !== null && headerBottom <= 20;
+        } else {
+          isHeaderPast = isCompactBarVisible || window.scrollY > 120;
+        }
+      }
 
       setIsScrolledPastHeader((prev) => (prev === isHeaderPast ? prev : isHeaderPast));
 
@@ -131,20 +146,38 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
         rafId = null;
         updateFloatingOffsets();
       });
+
+      // Si nos acercamos a la parte superior, aseguramos una reevaluación inmediata
+      // para que el botón no quede flotando sobre el logo tras desaceleraciones rápidas
+      if (window.scrollY <= 120) {
+        if (trailingTimer) clearTimeout(trailingTimer);
+        trailingTimer = setTimeout(() => {
+          updateFloatingOffsets();
+        }, 70);
+      }
     };
 
     updateFloatingOffsets();
     window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('scrollend', scheduleUpdate, { passive: true });
     window.addEventListener('resize', scheduleUpdate);
+    document.addEventListener('transitionend', scheduleUpdate);
 
     return () => {
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId);
       }
+      if (trailingTimer) {
+        clearTimeout(trailingTimer);
+      }
       window.removeEventListener('scroll', scheduleUpdate);
+      window.removeEventListener('scrollend', scheduleUpdate);
       window.removeEventListener('resize', scheduleUpdate);
+      document.removeEventListener('transitionend', scheduleUpdate);
     };
   }, []);
+
+  const isFloatingVisible = isScrolledPastHeader && !isImageViewerOpen && !isBodyScrollLocked;
 
   const baseStyle: React.CSSProperties = {
     display: 'inline-flex',
@@ -170,8 +203,9 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
     backdropFilter: 'blur(8px)',
     boxShadow:
       '0 6px 18px rgba(220, 38, 38, 0.38), 0 2px 6px rgba(185, 28, 28, 0.28), inset 0 1px 1px rgba(255, 255, 255, 0.45)',
-    transition:
-      'opacity 220ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease, background 180ms ease, border-color 180ms ease, filter 180ms ease',
+    transition: isFloatingVisible
+      ? 'opacity 180ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease, background 180ms ease, border-color 180ms ease, filter 180ms ease'
+      : 'opacity 80ms ease, transform 80ms ease, visibility 80ms ease',
     fontFamily: 'inherit',
     position: 'fixed',
     top: `calc(env(safe-area-inset-top, 0px) + ${floatingTopOffset}px)`,
@@ -200,10 +234,9 @@ const BackButton: React.FC<BackButtonProps> = ({ onClick, label = 'Regresar', st
       '0 0 0 3px rgba(254, 202, 202, 0.65), 0 8px 22px rgba(220, 38, 38, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.45)',
   };
 
-  const isFloatingVisible = isScrolledPastHeader && !isImageViewerOpen && !isBodyScrollLocked;
-
   const floatingVisibilityStyle: React.CSSProperties = {
     opacity: isFloatingVisible ? 1 : 0,
+    visibility: isFloatingVisible ? 'visible' : 'hidden',
     transform: isFloatingVisible
       ? isHover
         ? 'scale(1.1)'

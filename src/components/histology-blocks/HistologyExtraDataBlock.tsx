@@ -43,12 +43,12 @@ export const HistologyExtraDataBlock: React.FC<HistologyExtraDataProps> = ({
       style={{
         position: 'relative',
         width: '100%',
-        borderRadius: '10px',
+        borderRadius: '16px',
         background: effectiveBgColor,
         border: '1px solid #ccfbf1',
         borderLeft: `5px solid ${effectiveBarColor}`,
         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
-        padding: 'clamp(14px, 1.8vw, 18px) clamp(16px, 2.2vw, 22px)',
+        padding: 'clamp(20px, 2.75vw, 28px) clamp(18px, 2.5vw, 24px)',
         fontFamily: '"Montserrat", "Segoe UI", sans-serif',
         display: 'flex',
         flexDirection: 'column',
@@ -71,11 +71,11 @@ export const HistologyExtraDataBlock: React.FC<HistologyExtraDataProps> = ({
                 <h4
                   style={{
                     margin: 0,
-                    fontSize: 'clamp(1.02rem, 1.4vw, 1.12rem)',
+                    fontSize: 'clamp(0.98rem, 1.25vw, 1.08rem)',
                     fontWeight: 800,
                     color: effectiveTitleColor,
                     letterSpacing: '-0.01em',
-                    lineHeight: 1.35,
+                    lineHeight: 1.3,
                   }}
                 >
                   {renderBoldText(safeTitle)}
@@ -85,9 +85,9 @@ export const HistologyExtraDataBlock: React.FC<HistologyExtraDataProps> = ({
                 <div
                   className="histology-extra-data-text"
                   style={{
-                    fontSize: 'clamp(0.92rem, 1.3vw, 0.96rem)',
+                    fontSize: 'clamp(0.88rem, 1.15vw, 0.93rem)',
                     color: '#334155',
-                    lineHeight: 1.65,
+                    lineHeight: 1.6,
                   }}
                 >
                   {hasHtmlMarkup(safeText) ? (
@@ -102,9 +102,9 @@ export const HistologyExtraDataBlock: React.FC<HistologyExtraDataProps> = ({
             <div
               className="histology-extra-data-text"
               style={{
-                fontSize: 'clamp(0.92rem, 1.3vw, 0.96rem)',
+                fontSize: 'clamp(0.88rem, 1.15vw, 0.93rem)',
                 color: '#334155',
-                lineHeight: 1.68,
+                lineHeight: 1.6,
               }}
             >
               {safeTitle && (

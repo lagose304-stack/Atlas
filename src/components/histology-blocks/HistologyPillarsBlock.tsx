@@ -147,6 +147,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
         style={{
           position: 'relative',
           width: '100%',
+          boxSizing: 'border-box',
           borderRadius: '24px',
           background: 'radial-gradient(ellipse at 88% 18%, rgba(2, 132, 199, 0.05) 0%, transparent 60%), linear-gradient(180deg, #ffffff 0%, #f9fcff 100%)',
           border: '1.5px solid rgba(186, 230, 253, 0.95)',
@@ -187,7 +188,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
           style={{
             position: 'relative',
             zIndex: 1,
-            padding: 'clamp(20px, 3vw, 32px)',
+            padding: 'clamp(12px, 1.7vw, 18px) clamp(20px, 2.8vw, 30px)',
             display: 'flex',
             flexDirection: 'column',
             gap: '16px',
@@ -199,7 +200,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
               <h3
                 style={{
                   margin: 0,
-                  fontSize: 'clamp(1.22rem, 2.2vw, 1.48rem)',
+                  fontSize: 'clamp(1.22rem, 2vw, 1.5rem)',
                   fontWeight: 850,
                   color: '#1e3a8a',
                   letterSpacing: '-0.02em',
@@ -335,6 +336,8 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
       className="histology-pillars-block"
       style={{
         display: 'grid',
+        width: '100%',
+        boxSizing: 'border-box',
         gridTemplateColumns: gridCols,
         gap: 'clamp(14px, 1.8vw, 22px)',
         alignItems: 'stretch',

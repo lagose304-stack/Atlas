@@ -41,16 +41,18 @@ export const HistologyLocationsBlock: React.FC<HistologyLocationsProps> = ({
     <div
       style={{
         position: 'relative',
+        width: '100%',
+        boxSizing: 'border-box',
         borderRadius: '24px',
         background: 'linear-gradient(180deg, #ffffff 0%, #f6fbf9 100%)',
         border: '1.5px solid rgba(186, 230, 253, 0.95)',
         borderLeft: '6px solid #059669',
-        padding: 'clamp(20px, 3vw, 32px)',
+        padding: 'clamp(12px, 1.7vw, 18px) clamp(20px, 2.8vw, 30px)',
         boxShadow: '0 12px 34px rgba(5, 150, 105, 0.06), inset 0 1px 0 #ffffff',
         fontFamily: '"Montserrat", "Segoe UI", sans-serif',
         display: 'flex',
         flexDirection: 'column',
-        gap: '24px',
+        gap: '20px',
       }}
     >
       {/* ─── FILA SUPERIOR: INTRODUCCIÓN (Y FOTO SI EXISTE) ─── */}
@@ -64,7 +66,7 @@ export const HistologyLocationsBlock: React.FC<HistologyLocationsProps> = ({
           }}
         >
           {/* Lado Izquierdo: Badge, Título e Intro */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {badgeText && badgeText.trim() !== '' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span
@@ -73,7 +75,7 @@ export const HistologyLocationsBlock: React.FC<HistologyLocationsProps> = ({
                     alignItems: 'center',
                     gap: '6px',
                     fontSize: '0.72rem',
-                    fontWeight: 800,
+                    fontWeight: 850,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
                     color: '#059669',
@@ -93,11 +95,11 @@ export const HistologyLocationsBlock: React.FC<HistologyLocationsProps> = ({
               <h3
                 style={{
                   margin: 0,
-                  fontSize: 'clamp(1.2rem, 2.2vw, 1.55rem)',
+                  fontSize: 'clamp(1.22rem, 2vw, 1.5rem)',
                   fontWeight: 850,
                   color: '#064e3b',
-                  letterSpacing: '-0.025em',
-                  lineHeight: 1.2,
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1.25,
                 }}
               >
                 {title}

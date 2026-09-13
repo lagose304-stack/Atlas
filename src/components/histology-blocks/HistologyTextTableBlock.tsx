@@ -223,6 +223,7 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
       style={{
         position: 'relative',
         width: '100%',
+        boxSizing: 'border-box',
         borderRadius: '24px',
         background: 'radial-gradient(ellipse at 88% 18%, rgba(2, 132, 199, 0.05) 0%, transparent 60%), linear-gradient(180deg, #ffffff 0%, #f9fcff 100%)',
         border: '1.5px solid rgba(186, 230, 253, 0.95)',
@@ -263,7 +264,7 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
         style={{
           position: 'relative',
           zIndex: 1,
-          padding: 'clamp(20px, 3vw, 32px)',
+          padding: 'clamp(12px, 1.7vw, 18px) clamp(20px, 2.8vw, 30px)',
           display: 'flex',
           flexDirection: 'column',
           gap: '18px',
@@ -279,13 +280,13 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    fontSize: '0.70rem',
+                    fontSize: '0.72rem',
                     fontWeight: 850,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
                     color: effectiveBadgeColor,
                     background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
-                    padding: '4px 12px',
+                    padding: '3px 11px',
                     borderRadius: '999px',
                     border: '1.2px solid #7dd3fc',
                     boxShadow: '0 2px 8px rgba(2, 132, 199, 0.12)',
@@ -301,11 +302,11 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
               <h3
                 style={{
                   margin: 0,
-                  fontSize: 'clamp(1.25rem, 2.2vw, 1.55rem)',
+                  fontSize: 'clamp(1.22rem, 2vw, 1.5rem)',
                   fontWeight: 850,
                   color: effectiveTitleColor,
-                  letterSpacing: '-0.025em',
-                  lineHeight: 1.22,
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1.25,
                 }}
               >
                 {renderBoldText(title)}
@@ -319,20 +320,20 @@ export const HistologyTextTableBlock: React.FC<HistologyTextTableProps> = ({
           <div
             className="histology-text-table-text"
             style={{
-              fontSize: '0.96rem',
-              lineHeight: 1.68,
-              color: '#0f172a',
+              fontSize: 'clamp(0.90rem, 1.2vw, 0.95rem)',
+              lineHeight: 1.65,
+              color: '#334155',
               fontWeight: 500,
               display: 'flex',
               flexDirection: 'column',
-              gap: '10px',
+              gap: '8px',
             }}
           >
             {hasHtmlMarkup(safeText) ? (
               renderBoldText(safeText)
             ) : (
               safeText.split(/\n\s*\n/).map((para, pIdx) => (
-                <p key={pIdx} style={{ margin: 0, color: '#0f172a' }}>
+                <p key={pIdx} style={{ margin: 0, color: '#334155' }}>
                   {renderBoldText(para.trim())}
                 </p>
               ))

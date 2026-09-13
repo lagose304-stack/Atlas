@@ -53,6 +53,7 @@ export const HistologyTextSimpleCardsBlock: React.FC<HistologyTextSimpleCardsPro
       style={{
         position: 'relative',
         width: '100%',
+        boxSizing: 'border-box',
         borderRadius: '24px',
         background: 'radial-gradient(ellipse at 88% 18%, rgba(2, 132, 199, 0.05) 0%, transparent 60%), linear-gradient(180deg, #ffffff 0%, #f9fcff 100%)',
         border: '1.5px solid rgba(186, 230, 253, 0.95)',
@@ -93,7 +94,7 @@ export const HistologyTextSimpleCardsBlock: React.FC<HistologyTextSimpleCardsPro
         style={{
           position: 'relative',
           zIndex: 1,
-          padding: 'clamp(20px, 3vw, 32px)',
+          padding: 'clamp(12px, 1.7vw, 18px) clamp(20px, 2.8vw, 30px)',
           display: 'flex',
           flexDirection: 'column',
           gap: '20px',
@@ -109,13 +110,13 @@ export const HistologyTextSimpleCardsBlock: React.FC<HistologyTextSimpleCardsPro
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    fontSize: '0.70rem',
+                    fontSize: '0.72rem',
                     fontWeight: 850,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
                     color: effectiveBadgeColor,
                     background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
-                    padding: '4px 12px',
+                    padding: '3px 11px',
                     borderRadius: '999px',
                     border: '1.2px solid #7dd3fc',
                     boxShadow: '0 2px 8px rgba(2, 132, 199, 0.12)',
@@ -131,10 +132,10 @@ export const HistologyTextSimpleCardsBlock: React.FC<HistologyTextSimpleCardsPro
               <h3
                 style={{
                   margin: 0,
-                  fontSize: 'clamp(1.25rem, 2.2vw, 1.55rem)',
+                  fontSize: 'clamp(1.22rem, 2vw, 1.5rem)',
                   fontWeight: 850,
                   color: effectiveTitleColor,
-                  letterSpacing: '-0.025em',
+                  letterSpacing: '-0.02em',
                   lineHeight: 1.25,
                 }}
               >
@@ -149,20 +150,20 @@ export const HistologyTextSimpleCardsBlock: React.FC<HistologyTextSimpleCardsPro
           <div
             className="histology-text-simple-cards-text"
             style={{
-              fontSize: '0.96rem',
-              lineHeight: 1.68,
-              color: '#0f172a',
+              fontSize: 'clamp(0.90rem, 1.2vw, 0.95rem)',
+              lineHeight: 1.65,
+              color: '#334155',
               fontWeight: 500,
               display: 'flex',
               flexDirection: 'column',
-              gap: '10px',
+              gap: '8px',
             }}
           >
             {hasHtmlMarkup(safeText) ? (
               renderBoldText(safeText)
             ) : (
               safeText.split(/\n\s*\n/).map((para, pIdx) => (
-                <p key={pIdx} style={{ margin: 0, color: '#0f172a' }}>
+                <p key={pIdx} style={{ margin: 0, color: '#334155' }}>
                   {renderBoldText(para.trim())}
                 </p>
               ))
@@ -178,7 +179,7 @@ export const HistologyTextSimpleCardsBlock: React.FC<HistologyTextSimpleCardsPro
               display: 'flex',
               flexWrap: 'wrap',
               justifyContent: cardsAlign === 'left' ? 'flex-start' : 'center',
-              gap: '14px',
+              gap: '12px',
               width: '100%',
             }}
           >
@@ -190,23 +191,23 @@ export const HistologyTextSimpleCardsBlock: React.FC<HistologyTextSimpleCardsPro
                   position: 'relative',
                   display: 'flex',
                   alignItems: 'center',
-                  minHeight: '52px',
-                  padding: '13px 20px',
-                  borderRadius: '12px',
+                  minHeight: '48px',
+                  padding: '10px 16px',
+                  borderRadius: '11px',
                   background: 'linear-gradient(180deg, #ffffff 0%, #f9fcfe 100%)',
                   border: `1.4px solid ${effectiveCardBorderColor}`,
-                  boxShadow: '0 2px 8px rgba(2, 132, 199, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                  boxShadow: '0 2px 6px rgba(2, 132, 199, 0.03), 0 1px 3px rgba(0, 0, 0, 0.02)',
                   transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                   overflow: 'hidden',
                   flex: `0 1 ${cardWidth}`,
                   maxWidth: cardWidth,
-                  minWidth: 'min(100%, 200px)',
+                  minWidth: 'min(100%, 190px)',
                   boxSizing: 'border-box',
                 }}
               >
                 <span
                   style={{
-                    fontSize: '0.96rem',
+                    fontSize: 'clamp(0.85rem, 1.1vw, 0.90rem)',
                     fontWeight: 750,
                     color: '#0f172a',
                     lineHeight: 1.35,

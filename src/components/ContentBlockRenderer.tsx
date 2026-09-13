@@ -177,9 +177,29 @@ interface ContentBlockRendererProps {
 
 type RenderGroup =
   | { kind: 'single'; block: ContentBlock }
-  | { kind: 'section'; section: ContentBlock; children: ContentBlock[] };
+  | { kind: 'section'; section: ContentBlock; children: ContentBlock[] }
+  | { kind: 'histology_dossier'; blocks: ContentBlock[] };
 
-const buildRenderGroups = (blocks: ContentBlock[]): RenderGroup[] => {
+const isHistologyBlockType = (blockType: string): boolean => {
+  return blockType.startsWith('histology_');
+};
+
+const HistologyDossierTransition: React.FC<{
+  prevBlock?: ContentBlock;
+  nextBlock?: ContentBlock;
+}> = () => {
+  return (
+    <div
+      className="histology-dossier-transition"
+      role="separator"
+      aria-hidden="true"
+    >
+      <div className="histology-dossier-line" />
+    </div>
+  );
+};
+
+const buildRenderGroups = (blocks: ContentBlock[], editorMode = false): RenderGroup[] => {
   const groups: RenderGroup[] = [];
   let idx = 0;
 
@@ -189,21 +209,35 @@ const buildRenderGroups = (blocks: ContentBlock[]): RenderGroup[] => {
       idx += 1;
       continue;
     }
-    if (current.block_type !== 'section') {
-      groups.push({ kind: 'single', block: current });
-      idx += 1;
+    if (current.block_type === 'section') {
+      const children: ContentBlock[] = [];
+      let cursor = idx + 1;
+      while (cursor < blocks.length && blocks[cursor].block_type !== 'section' && blocks[cursor].block_type !== 'section_end') {
+        children.push(blocks[cursor]);
+        cursor += 1;
+      }
+      groups.push({ kind: 'section', section: current, children });
+      idx = cursor;
       continue;
     }
 
-    const children: ContentBlock[] = [];
-    let cursor = idx + 1;
-    while (cursor < blocks.length && blocks[cursor].block_type !== 'section' && blocks[cursor].block_type !== 'section_end') {
-      children.push(blocks[cursor]);
-      cursor += 1;
+    // En vista pública (!editorMode), agrupar secuencias contiguas de 2 o más bloques histológicos en un Dossier Continuo
+    if (!editorMode && isHistologyBlockType(current.block_type)) {
+      const histoRun: ContentBlock[] = [current];
+      let cursor = idx + 1;
+      while (cursor < blocks.length && isHistologyBlockType(blocks[cursor].block_type)) {
+        histoRun.push(blocks[cursor]);
+        cursor += 1;
+      }
+      if (histoRun.length > 1) {
+        groups.push({ kind: 'histology_dossier', blocks: histoRun });
+        idx = cursor;
+        continue;
+      }
     }
 
-    groups.push({ kind: 'section', section: current, children });
-    idx = cursor;
+    groups.push({ kind: 'single', block: current });
+    idx += 1;
   }
 
   return groups;
@@ -308,72 +342,101 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
     return map;
   }, [safeBlocks, containerIds]);
   const topLevelBlocks = useMemo(() => safeBlocks.filter(block => !block.content.layout_parent_id || !containerIds.has(block.content.layout_parent_id)), [safeBlocks, containerIds]);
-  const renderGroups = useMemo(() => buildRenderGroups(topLevelBlocks), [topLevelBlocks]);
+  const renderGroups = useMemo(() => buildRenderGroups(topLevelBlocks, editorMode), [topLevelBlocks, editorMode]);
   if (safeBlocks.length === 0) return null;
+
+  const renderGroupItem = (group: RenderGroup): React.ReactNode => {
+    if (group.kind === 'single') {
+      const normalizedContent = normalizeBlockContent(group.block.block_type, group.block.content);
+      return (
+        <div
+          key={group.block.id}
+          style={getBlockShellStyle(normalizedContent, group.block.block_type)}
+          className={`cb-shell cb-shell-${group.block.block_type} ${editorMode ? 'cb-editor-selectable' : ''} ${selectedBlockId === group.block.id ? 'is-editor-selected' : ''}`}
+          data-editor-block-id={editorMode ? group.block.id : undefined}
+          onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(group.block.id); } : undefined}
+        >
+          <BlockWithCtas block={group.block} onZoom={handleZoom} columnChildren={columnChildrenByParent.get(group.block.id)} editorMode={editorMode} />
+        </div>
+      );
+    }
+
+    if (group.kind === 'histology_dossier') {
+      return (
+        <div
+          key={`dossier-${group.blocks[0].id}`}
+          className="histology-dossier-wrapper"
+          data-dossier-blocks-count={group.blocks.length}
+        >
+          {group.blocks.map((block, bIdx) => {
+            const normalizedContent = normalizeBlockContent(block.block_type, block.content);
+            const position = bIdx === 0 ? 'first' : bIdx === group.blocks.length - 1 ? 'last' : 'middle';
+            return (
+              <React.Fragment key={block.id}>
+                {bIdx > 0 && (
+                  <HistologyDossierTransition
+                    prevBlock={group.blocks[bIdx - 1]}
+                    nextBlock={block}
+                  />
+                )}
+                <div
+                  style={getBlockShellStyle(normalizedContent, block.block_type)}
+                  className={`cb-shell cb-shell-${block.block_type} histology-dossier-child`}
+                  data-dossier-position={position}
+                >
+                  <BlockWithCtas
+                    block={block}
+                    onZoom={handleZoom}
+                    columnChildren={columnChildrenByParent.get(block.id)}
+                    editorMode={editorMode}
+                  />
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+      );
+    }
+
+    const sectionContent = normalizeBlockContent(group.section.block_type, group.section.content);
+    const sectionLayout = sectionContent.section_layout || 'guided';
+    const sectionAccent = sectionContent.section_accent || '#38bdf8';
+    const sectionGroupStyle: React.CSSProperties = sectionLayout === 'card'
+      ? { ...rs.sectionGroup, padding: 'clamp(14px, 2.5vw, 24px)', borderRadius: '20px', border: `1px solid ${sectionAccent}40`, background: sectionContent.section_bg || '#f8fbff', boxShadow: '0 12px 34px rgba(15,23,42,.07)' }
+      : sectionLayout === 'band'
+        ? { ...rs.sectionGroup, padding: 'clamp(16px, 3vw, 28px)', borderTop: `4px solid ${sectionAccent}`, borderBottom: `1px solid ${sectionAccent}45`, background: sectionContent.section_bg || `${sectionAccent}0d` }
+        : rs.sectionGroup;
+    const sectionChildrenStyle: React.CSSProperties = {
+      ...rs.sectionChildren,
+      gap: `${Math.max(4, Math.min(48, Number(sectionContent.section_gap || 16)))}px`,
+      ...(sectionLayout === 'minimal' || sectionContent.section_guide === 'false'
+        ? { paddingLeft: 0, borderLeft: 'none', marginLeft: 0 }
+        : { borderLeft: `2px dashed ${sectionAccent}` }),
+    };
+    const childGroups = buildRenderGroups(group.children, editorMode);
+
+    return (
+      <section key={group.section.id} style={sectionGroupStyle} className={`cb-section-group cb-section-layout-${sectionLayout}`} aria-label={sectionContent.title || 'Sección de contenido'}>
+        <div
+          style={getBlockShellStyle(sectionContent, group.section.block_type)}
+          className={`cb-shell cb-section-shell ${editorMode ? 'cb-editor-selectable' : ''} ${selectedBlockId === group.section.id ? 'is-editor-selected' : ''}`}
+          onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(group.section.id); } : undefined}
+        >
+          <BlockWithCtas block={group.section} onZoom={handleZoom} editorMode={editorMode} />
+        </div>
+        {group.children.length > 0 && (
+          <div style={sectionChildrenStyle} className="cb-section-children">
+            {childGroups.map(childGroup => renderGroupItem(childGroup))}
+          </div>
+        )}
+      </section>
+    );
+  };
 
   return (
     <>
       <div style={rs.container} className="cb-container">
-        {renderGroups.map(group => {
-          if (group.kind === 'single') {
-            const normalizedContent = normalizeBlockContent(group.block.block_type, group.block.content);
-            return (
-              <div
-                key={group.block.id}
-                style={getBlockShellStyle(normalizedContent, group.block.block_type)}
-                className={`cb-shell cb-shell-${group.block.block_type} ${editorMode ? 'cb-editor-selectable' : ''} ${selectedBlockId === group.block.id ? 'is-editor-selected' : ''}`}
-                data-editor-block-id={editorMode ? group.block.id : undefined}
-                onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(group.block.id); } : undefined}
-              >
-                <BlockWithCtas block={group.block} onZoom={handleZoom} columnChildren={columnChildrenByParent.get(group.block.id)} editorMode={editorMode} />
-              </div>
-            );
-          }
-
-          const sectionContent = normalizeBlockContent(group.section.block_type, group.section.content);
-          const sectionLayout = sectionContent.section_layout || 'guided';
-          const sectionAccent = sectionContent.section_accent || '#38bdf8';
-          const sectionGroupStyle: React.CSSProperties = sectionLayout === 'card'
-            ? { ...rs.sectionGroup, padding: 'clamp(14px, 2.5vw, 24px)', borderRadius: '20px', border: `1px solid ${sectionAccent}40`, background: sectionContent.section_bg || '#f8fbff', boxShadow: '0 12px 34px rgba(15,23,42,.07)' }
-            : sectionLayout === 'band'
-              ? { ...rs.sectionGroup, padding: 'clamp(16px, 3vw, 28px)', borderTop: `4px solid ${sectionAccent}`, borderBottom: `1px solid ${sectionAccent}45`, background: sectionContent.section_bg || `${sectionAccent}0d` }
-              : rs.sectionGroup;
-          const sectionChildrenStyle: React.CSSProperties = {
-            ...rs.sectionChildren,
-            gap: `${Math.max(4, Math.min(48, Number(sectionContent.section_gap || 16)))}px`,
-            ...(sectionLayout === 'minimal' || sectionContent.section_guide === 'false'
-              ? { paddingLeft: 0, borderLeft: 'none', marginLeft: 0 }
-              : { borderLeft: `2px dashed ${sectionAccent}` }),
-          };
-          return (
-            <section key={group.section.id} style={sectionGroupStyle} className={`cb-section-group cb-section-layout-${sectionLayout}`} aria-label={sectionContent.title || 'Sección de contenido'}>
-              <div
-                style={getBlockShellStyle(sectionContent, group.section.block_type)}
-                className={`cb-shell cb-section-shell ${editorMode ? 'cb-editor-selectable' : ''} ${selectedBlockId === group.section.id ? 'is-editor-selected' : ''}`}
-                onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(group.section.id); } : undefined}
-              >
-                <BlockWithCtas block={group.section} onZoom={handleZoom} editorMode={editorMode} />
-              </div>
-              {group.children.length > 0 && (
-                <div style={sectionChildrenStyle} className="cb-section-children">
-                  {group.children.map(child => {
-                    const childContent = normalizeBlockContent(child.block_type, child.content);
-                    return (
-                      <div
-                        key={child.id}
-                        style={getBlockShellStyle(childContent, child.block_type)}
-                        className={`cb-shell cb-shell-${child.block_type} ${editorMode ? 'cb-editor-selectable' : ''} ${selectedBlockId === child.id ? 'is-editor-selected' : ''}`}
-                        onClick={editorMode ? event => { event.stopPropagation(); onBlockSelect?.(child.id); } : undefined}
-                      >
-                        <BlockWithCtas block={child} onZoom={handleZoom} columnChildren={columnChildrenByParent.get(child.id)} editorMode={editorMode} />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          );
-        })}
+        {renderGroups.map(group => renderGroupItem(group))}
       </div>
       {selectedImage && (
         <ImageViewerModal src={selectedImage.view} srcZoom={selectedImage.zoom} placaId={selectedImage.placaId} temaNombre={selectedImage.temaNombre} subtemaNombre={selectedImage.subtemaNombre} aumento={selectedImage.aumento} senalados={selectedImage.senalados} senaladosMeta={selectedImage.senaladosMeta} comentario={selectedImage.comentario} tincion={selectedImage.tincion} onClose={() => setSelectedImage(null)} />
@@ -657,9 +720,30 @@ const BlockItem: React.FC<{
         return <div className="cb-columns-row cb-columns-container" style={{ ...rs.columnsRow, gridTemplateColumns, gap: `${columnGap}px`, alignItems: verticalAlign }}>
           {childrenByColumn.map((children, columnIndex) => <div key={columnIndex} className="cb-column-slot" style={{ ...cellStyle, display: 'flex', flexDirection: 'column', gap: `${Math.max(6, Number(c.column_inner_gap || 14))}px` }}>
             {c[`col_title_${columnIndex + 1}`] && <RichTextValue style={{ color: accent, fontWeight: 800, fontSize: '1em' }} value={c[`col_title_${columnIndex + 1}`]} />}
-            {children.map(child => {
-              const childContent = normalizeBlockContent(child.block_type, child.content);
-              return <div key={child.id} className={`cb-shell cb-shell-${child.block_type}`} style={getBlockShellStyle(childContent, child.block_type)}><BlockWithCtas block={child} onZoom={onZoom} editorMode={editorMode} /></div>;
+            {buildRenderGroups(children, editorMode).map(colGroup => {
+              if (colGroup.kind === 'single') {
+                const childContent = normalizeBlockContent(colGroup.block.block_type, colGroup.block.content);
+                return <div key={colGroup.block.id} className={`cb-shell cb-shell-${colGroup.block.block_type}`} style={getBlockShellStyle(childContent, colGroup.block.block_type)}><BlockWithCtas block={colGroup.block} onZoom={onZoom} editorMode={editorMode} /></div>;
+              }
+              if (colGroup.kind === 'histology_dossier') {
+                return (
+                  <div key={`dossier-${colGroup.blocks[0].id}`} className="histology-dossier-wrapper" data-dossier-blocks-count={colGroup.blocks.length}>
+                    {colGroup.blocks.map((b, bIdx) => {
+                      const childContent = normalizeBlockContent(b.block_type, b.content);
+                      const position = bIdx === 0 ? 'first' : bIdx === colGroup.blocks.length - 1 ? 'last' : 'middle';
+                      return (
+                        <React.Fragment key={b.id}>
+                          {bIdx > 0 && <HistologyDossierTransition prevBlock={colGroup.blocks[bIdx - 1]} nextBlock={b} />}
+                          <div style={getBlockShellStyle(childContent, b.block_type)} className={`cb-shell cb-shell-${b.block_type} histology-dossier-child`} data-dossier-position={position}>
+                            <BlockWithCtas block={b} onZoom={onZoom} editorMode={editorMode} />
+                          </div>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                );
+              }
+              return null;
             })}
           </div>)}
         </div>;
@@ -2177,6 +2261,63 @@ const BlockItem: React.FC<{
           accentColor={c.accent_color || '#0284c7'}
           childrenBlocks={columnChildren || []}
           editorMode={editorMode}
+          renderChildrenBlocks={children => {
+            const childGroups = buildRenderGroups(children, editorMode);
+            return (
+              <div className="topic-division-child-groups" style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+                {childGroups.map(childGroup => {
+                  if (childGroup.kind === 'single') {
+                    const childContent = normalizeBlockContent(childGroup.block.block_type, childGroup.block.content);
+                    return (
+                      <div
+                        key={childGroup.block.id}
+                        className={`cb-shell cb-shell-${childGroup.block.block_type}`}
+                        style={getBlockShellStyle(childContent, childGroup.block.block_type)}
+                      >
+                        <BlockWithCtas block={childGroup.block} onZoom={onZoom} editorMode={editorMode} />
+                      </div>
+                    );
+                  }
+                  if (childGroup.kind === 'histology_dossier') {
+                    return (
+                      <div
+                        key={`dossier-${childGroup.blocks[0].id}`}
+                        className="histology-dossier-wrapper"
+                        data-dossier-blocks-count={childGroup.blocks.length}
+                      >
+                        {childGroup.blocks.map((b, bIdx) => {
+                          const childContent = normalizeBlockContent(b.block_type, b.content);
+                          const position = bIdx === 0 ? 'first' : bIdx === childGroup.blocks.length - 1 ? 'last' : 'middle';
+                          return (
+                            <React.Fragment key={b.id}>
+                              {bIdx > 0 && (
+                                <HistologyDossierTransition
+                                  prevBlock={childGroup.blocks[bIdx - 1]}
+                                  nextBlock={b}
+                                />
+                              )}
+                              <div
+                                style={getBlockShellStyle(childContent, b.block_type)}
+                                className={`cb-shell cb-shell-${b.block_type} histology-dossier-child`}
+                                data-dossier-position={position}
+                              >
+                                <BlockWithCtas
+                                  block={b}
+                                  onZoom={onZoom}
+                                  editorMode={editorMode}
+                                />
+                              </div>
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+            );
+          }}
           renderChildBlock={child => {
             const childContent = normalizeBlockContent(child.block_type, child.content);
             return (

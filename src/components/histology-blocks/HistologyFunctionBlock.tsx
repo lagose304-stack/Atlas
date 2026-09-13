@@ -56,16 +56,18 @@ export const HistologyFunctionBlock: React.FC<HistologyFunctionProps> = ({
     <div
       style={{
         position: 'relative',
+        width: '100%',
+        boxSizing: 'border-box',
         borderRadius: '24px',
         background: 'linear-gradient(180deg, #ffffff 0%, #f4fbfd 100%)',
         border: '1.5px solid rgba(186, 230, 253, 0.95)',
         borderLeft: '6px solid #0284c7',
-        padding: 'clamp(20px, 3vw, 32px)',
+        padding: 'clamp(12px, 1.7vw, 18px) clamp(20px, 2.8vw, 30px)',
         boxShadow: '0 12px 34px rgba(2, 132, 199, 0.06), inset 0 1px 0 #ffffff',
         fontFamily: '"Montserrat", "Segoe UI", sans-serif',
         display: 'flex',
         flexDirection: 'column',
-        gap: '22px',
+        gap: '20px',
       }}
     >
       {/* ─── FILA SUPERIOR: TEXTO DE FUNCIÓN (Y FOTO SI EXISTE) ─── */}
@@ -79,7 +81,7 @@ export const HistologyFunctionBlock: React.FC<HistologyFunctionProps> = ({
           }}
         >
           {/* Columna Izquierda: Información de la Función */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {badgeText && badgeText.trim() !== '' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span
@@ -108,11 +110,11 @@ export const HistologyFunctionBlock: React.FC<HistologyFunctionProps> = ({
               <h3
                 style={{
                   margin: 0,
-                  fontSize: 'clamp(1.2rem, 2.2vw, 1.55rem)',
+                  fontSize: 'clamp(1.22rem, 2vw, 1.5rem)',
                   fontWeight: 850,
                   color: '#0f2a43',
-                  letterSpacing: '-0.025em',
-                  lineHeight: 1.2,
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1.25,
                 }}
               >
                 {title}

@@ -135,7 +135,7 @@ export const HistologyHorizontalCardsBlock: React.FC<HistologyHorizontalCardsPro
         style={{
           position: 'relative',
           zIndex: 1,
-          padding: 'clamp(20px, 2.8vw, 30px)',
+          padding: 'clamp(12px, 1.7vw, 18px) clamp(20px, 2.8vw, 30px)',
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
@@ -147,11 +147,11 @@ export const HistologyHorizontalCardsBlock: React.FC<HistologyHorizontalCardsPro
             <h3
               style={{
                 margin: 0,
-                fontSize: 'clamp(1.28rem, 2.2vw, 1.65rem)',
-                fontWeight: 800,
+                fontSize: 'clamp(1.22rem, 2vw, 1.5rem)',
+                fontWeight: 850,
                 color: effectiveTitleColor,
-                letterSpacing: '-0.015em',
-                lineHeight: 1.3,
+                letterSpacing: '-0.02em',
+                lineHeight: 1.25,
               }}
             >
               {renderBoldText(safeTitle)}
@@ -172,151 +172,151 @@ export const HistologyHorizontalCardsBlock: React.FC<HistologyHorizontalCardsPro
 
         {/* ─── 2. PÁRRAFO DE TEXTO EXPLICATIVO ─── */}
         {hasText && (
-        <div
-          style={{
-            fontSize: 'clamp(0.93rem, 1.3vw, 0.98rem)',
-            color: '#334155',
-            lineHeight: 1.6,
-            marginBottom: validCards.length > 0 ? '12px' : 0,
-          }}
-        >
-          {renderFormattedText(safeText)}
-        </div>
-      )}
+          <div
+            style={{
+              fontSize: 'clamp(0.90rem, 1.2vw, 0.95rem)',
+              color: '#334155',
+              lineHeight: 1.65,
+              marginBottom: validCards.length > 0 ? '8px' : 0,
+            }}
+          >
+            {renderFormattedText(safeText)}
+          </div>
+        )}
 
-      {/* ─── 3. LISTA DE TARJETAS HORIZONTALES ─── */}
-      {validCards.length > 0 && (
-        <div
-          className="histology-horizontal-cards-stack"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px',
-            width: '100%',
-            boxSizing: 'border-box',
-          }}
-        >
-          {validCards.map((card, idx) => {
-            const badgeVariant = (card.badgeColor || 'amber').toLowerCase();
-            const badgeStyle = BADGE_COLOR_STYLES[badgeVariant] || BADGE_COLOR_STYLES.amber;
+        {/* ─── 3. LISTA DE TARJETAS HORIZONTALES (COMPACTAS Y PROPORCIONADAS) ─── */}
+        {validCards.length > 0 && (
+          <div
+            className="histology-horizontal-cards-stack"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              width: '100%',
+              boxSizing: 'border-box',
+            }}
+          >
+            {validCards.map((card, idx) => {
+              const badgeVariant = (card.badgeColor || 'amber').toLowerCase();
+              const badgeStyle = BADGE_COLOR_STYLES[badgeVariant] || BADGE_COLOR_STYLES.amber;
 
-            return (
-              <div
-                key={card.id || `hcard-${idx}`}
-                className="histology-horizontal-card-item"
-                style={{
-                  position: 'relative',
-                  background: '#ffffff',
-                  border: '1.5px solid #e2e8f0',
-                  borderRadius: '12px',
-                  padding: 'clamp(10px, 1.4vw, 14px) clamp(14px, 1.8vw, 18px)',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
-                  display: 'flex',
-                  alignItems: 'stretch',
-                  gap: 'clamp(12px, 1.6vw, 18px)',
-                  boxSizing: 'border-box',
-                  transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
-                }}
-              >
-                {/* Columna Izquierda: Título, Subtítulo y Badge */}
+              return (
                 <div
-                  className="histology-horizontal-card-left"
+                  key={card.id || `hcard-${idx}`}
+                  className="histology-horizontal-card-item"
                   style={{
-                    flex: '0 0 clamp(190px, 25%, 240px)',
-                    minWidth: 0,
+                    position: 'relative',
+                    background: '#ffffff',
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: '11px',
+                    padding: 'clamp(7px, 1vw, 10px) clamp(12px, 1.5vw, 16px)',
+                    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.025)',
                     display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    alignItems: 'flex-start',
-                    gap: '2px',
+                    alignItems: 'stretch',
+                    gap: 'clamp(10px, 1.4vw, 14px)',
+                    boxSizing: 'border-box',
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
                   }}
                 >
-                  {card.title && card.title.trim() !== '' && (
-                    <h4
-                      style={{
-                        margin: 0,
-                        fontSize: 'clamp(1.02rem, 1.35vw, 1.12rem)',
-                        fontWeight: 750,
-                        color: effectiveCardTitleColor,
-                        letterSpacing: '-0.01em',
-                        lineHeight: 1.3,
-                      }}
-                    >
-                      {renderBoldText(card.title)}
-                    </h4>
-                  )}
+                  {/* Columna Izquierda: Título, Subtítulo y Badge */}
+                  <div
+                    className="histology-horizontal-card-left"
+                    style={{
+                      flex: '0 0 clamp(160px, 22%, 205px)',
+                      minWidth: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      alignItems: 'flex-start',
+                      gap: '2px',
+                    }}
+                  >
+                    {card.title && card.title.trim() !== '' && (
+                      <h4
+                        style={{
+                          margin: 0,
+                          fontSize: 'clamp(0.96rem, 1.2vw, 1.05rem)',
+                          fontWeight: 750,
+                          color: effectiveCardTitleColor,
+                          letterSpacing: '-0.01em',
+                          lineHeight: 1.25,
+                        }}
+                      >
+                        {renderBoldText(card.title)}
+                      </h4>
+                    )}
 
-                  {card.subtitle && card.subtitle.trim() !== '' && (
-                    <span
-                      style={{
-                        fontSize: 'clamp(0.72rem, 0.95vw, 0.78rem)',
-                        fontWeight: 700,
-                        letterSpacing: '0.05em',
-                        textTransform: 'uppercase',
-                        color: effectiveCardSubtitleColor,
-                        lineHeight: 1.3,
-                        marginTop: '1px',
-                      }}
-                    >
-                      {renderBoldText(card.subtitle)}
-                    </span>
-                  )}
+                    {card.subtitle && card.subtitle.trim() !== '' && (
+                      <span
+                        style={{
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          letterSpacing: '0.04em',
+                          textTransform: 'uppercase',
+                          color: effectiveCardSubtitleColor,
+                          lineHeight: 1.25,
+                          marginTop: '1px',
+                        }}
+                      >
+                        {renderBoldText(card.subtitle)}
+                      </span>
+                    )}
 
-                  {card.badge && card.badge.trim() !== '' && (
-                    <span
-                      style={{
-                        marginTop: '4px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        fontSize: '0.72rem',
-                        fontWeight: 700,
-                        padding: '2px 7px',
-                        borderRadius: '5px',
-                        background: badgeStyle.bg,
-                        color: badgeStyle.text,
-                        border: `1px solid ${badgeStyle.border}`,
-                        lineHeight: 1.25,
-                      }}
-                    >
-                      {card.badge}
-                    </span>
-                  )}
+                    {card.badge && card.badge.trim() !== '' && (
+                      <span
+                        style={{
+                          marginTop: '3px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: badgeStyle.bg,
+                          color: badgeStyle.text,
+                          border: `1px solid ${badgeStyle.border}`,
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {card.badge}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Divisor Vertical Personalizable */}
+                  <div
+                    className="histology-horizontal-card-divider"
+                    style={{
+                      flexShrink: 0,
+                      width: '2px',
+                      background: effectiveCardLineColor,
+                      borderRadius: '999px',
+                      alignSelf: 'stretch',
+                    }}
+                    aria-hidden="true"
+                  />
+
+                  {/* Columna Derecha: Descripción */}
+                  <div
+                    className="histology-horizontal-card-right"
+                    style={{
+                      flex: '1 1 0',
+                      minWidth: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      fontSize: 'clamp(0.85rem, 1.1vw, 0.90rem)',
+                      color: '#334155',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {renderFormattedText(card.description)}
+                  </div>
                 </div>
-
-                {/* Divisor Vertical Personalizable */}
-                <div
-                  className="histology-horizontal-card-divider"
-                  style={{
-                    flexShrink: 0,
-                    width: '2px',
-                    background: effectiveCardLineColor,
-                    borderRadius: '999px',
-                    alignSelf: 'stretch',
-                  }}
-                  aria-hidden="true"
-                />
-
-                {/* Columna Derecha: Descripción */}
-                <div
-                  className="histology-horizontal-card-right"
-                  style={{
-                    flex: '1 1 0',
-                    minWidth: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    fontSize: 'clamp(0.88rem, 1.2vw, 0.93rem)',
-                    color: '#334155',
-                    lineHeight: 1.6,
-                  }}
-                >
-                  {renderFormattedText(card.description)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

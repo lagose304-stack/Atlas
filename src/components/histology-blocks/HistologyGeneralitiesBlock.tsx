@@ -82,6 +82,8 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
       className="histology-generalities-block"
       style={{
         position: 'relative',
+        width: '100%',
+        boxSizing: 'border-box',
         borderRadius: '24px',
         background: 'radial-gradient(ellipse at 88% 18%, rgba(99, 102, 241, 0.06) 0%, transparent 60%), linear-gradient(180deg, #ffffff 0%, #fafbff 100%)',
         border: '1.5px solid rgba(199, 210, 254, 0.95)',
@@ -110,7 +112,7 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
         }}
       />
 
-      <div style={{ position: 'relative', zIndex: 1, padding: 'clamp(20px, 3vw, 32px)', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div style={{ position: 'relative', zIndex: 1, padding: 'clamp(12px, 1.7vw, 18px) clamp(20px, 2.8vw, 30px)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {/* ─── FILA SUPERIOR: TEXTO INTRODUCTORIO + FOTO CENTRAL + TARJETA IDEA CLAVE ─── */}
         {hasTopContent && (
           <div
@@ -122,7 +124,7 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
             }}
           >
             {/* Columna 1 (Izquierda): Cabecera, Título e Introducción */}
-            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '10px' }}>
               {/* Badge de sección (Solo si tiene texto) */}
               {badgeText && badgeText.trim() !== '' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -133,11 +135,11 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                       gap: '6px',
                       fontSize: '0.72rem',
                       fontWeight: 850,
-                      letterSpacing: '0.07em',
+                      letterSpacing: '0.06em',
                       textTransform: 'uppercase',
                       color: effectiveBadgeColor,
                       background: 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)',
-                      padding: '4px 12px',
+                      padding: '3px 11px',
                       borderRadius: '999px',
                       border: '1.2px solid #c4b5fd',
                       boxShadow: '0 2px 8px rgba(99, 102, 241, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
@@ -154,11 +156,11 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                 <h3
                   style={{
                     margin: 0,
-                    fontSize: 'clamp(1.25rem, 2.3vw, 1.6rem)',
-                    fontWeight: 900,
+                    fontSize: 'clamp(1.22rem, 2vw, 1.5rem)',
+                    fontWeight: 850,
                     color: effectiveTitleColor,
-                    letterSpacing: '-0.028em',
-                    lineHeight: 1.2,
+                    letterSpacing: '-0.02em',
+                    lineHeight: 1.25,
                   }}
                 >
                   {renderBoldText(title)}
@@ -169,13 +171,13 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
               {introText && introText.trim() !== '' && (
                 <div
                   style={{
-                    fontSize: '0.93rem',
-                    lineHeight: 1.68,
-                    color: '#0f172a',
+                    fontSize: 'clamp(0.90rem, 1.2vw, 0.95rem)',
+                    lineHeight: 1.65,
+                    color: '#334155',
                     fontWeight: 500,
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '10px',
+                    gap: '8px',
                     borderLeft: '3px solid #818cf8',
                     paddingLeft: '14px',
                     margin: '2px 0',
@@ -367,8 +369,8 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                       style={{
                         position: 'relative',
                         zIndex: 1,
-                        fontSize: '0.88rem',
-                        lineHeight: 1.62,
+                        fontSize: 'clamp(0.85rem, 1.1vw, 0.90rem)',
+                        lineHeight: 1.6,
                         color: '#1e1b4b',
                         fontWeight: 550,
                         letterSpacing: '-0.01em',
@@ -489,7 +491,7 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                       </span>
                     </div>
                     {point.content && point.content.trim() !== '' && (
-                      <div style={{ fontSize: '0.83rem', lineHeight: 1.55, color: '#1e293b' }}>
+                      <div style={{ fontSize: 'clamp(0.85rem, 1.1vw, 0.90rem)', lineHeight: 1.55, color: '#334155' }}>
                         {renderBoldText(point.content)}
                       </div>
                     )}

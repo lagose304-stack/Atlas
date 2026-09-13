@@ -15,6 +15,7 @@ export interface TopicDivisionsBlockProps {
   accentColor?: string;
   childrenBlocks?: ContentBlock[];
   renderChildBlock?: (child: ContentBlock) => React.ReactNode;
+  renderChildrenBlocks?: (children: ContentBlock[]) => React.ReactNode;
   editorMode?: boolean;
   selectedTab?: number;
   onTabChange?: (tabIndex: number) => void;
@@ -28,6 +29,7 @@ export const TopicDivisionsBlock: React.FC<TopicDivisionsBlockProps> = ({
   accentColor = '#0284c7',
   childrenBlocks = [],
   renderChildBlock,
+  renderChildrenBlocks,
   editorMode = false,
   selectedTab,
   onTabChange,
@@ -108,11 +110,11 @@ export const TopicDivisionsBlock: React.FC<TopicDivisionsBlockProps> = ({
       className="topic-divisions-block"
       style={{
         width: '100%',
+        boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
         gap: 'clamp(14px, 2vw, 20px)',
         fontFamily: '"Montserrat", "Segoe UI", sans-serif',
-        margin: '4px 0 0 0',
       }}
     >
       {/* ─── BARRA DE NAVEGACIÓN ESTILO TEMARIO ─── */}
@@ -257,16 +259,20 @@ export const TopicDivisionsBlock: React.FC<TopicDivisionsBlockProps> = ({
         }}
       >
         {activeChildren.length > 0 ? (
-          activeChildren.map(child => {
-            if (renderChildBlock) {
-              return (
-                <React.Fragment key={child.id}>
-                  {renderChildBlock(child)}
-                </React.Fragment>
-              );
-            }
-            return null;
-          })
+          renderChildrenBlocks ? (
+            renderChildrenBlocks(activeChildren)
+          ) : (
+            activeChildren.map(child => {
+              if (renderChildBlock) {
+                return (
+                  <React.Fragment key={child.id}>
+                    {renderChildBlock(child)}
+                  </React.Fragment>
+                );
+              }
+              return null;
+            })
+          )
         ) : (
           <div
             style={{

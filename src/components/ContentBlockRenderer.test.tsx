@@ -1403,6 +1403,108 @@ describe('ContentBlockRenderer', () => {
     expect(screen.getByText('Segundo componente cortado y pegado')).toBeInTheDocument();
     expect(screen.getByText('Tercer componente cortado y pegado')).toBeInTheDocument();
   });
+
+  it('agrupa bloques histológicos contiguos en un Dossier Continuo con transiciones en la vista pública', () => {
+    const histologyBlocks: ContentBlock[] = [
+      {
+        id: 'histo-1',
+        entity_type: 'subtemas_page',
+        entity_id: 1,
+        block_type: 'histology_generalities',
+        sort_order: 1,
+        content: {
+          title: 'Generalidades de Epitelio',
+          badge_text: 'Generalidades',
+          intro_text: 'Introducción al tejido',
+        },
+      },
+      {
+        id: 'histo-2',
+        entity_type: 'subtemas_page',
+        entity_id: 1,
+        block_type: 'histology_stains',
+        sort_order: 2,
+        content: {
+          title: 'Tinciones Principales',
+          badge_text: 'Tinciones',
+          intro_text: 'Técnicas de tinción recomendadas',
+        },
+      },
+    ];
+
+    const { container, rerender } = render(<ContentBlockRenderer blocks={histologyBlocks} editorMode={false} />);
+
+    // En vista pública, debe existir el contenedor de dossier continuo
+    const dossierWrapper = container.querySelector('.histology-dossier-wrapper');
+    expect(dossierWrapper).toBeInTheDocument();
+    expect(dossierWrapper?.getAttribute('data-dossier-blocks-count')).toBe('2');
+
+    // Debe existir la transición elegante entre el bloque 1 y el bloque 2 (solo raya divisoria, sin píldora ni texto)
+    const transition = container.querySelector('.histology-dossier-transition');
+    expect(transition).toBeInTheDocument();
+    expect(transition?.querySelector('.histology-dossier-line')).toBeInTheDocument();
+    expect(transition?.textContent).not.toContain('Siguiente');
+
+    // En modo editor (editorMode = true), no debe agrupar en dossier para permitir edición individual
+    rerender(<ContentBlockRenderer blocks={histologyBlocks} editorMode={true} />);
+    expect(container.querySelector('.histology-dossier-wrapper')).not.toBeInTheDocument();
+  });
+
+  it('agrupa bloques histológicos contiguos dentro de una pestaña de topic_divisions en vista pública', () => {
+    const parentId = 'div-container-1';
+    const blocksWithDivisions: ContentBlock[] = [
+      {
+        id: parentId,
+        entity_type: 'subtemas_page',
+        entity_id: 1,
+        block_type: 'topic_divisions',
+        sort_order: 0,
+        content: {
+          divisions_count: '1',
+          division_1_title: 'Estrato Córneo',
+        },
+      },
+      {
+        id: 'child-histo-1',
+        entity_type: 'subtemas_page',
+        entity_id: 1,
+        block_type: 'histology_bullet_cards',
+        sort_order: 1,
+        content: {
+          layout_parent_id: parentId,
+          layout_tab: '1',
+          title: 'Organización Tisular',
+          card_1_title: 'Capa A',
+          card_1_bullets: 'Punto 1',
+        },
+      },
+      {
+        id: 'child-histo-2',
+        entity_type: 'subtemas_page',
+        entity_id: 1,
+        block_type: 'histology_horizontal_cards',
+        sort_order: 2,
+        content: {
+          layout_parent_id: parentId,
+          layout_tab: '1',
+          title: 'Clasificación',
+          card_1_title: 'Célula 1',
+          card_1_desc: 'Detalle de célula',
+        },
+      },
+    ];
+
+    const { container } = render(<ContentBlockRenderer blocks={blocksWithDivisions} editorMode={false} />);
+
+    // El dossier debe estar presente dentro de la pestaña activa de topic_divisions
+    const slotDossier = container.querySelector('.topic-division-content-slot .histology-dossier-wrapper');
+    expect(slotDossier).toBeInTheDocument();
+    expect(slotDossier?.getAttribute('data-dossier-blocks-count')).toBe('2');
+
+    // La transición debe estar presente entre ambos bloques
+    const transition = container.querySelector('.topic-division-content-slot .histology-dossier-transition');
+    expect(transition).toBeInTheDocument();
+  });
 });
 
 

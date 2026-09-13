@@ -61,6 +61,8 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
       className="histology-stains-block"
       style={{
         position: 'relative',
+        width: '100%',
+        boxSizing: 'border-box',
         borderRadius: '24px',
         background: 'linear-gradient(180deg, #ffffff 0%, #faf6fd 100%)',
         border: '1.5px solid rgba(233, 213, 255, 0.95)',
@@ -74,7 +76,7 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
       {/* Barra superior de acento personalizable */}
       <div style={{ height: '4px', width: '100%', background: effectiveLineColor, flexShrink: 0 }} />
 
-      <div style={{ padding: 'clamp(20px, 3vw, 32px)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: 'clamp(12px, 1.7vw, 18px) clamp(20px, 2.8vw, 30px)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {/* ─── CABECERA: BADGE Y TÍTULO ─── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {badgeText && badgeText.trim() !== '' && (
@@ -84,7 +86,7 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  fontSize: '0.70rem',
+                  fontSize: '0.72rem',
                   fontWeight: 850,
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase',
@@ -106,11 +108,11 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
             <h3
               style={{
                 margin: 0,
-                fontSize: 'clamp(1.2rem, 2.2vw, 1.55rem)',
+                fontSize: 'clamp(1.22rem, 2vw, 1.5rem)',
                 fontWeight: 850,
                 color: effectiveTitleColor,
-                letterSpacing: '-0.025em',
-                lineHeight: 1.2,
+                letterSpacing: '-0.02em',
+                lineHeight: 1.25,
               }}
             >
               {renderBoldText(title)}
@@ -120,9 +122,9 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
           {introText && introText.trim() !== '' && (
             <div
               style={{
-                fontSize: '0.90rem',
-                lineHeight: 1.6,
-                color: '#000000',
+                fontSize: 'clamp(0.90rem, 1.2vw, 0.95rem)',
+                lineHeight: 1.65,
+                color: '#334155',
                 fontWeight: 500,
               }}
             >
