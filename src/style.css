@@ -5553,6 +5553,26 @@ body {
   transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
+.cb-weekly-topics-1 .cb-weekly-vertical-bar {
+  padding: 3px 0;
+}
+.cb-weekly-topics-1 .cb-weekly-vertical-spark {
+  display: none;
+}
+.cb-weekly-topics-1 .cb-weekly-vertical-icon {
+  width: 22px;
+  height: 22px;
+  font-size: 0.72rem;
+}
+.cb-weekly-topics-1 .cb-weekly-vertical-action {
+  width: 20px;
+  height: 20px;
+  font-size: 0.68rem;
+}
+.cb-weekly-topics-1 .cb-weekly-vertical-text {
+  font-size: 0.68rem !important;
+}
+
 .cb-weekly-vertical-bar::before {
   content: '';
   position: absolute;
@@ -5690,6 +5710,8 @@ body {
 }
 
 .cb-weekly-plate-image-wrap img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;

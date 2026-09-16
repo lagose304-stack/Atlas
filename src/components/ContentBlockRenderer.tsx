@@ -1044,36 +1044,47 @@ const BlockItem: React.FC<{
         { id: c.topic_1_id, name: c.topic_1, logo: c.topic_1_logo },
         { id: c.topic_2_id, name: c.topic_2, logo: c.topic_2_logo },
         { id: c.topic_3_id, name: c.topic_3, logo: c.topic_3_logo },
-      ].filter(topic => topic.name);
+      ].filter(topic => Boolean(topic.name));
       const topicCount = Math.max(1, Math.min(3, topics.length));
       const adaptiveGridMinHeight = topicCount === 1
-        ? 'clamp(130px, 13vw, 160px)'
+        ? 'clamp(118px, 9.8vw, 126px)'
         : topicCount === 2
-          ? 'clamp(148px, 14.8vw, 185px)'
-          : 'clamp(168px, 16.5vw, 210px)';
+          ? 'clamp(170px, 15vw, 185px)'
+          : 'clamp(230px, 19.5vw, 248px)';
 
       const adaptiveContentPadding = topicCount === 1
-        ? 'clamp(8px, 1.2vw, 14px) clamp(20px, 2.5vw, 30px)'
+        ? '4px clamp(16px, 2vw, 24px)'
         : topicCount === 2
-          ? 'clamp(6px, 1vw, 12px) clamp(18px, 2.2vw, 28px)'
-          : 'clamp(5px, 0.8vw, 10px) clamp(16px, 2vw, 26px)';
+          ? 'clamp(8px, 1vw, 12px) clamp(16px, 2vw, 24px)'
+          : 'clamp(8px, 1vw, 12px) clamp(16px, 1.8vw, 24px)';
 
-      const adaptiveTitleMarginBottom = topicCount === 1 ? '18px' : topicCount === 2 ? '14px' : '11px';
-      const adaptiveTopicGap = topicCount === 1 ? '0px' : topicCount === 2 ? '6px' : '4px';
-      const adaptiveDateMarginTop = topicCount === 1 ? '18px' : topicCount === 2 ? '14px' : '11px';
+      const adaptiveTitleMarginBottom = '0px';
+      const adaptiveDividerMarginBottom = topicCount === 1 ? '3px' : topicCount === 2 ? '6px' : '6px';
+      const adaptiveTopicGap = topicCount === 1 ? '0px' : topicCount === 2 ? '5px' : '5px';
+      const adaptiveDateMarginTop = topicCount === 1 ? '7px' : topicCount === 2 ? '6px' : '6px';
       const adaptiveTopicPadding = topicCount === 1
-        ? '8px 14px 8px 14px'
+        ? '8px 14px'
         : topicCount === 2
-          ? '6px 12px 6px 13px'
-          : '5px 10px 5px 12px';
-      const adaptiveTopicLogoSize = topicCount === 1 ? '42px' : topicCount === 2 ? '38px' : '35px';
-      const adaptiveTopicCols = topicCount === 1 ? '48px minmax(0, 1fr) 28px' : topicCount === 2 ? '44px minmax(0, 1fr) 28px' : '41px minmax(0, 1fr) 28px';
+          ? '5px 11px'
+          : '4px 10px';
+      const adaptiveTopicLogoSize = topicCount === 1 ? '44px' : topicCount === 2 ? '34px' : '32px';
+      const adaptiveTopicCols = topicCount === 1
+        ? '44px minmax(0, 1fr) 26px'
+        : topicCount === 2
+          ? '40px minmax(0, 1fr) 26px'
+          : '36px minmax(0, 1fr) 26px';
+
+      const adaptiveGridCols = imageRight
+        ? 'minmax(0, 60%) minmax(0, 40%)'
+        : 'minmax(0, 40%) minmax(0, 60%)';
 
       return (
         <article
-          className="cb-weekly-publication"
+          className={`cb-weekly-publication cb-weekly-topics-${topicCount}`}
+          data-topic-count={topicCount}
           style={{
             ['--weekly-accent' as string]: accent,
+            ['--cb-weekly-min-height' as string]: adaptiveGridMinHeight,
             width: `min(100%, ${widthMap[c.weekly_width || 'full'] || '100%'})`,
             marginInline: 'auto',
             overflow: 'hidden',
@@ -1139,11 +1150,11 @@ const BlockItem: React.FC<{
             className="cb-weekly-publication-grid"
             style={{
               display: 'grid',
-              gridTemplateColumns: imageRight ? 'minmax(0, 1.15fr) minmax(300px, 0.85fr)' : 'minmax(300px, 0.85fr) minmax(0, 1.15fr)',
+              gridTemplateColumns: adaptiveGridCols,
               gap: 0,
               padding: 0,
               alignItems: 'stretch',
-              minHeight: adaptiveGridMinHeight,
+              minHeight: 0,
             }}
           >
             {/* Columna de contenido */}
@@ -1165,14 +1176,14 @@ const BlockItem: React.FC<{
                 const resolvedTitle = isGenericTitle ? defaultTitle : rawTitle;
 
                 return (
-                  <div style={{ position: 'relative', width: '100%', marginBottom: '3px', textAlign: (c.weekly_text_align || 'center') as React.CSSProperties['textAlign'] }}>
+                  <div style={{ position: 'relative', width: '100%', marginBottom: adaptiveTitleMarginBottom, textAlign: (c.weekly_text_align || 'center') as React.CSSProperties['textAlign'] }}>
                     <RichTextValue
                       value={resolvedTitle}
                       style={{
                         width: '100%',
                         margin: '0',
                         color: c.weekly_title_color || c.style_text || '#071b31',
-                        fontSize: c.weekly_title_size || 'clamp(1.12rem, 1.6vw, 1.45rem)',
+                        fontSize: c.weekly_title_size || (topicCount === 1 ? 'clamp(1.02rem, 1.3vw, 1.2rem)' : 'clamp(1.05rem, 1.45vw, 1.32rem)'),
                         fontWeight: Number(c.weekly_title_weight || 850),
                         fontFamily: 'inherit',
                         lineHeight: '1.15',
@@ -1187,69 +1198,69 @@ const BlockItem: React.FC<{
               })()}
 
               {/* Línea decorativa centrada con separación vertical adaptativa */}
-              <div style={{ alignSelf: c.weekly_text_align === 'left' ? 'flex-start' : c.weekly_text_align === 'right' ? 'flex-end' : 'center', width: '30px', height: '2px', borderRadius: '999px', background: `linear-gradient(90deg, ${accent}, #7dd3fc)`, marginBottom: adaptiveTitleMarginBottom }} />
+              <div style={{ alignSelf: c.weekly_text_align === 'left' ? 'flex-start' : c.weekly_text_align === 'right' ? 'flex-end' : 'center', width: topicCount === 1 ? '28px' : '30px', height: '2px', borderRadius: '999px', background: `linear-gradient(90deg, ${accent}, #7dd3fc)`, marginBottom: adaptiveDividerMarginBottom }} />
 
               {/* Lista de temas adaptativa */}
               <div style={{ display: 'grid', gap: adaptiveTopicGap }}>
-                  {topics.map((topic, index) => (
-                    <a
-                      className="cb-weekly-topic"
-                      key={topic.id || index}
-                      href={topic.id ? `/subtemas/${topic.id}` : undefined}
-                      style={{
-                        ['--weekly-accent' as string]: accent,
-                        position: 'relative',
-                        display: 'grid',
-                        gridTemplateColumns: adaptiveTopicCols,
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: adaptiveTopicPadding,
-                        overflow: 'hidden',
-                        borderRadius: '12px',
-                        background: 'linear-gradient(115deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 250, 255, 0.9) 100%)',
-                        border: '1.3px solid rgba(147, 213, 248, 0.7)',
-                        boxShadow: '0 2px 10px rgba(12, 69, 104, 0.04), inset 0 1px 0 #ffffff',
-                        color: c.weekly_topic_color || '#071b31',
-                        fontSize: c.weekly_topic_size || '1.08rem',
-                        textDecoration: 'none',
-                        transition: 'transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease',
-                      }}
-                    >
-                      <span aria-hidden style={{ position: 'absolute', inset: '4px auto 4px 0', width: '3px', borderRadius: '0 99px 99px 0', background: `linear-gradient(180deg, ${accent}, #38bdf8)` }} />
-                      {topic.logo ? (
-                        <img
-                          src={getCloudinaryImageUrl(topic.logo, 'thumbSmall')}
-                          alt=""
-                          style={{
-                            width: adaptiveTopicLogoSize,
-                            height: adaptiveTopicLogoSize,
-                            objectFit: 'cover',
-                            borderRadius: '9px',
-                            border: '1.2px solid #ffffff',
-                            boxShadow: `0 2px 6px ${accent}25`,
-                          }}
-                        />
-                      ) : (
-                        <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: adaptiveTopicLogoSize, height: adaptiveTopicLogoSize, borderRadius: '9px', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: '1.15em' }}>
-                          🔬
-                        </span>
-                      )}
-                      <span style={{ display: 'grid', gap: '2px', minWidth: 0 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', width: 'fit-content', padding: '1px 6px', borderRadius: '4px', background: `${accent}14`, color: accent, fontSize: '.75em', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>
-                          Tema {String(index + 1).padStart(2, '0')}
-                        </span>
-                        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: Number(c.weekly_topic_weight || 750), lineHeight: 1.22 }}>
-                          {topic.name}
-                        </strong>
+                {topics.map((topic, index) => (
+                  <a
+                    className="cb-weekly-topic"
+                    key={topic.id || index}
+                    href={topic.id ? `/subtemas/${topic.id}` : undefined}
+                    style={{
+                      ['--weekly-accent' as string]: accent,
+                      position: 'relative',
+                      display: 'grid',
+                      gridTemplateColumns: adaptiveTopicCols,
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: adaptiveTopicPadding,
+                      overflow: 'hidden',
+                      borderRadius: topicCount === 1 ? '11px' : '11px',
+                      background: 'linear-gradient(115deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 250, 255, 0.9) 100%)',
+                      border: '1.3px solid rgba(147, 213, 248, 0.7)',
+                      boxShadow: '0 2px 10px rgba(12, 69, 104, 0.04), inset 0 1px 0 #ffffff',
+                      color: c.weekly_topic_color || '#071b31',
+                      fontSize: c.weekly_topic_size || (topicCount === 1 ? '1.02rem' : '0.98rem'),
+                      textDecoration: 'none',
+                      transition: 'transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease',
+                    }}
+                  >
+                    <span aria-hidden style={{ position: 'absolute', inset: '4px auto 4px 0', width: '3px', borderRadius: '0 999px 999px 0', background: `linear-gradient(180deg, ${accent}, #38bdf8)` }} />
+                    {topic.logo ? (
+                      <img
+                        src={getCloudinaryImageUrl(topic.logo, 'thumbSmall')}
+                        alt=""
+                        style={{
+                          width: adaptiveTopicLogoSize,
+                          height: adaptiveTopicLogoSize,
+                          objectFit: 'cover',
+                          borderRadius: '8px',
+                          border: '1.2px solid #ffffff',
+                          boxShadow: `0 2px 6px ${accent}25`,
+                        }}
+                      />
+                    ) : (
+                      <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: adaptiveTopicLogoSize, height: adaptiveTopicLogoSize, borderRadius: '8px', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: '1.15em' }}>
+                        🔬
                       </span>
-                      <span className="cb-weekly-topic-arrow" aria-hidden style={{ display: 'grid', placeItems: 'center', width: '28px', height: '28px', borderRadius: '50%', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: '1.15em', fontWeight: 700 }}>
-                        ›
+                    )}
+                    <span style={{ display: 'grid', gap: '2px', minWidth: 0 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', width: 'fit-content', padding: topicCount === 1 ? '2px 7px' : '1px 5px', borderRadius: '4px', background: `${accent}14`, color: accent, fontSize: topicCount === 1 ? '.78em' : '.72em', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                        Tema {String(index + 1).padStart(2, '0')}
                       </span>
-                    </a>
-                  ))}
-                </div>
+                      <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontSize: topicCount === 1 ? 'clamp(1.02rem, 1.2vw, 1.15rem)' : undefined, fontWeight: Number(c.weekly_topic_weight || 750), lineHeight: 1.2 }}>
+                        {topic.name}
+                      </strong>
+                    </span>
+                    <span className="cb-weekly-topic-arrow" aria-hidden style={{ display: 'grid', placeItems: 'center', width: topicCount === 1 ? '26px' : '28px', height: topicCount === 1 ? '26px' : '28px', borderRadius: '50%', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: topicCount === 1 ? '1.05em' : '1.15em', fontWeight: 700 }}>
+                      ›
+                    </span>
+                  </a>
+                ))}
+              </div>
 
-              {/* Fecha abajo y centrada con badge elegante y margen vertical adaptativo */}
+              {/* Fecha abajo y centrada con badge elegante (posición original respetada) */}
               {(() => {
                 const cleanDates = normalizeWeeklyDates(c.eyebrow);
                 if (!cleanDates) return null;
@@ -1263,7 +1274,6 @@ const BlockItem: React.FC<{
                   </div>
                 );
               })()}
-
             </div>
 
             {/* Figura / Placa con barra lateral vertical y foto limpia sin obstrucciones */}
@@ -1280,7 +1290,7 @@ const BlockItem: React.FC<{
                 margin: 0,
                 width: '100%',
                 height: '100%',
-                minHeight: adaptiveGridMinHeight,
+                minHeight: 0,
                 overflow: 'hidden',
                 cursor: c.image_url ? 'zoom-in' : 'default',
                 display: 'flex',
@@ -1317,12 +1327,14 @@ const BlockItem: React.FC<{
               })()}
 
               {/* Contenedor de la placa histológica 100% visible sin obstrucciones */}
-              <div className="cb-weekly-plate-image-wrap">
+              <div className="cb-weekly-plate-image-wrap" style={{ position: 'relative', flex: 1, height: '100%', minHeight: 0, overflow: 'hidden' }}>
                 {c.image_url ? (
                   <img
                     src={getCloudinaryImageUrl(c.image_url, 'view')}
                     alt={c.image_caption || 'Placa de la semana'}
                     style={{
+                      position: 'absolute',
+                      inset: 0,
                       width: '100%',
                       height: '100%',
                       objectFit: (c.weekly_image_fit || 'cover') as React.CSSProperties['objectFit'],

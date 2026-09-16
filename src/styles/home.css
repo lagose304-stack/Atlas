@@ -273,13 +273,35 @@
   transition: transform .75s cubic-bezier(.22, 1, .36, 1), filter .5s ease;
 }
 
+.home-weekly-publication .cb-weekly-publication:not(.cb-exam-week-block) .cb-weekly-publication-grid {
+  grid-template-columns: 60% 40% !important;
+}
+
 .home-weekly-publication .cb-weekly-publication:not(.cb-exam-week-block) figure {
   height: 100% !important;
-  min-height: 260px;
+  min-height: 0 !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-1 figure,
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-publication-grid {
+  min-height: 122px !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-2 figure,
+.home-weekly-publication .cb-weekly-topics-2 .cb-weekly-publication-grid {
+  min-height: 180px !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-3 figure,
+.home-weekly-publication .cb-weekly-topics-3 .cb-weekly-publication-grid {
+  min-height: 240px !important;
 }
 
 .home-weekly-publication .cb-weekly-publication:not(.cb-exam-week-block) figure img {
+  position: absolute !important;
+  inset: 0 !important;
   height: 100% !important;
+  width: 100% !important;
   object-fit: cover !important;
 }
 
@@ -2151,13 +2173,25 @@ button.home-bento-card:focus-visible {
   .home-emblem-core span { font-size: .34rem; }
 
   .home-weekly-publication .cb-weekly-publication:not(.cb-exam-week-block) .cb-weekly-publication-grid {
-    grid-template-columns: minmax(0, 1.08fr) minmax(130px, 0.92fr) !important;
+    grid-template-columns: minmax(0, 60%) minmax(0, 40%) !important;
     direction: ltr !important;
-    min-height: 200px !important;
+    min-height: unset !important;
     padding: 0 !important;
   }
+  .home-weekly-publication .cb-weekly-topics-1 .cb-weekly-publication-grid,
+  .home-weekly-publication .cb-weekly-topics-1 figure {
+    min-height: 122px !important;
+  }
+  .home-weekly-publication .cb-weekly-topics-2 .cb-weekly-publication-grid,
+  .home-weekly-publication .cb-weekly-topics-2 figure {
+    min-height: 180px !important;
+  }
+  .home-weekly-publication .cb-weekly-topics-3 .cb-weekly-publication-grid,
+  .home-weekly-publication .cb-weekly-topics-3 figure {
+    min-height: 230px !important;
+  }
   .home-weekly-publication .cb-weekly-publication:not(.cb-exam-week-block) .cb-weekly-publication-grid > div:first-child {
-    padding: 12px 10px !important;
+    padding: 7px 12px !important;
   }
   .home-weekly-publication .cb-weekly-publication:not(.cb-exam-week-block) .cb-weekly-publication-grid > div:first-child > div:first-child * {
     font-size: 1.05rem !important;
@@ -2188,7 +2222,6 @@ button.home-bento-card:focus-visible {
   }
   .home-weekly-publication figure {
     height: 100% !important;
-    min-height: 200px !important;
     margin: 0 !important;
   }
   .home-weekly-publication figure img {
@@ -2411,17 +2444,29 @@ button.home-bento-card:focus-visible {
 
 @media (max-width: 390px) {
   .home-weekly-publication .cb-weekly-publication:not(.cb-exam-week-block) .cb-weekly-publication-grid {
-    grid-template-columns: minmax(0, 1.02fr) minmax(120px, .98fr) !important;
+    grid-template-columns: minmax(0, 60%) minmax(0, 40%) !important;
   }
 }
 
 @media (max-width: 360px) {
   .home-weekly-publication .cb-weekly-publication:not(.cb-exam-week-block) .cb-weekly-publication-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(110px, .9fr) !important;
+    grid-template-columns: minmax(0, 60%) minmax(0, 40%) !important;
+    min-height: unset !important;
+  }
+  .home-weekly-publication .cb-weekly-topics-1 figure,
+  .home-weekly-publication .cb-weekly-topics-1 .cb-weekly-publication-grid {
+    min-height: 100px !important;
+  }
+  .home-weekly-publication .cb-weekly-topics-2 figure,
+  .home-weekly-publication .cb-weekly-topics-2 .cb-weekly-publication-grid {
+    min-height: 165px !important;
+  }
+  .home-weekly-publication .cb-weekly-topics-3 figure,
+  .home-weekly-publication .cb-weekly-topics-3 .cb-weekly-publication-grid {
+    min-height: 185px !important;
   }
   .home-weekly-publication .cb-weekly-publication:not(.cb-exam-week-block) figure {
     height: 100% !important;
-    min-height: 175px !important;
   }
   .home-weekly-publication .cb-weekly-publication:not(.cb-exam-week-block) .cb-weekly-publication-grid > div:first-child > div:first-child * {
     font-size: .88rem !important;
