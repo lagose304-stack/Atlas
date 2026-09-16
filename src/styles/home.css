@@ -290,8 +290,8 @@
   isolation: isolate;
   display: flex;
   flex-direction: column;
-  gap: clamp(10px, 1.3vw, 16px);
-  padding: clamp(14px, 1.6vw, 20px) clamp(16px, 2.2vw, 26px);
+  gap: clamp(8px, 1vw, 11px);
+  padding: clamp(10px, 1.2vw, 14px) clamp(14px, 1.8vw, 22px);
   overflow: hidden;
   border: 1.5px solid rgba(147, 213, 248, 0.7);
   border-radius: clamp(18px, 2.2vw, 26px);
@@ -489,8 +489,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 8px;
+  gap: 10px;
+  padding-bottom: 5px;
   border-bottom: 1px solid rgba(224, 242, 254, 0.85);
 }
 
@@ -666,9 +666,10 @@
 @media (max-width: 880px) {
   .home-fact-steps-horizontal {
     grid-template-columns: 1fr !important;
-    gap: 10px !important;
   }
 }
+
+.home-histology-fact-quote-card {
   position: relative;
   height: 100%;
   display: flex;

@@ -25,6 +25,7 @@ import { OPEN_HEADER_SEARCH_EVENT } from '../constants/uiEvents';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks } from '../services/contentPublication';
 import bombillaIcon from '../assets/icons/bombilla.ico';
+import HomeHistologyFact from '../components/HomeHistologyFact';
 import '../styles/home.css';
 
 const Home: React.FC = () => {
@@ -155,6 +156,8 @@ const Home: React.FC = () => {
             <ContentBlockRenderer blocks={featuredPublication} />
           </section>
         )}
+
+        <HomeHistologyFact />
 
         <section className="home-learning-route home-reveal" aria-labelledby="home-route-title">
           {/* Fondo y decoraciones de ambientación */}
