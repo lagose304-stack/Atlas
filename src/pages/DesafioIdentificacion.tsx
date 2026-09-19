@@ -56,6 +56,7 @@ type ParcialKey = 'todos' | 'primer' | 'segundo' | 'tercer';
 
 const MAX_QUESTIONS_PER_MATCH = 30;
 const TOTAL_ROUND_SECONDS = 15.0;
+const MAX_LIVES = 4.0;
 
 const PARCIALES_INFO: { key: ParcialKey; num: string; name: string; desc: string }[] = [
   { key: 'todos', num: '★', name: 'Todos los Parciales', desc: 'Desafío global de 30 placas con todo el atlas' },
@@ -281,7 +282,7 @@ const DesafioIdentificacion: React.FC = () => {
   // Estado de la partida activa
   const [gamePlates, setGamePlates] = useState<PlacaGameItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [lives, setLives] = useState<number>(5.0); // 5.0 = 5 corazones completos
+  const [lives, setLives] = useState<number>(MAX_LIVES);
   const [unidentifiedCount, setUnidentifiedCount] = useState<number>(0); // Contador de placas no identificadas (máx 2 oportunidades)
   const [currentStreak, setCurrentStreak] = useState<number>(0);
   const [maxStreak, setMaxStreak] = useState<number>(0);
@@ -305,6 +306,8 @@ const DesafioIdentificacion: React.FC = () => {
 
   // Referencias para evitar condiciones de carrera entre timeout y click
   const roundResolvedRef = useRef<boolean>(false);
+  // Evita que eventos cercanos usen un contador de oportunidades obsoleto.
+  const unidentifiedCountRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const nextRoundTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -802,8 +805,9 @@ const DesafioIdentificacion: React.FC = () => {
 
     setGamePlates(diversePlates);
     setCurrentIndex(0);
-    setLives(5.0);
+    setLives(MAX_LIVES);
     setUnidentifiedCount(0);
+    unidentifiedCountRef.current = 0;
     setCurrentStreak(0);
     setMaxStreak(0);
     setScore(0);
@@ -927,7 +931,8 @@ const DesafioIdentificacion: React.FC = () => {
     setCurrentStreak(0);
     setTotalAttempted((prev) => prev + 1);
 
-    const newUnidentifiedCount = unidentifiedCount + 1;
+    const newUnidentifiedCount = unidentifiedCountRef.current + 1;
+    unidentifiedCountRef.current = newUnidentifiedCount;
     setUnidentifiedCount(newUnidentifiedCount);
 
     if (newUnidentifiedCount >= 2) {
@@ -1000,8 +1005,8 @@ const DesafioIdentificacion: React.FC = () => {
       floatingTimeoutRef.current = setTimeout(() => setFloatingFeedback(null), 800);
 
       // Curación: Racha de 3 o más recupera +0.5 corazón si le falta vida
-      if (nextStreak >= 3 && lives < 5.0) {
-        setLives((prevLives) => Math.min(5.0, prevLives + 0.5));
+      if (nextStreak >= 3 && lives < MAX_LIVES) {
+        setLives((prevLives) => Math.min(MAX_LIVES, prevLives + 0.5));
         setIsHeartPopping(true);
         setTimeout(() => setIsHeartPopping(false), 500);
         playAudioFx('heal');
@@ -1125,8 +1130,8 @@ const DesafioIdentificacion: React.FC = () => {
               </div>
 
               {/* Vidas / Corazones */}
-              <div className="desafio-hearts-container" title={`Vidas restantes: ${lives} de 5`}>
-                {[0, 1, 2, 3, 4].map((i) => {
+              <div className="desafio-hearts-container" title={`Vidas restantes: ${lives} de ${MAX_LIVES}`}>
+                {[0, 1, 2, 3].map((i) => {
                   let status: 'full' | 'half' | 'empty' = 'empty';
                   if (lives >= i + 1) {
                     status = 'full';
@@ -1231,7 +1236,7 @@ const DesafioIdentificacion: React.FC = () => {
               <div className="desafio-rule-pill">
                 <Heart size={14} color="#f43f5e" />
                 <span>
-                  <strong>5 Vidas:</strong> -0.5 ❤️ fallo
+                  <strong>4 Vidas:</strong> -0.5 ❤️ fallo
                 </span>
               </div>
               <div className="desafio-rule-pill">
@@ -1353,13 +1358,13 @@ const DesafioIdentificacion: React.FC = () => {
             <div className="desafio-arcade-reticle desafio-arcade-reticle-right" />
 
             {/* Formas arcade palpitantes (latido rítmico brusco y elástico) */}
-            <div className="desafio-arcade-pulse-cluster desafio-pulse-cluster-left" aria-hidden="true">
+            <div className="desafio-arcade-pulse-cluster desafio-pulse-cluster-left desafio-pulse-cluster-footer" aria-hidden="true">
               <span className="arcade-shape-diamond diamond-snap-strong" />
               <span className="arcade-shape-ring ring-snap-main" />
               <span className="arcade-shape-star star-snap-fast">✦</span>
               <span className="arcade-shape-dot dot-snap-beat" />
             </div>
-            <div className="desafio-arcade-pulse-cluster desafio-pulse-cluster-right" aria-hidden="true">
+            <div className="desafio-arcade-pulse-cluster desafio-pulse-cluster-right desafio-pulse-cluster-footer" aria-hidden="true">
               <span className="arcade-shape-star star-snap-slow">✦</span>
               <span className="arcade-shape-ring ring-snap-delayed" />
               <span className="arcade-shape-diamond diamond-snap-soft" />
