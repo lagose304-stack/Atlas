@@ -829,7 +829,8 @@
 }
 
 .desafio-plate-tags {
-  display: flex;
+  /* No mostrar metadatos de aumento/tinción durante el desafío: revelarían la respuesta. */
+  display: none;
   align-items: center;
   gap: 6px;
 }

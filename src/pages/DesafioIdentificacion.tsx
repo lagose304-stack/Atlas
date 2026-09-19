@@ -57,6 +57,7 @@ type ParcialKey = 'todos' | 'primer' | 'segundo' | 'tercer';
 const MAX_QUESTIONS_PER_MATCH = 30;
 const TOTAL_ROUND_SECONDS = 15.0;
 const MAX_LIVES = 4.0;
+const ARCADE_SESSION_HISTORY_KEY = 'atlas_arcade_used_plate_ids';
 
 const PARCIALES_INFO: { key: ParcialKey; num: string; name: string; desc: string }[] = [
   { key: 'todos', num: '★', name: 'Todos los Parciales', desc: 'Desafío global de 30 placas con todo el atlas' },
@@ -180,6 +181,28 @@ function generateDiverseMatchPlates(pool: PlacaGameItem[], count: number = MAX_Q
   }
 
   return result;
+}
+
+function getSessionPlateHistory(): number[] {
+  try {
+    const saved = window.sessionStorage.getItem(ARCADE_SESSION_HISTORY_KEY);
+    if (!saved) return [];
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed)) return [];
+    return [...new Set(parsed.map(Number).filter(Number.isFinite))];
+  } catch {
+    return [];
+  }
+}
+
+function rememberSessionPlates(previousIds: number[], playedIds: number[]) {
+  try {
+    const justPlayed = new Set(playedIds);
+    const updated = [...previousIds.filter((id) => !justPlayed.has(id)), ...playedIds].slice(-1000);
+    window.sessionStorage.setItem(ARCADE_SESSION_HISTORY_KEY, JSON.stringify(updated));
+  } catch {
+    // La partida continúa aunque el navegador bloquee el almacenamiento de sesión.
+  }
 }
 
 /** Componente para renderizar un corazón (lleno, mitad o vacío) */
@@ -801,7 +824,20 @@ const DesafioIdentificacion: React.FC = () => {
     setGameState('preparing');
 
     // Generar 30 placas con distribución diversa (evitando aglomeraciones de un mismo subtema/tema)
-    const diversePlates = generateDiverseMatchPlates(availablePlatesForParcial, MAX_QUESTIONS_PER_MATCH);
+    // Priorizar placas no vistas en esta sesión; cuando el catálogo se agota, reutilizar las menos recientes.
+    const sessionHistory = getSessionPlateHistory();
+    const seenInSession = new Set(sessionHistory);
+    const unseenPlates = availablePlatesForParcial.filter((plate) => !seenInSession.has(plate.id));
+    const matchSize = Math.min(MAX_QUESTIONS_PER_MATCH, availablePlatesForParcial.length);
+    const candidatePlates = unseenPlates.length >= matchSize
+      ? unseenPlates
+      : [
+          ...unseenPlates,
+          ...sessionHistory
+            .map((id) => availablePlatesForParcial.find((plate) => plate.id === id))
+            .filter((plate): plate is PlacaGameItem => Boolean(plate)),
+        ];
+    const diversePlates = generateDiverseMatchPlates(candidatePlates, matchSize);
 
     setGamePlates(diversePlates);
     setCurrentIndex(0);
@@ -862,6 +898,8 @@ const DesafioIdentificacion: React.FC = () => {
     }
 
     const currentPlate = platesList[index];
+    // Solo cuenta como usada cuando realmente se muestra al jugador, no al preparar la partida.
+    rememberSessionPlates(getSessionPlateHistory(), [currentPlate.id]);
     const generated = generateOptionsForPlate(currentPlate, availablePlatesForParcial);
     setOptions(generated);
     setSelectedIncorrectOptions(new Set());
