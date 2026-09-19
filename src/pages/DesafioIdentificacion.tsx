@@ -919,7 +919,7 @@ const DesafioIdentificacion: React.FC = () => {
   };
 
   // Iniciar cronómetro de 15s cuando la imagen esté cargada y lista
-  const startTimerOnImageReady = useCallback(() => {
+  const startTimerOnImageReady = () => {
     setIsImageLoaded(true);
 
     if (timerRef.current) clearInterval(timerRef.current);
@@ -954,7 +954,7 @@ const DesafioIdentificacion: React.FC = () => {
         }, 120);
       }
     }, 100);
-  }, [playAudioFx]);
+  };
 
   // Manejar placa no identificada (por tiempo agotado o 3 fallos en la misma placa)
   // Regla: 2 oportunidades antes de Game Over
