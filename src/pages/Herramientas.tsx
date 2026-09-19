@@ -5,9 +5,11 @@ import {
   Atom,
   Columns2,
   Compass,
+  Flame,
   Microscope,
   Move,
   Sparkles,
+  Zap,
   ZoomIn,
 } from 'lucide-react';
 import Header from '../components/Header';
@@ -108,6 +110,67 @@ const Herramientas: React.FC = () => {
             <div style={s.toolCardFooter}>
               <Link to="/herramientas/comparador" className="versus-action-btn" style={s.toolActionBtn}>
                 <span>Abrir Versus de Placas</span>
+                <ArrowRight size={18} />
+              </Link>
+            </div>
+          </article>
+
+          {/* Tool 2: Desafío de Identificación de Placas (Arcade Speed Mode) */}
+          <article className="versus-featured-card" style={s.toolCard}>
+            <div style={s.toolCardGlowTop} aria-hidden="true" />
+            <div style={s.toolCardGlowBottom} aria-hidden="true" />
+
+            <div style={s.toolCardTop}>
+              <div style={{ ...s.toolIconBadge, background: 'linear-gradient(135deg, #0284c7 0%, #4f46e5 100%)' }}>
+                <Zap size={26} />
+              </div>
+              <div style={s.badgesGroup}>
+                <span style={{ ...s.toolBadgeNew, color: '#4f46e5', background: '#eef2ff', borderColor: '#c7d2fe' }}>
+                  Modo Arcade
+                </span>
+                <span style={s.toolBadgeAvailable}>Disponible</span>
+              </div>
+            </div>
+
+            <div style={s.cardHeaderContent}>
+              <h2 style={s.toolTitle}>Desafío de Identificación</h2>
+              <p style={s.toolDescription}>
+                Identifica placas en 15 segundos por parciales, mantén tus vidas y encadena rachas para curarte.
+              </p>
+            </div>
+
+            {/* Visual Interactive Showcase Graphic */}
+            <div style={{ ...s.visualPreviewBox, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '12px 14px', boxSizing: 'border-box' }}>
+              {/* Mini HUD */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', zIndex: 2 }}>
+                <div style={{ display: 'flex', gap: 4, color: '#f43f5e', fontSize: '0.8rem', fontWeight: 900 }}>
+                  <span>❤️❤️❤️❤️❤️</span>
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.4)', padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(245,158,11,0.5)', color: '#fef08a', fontSize: '0.68rem', fontWeight: 800 }}>
+                  <Flame size={12} color="#f59e0b" />
+                  <span>Racha x3</span>
+                </div>
+              </div>
+
+              {/* Mini Timer Bar */}
+              <div style={{ width: '100%', height: 6, borderRadius: 999, background: 'rgba(0,0,0,0.5)', overflow: 'hidden', zIndex: 2 }}>
+                <div style={{ width: '70%', height: '100%', background: 'linear-gradient(90deg, #10b981, #06b6d4)', borderRadius: 999 }} />
+              </div>
+
+              {/* Mini Options Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, width: '100%', zIndex: 2 }}>
+                <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '4px 8px', fontSize: '0.65rem', fontWeight: 700, color: '#e0f2fe', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  A. Epitelio Cúbico
+                </div>
+                <div style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.4), rgba(5,150,105,0.5))', border: '1px solid #34d399', borderRadius: 8, padding: '4px 8px', fontSize: '0.65rem', fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  ✓ B. Riñón (Corteza)
+                </div>
+              </div>
+            </div>
+
+            <div style={s.toolCardFooter}>
+              <Link to="/herramientas/identificador" className="versus-action-btn" style={{ ...s.toolActionBtn, background: 'linear-gradient(135deg, #0284c7 0%, #4f46e5 100%)' }}>
+                <span>Jugar Desafío</span>
                 <ArrowRight size={18} />
               </Link>
             </div>
