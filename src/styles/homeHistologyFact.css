@@ -1,167 +1,311 @@
-.diapedesis-fact {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  padding: clamp(14px, 2vw, 24px);
+/* ═══════════════════════════════════════════════════════════════════════════
+   DATO HISTOLÓGICO DE LA SEMANA: DIAPÉDESIS (FORMATO RECTANGULAR)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.home-histology-fact.diapedesis-fact {
+  --ink: #0f2a43;
+  --muted: #475569;
+  --line: #dbe4ef;
+  --ind: #4b5bd0;
+  --ind-hover: #3b49bb;
+  --ind-light: #f1f3ff;
+  --ind-focus: #9aa5f5;
+
+  position: relative;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+  box-sizing: border-box;
 }
-.diapedesis-heading {
+
+/* ─── Grid principal de 2 columnas (Rectángulo simétrico) ─── */
+.home-diapedesis-grid {
   position: relative;
   z-index: 1;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+  gap: clamp(14px, 1.8vw, 24px);
+  align-items: center;
+  width: 100%;
 }
-.diapedesis-heading .home-histology-fact-brand {
+
+@media (max-width: 980px) {
+  .home-diapedesis-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* ─── Columna Izquierda: Información, Etapas y Controles ─── */
+.home-diapedesis-left {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  justify-content: center;
+  gap: 8px;
 }
-.diapedesis-heading .home-histology-fact-label {
-  width: max-content;
-}
-.diapedesis-heading h2 {
-  margin: 1px 0 3px;
-  color: #071b31;
-  font-size: clamp(1.35rem, 2vw, 1.8rem);
-  line-height: 1.1;
-  letter-spacing: -.025em;
-}
-.diapedesis-heading p {
-  margin: 0;
-  max-width: 65ch;
-  color: #475569;
-  font-size: .92rem;
-  line-height: 1.45;
-}
-.diapedesis-frame {
-  position: relative;
-  z-index: 1;
-  overflow: hidden;
-  width: 100%;
-  min-height: 150px;
-  aspect-ratio: 16 / 8.5;
-  border: 1px solid #d9d7e5;
-  border-radius: 12px;
-  background: #f0eaf0;
-}
-.diapedesis-scene {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-.diapedesis-fibers { stroke: #dfd2e2; stroke-width: 3; stroke-linecap: round; }
-.diapedesis-rbc { fill: #d8524b; animation: diapedesis-flow 5s linear infinite; transform-box: fill-box; transform-origin: center; }
-.diapedesis-rbc ellipse:nth-child(even) { fill: #e9877f; }
-.diapedesis-endothelium rect { fill: #eba99e; stroke: #c4766b; stroke-width: 1.2; }
-.diapedesis-selectins line { stroke: #d9981a; stroke-width: 1.6; }
-.diapedesis-selectins circle { fill: #f0b429; stroke: #b0740d; }
-.diapedesis-icam line { stroke: #12866f; stroke-width: 1.6; }
-.diapedesis-icam circle { fill: #2cb79a; stroke: #0d6b58; }
-.diapedesis-basal { fill: none; stroke: #b99cc1; stroke-width: 4; stroke-linecap: round; }
-.diapedesis-chemokines circle { fill: #a23f9a; opacity: .68; animation: diapedesis-pulse 2.2s ease-in-out infinite alternate; }
-.diapedesis-chemokines circle:nth-child(odd) { animation-delay: -.8s; }
-.diapedesis-bacteria rect { fill: #a23f9a; stroke: #6e2168; stroke-width: 1.2; }
-.diapedesis-leukocyte { transition: transform .08s linear; }
-.diapedesis-leukocyte circle { fill: #a9b6f6; stroke: #4b5bd0; stroke-width: 2.4; }
-.diapedesis-leukocyte path { fill: #4b5bd0; opacity: .9; }
-.diapedesis-labels { fill: #5b6172; font: 600 13px system-ui, sans-serif; }
-.diapedesis-labels text:last-child { fill: #7a2c74; }
-.diapedesis-controls {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-top: 12px;
-}
-.diapedesis-controls input { flex: 1; min-width: 0; accent-color: #4b5bd0; cursor: pointer; }
-.diapedesis-play {
+
+.home-diapedesis-left .home-histology-fact-brand {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 124px;
-  padding: 10px 15px;
-  border: 0;
-  border-radius: 8px;
-  color: #fff;
-  background: #4b5bd0;
-  font: 700 .9rem inherit;
-  cursor: pointer;
-}
-.diapedesis-play:hover { background: #3e4cbb; }
-.diapedesis-steps {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  padding: 0;
-  margin: 12px 0 0;
-  list-style: none;
 }
-.diapedesis-steps button {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+
+.home-diapedesis-left .home-histology-fact-icon {
+  display: flex;
   align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: rgba(75, 91, 208, 0.1);
+  color: var(--ind);
+  border: 1px solid rgba(75, 91, 208, 0.22);
+}
+
+.home-diapedesis-left .home-histology-fact-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  background: rgba(75, 91, 208, 0.08);
+  border: 1px solid rgba(75, 91, 208, 0.18);
+  color: var(--ind);
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.diap-header-text h2 {
+  margin: 0;
+  font-size: clamp(1.2rem, 1.6vw, 1.55rem);
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.diap-header-text .sub {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  max-width: 58ch;
+}
+
+/* ─── Tarjeta de detalle de la etapa activa ─── */
+.home-diapedesis-left .detail {
+  position: relative;
+  margin-top: 2px;
+  padding: 4px 0 4px 12px;
+  border-left: 3px solid var(--ind);
+}
+
+.home-diapedesis-left .detail h3 {
+  margin: 0 0 2px;
+  font-size: 0.92rem;
+  font-weight: 750;
+  color: var(--ink);
+}
+
+.home-diapedesis-left .detail p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #334155;
+}
+
+/* ─── Botones de etapas en matriz compacta 2x2 ─── */
+.home-diapedesis-left .steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+}
+
+.home-diapedesis-left .step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   width: 100%;
-  gap: 7px;
-  padding: 10px;
   text-align: left;
-  color: #1e2230;
-  border: 1px solid #d9d7e5;
+  padding: 6px 10px 8px;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
-  font: inherit;
+  background: #ffffff;
+  color: var(--ink);
+  font-family: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+}
+
+.home-diapedesis-left .step:hover {
+  border-color: #a9b0e8;
+  transform: translateY(-1px);
+}
+
+.home-diapedesis-left .step .n {
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.home-diapedesis-left .step .t {
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.home-diapedesis-left .step .bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--ind);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+.home-diapedesis-left .step[aria-current='true'] {
+  border-color: var(--ind);
+  background: var(--ind-light);
+}
+
+/* ─── Barra de controles: Play + Seek slider ─── */
+.home-diapedesis-left .controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.home-diapedesis-left .play {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 108px;
+  justify-content: center;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--ind);
+  color: #ffffff;
+  font: 700 0.8rem/1 inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.home-diapedesis-left .play svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.home-diapedesis-left .play:hover {
+  background: var(--ind-hover);
+}
+
+.home-diapedesis-left .play:active {
+  transform: scale(0.97);
+}
+
+.home-diapedesis-left input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--ind);
+  height: 24px;
   cursor: pointer;
 }
-.diapedesis-steps button span { color: #5b6172; font-size: .75rem; }
-.diapedesis-steps button strong { font-size: .81rem; }
-.diapedesis-steps button svg { color: #94a3b8; }
-.diapedesis-steps button:hover, .diapedesis-steps button.is-current { border-color: #4b5bd0; background: #f1f3ff; }
-.diapedesis-steps button.is-current svg { color: #4b5bd0; }
-.diapedesis-detail {
-  position: relative;
-  z-index: 1;
-  margin-top: 12px;
-  padding: 5px 0 5px 15px;
-  border-left: 3px solid #4b5bd0;
-}
-.diapedesis-detail h3 { margin: 0 0 3px; font-size: 1rem; color: #1e2230; }
-.diapedesis-detail p { margin: 0; max-width: 75ch; color: #475569; font-size: .9rem; line-height: 1.5; }
-.diapedesis-legend {
-  position: relative;
-  z-index: 1;
+
+/* ─── Leyenda y notas ─── */
+.home-diapedesis-left .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 18px;
-  padding: 0;
-  margin: 14px 0 0;
+  gap: 6px 14px;
   list-style: none;
-  color: #5b6172;
-  font-size: .76rem;
+  margin: 4px 0 0;
+  padding: 0;
+  font-size: 0.74rem;
+  color: var(--muted);
 }
-.diapedesis-legend li { display: flex; align-items: center; gap: 6px; }
-.diapedesis-legend i { width: 11px; height: 11px; border: 1px solid rgba(0, 0, 0, .28); border-radius: 50%; }
-.diapedesis-legend .leukocyte { background: #a9b6f6; }
-.diapedesis-legend .selectin { background: #f0b429; }
-.diapedesis-legend .icam { background: #2cb79a; }
-.diapedesis-legend .chemokine { background: #a23f9a; }
-.diapedesis-play:focus-visible, .diapedesis-steps button:focus-visible, .diapedesis-controls input:focus-visible { outline: 3px solid #9aa5f5; outline-offset: 2px; }
-@keyframes diapedesis-flow { 50% { transform: translateX(28px); } } @keyframes diapedesis-pulse { to { opacity: 1; transform: scale(1.25); } }
-@media (max-width: 680px) {
-  .diapedesis-fact { padding: 14px; }
-  .diapedesis-heading { gap: 9px; }
-  .diapedesis-heading h2 { font-size: 1.35rem; }
-  .diapedesis-heading p { font-size: .82rem; }
-  .diapedesis-frame { aspect-ratio: 16 / 8; min-height: 120px; }
-  .diapedesis-controls { gap: 10px; }
-  .diapedesis-play { min-width: 0; padding: 9px 12px; font-size: .82rem; }
-  .diapedesis-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .diapedesis-steps button { padding: 9px; }
-  .diapedesis-steps button strong { font-size: .77rem; }
-  .diapedesis-labels { font-size: 15px; }
-  .diapedesis-legend { font-size: .7rem; }
+
+.home-diapedesis-left .legend li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
-@media (prefers-reduced-motion: reduce) { .diapedesis-rbc, .diapedesis-chemokines circle { animation: none; }.diapedesis-leukocyte { transition: none; } }
+
+.home-diapedesis-left .legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, 0.25);
+  display: block;
+  flex-shrink: 0;
+}
+
+.home-diapedesis-left .note {
+  margin: 3px 0 0;
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ─── Columna Derecha: Marco del visor SVG animado ─── */
+.home-diapedesis-right {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.home-diapedesis-right .frame {
+  position: relative;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1.2px solid var(--line);
+  background: #f0eaf0;
+  box-shadow:
+    0 6px 20px -4px rgba(15, 42, 67, 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.home-diapedesis-right .scene {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.home-diapedesis-right .lab {
+  font: 600 13px 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+  user-select: none;
+}
+
+/* Foco en accesibilidad */
+.diapedesis-fact button:focus-visible,
+.diapedesis-fact input:focus-visible {
+  outline: 3px solid var(--ind-focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .home-diapedesis-left .steps {
+    grid-template-columns: 1fr;
+  }
+  .home-diapedesis-right .lab {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-diapedesis-left .step .bar {
+    transition: none;
+  }
+}

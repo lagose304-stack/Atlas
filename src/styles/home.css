@@ -21,7 +21,7 @@
 }
 
 .home-semester-welcome {
-  width: min(100%, 1280px);
+  width: 100%;
   contain: layout style;
 }
 
@@ -30,7 +30,7 @@
 .home-study-tools,
 .home-learning-route,
 .home-site-notice {
-  width: min(100%, 1280px);
+  width: 100%;
   contain: layout style;
   content-visibility: auto;
   contain-intrinsic-size: auto 320px;
@@ -277,14 +277,102 @@
   grid-template-columns: 60% 40% !important;
 }
 
-.home-weekly-publication .cb-weekly-publication:not(.cb-exam-week-block) figure {
+.home-weekly-publication .cb-weekly-publication:not(.cb-exam-week-block):not(.cb-weekly-topics-1) figure {
   height: 100% !important;
   min-height: 0 !important;
 }
 
+.home-weekly-publication .cb-weekly-publication.cb-weekly-topics-1:not(.cb-exam-week-block) figure,
+.home-weekly-publication .cb-weekly-publication.cb-weekly-topics-1:not(.cb-exam-week-block) .cb-weekly-publication-grid,
+.home-weekly-publication .cb-weekly-publication.cb-weekly-topics-1,
 .home-weekly-publication .cb-weekly-topics-1 figure,
 .home-weekly-publication .cb-weekly-topics-1 .cb-weekly-publication-grid {
-  min-height: 122px !important;
+  min-height: clamp(370px, 24vw, 415px) !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-publication-grid > div:first-child > div:first-child *,
+.cb-weekly-topics-1 .cb-weekly-publication-grid > div:first-child > div:first-child * {
+  font-size: clamp(1.85rem, 2.7vw, 2.45rem) !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.05em !important;
+  line-height: 1.15 !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-publication-grid > div:first-child > div:first-child p,
+.cb-weekly-topics-1 .cb-weekly-publication-grid > div:first-child > div:first-child p {
+  margin: 0 !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-topic,
+.cb-weekly-topics-1 .cb-weekly-topic {
+  grid-template-columns: 66px minmax(0, 1fr) 42px !important;
+  gap: 16px !important;
+  padding: 16px 26px !important;
+  border-radius: 16px !important;
+  max-width: 720px !important;
+  width: 100% !important;
+  margin-inline: auto !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-topic > img,
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-topic > span:nth-child(2),
+.cb-weekly-topics-1 .cb-weekly-topic > img,
+.cb-weekly-topics-1 .cb-weekly-topic > span:nth-child(2) {
+  width: 66px !important;
+  height: 66px !important;
+  border-radius: 12px !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-topic strong,
+.cb-weekly-topics-1 .cb-weekly-topic strong {
+  font-size: clamp(1.38rem, 1.8vw, 1.68rem) !important;
+  font-weight: 800 !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-topic span span:first-child,
+.cb-weekly-topics-1 .cb-weekly-topic span span:first-child {
+  font-size: 0.92rem !important;
+  padding: 4px 10px !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-topic-arrow,
+.cb-weekly-topics-1 .cb-weekly-topic-arrow {
+  width: 42px !important;
+  height: 42px !important;
+  font-size: 1.6em !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-date-badge,
+.cb-weekly-topics-1 .cb-weekly-date-badge-large {
+  padding: 10px 28px !important;
+  font-size: clamp(1.08rem, 1.3vw, 1.25rem) !important;
+  gap: 10px !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-date-icon,
+.cb-weekly-topics-1 .cb-weekly-date-badge-large .cb-weekly-date-icon {
+  font-size: 1.35rem !important;
+}
+
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-vertical-spark,
+.cb-weekly-topics-1 .cb-weekly-vertical-spark {
+  display: block !important;
+}
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-vertical-icon,
+.cb-weekly-topics-1 .cb-weekly-vertical-icon {
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 0.85rem !important;
+}
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-vertical-action,
+.cb-weekly-topics-1 .cb-weekly-vertical-action {
+  width: 26px !important;
+  height: 26px !important;
+  font-size: 0.76rem !important;
+}
+.home-weekly-publication .cb-weekly-topics-1 .cb-weekly-vertical-text,
+.cb-weekly-topics-1 .cb-weekly-vertical-text {
+  font-size: 0.78rem !important;
 }
 
 .home-weekly-publication .cb-weekly-topics-2 figure,
@@ -2180,7 +2268,7 @@ button.home-bento-card:focus-visible {
   }
   .home-weekly-publication .cb-weekly-topics-1 .cb-weekly-publication-grid,
   .home-weekly-publication .cb-weekly-topics-1 figure {
-    min-height: 122px !important;
+    min-height: 195px !important;
   }
   .home-weekly-publication .cb-weekly-topics-2 .cb-weekly-publication-grid,
   .home-weekly-publication .cb-weekly-topics-2 figure {
@@ -2455,7 +2543,7 @@ button.home-bento-card:focus-visible {
   }
   .home-weekly-publication .cb-weekly-topics-1 figure,
   .home-weekly-publication .cb-weekly-topics-1 .cb-weekly-publication-grid {
-    min-height: 100px !important;
+    min-height: 130px !important;
   }
   .home-weekly-publication .cb-weekly-topics-2 figure,
   .home-weekly-publication .cb-weekly-topics-2 .cb-weekly-publication-grid {

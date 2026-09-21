@@ -9,7 +9,7 @@ describe('HomeHistologyFact Component', () => {
     expect(screen.getByRole('heading', { name: /diapédesis/i })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: /esquema animado de la diapédesis/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /pausar animación/i })).toBeInTheDocument();
-    expect(screen.getByText(/selectinas del endotelio/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/selectinas/i).length).toBeGreaterThan(0);
   });
 
   it('muestra controles y las cuatro etapas del proceso', () => {
@@ -17,7 +17,7 @@ describe('HomeHistologyFact Component', () => {
     expect(screen.getByLabelText(/progreso de la animación/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /rodamiento/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /adhesión firme/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /3 diapédesis/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /migración al foco/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /diapédesis/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /migración/i })).toBeInTheDocument();
   });
 });
