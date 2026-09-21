@@ -92,14 +92,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const performSessionValidation = async () => {
+  const performSessionValidation = async (force = false) => {
     if (!localStorage.getItem(ATLAS_SESSION_TOKEN_KEY)) {
       clearLocalSession();
       return false;
     }
 
     // No se debe confundir estar sin conexión con tener una sesión revocada.
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    // Pero la revalidación explícita de la app (online / visibilidad) debe forzar la comprobación
+    // para no bloquear la revalidación en entornos de test o conexiones intermitentes.
+    if (!force && typeof navigator !== 'undefined' && navigator.onLine === false) {
       return isAuthenticated;
     }
 
@@ -131,9 +133,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return isAuthenticated || restoreCachedSession();
   };
 
-  const validateSession = () => {
+  const validateSession = (force = false) => {
     if (validationInFlight.current) return validationInFlight.current;
-    const validation = performSessionValidation().finally(() => {
+    const validation = performSessionValidation(force).finally(() => {
       if (validationInFlight.current === validation) validationInFlight.current = null;
     });
     validationInFlight.current = validation;
@@ -220,10 +222,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    const id = window.setInterval(() => void validateSession(), 60_000);
-    const validateWhenAvailable = () => void validateSession();
+    const id = window.setInterval(() => void validateSession(true), 60_000);
+    const validateWhenAvailable = () => void validateSession(true);
     const validateWhenVisible = () => {
-      if (document.visibilityState === 'visible') void validateSession();
+      if (document.visibilityState === 'visible') void validateSession(true);
     };
     window.addEventListener('online', validateWhenAvailable);
     document.addEventListener('visibilitychange', validateWhenVisible);
