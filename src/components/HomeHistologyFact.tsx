@@ -761,7 +761,6 @@ export const HomeHistologyFact: React.FC = () => {
               Quimiocinas
             </li>
           </ul>
-          <p className="note">Esquema ilustrativo: los tamaños y los tiempos están exagerados.</p>
         </div>
 
         {/* ─── Columna Derecha: Esquema SVG Dinámico ─── */}
