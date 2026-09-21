@@ -8,6 +8,7 @@ import { getCloudinaryPublicId } from '../services/cloudinary';
 import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
 import { normalizeBlockContent, normalizeWeeklyDates } from './blocks/blockRegistry';
 import { supabase } from '../services/supabase';
+import { getCachedTemas, getQuickTemas, getQuickTemaById } from '../services/catalogService';
 import {
   HistologyGeneralitiesBlock,
   HistologyPillarsBlock,
@@ -547,6 +548,138 @@ const BlockCtas: React.FC<{ content: Record<string, string> }> = ({ content }) =
         ))}
       </div>
     </div>
+  );
+};
+
+const WeeklyTopicCard: React.FC<{
+  topic: { id?: string | number; name: string; logo?: string };
+  fallbackIndex: number;
+  topicCount: number;
+  accent: string;
+  adaptiveTopicCols: string;
+  adaptiveTopicPadding: string;
+  adaptiveTopicLogoSize: string;
+  weeklyTopicColor?: string;
+  weeklyTopicSize?: string;
+  weeklyTopicWeight?: string | number;
+}> = ({
+  topic,
+  fallbackIndex,
+  topicCount,
+  accent,
+  adaptiveTopicCols,
+  adaptiveTopicPadding,
+  adaptiveTopicLogoSize,
+  weeklyTopicColor,
+  weeklyTopicSize,
+  weeklyTopicWeight,
+}) => {
+  const [assignedNumber, setAssignedNumber] = useState<number | null>(() => {
+    if (topic.id) {
+      const quick = getQuickTemaById(Number(topic.id));
+      if (quick && quick.sort_order != null) return Number(quick.sort_order) + 1;
+    }
+    const allQuick = getQuickTemas();
+    if (allQuick) {
+      const match = allQuick.find(t =>
+        (topic.id && Number(t.id) === Number(topic.id)) ||
+        (topic.name && t.nombre.toLowerCase().trim() === topic.name.toLowerCase().trim())
+      );
+      if (match && match.sort_order != null) return Number(match.sort_order) + 1;
+    }
+    return null;
+  });
+
+  const [resolvedLogo, setResolvedLogo] = useState<string | undefined>(topic.logo);
+  const [resolvedId, setResolvedId] = useState<string | number | undefined>(topic.id);
+
+  useEffect(() => {
+    let isMounted = true;
+    const canQuery = typeof supabase?.from === 'function' && typeof supabase.from('temas')?.select === 'function';
+    if (canQuery) {
+      getCachedTemas().then(temas => {
+        if (!isMounted || !temas) return;
+        const match = temas.find(t =>
+          (topic.id && Number(t.id) === Number(topic.id)) ||
+          (topic.name && t.nombre.toLowerCase().trim() === topic.name.toLowerCase().trim())
+        );
+        if (match) {
+          if (match.sort_order != null) {
+            setAssignedNumber(Number(match.sort_order) + 1);
+          }
+          if (!topic.id && match.id) {
+            setResolvedId(match.id);
+          }
+          if (!topic.logo && match.logo_url) {
+            setResolvedLogo(match.logo_url);
+          }
+        }
+      }).catch(() => {});
+    }
+    return () => { isMounted = false; };
+  }, [topic.id, topic.name, topic.logo]);
+
+  const displayNumber = assignedNumber != null
+    ? String(assignedNumber).padStart(2, '0')
+    : String(fallbackIndex + 1).padStart(2, '0');
+
+  const finalId = resolvedId || topic.id;
+  const finalLogo = resolvedLogo || topic.logo;
+
+  return (
+    <a
+      className="cb-weekly-topic"
+      href={finalId ? `/subtemas/${finalId}` : undefined}
+      style={{
+        ['--weekly-accent' as string]: accent,
+        position: 'relative',
+        display: 'grid',
+        gridTemplateColumns: adaptiveTopicCols,
+        alignItems: 'center',
+        gap: topicCount === 1 ? '16px' : '12px',
+        padding: adaptiveTopicPadding,
+        overflow: 'hidden',
+        borderRadius: topicCount === 1 ? '16px' : '11px',
+        background: 'linear-gradient(115deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 250, 255, 0.9) 100%)',
+        border: '1.3px solid rgba(147, 213, 248, 0.7)',
+        boxShadow: '0 2px 10px rgba(12, 69, 104, 0.04), inset 0 1px 0 #ffffff',
+        color: weeklyTopicColor || '#071b31',
+        fontSize: weeklyTopicSize || (topicCount === 1 ? '1.38rem' : '0.98rem'),
+        textDecoration: 'none',
+        transition: 'transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease',
+      }}
+    >
+      <span aria-hidden style={{ position: 'absolute', inset: '4px auto 4px 0', width: '3.5px', borderRadius: '0 999px 999px 0', background: `linear-gradient(180deg, ${accent}, #38bdf8)` }} />
+      {finalLogo ? (
+        <img
+          src={getCloudinaryImageUrl(finalLogo, 'thumbSmall')}
+          alt=""
+          style={{
+            width: adaptiveTopicLogoSize,
+            height: adaptiveTopicLogoSize,
+            objectFit: 'cover',
+            borderRadius: '12px',
+            border: '1.2px solid #ffffff',
+            boxShadow: `0 2px 6px ${accent}25`,
+          }}
+        />
+      ) : (
+        <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: adaptiveTopicLogoSize, height: adaptiveTopicLogoSize, borderRadius: '12px', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: '1.45em' }}>
+          🔬
+        </span>
+      )}
+      <span style={{ display: 'grid', gap: '4px', minWidth: 0 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', width: 'fit-content', padding: topicCount === 1 ? '4px 10px' : '1px 5px', borderRadius: '4px', background: `${accent}14`, color: accent, fontSize: topicCount === 1 ? '0.92rem' : '.72em', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+          Tema {displayNumber}
+        </span>
+        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontSize: topicCount === 1 ? 'clamp(1.38rem, 1.8vw, 1.68rem)' : undefined, fontWeight: Number(weeklyTopicWeight || 800), lineHeight: 1.2 }}>
+          {topic.name}
+        </strong>
+      </span>
+      <span className="cb-weekly-topic-arrow" aria-hidden style={{ display: 'grid', placeItems: 'center', width: topicCount === 1 ? '42px' : '28px', height: topicCount === 1 ? '42px' : '28px', borderRadius: '50%', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: topicCount === 1 ? '1.6em' : '1.15em', fontWeight: 700 }}>
+        ›
+      </span>
+    </a>
   );
 };
 
@@ -1204,60 +1337,19 @@ const BlockItem: React.FC<{
               {/* Lista de temas adaptativa */}
               <div style={{ display: 'grid', gap: adaptiveTopicGap }}>
                 {topics.map((topic, index) => (
-                  <a
-                    className="cb-weekly-topic"
+                  <WeeklyTopicCard
                     key={topic.id || index}
-                    href={topic.id ? `/subtemas/${topic.id}` : undefined}
-                    style={{
-                      ['--weekly-accent' as string]: accent,
-                      position: 'relative',
-                      display: 'grid',
-                      gridTemplateColumns: adaptiveTopicCols,
-                      alignItems: 'center',
-                      gap: topicCount === 1 ? '16px' : '12px',
-                      padding: adaptiveTopicPadding,
-                      overflow: 'hidden',
-                      borderRadius: topicCount === 1 ? '16px' : '11px',
-                      background: 'linear-gradient(115deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 250, 255, 0.9) 100%)',
-                      border: '1.3px solid rgba(147, 213, 248, 0.7)',
-                      boxShadow: '0 2px 10px rgba(12, 69, 104, 0.04), inset 0 1px 0 #ffffff',
-                      color: c.weekly_topic_color || '#071b31',
-                      fontSize: c.weekly_topic_size || (topicCount === 1 ? '1.38rem' : '0.98rem'),
-                      textDecoration: 'none',
-                      transition: 'transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease',
-                    }}
-                  >
-                    <span aria-hidden style={{ position: 'absolute', inset: '4px auto 4px 0', width: '3.5px', borderRadius: '0 999px 999px 0', background: `linear-gradient(180deg, ${accent}, #38bdf8)` }} />
-                    {topic.logo ? (
-                      <img
-                        src={getCloudinaryImageUrl(topic.logo, 'thumbSmall')}
-                        alt=""
-                        style={{
-                          width: adaptiveTopicLogoSize,
-                          height: adaptiveTopicLogoSize,
-                          objectFit: 'cover',
-                          borderRadius: '12px',
-                          border: '1.2px solid #ffffff',
-                          boxShadow: `0 2px 6px ${accent}25`,
-                        }}
-                      />
-                    ) : (
-                      <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: adaptiveTopicLogoSize, height: adaptiveTopicLogoSize, borderRadius: '12px', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: '1.45em' }}>
-                        🔬
-                      </span>
-                    )}
-                    <span style={{ display: 'grid', gap: '4px', minWidth: 0 }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', width: 'fit-content', padding: topicCount === 1 ? '4px 10px' : '1px 5px', borderRadius: '4px', background: `${accent}14`, color: accent, fontSize: topicCount === 1 ? '0.92rem' : '.72em', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>
-                        Tema {String(index + 1).padStart(2, '0')}
-                      </span>
-                      <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontSize: topicCount === 1 ? 'clamp(1.38rem, 1.8vw, 1.68rem)' : undefined, fontWeight: Number(c.weekly_topic_weight || 800), lineHeight: 1.2 }}>
-                        {topic.name}
-                      </strong>
-                    </span>
-                    <span className="cb-weekly-topic-arrow" aria-hidden style={{ display: 'grid', placeItems: 'center', width: topicCount === 1 ? '42px' : '28px', height: topicCount === 1 ? '42px' : '28px', borderRadius: '50%', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: topicCount === 1 ? '1.6em' : '1.15em', fontWeight: 700 }}>
-                      ›
-                    </span>
-                  </a>
+                    topic={topic}
+                    fallbackIndex={index}
+                    topicCount={topicCount}
+                    accent={accent}
+                    adaptiveTopicCols={adaptiveTopicCols}
+                    adaptiveTopicPadding={adaptiveTopicPadding}
+                    adaptiveTopicLogoSize={adaptiveTopicLogoSize}
+                    weeklyTopicColor={c.weekly_topic_color}
+                    weeklyTopicSize={c.weekly_topic_size}
+                    weeklyTopicWeight={c.weekly_topic_weight}
+                  />
                 ))}
               </div>
 
