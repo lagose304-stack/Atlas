@@ -157,8 +157,6 @@ const Home: React.FC = () => {
           </section>
         )}
 
-        <HomeHistologyFact />
-
         <section className="home-learning-route home-reveal" aria-labelledby="home-route-title">
           {/* Fondo y decoraciones de ambientación */}
           <span className="home-route-edge-bar" aria-hidden="true" />

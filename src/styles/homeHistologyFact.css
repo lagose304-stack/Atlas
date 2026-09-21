@@ -1,380 +1,167 @@
-/* ═══════════════════════════════════════════════════════════════════════════
-   DATO HISTOLÓGICO DE LA SEMANA: DISEÑO COMPACTO Y ELEGANTE
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-.home-immune-grid-compact {
-  display: grid;
-  grid-template-columns: minmax(0, 65fr) minmax(0, 35fr);
-  gap: clamp(10px, 1.4vw, 18px);
-  align-items: stretch;
+.diapedesis-fact {
+  display: block;
   width: 100%;
+  max-width: 100%;
+  padding: clamp(14px, 2vw, 24px);
 }
-
-@media (max-width: 960px) {
-  .home-immune-grid-compact {
-    grid-template-columns: 1fr;
-  }
+.diapedesis-heading {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
 }
-
-/* ─── Columna Izquierda: Explicación Breve y al Grano ─── */
-.home-immune-left {
+.diapedesis-heading .home-histology-fact-brand {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 6px;
+  gap: 7px;
 }
-
-.home-immune-title-compact {
-  margin: 0;
-  font-size: clamp(0.94rem, 1.1vw, 1.06rem);
-  font-weight: 850;
+.diapedesis-heading .home-histology-fact-label {
+  width: max-content;
+}
+.diapedesis-heading h2 {
+  margin: 1px 0 3px;
   color: #071b31;
-  letter-spacing: -0.015em;
-  line-height: 1.2;
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  line-height: 1.1;
+  letter-spacing: -.025em;
 }
-
-.home-immune-list-compact {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+.diapedesis-heading p {
+  margin: 0;
+  max-width: 65ch;
+  color: #475569;
+  font-size: .92rem;
+  line-height: 1.45;
 }
-
-.home-immune-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 5px 9px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1.2px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 1px 4px rgba(15, 60, 95, 0.02);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+.diapedesis-frame {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  width: 100%;
+  min-height: 150px;
+  aspect-ratio: 16 / 8.5;
+  border: 1px solid #d9d7e5;
+  border-radius: 12px;
+  background: #f0eaf0;
 }
-
-.home-immune-row:hover {
-  transform: translateX(2px);
-  box-shadow: 0 3px 8px rgba(15, 60, 95, 0.05);
+.diapedesis-scene {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
-
-.row-ag {
-  border-left: 3.5px solid #0284c7;
-}
-.row-im {
-  border-left: 3.5px solid #6366f1;
-}
-.row-hp {
-  border-left: 3.5px solid #0d9488;
-}
-
-.home-immune-row-head {
+.diapedesis-fibers { stroke: #dfd2e2; stroke-width: 3; stroke-linecap: round; }
+.diapedesis-rbc { fill: #d8524b; animation: diapedesis-flow 5s linear infinite; transform-box: fill-box; transform-origin: center; }
+.diapedesis-rbc ellipse:nth-child(even) { fill: #e9877f; }
+.diapedesis-endothelium rect { fill: #eba99e; stroke: #c4766b; stroke-width: 1.2; }
+.diapedesis-selectins line { stroke: #d9981a; stroke-width: 1.6; }
+.diapedesis-selectins circle { fill: #f0b429; stroke: #b0740d; }
+.diapedesis-icam line { stroke: #12866f; stroke-width: 1.6; }
+.diapedesis-icam circle { fill: #2cb79a; stroke: #0d6b58; }
+.diapedesis-basal { fill: none; stroke: #b99cc1; stroke-width: 4; stroke-linecap: round; }
+.diapedesis-chemokines circle { fill: #a23f9a; opacity: .68; animation: diapedesis-pulse 2.2s ease-in-out infinite alternate; }
+.diapedesis-chemokines circle:nth-child(odd) { animation-delay: -.8s; }
+.diapedesis-bacteria rect { fill: #a23f9a; stroke: #6e2168; stroke-width: 1.2; }
+.diapedesis-leukocyte { transition: transform .08s linear; }
+.diapedesis-leukocyte circle { fill: #a9b6f6; stroke: #4b5bd0; stroke-width: 2.4; }
+.diapedesis-leukocyte path { fill: #4b5bd0; opacity: .9; }
+.diapedesis-labels { fill: #5b6172; font: 600 13px system-ui, sans-serif; }
+.diapedesis-labels text:last-child { fill: #7a2c74; }
+.diapedesis-controls {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  gap: 15px;
+  margin-top: 12px;
 }
-
-.home-immune-tag {
+.diapedesis-controls input { flex: 1; min-width: 0; accent-color: #4b5bd0; cursor: pointer; }
+.diapedesis-play {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 0.74rem;
-  font-weight: 850;
-  padding: 1px 6px;
-  border-radius: 5px;
+  justify-content: center;
+  gap: 7px;
+  min-width: 124px;
+  padding: 10px 15px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: #4b5bd0;
+  font: 700 .9rem inherit;
+  cursor: pointer;
 }
-
-.tag-ag {
-  background: #e0f2fe;
-  color: #0369a1;
-}
-.tag-im {
-  background: #ede9fe;
-  color: #4f46e5;
-}
-.tag-hp {
-  background: #ccfbf1;
-  color: #0f766e;
-}
-
-.home-immune-motto {
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: #475569;
-}
-
-.home-immune-row p {
-  margin: 0;
-  font-size: 0.73rem;
-  color: #334155;
-  line-height: 1.35;
-}
-
-.home-immune-rule {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #fffbeb, #fef3c7);
-  border: 1px solid #fde68a;
-  font-size: 0.7rem;
-  color: #92400e;
-  line-height: 1.3;
-}
-
-.home-immune-rule strong {
-  color: #b45309;
-}
-
-.home-immune-footer {
-  font-size: 0.64rem;
-  color: #64748b;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding-top: 1px;
-}
-
-/* ─── Columna Derecha: Visor de Microscopía Compacto ─── */
-.home-bacteria-frame {
+.diapedesis-play:hover { background: #3e4cbb; }
+.diapedesis-steps {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  height: 100%;
-  min-height: 180px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #061423;
-  border: 1.2px solid rgba(56, 189, 248, 0.4);
-  box-shadow:
-    0 8px 20px -4px rgba(4, 30, 54, 0.3),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-  isolation: isolate;
-}
-
-@media (min-width: 961px) {
-  .home-bacteria-frame {
-    margin-top: calc(-1 * clamp(10px, 1.2vw, 14px));
-    margin-bottom: calc(-1 * clamp(10px, 1.2vw, 14px));
-    margin-right: calc(-1 * clamp(14px, 1.8vw, 22px));
-    height: calc(100% + 2 * clamp(10px, 1.2vw, 14px));
-    border-radius: 0 clamp(16px, 2vw, 24px) clamp(16px, 2vw, 24px) 0;
-    border-right: none;
-    border-top: none;
-    border-bottom: none;
-    border-left: 1.5px solid rgba(147, 213, 248, 0.7);
-  }
-}
-
-/* Imagen base animada con movimiento orgánico tipo GIF */
-.home-bacteria-media-wrap {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
   z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0;
+  margin: 12px 0 0;
+  list-style: none;
 }
-
-.home-bacteria-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  filter: contrast(1.08) brightness(1.02);
-  will-change: transform;
-  animation: bacteriaFluidMotion 9s ease-in-out infinite alternate;
-}
-
-@keyframes bacteriaFluidMotion {
-  0% {
-    transform: scale(1.04) translate(0px, 0px) rotate(0deg);
-  }
-  25% {
-    transform: scale(1.08) translate(-5px, 3px) rotate(1.2deg);
-  }
-  50% {
-    transform: scale(1.05) translate(3px, -2px) rotate(-0.8deg);
-  }
-  75% {
-    transform: scale(1.09) translate(-3px, -4px) rotate(0.9deg);
-  }
-  100% {
-    transform: scale(1.06) translate(4px, 2px) rotate(-1.1deg);
-  }
-}
-
-/* Aura bioluminiscente pulsante */
-.home-bacteria-glow-pulse {
-  position: absolute;
-  inset: 10% 15%;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(20, 184, 166, 0.4) 0%, rgba(56, 189, 248, 0.25) 45%, transparent 75%);
-  filter: blur(20px);
-  pointer-events: none;
-  z-index: 2;
-  animation: biolumPulse 4.5s ease-in-out infinite alternate;
-}
-
-@keyframes biolumPulse {
-  0% {
-    transform: scale(0.92);
-    opacity: 0.45;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(0.98);
-    opacity: 0.5;
-  }
-}
-
-/* Partículas microscópicas flotantes */
-.home-bacteria-particles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 3;
-}
-
-.particle-dot {
-  position: absolute;
-  border-radius: 50%;
-  background: #38bdf8;
-  filter: blur(1px);
-  opacity: 0.5;
-  animation: particleDrift 6s ease-in-out infinite;
-}
-
-.dot-1 {
-  width: 4px;
-  height: 4px;
-  left: 20%;
-  bottom: 25%;
-  animation-duration: 5.5s;
-}
-.dot-2 {
-  width: 6px;
-  height: 6px;
-  right: 25%;
-  top: 30%;
-  background: #34d399;
-  animation-duration: 7s;
-  animation-delay: 1s;
-}
-.dot-3 {
-  width: 3px;
-  height: 3px;
-  left: 45%;
-  top: 20%;
-  animation-duration: 6.2s;
-  animation-delay: 2s;
-}
-.dot-4 {
-  width: 5px;
-  height: 5px;
-  right: 18%;
-  bottom: 35%;
-  background: #a78bfa;
-  animation-duration: 8s;
-}
-
-@keyframes particleDrift {
-  0% {
-    transform: translateY(0) translateX(0);
-    opacity: 0.3;
-  }
-  50% {
-    transform: translateY(-12px) translateX(4px);
-    opacity: 0.75;
-  }
-  100% {
-    transform: translateY(-24px) translateX(-3px);
-    opacity: 0.2;
-  }
-}
-
-/* Destello de barrido luminoso */
-.home-bacteria-scan-line {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    115deg,
-    transparent 35%,
-    rgba(255, 255, 255, 0.15) 48%,
-    rgba(56, 189, 248, 0.25) 50%,
-    transparent 62%
-  );
-  transform: translateX(-150%);
-  animation: scanLightSweep 7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  pointer-events: none;
-  z-index: 4;
-}
-
-@keyframes scanLightSweep {
-  0%, 60% {
-    transform: translateX(-150%);
-  }
-  80%, 100% {
-    transform: translateX(150%);
-  }
-}
-
-/* Pie del visor: Referencia a Inmunógeno Completo (anclado abajo) */
-.home-bacteria-overlay-bottom {
-  position: relative;
-  z-index: 5;
-  margin-top: auto;
-  width: 100%;
-  padding: 8px 12px;
-  background: linear-gradient(0deg, rgba(6, 20, 35, 0.96) 0%, rgba(6, 20, 35, 0.78) 70%, transparent 100%);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.bacteria-caption-title {
-  margin: 0;
-  font-size: 0.75rem;
-  font-weight: 850;
-  color: #ffffff;
-  display: flex;
+.diapedesis-steps button {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 5px;
+  width: 100%;
+  gap: 7px;
+  padding: 10px;
+  text-align: left;
+  color: #1e2230;
+  border: 1px solid #d9d7e5;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
 }
-
-.bacteria-caption-text {
-  margin: 0;
-  font-size: 0.69rem;
-  color: #cbd5e1;
-  line-height: 1.32;
+.diapedesis-steps button span { color: #5b6172; font-size: .75rem; }
+.diapedesis-steps button strong { font-size: .81rem; }
+.diapedesis-steps button svg { color: #94a3b8; }
+.diapedesis-steps button:hover, .diapedesis-steps button.is-current { border-color: #4b5bd0; background: #f1f3ff; }
+.diapedesis-steps button.is-current svg { color: #4b5bd0; }
+.diapedesis-detail {
+  position: relative;
+  z-index: 1;
+  margin-top: 12px;
+  padding: 5px 0 5px 15px;
+  border-left: 3px solid #4b5bd0;
 }
-
-.bacteria-caption-text strong {
-  color: #38bdf8;
-}
-
-.bacteria-features-pills {
+.diapedesis-detail h3 { margin: 0 0 3px; font-size: 1rem; color: #1e2230; }
+.diapedesis-detail p { margin: 0; max-width: 75ch; color: #475569; font-size: .9rem; line-height: 1.5; }
+.diapedesis-legend {
+  position: relative;
+  z-index: 1;
   display: flex;
-  gap: 5px;
   flex-wrap: wrap;
-  margin-top: 2px;
+  gap: 8px 18px;
+  padding: 0;
+  margin: 14px 0 0;
+  list-style: none;
+  color: #5b6172;
+  font-size: .76rem;
 }
-
-.feature-pill {
-  font-size: 0.62rem;
-  font-weight: 750;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: #f1f5f9;
+.diapedesis-legend li { display: flex; align-items: center; gap: 6px; }
+.diapedesis-legend i { width: 11px; height: 11px; border: 1px solid rgba(0, 0, 0, .28); border-radius: 50%; }
+.diapedesis-legend .leukocyte { background: #a9b6f6; }
+.diapedesis-legend .selectin { background: #f0b429; }
+.diapedesis-legend .icam { background: #2cb79a; }
+.diapedesis-legend .chemokine { background: #a23f9a; }
+.diapedesis-play:focus-visible, .diapedesis-steps button:focus-visible, .diapedesis-controls input:focus-visible { outline: 3px solid #9aa5f5; outline-offset: 2px; }
+@keyframes diapedesis-flow { 50% { transform: translateX(28px); } } @keyframes diapedesis-pulse { to { opacity: 1; transform: scale(1.25); } }
+@media (max-width: 680px) {
+  .diapedesis-fact { padding: 14px; }
+  .diapedesis-heading { gap: 9px; }
+  .diapedesis-heading h2 { font-size: 1.35rem; }
+  .diapedesis-heading p { font-size: .82rem; }
+  .diapedesis-frame { aspect-ratio: 16 / 8; min-height: 120px; }
+  .diapedesis-controls { gap: 10px; }
+  .diapedesis-play { min-width: 0; padding: 9px 12px; font-size: .82rem; }
+  .diapedesis-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .diapedesis-steps button { padding: 9px; }
+  .diapedesis-steps button strong { font-size: .77rem; }
+  .diapedesis-labels { font-size: 15px; }
+  .diapedesis-legend { font-size: .7rem; }
 }
-
-.feature-pill.highlight {
-  background: rgba(56, 189, 248, 0.22);
-  border-color: rgba(56, 189, 248, 0.5);
-  color: #7dd3fc;
-}
+@media (prefers-reduced-motion: reduce) { .diapedesis-rbc, .diapedesis-chemokines circle { animation: none; }.diapedesis-leukocyte { transition: none; } }
