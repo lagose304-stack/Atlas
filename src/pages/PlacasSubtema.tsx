@@ -11,6 +11,7 @@ import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
 import AtlasLoadingScreen from '../components/AtlasLoadingScreen';
 import type { ContentBlock } from '../types/contentBlocks';
+import DiapedesisHistologyFact from '../components/archived/DiapedesisHistologyFact';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { logPlacaView, logSubtemaView } from '../services/analytics';
@@ -375,6 +376,13 @@ const PlacasSubtemaContent: React.FC = () => {
   }, [subtema]);
 
   const currentSubtemaId = Number(subtemaId ?? 0);
+
+  const isNeutrofilos = useMemo(() => {
+    if (numSubtemaId === 54 || currentSubtemaId === 54) return true;
+    const nameNorm = (subtema?.nombre ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const temaNorm = temaNombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return nameNorm.includes('neutrofilo') || (temaNorm.includes('sanguineo') && nameNorm.includes('neutr'));
+  }, [numSubtemaId, currentSubtemaId, subtema?.nombre, temaNombre]);
 
   const subtemasTemaActual = useMemo(() => {
     return [...allSubtemas].sort((a, b) => {
@@ -812,6 +820,22 @@ const PlacasSubtemaContent: React.FC = () => {
           {contentBlocks.length > 0 && (
             <div className="public-editor-content public-editor-content-before-system">
               <ContentBlockRenderer blocks={contentBlocks} />
+            </div>
+          )}
+
+          {/* Dato Histológico Interactivo Guardado: Diapédesis (Tema Sanguíneo / Subtema Neutrófilos) */}
+          {isNeutrofilos && (
+            <div
+              className="subtema-diapedesis-wrapper"
+              style={{
+                margin: '18px 0 28px 0',
+                width: '100%',
+              }}
+            >
+              <DiapedesisHistologyFact
+                badgeLabel="Dato histológico · Diapédesis"
+                className="diapedesis-neutrofilos-embed"
+              />
             </div>
           )}
 

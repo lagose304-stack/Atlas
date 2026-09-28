@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Microscope, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Microscope, Play, Pause, Sparkles } from 'lucide-react';
 import '../styles/homeHistologyFact.css';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -15,651 +15,316 @@ function el(tag: string, attrs: Record<string, string | number>, parent?: Elemen
   return e;
 }
 
-function clamp01(x: number): number {
-  return x < 0 ? 0 : x > 1 ? 1 : x;
-}
-
-function smooth(x: number): number {
-  const c = clamp01(x);
-  return c * c * (3 - 2 * c);
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-function seg(t: number, a: number, b: number): number {
-  return clamp01((t - a) / (b - a));
-}
-
-function rng(seedInit: number): () => number {
-  let seed = seedInit;
-  return function () {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 const STAGES = [
   {
-    t: 'Rodamiento',
-    d: 'El endotelio activado expone selectinas. Se unen al leucocito y se sueltan con rapidez, así que la célula frena y rueda sobre la pared en lugar de ser arrastrada por el flujo.',
+    title: 'Vena típica',
+    desc: 'En la mayoría de las venas el músculo liso forma una capa circular que rodea la luz. Es la referencia para ver qué cambia.',
   },
   {
-    t: 'Adhesión firme',
-    d: 'Las quimiocinas del endotelio activan las integrinas del leucocito. Al unirse a ICAM-1, la célula se detiene y se aplana contra la pared.',
+    title: 'Vena adrenomedular',
+    desc: 'Aquí no hay capa circular. La media es irregular, con haces musculares y tejido conectivo fibroso; no hay lámina elástica bien definida y la pared se engrosa de forma asimétrica.',
   },
   {
-    t: 'Diapédesis',
-    d: 'El leucocito se deforma y pasa entre dos células endoteliales. Después atraviesa la membrana basal y llega al tejido.',
+    title: 'Haces longitudinales',
+    desc: 'El músculo corre a lo largo del vaso, por eso en un corte transversal cada haz se ve como un grupo de puntos (fibras cortadas de punta). Los haces sobresalen hacia la luz como almohadillas.',
   },
   {
-    t: 'Migración hacia el foco',
-    d: 'Ya en el tejido, sigue el gradiente de quimiocinas que libera la zona infectada hasta llegar a los microorganismos.',
+    title: 'Función reguladora (hipótesis)',
+    desc: 'Se cree que al contraerse, los haces acortan la vena o protruyen hacia la luz y estrechan el paso. Así modificarían el flujo de salida y la liberación de catecolaminas durante el estrés.',
   },
 ];
 
-const W = 900;
-const J = 470;
-// 50% más rápido que los 17s originales (17 / 1.5 = 11.33s)
-const LOOP = 11.33;
-const B = [0, 0.24, 0.48, 0.76, 1];
-const NECK = 220;
-const WIN = 34;
-const BX = 830;
-const BY = 418;
+const T_TOTAL = 20000;
+const STEP = 5000;
 
-function sfun(y: number, k: number): number {
-  const d = (y - NECK) / WIN;
-  return 1 - k * Math.max(0, 1 - d * d);
+interface RbcItem {
+  e: SVGElement;
+  p: number;
+  v: number;
+  a: number;
+  q: number;
+  o: number;
 }
 
-interface LeukState {
-  x: number;
-  y: number;
-  rx: number;
-  ry: number;
-  phi: number;
-  tear: number;
-  k: number;
-  g: number;
-  h: number;
-  theta: number;
-  opS: number;
-  opI: number;
+export interface HomeHistologyFactProps {
+  badgeLabel?: string;
+  className?: string;
 }
 
-function calcState(T: number): LeukState {
-  const s: LeukState = {
-    x: 170,
-    y: 136,
-    rx: 30,
-    ry: 30,
-    phi: 0,
-    tear: 0,
-    k: 0,
-    g: 0,
-    h: 8,
-    theta: 0,
-    opS: 0,
-    opI: 0,
-  };
-
-  let p: number;
-  if (T < B[1]) {
-    p = seg(T, B[0], B[1]);
-    s.x = 170 + 245 * (1 - Math.pow(1 - p, 1.7));
-    s.y = 166 + 2.4 * Math.sin(p * 44) - 30;
-    s.opS = 1;
-  } else if (T < B[2]) {
-    p = seg(T, B[1], B[2]);
-    s.x = 415 + 55 * smooth(seg(p, 0, 0.6));
-    const f = smooth(seg(p, 0.2, 0.85));
-    s.rx = lerp(30, 40, f);
-    s.ry = lerp(30, 22, f);
-    s.y = lerp(166, 172, f) - s.ry;
-    s.opS = 1 - smooth(seg(p, 0.25, 0.75));
-    s.opI = smooth(seg(p, 0.3, 0.85));
-  } else if (T < B[3]) {
-    p = seg(T, B[2], B[3]);
-    s.x = J;
-    const sq = smooth(seg(p, 0, 0.35));
-    const rel = smooth(seg(p, 0.7, 1));
-    s.rx = 40 - 12 * sq + 2 * rel;
-    s.ry = 22 + 11 * sq - 3 * rel;
-    s.y = lerp(150, 268, smooth(p));
-    s.k = 0.55 * smooth(seg(p, 0.05, 0.3)) * (1 - smooth(seg(p, 0.72, 0.95)));
-    s.g = 16 * smooth(seg(p, 0, 0.3)) * (1 - smooth(seg(p, 0.75, 1)));
-    s.h = 8 + 14 * smooth(seg(p, 0.1, 0.4)) * (1 - smooth(seg(p, 0.8, 1)));
-    s.opI = 1 - smooth(seg(p, 0, 0.3));
-  } else {
-    p = seg(T, B[3], B[4]);
-    const t = smooth(p);
-    const u = 1 - t;
-    const P0 = [470, 268];
-    const P1 = [520, 392];
-    const P2 = [776, 404];
-    s.x = u * u * P0[0] + 2 * u * t * P1[0] + t * t * P2[0];
-    s.y = u * u * P0[1] + 2 * u * t * P1[1] + t * t * P2[1];
-    const vx = 2 * u * (P1[0] - P0[0]) + 2 * t * (P2[0] - P1[0]);
-    const vy = 2 * u * (P1[1] - P0[1]) + 2 * t * (P2[1] - P1[1]);
-    s.phi = Math.atan2(vy, vx);
-    const pol = smooth(seg(p, 0.05, 0.3));
-    const wob = Math.sin(p * 38) * 0.04 * pol;
-    s.rx = lerp(30, 38, pol) * (1 + wob);
-    s.ry = lerp(30, 23, pol) * (1 - wob);
-    s.tear = 0.16 * pol;
-  }
-
-  const xr = s.x < 170 ? 170 : s.x > 470 ? 470 : s.x;
-  s.theta = (xr - 170) / 30;
-  return s;
-}
-
-export const HomeHistologyFact: React.FC = () => {
+export const HomeHistologyFact: React.FC<HomeHistologyFactProps> = ({
+  badgeLabel = 'Dato histológico de la semana',
+  className = '',
+}) => {
   const rootRef = useRef<HTMLElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(true);
 
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
 
-    const rand = rng(11);
+    const gCt = root.querySelector('#ct');
+    const gBn = root.querySelector('#bn');
+    const gRa = root.querySelector('#ra');
+    const gRb = root.querySelector('#rb');
+    const gA = root.querySelector('#gA') as SVGGElement | null;
+    const gB = root.querySelector('#gB') as SVGGElement | null;
+    const gX = root.querySelector('#gX') as SVGGElement | null;
+    const gH = root.querySelector('#gH') as SVGGElement | null;
+    const gF = root.querySelector('#gF') as SVGGElement | null;
+    const bl = root.querySelector('#bl') as SVGCircleElement | null;
+    const be = root.querySelector('#be') as SVGCircleElement | null;
+    const dtEl = root.querySelector('#dt');
+    const dpEl = root.querySelector('#dp');
+    const playBtn = root.querySelector('#pb') as HTMLButtonElement | null;
+    const slider = root.querySelector('#sl') as HTMLInputElement | null;
+    const tabBtns = Array.from(root.querySelectorAll<HTMLButtonElement>('.adreno-tab'));
+    const svgScene = root.querySelector('#adreno-scene') as SVGSVGElement | null;
 
-    const gEndo = root.querySelector('#endo');
-    const gMol = root.querySelector('#mol');
-    const gBonds = root.querySelector('#bonds');
-    const gRbc = root.querySelector('#rbc');
-    const gDiff = root.querySelector('#diffuse');
-    const gBact = root.querySelector('#bact');
-    const gGrans = root.querySelector('#grans');
-    const gLobes = root.querySelector('#lobes');
-    const body = root.querySelector('#body') as SVGPathElement | null;
-    const gLeuk = root.querySelector('#leuk') as SVGGElement | null;
-    const bmL = root.querySelector('#bmL') as SVGPathElement | null;
-    const bmR = root.querySelector('#bmR') as SVGPathElement | null;
-    const halo1 = root.querySelector('#halo1') as SVGCircleElement | null;
-    const halo2 = root.querySelector('#halo2') as SVGCircleElement | null;
-    const scene = root.querySelector('#scene') as SVGSVGElement | null;
-
-    if (!gEndo || !gMol || !gBonds || !gRbc || !gDiff || !gBact || !gGrans || !gLobes || !body || !gLeuk || !bmL || !bmR || !halo1 || !halo2) {
+    if (!gCt || !gBn || !gRa || !gRb || !gA || !gB || !gX || !gH || !gF || !bl || !be) {
       return;
     }
 
-    gEndo.innerHTML = '';
-    gMol.innerHTML = '';
-    gBonds.innerHTML = '';
-    gRbc.innerHTML = '';
-    gDiff.innerHTML = '';
-    gBact.innerHTML = '';
-    gGrans.innerHTML = '';
-    gLobes.innerHTML = '';
+    const CX_A = 190;
+    const CX_B = 490;
+    const CY = 175;
+    const RL_A = 54;
+    const RL_B_BASE = 54;
 
-    const junctions = [130, 300, 470, 640, 790];
-    function okX(x: number) {
-      for (let i = 0; i < junctions.length; i++) {
-        const lim = junctions[i] === J ? 26 : 14;
-        if (Math.abs(x - junctions[i]) <= lim) return false;
-      }
-      return true;
+    gCt.innerHTML = '';
+    gBn.innerHTML = '';
+    gRa.innerHTML = '';
+    gRb.innerHTML = '';
+
+    // Generar fibras de tejido conectivo en la media
+    for (let k = 0; k < 12; k++) {
+      const a = k * 0.52 + 0.2;
+      const r = 75;
+      const x = CX_B + r * Math.cos(a);
+      const y = CY + r * Math.sin(a);
+      const dx = -Math.sin(a) * 8;
+      const dy = Math.cos(a) * 8;
+      el('path', { d: `M${(x - dx).toFixed(1)} ${(y - dy).toFixed(1)}L${(x + dx).toFixed(1)} ${(y + dy).toFixed(1)}` }, gCt);
     }
 
-    const cells = [
-      [-20, 124],
-      [136, 294],
-      [306, 464],
-      [476, 634],
-      [646, 784],
-      [796, 920],
+    // Generar los 7 haces musculares longitudinales (con corte transversal de fibras)
+    const bundles: SVGElement[] = [];
+    const DOT_OFFSETS: [number, number][] = [
+      [-6, -5],
+      [5, -6],
+      [-1, 0],
+      [7, 4],
+      [-6, 7],
+      [2, 9],
     ];
-    let cellL: SVGRectElement | null = null;
-    let cellR: SVGRectElement | null = null;
 
-    cells.forEach((c, i) => {
-      const r = el(
-        'rect',
-        {
-          x: c[0],
-          y: 199,
-          width: c[1] - c[0],
-          height: 26,
-          rx: 9,
-          fill: '#EBA99E',
-          stroke: '#C4766B',
-          'stroke-width': 1.2,
-        },
-        gEndo
-      ) as SVGRectElement;
-      if (i === 2) cellL = r;
-      if (i === 3) cellR = r;
-    });
-
-    [
-      [100, 14],
-      [215, 17],
-      [385, 17],
-      [555, 17],
-      [715, 17],
-      [858, 17],
-    ].forEach((n) => {
-      el('ellipse', { cx: n[0], cy: 212, rx: n[1], ry: 6, fill: '#D27F73' }, gEndo);
-    });
-
-    interface MolItem {
-      x: number;
-      type: 's' | 'i';
-      head: number;
-      bond?: SVGLineElement;
-    }
-
-    const mols: MolItem[] = [];
-    for (let x = 150; x < 900; x += 34) {
-      if (okX(x)) mols.push({ x, type: 's', head: 175 });
-    }
-    for (let x = 158; x < 900; x += 17) {
-      if (okX(x)) mols.push({ x, type: 'i', head: 185 });
-    }
-
-    const SEL_STROKE = '#D9981A';
-    const ICAM_STROKE = '#12866F';
-
-    mols.forEach((m) => {
-      const s = m.type === 's';
-      el(
-        'line',
-        {
-          x1: m.x,
-          y1: 199,
-          x2: m.x,
-          y2: m.head,
-          stroke: s ? SEL_STROKE : ICAM_STROKE,
-          'stroke-width': 1.6,
-          'stroke-linecap': 'round',
-        },
-        gMol
-      );
-      el(
-        'circle',
-        {
-          cx: m.x,
-          cy: m.head,
-          r: s ? 3.6 : 3.1,
-          fill: s ? '#F0B429' : '#2CB79A',
-          stroke: s ? '#B0740D' : '#0D6B58',
-          'stroke-width': 0.9,
-        },
-        gMol
-      );
-    });
-
-    const surf: SVGCircleElement[] = [];
-    for (let x = 163; x < 900; x += 34) {
-      if (okX(x)) {
-        surf.push(el('circle', { cx: x, cy: 194, r: 2.3, fill: '#A23F9A', opacity: 0 }, gMol) as SVGCircleElement);
-      }
-    }
-
-    mols.forEach((m) => {
-      const s = m.type === 's';
-      m.bond = el(
-        'line',
-        {
-          x1: m.x,
-          y1: m.head,
-          x2: m.x,
-          y2: m.head,
-          stroke: s ? SEL_STROKE : ICAM_STROKE,
-          'stroke-width': s ? 1.7 : 2.4,
-          'stroke-linecap': 'round',
-          opacity: 0,
-        },
-        gBonds
-      ) as SVGLineElement;
-    });
-
-    interface RbcItem {
-      g: SVGGElement;
-      y: number;
-      x0: number;
-      v: number;
-      rot: number;
-    }
-
-    const rbcs: RbcItem[] = [];
-    const lanes = [42, 58, 74, 90, 50, 66, 82, 46, 62, 86, 54, 78];
-    lanes.forEach((y, i) => {
-      const g = el('g', {}, gRbc) as SVGGElement;
-      el('ellipse', { rx: 13, ry: 7, fill: '#D8524B' }, g);
-      el('ellipse', { rx: 6, ry: 3, fill: '#E9877F' }, g);
-      rbcs.push({ g, y, x0: i * 80 + rand() * 30, v: 82 + ((i * 37) % 64), rot: (rand() - 0.5) * 50 });
-    });
-
-    interface DiffItem {
-      c: SVGCircleElement;
-      cos: number;
-      sin: number;
-      ph: number;
-      sp: number;
-      wob: number;
-    }
-
-    const diff: DiffItem[] = [];
-    for (let i = 0; i < 70; i++) {
-      const ang = ((195 + rand() * 75) * Math.PI) / 180;
-      diff.push({
-        c: el('circle', { r: 1.5 + rand() * 1.9, fill: '#A23F9A', opacity: 0 }, gDiff) as SVGCircleElement,
-        cos: Math.cos(ang),
-        sin: Math.sin(ang),
-        ph: rand(),
-        sp: 0.55 + rand() * 0.7,
-        wob: rand() * 10,
+    for (let k = 0; k < 7; k++) {
+      const g = el('g', {}, gBn);
+      el('circle', { r: 15, fill: 'var(--bun)' }, g);
+      DOT_OFFSETS.forEach(([dx, dy]) => {
+        el('circle', { cx: dx, cy: dy, r: 2.2, fill: 'var(--dot)' }, g);
       });
+      bundles.push(g);
     }
 
-    interface RodItem {
-      e: SVGRectElement;
-      cx: number;
-      cy: number;
-      a: number;
-    }
+    // Inicializar eritrocitos en 3D saliendo hacia el observador
+    const raList: RbcItem[] = [];
+    const rbList: RbcItem[] = [];
 
-    const rods: RodItem[] = [];
-    [
-      [-16, -8, 20],
-      [-6, 10, -30],
-      [8, -14, 60],
-      [16, 4, 10],
-      [-20, 12, 80],
-      [0, -1, -60],
-      [24, -8, 35],
-    ].forEach((r) => {
-      const rc = el(
-        'rect',
-        {
-          x: BX + r[0] - 8,
-          y: BY + r[1] - 3.5,
-          width: 16,
-          height: 7,
-          rx: 3.5,
-          fill: '#A23F9A',
-          stroke: '#6E2168',
-          'stroke-width': 1,
-        },
-        gBact
-      ) as SVGRectElement;
-      rods.push({ e: rc, cx: BX + r[0], cy: BY + r[1], a: r[2] });
-    });
-
-    const grans = [
-      [-19, 4],
-      [-8, -17],
-      [8, -15],
-      [20, 8],
-      [-2, 19],
-      [-20, -8],
-      [18, -2],
-      [10, 17],
-    ].map((p) => {
-      return { x: p[0], y: p[1], e: el('circle', { r: 1.6, fill: '#7688E6', opacity: 0.85 }, gGrans) as SVGCircleElement };
-    });
-
-    const lobes = [
-      { x: -11, y: -6, r: 8.5 },
-      { x: 3, y: 9, r: 8.5 },
-      { x: 13, y: -5, r: 7.5 },
-    ].map((l) => {
-      return {
-        ...l,
-        e: el('ellipse', { fill: '#4B5BD0', opacity: 0.93 }, gLobes) as SVGEllipseElement,
-      };
-    });
-
-    const N = 72;
-    const cosA: number[] = [];
-    const sinA: number[] = [];
-    for (let i = 0; i < N; i++) {
-      cosA.push(Math.cos((i / N) * Math.PI * 2));
-      sinA.push(Math.sin((i / N) * Math.PI * 2));
-    }
-
-    const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let playing = !reduce;
-    let T = reduce ? 0.6 : 0;
-    let amb = 0;
-
-    function renderScene() {
-      const s = calcState(T);
-      const fade = smooth(seg(T, 0, 0.02)) * (1 - smooth(seg(T, 0.97, 1)));
-      const cp = Math.cos(s.phi);
-      const sp = Math.sin(s.phi);
-      let d = '';
-
-      for (let j = 0; j < N; j++) {
-        const ca = cosA[j];
-        const lx = s.rx * ca;
-        const ly = s.ry * sinA[j] * (1 - s.tear * ca);
-        let X = s.x + lx * cp - ly * sp;
-        const Y = s.y + lx * sp + ly * cp;
-        if (s.k > 0) {
-          X = J + (X - J) * sfun(Y, s.k);
-        }
-        d += (j ? 'L' : 'M') + X.toFixed(1) + ' ' + Y.toFixed(1);
-      }
-      body!.setAttribute('d', d + 'Z');
-      gLeuk!.setAttribute('opacity', fade.toFixed(3));
-
-      const ct = Math.cos(s.theta);
-      const st = Math.sin(s.theta);
-      function local(px: number, py: number): [number, number, number] {
-        let u = px * ct - py * st;
-        let v = px * st + py * ct;
-        u *= s.rx / 30;
-        v *= s.ry / 30;
-        let wx = s.x + u * cp - v * sp;
-        const wy = s.y + u * sp + v * cp;
-        let sc = 1;
-        if (s.k > 0) {
-          sc = sfun(wy, s.k);
-          wx = J + (wx - J) * sc;
-        }
-        return [wx, wy, sc];
-      }
-
-      const rs = Math.min(s.rx, s.ry) / 30;
-      lobes.forEach((l) => {
-        const q = local(l.x, l.y);
-        l.e.setAttribute('cx', q[0].toFixed(1));
-        l.e.setAttribute('cy', q[1].toFixed(1));
-        l.e.setAttribute('rx', (l.r * rs * q[2]).toFixed(1));
-        l.e.setAttribute('ry', (l.r * rs).toFixed(1));
-      });
-      grans.forEach((g) => {
-        const q = local(g.x, g.y);
-        g.e.setAttribute('cx', q[0].toFixed(1));
-        g.e.setAttribute('cy', q[1].toFixed(1));
-      });
-
-      if (cellL) cellL.setAttribute('width', String(464 - s.g - 306));
-      if (cellR) {
-        cellR.setAttribute('x', String(476 + s.g));
-        cellR.setAttribute('width', String(634 - (476 + s.g)));
-      }
-      bmL!.setAttribute('d', 'M-10 234 H' + (J - s.h));
-      bmR!.setAttribute('d', 'M' + (J + s.h) + ' 234 H910');
-
-      mols.forEach((m) => {
-        const op = m.type === 's' ? s.opS : s.opI;
-        let shown = false;
-        if (op > 0.01 && s.phi === 0) {
-          const dx = m.x - s.x;
-          const lim = s.rx * (m.type === 's' ? 0.92 : 0.85);
-          if (Math.abs(dx) < lim) {
-            const edge = s.y + s.ry * Math.sqrt(1 - (dx / s.rx) * (dx / s.rx));
-            if (edge < m.head - 1.5) {
-              const prox = smooth((lim - Math.abs(dx)) / 10);
-              if (m.bond) {
-                m.bond.setAttribute('y2', edge.toFixed(1));
-                m.bond.setAttribute('opacity', (op * fade * prox).toFixed(2));
-                shown = true;
-              }
-            }
-          }
-        }
-        if (!shown && m.bond) {
-          m.bond.setAttribute('opacity', '0');
-        }
-      });
-
-      const sd = smooth(seg(T, 0, 0.2)) * (1 - smooth(seg(T, 0.95, 1)));
-      surf.forEach((c) => {
-        c.setAttribute('opacity', (sd * 0.9).toFixed(2));
-      });
-
-      rbcs.forEach((r) => {
-        const span = W + 80;
-        const xx = ((((r.x0 + r.v * amb) % span) + span) % span) - 40;
-        r.g.setAttribute('transform', 'translate(' + xx.toFixed(1) + ' ' + r.y + ') rotate(' + r.rot.toFixed(1) + ')');
-      });
-
-      diff.forEach((q) => {
-        const pr = (amb * 0.045 * q.sp + q.ph) % 1;
-        const dist = pr * 440;
-        const wb = Math.sin(amb * 1.3 + q.wob) * 5;
-        q.c.setAttribute('cx', (BX + q.cos * dist - q.sin * wb).toFixed(1));
-        q.c.setAttribute('cy', (BY + q.sin * dist + q.cos * wb).toFixed(1));
-        q.c.setAttribute('opacity', (0.7 * Math.pow(1 - pr, 1.3)).toFixed(2));
-      });
-
-      rods.forEach((r, k) => {
-        const a = r.a + 6 * Math.sin(amb * 1.5 + k);
-        r.e.setAttribute('transform', 'rotate(' + a.toFixed(1) + ' ' + r.cx + ' ' + r.cy + ')');
-      });
-      const pulse = Math.sin(amb * 1.6);
-      halo1!.setAttribute('opacity', (0.09 + 0.03 * pulse).toFixed(3));
-      halo2!.setAttribute('opacity', (0.055 + 0.02 * pulse).toFixed(3));
-    }
-
-    const playBtn = root.querySelector('#play') as HTMLButtonElement | null;
-    const playIcon = root.querySelector('#playIcon');
-    const playText = root.querySelector('#playText');
-    const seek = root.querySelector('#seek') as HTMLInputElement | null;
-    const stepBtns = Array.from(root.querySelectorAll<HTMLButtonElement>('#steps .step'));
-    const stepBars = stepBtns.map((b) => b.querySelector<HTMLElement>('.bar'));
-    const dTitle = root.querySelector('#dTitle');
-    const dText = root.querySelector('#dText');
-    let curIdx = -1;
-
-    function setPlayUI() {
-      if (!playBtn) return;
-      playBtn.setAttribute('aria-label', playing ? 'Pausar animación' : 'Reproducir animación');
-      if (playText) playText.textContent = playing ? 'Pausar' : 'Reproducir';
-      if (playIcon) {
-        playIcon.innerHTML = playing
-          ? '<rect x="6" y="5" width="4.5" height="14" rx="1"/><rect x="13.5" y="5" width="4.5" height="14" rx="1"/>'
-          : '<path d="M8 5.2v13.6a1 1 0 0 0 1.5.86l11-6.8a1 1 0 0 0 0-1.72l-11-6.8A1 1 0 0 0 8 5.2z"/>';
-      }
-    }
-
-    function updateUI() {
-      const idx = T < B[1] ? 0 : T < B[2] ? 1 : T < B[3] ? 2 : 3;
-      if (idx !== curIdx) {
-        curIdx = idx;
-        stepBtns.forEach((b, k) => {
-          b.setAttribute('aria-current', k === idx ? 'true' : 'false');
+    function makeRbc(count: number, parent: Element, list: RbcItem[]) {
+      for (let i = 0; i < count; i++) {
+        list.push({
+          e: el(
+            'ellipse',
+            {
+              rx: 6.5,
+              ry: 4.2,
+              fill: '#d9556b',
+              stroke: '#a83a4f',
+              'stroke-width': 0.8,
+            },
+            parent
+          ),
+          p: i / count,
+          v: 0.85 + Math.random() * 0.3,
+          a: Math.random() * 6.28,
+          q: 0.2 + Math.random() * 0.7,
+          o: Math.random() * 3,
         });
-        if (dTitle) dTitle.textContent = STAGES[idx].t;
-        if (dText) dText.textContent = STAGES[idx].d;
-        if (seek) seek.setAttribute('aria-valuetext', STAGES[idx].t);
       }
-      stepBars.forEach((bar, k) => {
-        if (!bar) return;
-        const v = k < idx ? 1 : k > idx ? 0 : seg(T, B[k], B[k + 1]);
-        bar.style.transform = 'scaleX(' + v.toFixed(3) + ')';
-      });
-      if (seek) seek.value = String(Math.round(T * 1000));
     }
 
-    let dirty = true;
-    let visible = true;
+    makeRbc(9, gRa, raList);
+    makeRbc(9, gRb, rbList);
+
+    function updateRbcPositions(list: RbcItem[], cx: number, rl: number, dt: number, speed: number) {
+      list.forEach((c) => {
+        c.p += dt * speed * c.v;
+        if (c.p >= 1) {
+          c.p -= 1;
+          c.a = Math.random() * 6.28;
+          c.q = 0.2 + Math.random() * 0.7;
+        }
+        const f = 0.35 + 0.65 * c.p;
+        const d = rl * 0.85 * c.q * f;
+        const sc = 0.35 + 0.95 * c.p;
+        const tx = cx + d * Math.cos(c.a);
+        const ty = CY + d * Math.sin(c.a);
+        const rot = c.o * 60 + c.p * 40;
+        c.e.setAttribute('transform', `translate(${tx.toFixed(1)},${ty.toFixed(1)}) rotate(${rot.toFixed(1)}) scale(${sc.toFixed(2)})`);
+        c.e.setAttribute('opacity', (Math.sin(Math.PI * c.p) * 0.95).toFixed(2));
+      });
+    }
+
+    let rlB = RL_B_BASE;
+    function flow(dt: number, ccVal: number) {
+      updateRbcPositions(raList, CX_A, RL_A, dt, 0.4);
+      updateRbcPositions(rbList, CX_B, rlB, dt, 0.4 * (1 - 0.6 * ccVal));
+    }
+
+    const OPACITIES: [number, number, number, number, number][] = [
+      [1, 0.3, 0, 0, 0], // Fase 1: Vena típica
+      [0.3, 1, 1, 0, 0], // Fase 2: Vena adrenomedular (gX)
+      [0.25, 1, 0, 1, 0], // Fase 3: Haces longitudinales (gH)
+      [0.25, 1, 0, 0, 1], // Fase 4: Función reguladora (gF)
+    ];
+
+    let t = 0;
+    let clk = 0;
+    let cc = 0;
+    let play = true;
     let last = performance.now();
+    let cur = -1;
+    let isDragging = false;
+    let isVisible = true;
     let animId = 0;
 
-    function frame(now: number) {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      if (visible && playing) {
-        // Avance de animación 50% más rápido
-        T += dt / LOOP;
-        if (T >= 1) T -= 1;
-        amb += dt * 1.5;
-        dirty = true;
+    function draw() {
+      const st = Math.min(3, Math.floor(t / STEP));
+      const fr = (t - st * STEP) / STEP;
+
+      if (st !== cur) {
+        cur = st;
+        if (dtEl) dtEl.textContent = STAGES[st].title;
+        if (dpEl) dpEl.textContent = STAGES[st].desc;
+
+        tabBtns.forEach((b, i) => {
+          b.classList.toggle('on', i === st);
+          b.setAttribute('aria-selected', i === st ? 'true' : 'false');
+        });
+
+        const op = OPACITIES[st];
+        gA!.style.opacity = String(op[0]);
+        gB!.style.opacity = String(op[1]);
+        gX!.style.opacity = String(op[2]);
+        gH!.style.opacity = String(op[3]);
+        gF!.style.opacity = String(op[4]);
       }
-      if (dirty && visible) {
-        renderScene();
-        updateUI();
-        dirty = false;
+
+      tabBtns.forEach((b, i) => {
+        const bar = b.querySelector('i');
+        if (bar) {
+          const widthPct = i < st ? 100 : i > st ? 0 : fr * 100;
+          bar.style.width = `${widthPct.toFixed(1)}%`;
+        }
+      });
+
+      if (!isDragging && slider) {
+        slider.value = String(Math.round((t / T_TOTAL) * 1000));
       }
-      animId = requestAnimationFrame(frame);
+
+      const rl = RL_B_BASE - 11 * cc;
+      rlB = rl;
+      bl!.setAttribute('r', rl.toFixed(1));
+      be!.setAttribute('r', rl.toFixed(1));
+
+      bundles.forEach((b, i) => {
+        const a = (i * 2 * Math.PI) / 7 - Math.PI / 2;
+        const r = rl + 11;
+        const bx = CX_B + r * Math.cos(a);
+        const by = CY + r * Math.sin(a);
+        const sc = (1 + 0.22 * cc).toFixed(2);
+        b.setAttribute('transform', `translate(${bx.toFixed(1)},${by.toFixed(1)}) scale(${sc})`);
+      });
     }
 
-    const onPlayClick = () => {
-      playing = !playing;
-      setPlayUI();
+    function loop(ts: number) {
+      const dt = Math.min((ts - last) / 1000, 0.05);
+      last = ts;
+      clk += dt;
+
+      if (play && !isDragging && isVisible) {
+        t += dt * 1000;
+        if (t >= T_TOTAL) t = 0;
+      }
+
+      const tg = cur === 3 ? 0.5 + 0.5 * Math.sin(clk * 2.5) : 0;
+      cc += (tg - cc) * Math.min(1, dt * 6);
+
+      if (isVisible) {
+        draw();
+        flow(dt, cc);
+      }
+
+      animId = requestAnimationFrame(loop);
+    }
+
+    const onPlayToggle = () => {
+      play = !play;
+      setIsPlaying(play);
+      if (playBtn) {
+        playBtn.setAttribute('aria-label', play ? 'Pausar animación' : 'Reanudar animación');
+      }
     };
 
-    const onSeekInput = () => {
-      if (!seek) return;
-      T = Math.min(0.999, Math.max(0, Number(seek.value) / 1000));
-      playing = false;
-      setPlayUI();
-      dirty = true;
+    const onSliderInput = () => {
+      if (!slider) return;
+      t = (Number(slider.value) / 1000) * T_TOTAL;
+      isDragging = true;
+      draw();
     };
 
-    const stepClickHandlers = stepBtns.map((b) => {
+    const onSliderChange = () => {
+      isDragging = false;
+    };
+
+    const tabListeners: { btn: HTMLButtonElement; handler: () => void }[] = [];
+    tabBtns.forEach((b, i) => {
       const handler = () => {
-        const iAttr = b.getAttribute('data-i');
-        const i = iAttr ? Number(iAttr) : 0;
-        T = B[i] + 0.02;
-        dirty = true;
+        t = i * STEP;
+        draw();
       };
       b.addEventListener('click', handler);
-      return { btn: b, handler };
+      tabListeners.push({ btn: b, handler });
     });
 
-    playBtn?.addEventListener('click', onPlayClick);
-    seek?.addEventListener('input', onSeekInput);
+    playBtn?.addEventListener('click', onPlayToggle);
+    slider?.addEventListener('input', onSliderInput);
+    slider?.addEventListener('change', onSliderChange);
 
     let observer: IntersectionObserver | null = null;
-    if (typeof window !== 'undefined' && 'IntersectionObserver' in window && scene) {
+    if (typeof window !== 'undefined' && 'IntersectionObserver' in window && svgScene) {
       observer = new IntersectionObserver(
         (entries) => {
-          visible = entries[0]?.isIntersecting ?? true;
-          if (visible) {
-            dirty = true;
-            last = performance.now();
-          }
+          isVisible = entries[0]?.isIntersecting ?? true;
         },
         { threshold: 0.05 }
       );
-      observer.observe(scene);
+      observer.observe(svgScene);
     }
 
-    setPlayUI();
-    renderScene();
-    updateUI();
-    animId = requestAnimationFrame((t) => {
-      last = t;
-      frame(t);
+    draw();
+    animId = requestAnimationFrame((ts) => {
+      last = ts;
+      loop(ts);
     });
 
     return () => {
       cancelAnimationFrame(animId);
       observer?.disconnect();
-      playBtn?.removeEventListener('click', onPlayClick);
-      seek?.removeEventListener('input', onSeekInput);
-      stepClickHandlers.forEach(({ btn, handler }) => {
+      playBtn?.removeEventListener('click', onPlayToggle);
+      slider?.removeEventListener('input', onSliderInput);
+      slider?.removeEventListener('change', onSliderChange);
+      tabListeners.forEach(({ btn, handler }) => {
         btn.removeEventListener('click', handler);
       });
     };
@@ -667,9 +332,9 @@ export const HomeHistologyFact: React.FC = () => {
 
   return (
     <section
-      className="home-histology-fact home-reveal diapedesis-fact"
-      id="diapedesis"
-      aria-labelledby="diap-title"
+      className={`home-histology-fact home-reveal adrenomedullary-fact ${className}`.trim()}
+      id="vena-adrenomedular"
+      aria-labelledby="adreno-title"
       ref={rootRef}
     >
       <span className="home-fact-shine" aria-hidden="true" />
@@ -677,152 +342,215 @@ export const HomeHistologyFact: React.FC = () => {
       <span className="home-fact-glow home-fact-glow-violet" aria-hidden="true" />
       <span className="home-histology-fact-mesh" aria-hidden="true" />
 
-      <div className="home-diapedesis-grid">
-        {/* ─── Columna Izquierda: Encabezado, Descripción, Etapas y Controles ─── */}
-        <div className="home-diapedesis-left">
-          <div className="home-histology-fact-brand">
-            <div className="home-histology-fact-icon" aria-hidden="true">
+      <div className="adreno-grid">
+        {/* ─── Columna Izquierda: Información, Fases y Controles ─── */}
+        <div className="adreno-left">
+          <div className="adreno-top">
+            <span className="adreno-ico" aria-hidden="true">
               <Microscope size={18} />
-            </div>
-            <span className="home-histology-fact-label">
-              <Sparkles size={13} /> Dato histológico de la semana
+            </span>
+            <span className="adreno-badge">
+              <Sparkles size={13} /> {badgeLabel}
             </span>
           </div>
 
-          <div className="diap-header-text">
-            <h2 id="diap-title">Diapédesis</h2>
+          <div className="adreno-header">
+            <h2 id="adreno-title">Vena adrenomedular</h2>
             <p className="sub">
-              Cómo un leucocito sale del torrente sanguíneo y atraviesa la pared del vaso hasta llegar al tejido infectado.
+              Una vena con la pared distinta: su músculo liso no forma una capa circular, sino haces longitudinales.
             </p>
           </div>
 
-          <div className="detail" aria-live="polite">
-            <h3 id="dTitle">{STAGES[0].t}</h3>
-            <p id="dText">{STAGES[0].d}</p>
+          <div className="adreno-desc" aria-live="polite">
+            <h3 id="dt">{STAGES[0].title}</h3>
+            <p id="dp">{STAGES[0].desc}</p>
           </div>
 
-          <ol className="steps" id="steps">
-            <li>
-              <button type="button" className="step" data-i="0" aria-current="true">
-                <span className="n">1</span>
-                <span className="t">Rodamiento</span>
-                <span className="bar" />
+          <div className="adreno-tabs" role="tablist" aria-label="Fases comparativas">
+            {STAGES.map((st, i) => (
+              <button
+                key={st.title}
+                type="button"
+                className={`adreno-tab ${i === 0 ? 'on' : ''}`}
+                role="tab"
+                aria-selected={i === 0 ? 'true' : 'false'}
+              >
+                <small>Fase {i + 1}</small>
+                <b>{st.title}</b>
+                <i style={{ width: i === 0 ? '0%' : '0%' }} />
               </button>
-            </li>
-            <li>
-              <button type="button" className="step" data-i="1" aria-current="false">
-                <span className="n">2</span>
-                <span className="t">Adhesión firme</span>
-                <span className="bar" />
-              </button>
-            </li>
-            <li>
-              <button type="button" className="step" data-i="2" aria-current="false">
-                <span className="n">3</span>
-                <span className="t">Diapédesis</span>
-                <span className="bar" />
-              </button>
-            </li>
-            <li>
-              <button type="button" className="step" data-i="3" aria-current="false">
-                <span className="n">4</span>
-                <span className="t">Migración hacia el foco</span>
-                <span className="bar" />
-              </button>
-            </li>
-          </ol>
+            ))}
+          </div>
 
-          <div className="controls">
-            <button type="button" className="play" id="play" aria-label="Pausar animación">
-              <svg viewBox="0 0 24 24" aria-hidden="true" id="playIcon">
-                <rect x="6" y="5" width="4.5" height="14" rx="1" />
-                <rect x="13.5" y="5" width="4.5" height="14" rx="1" />
-              </svg>
-              <span id="playText">Pausar</span>
+          <div className="adreno-ctl">
+            <button
+              id="pb"
+              type="button"
+              aria-label={isPlaying ? 'Pausar animación' : 'Reanudar animación'}
+            >
+              {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+              <span>{isPlaying ? 'Pausar' : 'Reanudar'}</span>
             </button>
-            <input type="range" id="seek" min="0" max="1000" defaultValue="0" aria-label="Progreso de la animación" />
+            <input
+              id="sl"
+              type="range"
+              min="0"
+              max="1000"
+              defaultValue="0"
+              aria-label="Progreso de la animación comparativa"
+            />
           </div>
 
-          <ul className="legend" aria-label="Leyenda">
-            <li>
-              <i style={{ background: '#A9B6F6', borderColor: '#4B5BD0' }} />
-              Leucocito
-            </li>
-            <li>
-              <i style={{ background: '#F0B429', borderColor: '#B0740D' }} />
-              Selectinas
-            </li>
-            <li>
-              <i style={{ background: '#2CB79A', borderColor: '#0D6B58' }} />
-              ICAM-1 e integrinas
-            </li>
-            <li>
-              <i style={{ background: '#A23F9A', borderColor: '#6E2168' }} />
-              Quimiocinas
-            </li>
-          </ul>
+          <div className="adreno-leg" aria-label="Leyenda de estructuras">
+            <span style={{ ['--c' as string]: '#e8c400' }}>Endotelio</span>
+            <span style={{ ['--c' as string]: 'var(--bun)' }}>Músculo liso</span>
+            <span style={{ ['--c' as string]: '#d9556b' }}>Eritrocitos (flujo hacia el observador)</span>
+            <span style={{ ['--c' as string]: 'var(--med)' }}>Media</span>
+            <span style={{ ['--c' as string]: 'var(--adv)' }}>Adventicia</span>
+          </div>
         </div>
 
-        {/* ─── Columna Derecha: Esquema SVG Dinámico ─── */}
-        <div className="home-diapedesis-right">
-          <div className="frame">
-            <svg className="scene" id="scene" viewBox="0 0 900 480" role="img" aria-labelledby="scene-title scene-desc">
-              <title id="scene-title">Esquema animado de la diapédesis</title>
-              <desc id="scene-desc">
-                Un leucocito rueda sobre el endotelio de un vaso, se adhiere con firmeza, se desliza entre dos células endoteliales, atraviesa la membrana basal y sigue un gradiente de quimiocinas hasta un foco de infección.
-              </desc>
-              <defs>
-                <clipPath id="lumenClip">
-                  <rect x="0" y="0" width="900" height="199" />
-                </clipPath>
-                <clipPath id="tissueClip">
-                  <rect x="0" y="240" width="900" height="240" />
-                </clipPath>
-              </defs>
+        {/* ─── Columna Derecha: Esquema SVG Dinámico Adaptado ─── */}
+        <div className="adreno-fig">
+          <svg
+            id="adreno-scene"
+            viewBox="0 0 740 340"
+            preserveAspectRatio="xMidYMid meet"
+            role="img"
+            aria-label="Comparación de la pared de una vena típica y de la vena adrenomedular"
+          >
+            {/* Vena Típica */}
+            <g id="gA" className="g">
+              <text x="190" y="28" textAnchor="middle" className="b" style={{ fontSize: '13px', fill: 'var(--ink)' }}>
+                Vena típica
+              </text>
+              <text x="190" y="44" textAnchor="middle" style={{ fontSize: '11px', fill: 'var(--mute)' }}>
+                músculo circular
+              </text>
+              <circle cx="190" cy="175" r="95" fill="var(--adv)" />
+              <circle cx="190" cy="175" r="80" fill="var(--med)" />
+              <circle
+                cx="190"
+                cy="175"
+                r="67"
+                fill="none"
+                stroke="var(--bun)"
+                strokeWidth="12"
+                strokeDasharray="10 3"
+              />
+              <circle cx="190" cy="175" r="54" fill="var(--lum)" />
+              <circle cx="190" cy="175" r="54" fill="none" stroke="#eab308" strokeWidth="2.8" />
+              <g id="ra" />
+              <text x="190" y="179" textAnchor="middle" style={{ opacity: 0.65, fontSize: '12px', fontWeight: 600 }}>
+                Luz
+              </text>
 
-              <rect x="0" y="0" width="900" height="480" fill="#F0EAF0" />
-              <rect x="0" y="0" width="900" height="205" fill="#FCE8E2" />
+              {/* Puntero Endotelio (texto alineado a la izquierda, línea hacia la derecha sin solapar texto) */}
+              <circle cx="145" cy="147" r="2.5" fill="#ca8a04" />
+              <path className="l" d="M68 118 H 92 L 145 147" />
+              <text x="62" y="116" textAnchor="end" className="b" style={{ fontSize: '11.5px', fill: '#0f2a43' }}>
+                Endotelio
+              </text>
+              <text x="62" y="128" textAnchor="end" style={{ fontSize: '9.5px', fill: '#64748b' }}>
+                (capa íntima)
+              </text>
 
-              <g fill="none" stroke="#E2D8E4" strokeWidth="3" strokeLinecap="round">
-                <path d="M-10 300 C90 268 190 336 320 304 S560 326 700 298 S850 320 920 302" />
-                <path d="M-10 356 C120 388 230 330 380 362 S620 392 760 350 S880 340 920 360" />
-                <path d="M-10 420 C110 396 250 448 400 418 S600 440 720 424" />
-                <path d="M120 258 C200 276 280 252 360 270 S500 262 560 274" />
+              {/* Puntero Capa Circular (texto alineado a la izquierda, línea hacia la derecha sin solapar texto) */}
+              <circle cx="136" cy="214" r="2.5" fill="var(--bun)" />
+              <path className="l" d="M72 250 H 95 L 136 214" />
+              <text x="66" y="248" textAnchor="end" className="b" style={{ fontSize: '11px', fill: 'var(--bun)' }}>
+                Capa circular
+              </text>
+              <text x="66" y="260" textAnchor="end" style={{ fontSize: '9.5px', fill: '#64748b' }}>
+                músculo liso continuo
+              </text>
+            </g>
+
+            {/* Vena Adrenomedular */}
+            <g id="gB" className="g">
+              <text x="490" y="28" textAnchor="middle" className="b" style={{ fontSize: '13px', fill: 'var(--ink)' }}>
+                Vena adrenomedular
+              </text>
+              <text x="490" y="44" textAnchor="middle" style={{ fontSize: '11px', fill: 'var(--mute)' }}>
+                haces longitudinales
+              </text>
+              <circle cx="490" cy="175" r="95" fill="var(--adv)" />
+              <circle cx="490" cy="175" r="80" fill="var(--med)" />
+              <g id="ct" stroke="var(--dot)" strokeWidth="1.8" strokeLinecap="round" />
+              <circle id="bl" cx="490" cy="175" fill="var(--lum)" />
+              <circle id="be" cx="490" cy="175" fill="none" stroke="#eab308" strokeWidth="2.8" />
+              <g id="rb" />
+              <g id="bn" />
+              <text x="490" y="179" textAnchor="middle" style={{ opacity: 0.65, fontSize: '12px', fontWeight: 600 }}>
+                Luz
+              </text>
+
+              {/* Puntero Haces Longitudinales (hacia la derecha con textAnchor start) */}
+              <circle cx="546" cy="134" r="2.5" fill="var(--bun)" />
+              <path className="l" d="M546 134 L 595 90 H 612" />
+              <text x="618" y="88" textAnchor="start" className="b" style={{ fontSize: '11.5px', fill: 'var(--bun)' }}>
+                Haces longitudinales
+              </text>
+              <text x="618" y="100" textAnchor="start" style={{ fontSize: '9.5px', fill: '#64748b' }}>
+                (fibras cortadas de punta)
+              </text>
+
+              {/* Puntero Endotelio (hacia la derecha con textAnchor start) */}
+              <circle cx="533" cy="190" r="2.5" fill="#ca8a04" />
+              <path className="l" d="M533 190 L 595 220 H 612" />
+              <text x="618" y="218" textAnchor="start" className="b" style={{ fontSize: '11.5px', fill: '#0f2a43' }}>
+                Endotelio
+              </text>
+              <text x="618" y="230" textAnchor="start" style={{ fontSize: '9.5px', fill: '#64748b' }}>
+                (revestimiento interno)
+              </text>
+            </g>
+
+            {/* Marcador de contraste: No hay capa circular (Fase 2) */}
+            <g id="gX" className="g" opacity="0">
+              <circle
+                cx="490"
+                cy="175"
+                r="67"
+                fill="none"
+                stroke="#dc2626"
+                strokeWidth="1.8"
+                strokeDasharray="5 4"
+              />
+              <g transform="translate(325, 284)">
+                <rect width="330" height="32" rx="8" fill="#fef2f2" stroke="#fca5a5" strokeWidth="1.2" />
+                <text x="165" y="20" textAnchor="middle" className="b" style={{ fill: '#dc2626', fontSize: '11px' }}>
+                  ✕ Sin capa circular de músculo liso continuo
+                </text>
               </g>
+            </g>
 
-              <g id="halo">
-                <circle id="halo1" cx="830" cy="418" r="64" fill="#A23F9A" opacity="0.08" />
-                <circle id="halo2" cx="830" cy="418" r="110" fill="#A23F9A" opacity="0.05" />
+            {/* Marcador de contraste: Haces longitudinales presentes (Fase 3) */}
+            <g id="gH" className="g" opacity="0">
+              <g transform="translate(325, 282)">
+                <rect width="330" height="36" rx="8" fill="#fdf4ff" stroke="#f0abfc" strokeWidth="1.2" />
+                <text x="165" y="15" textAnchor="middle" className="b" style={{ fill: '#a21caf', fontSize: '11.5px' }}>
+                  ✦ En su lugar: haces longitudinales de músculo liso
+                </text>
+                <text x="165" y="28" textAnchor="middle" style={{ fill: '#6b21a8', fontSize: '9.5px' }}>
+                  Fibras orientadas en el eje largo (se ven cortadas de punta)
+                </text>
               </g>
-              <g id="diffuse" clipPath="url(#tissueClip)" />
-              <g id="bact" />
+            </g>
 
-              <g id="bm" stroke="#B99CC1" strokeWidth="3.5" strokeLinecap="round" fill="none">
-                <path id="bmL" d="M-10 234 H462" />
-                <path id="bmR" d="M478 234 H910" />
+            {/* Marcador de contraste: Función reguladora y contracción (Fase 4) */}
+            <g id="gF" className="g" opacity="0">
+              <g transform="translate(325, 282)">
+                <rect width="330" height="36" rx="8" fill="#f0f9ff" stroke="#bae6fd" strokeWidth="1.2" />
+                <text x="165" y="15" textAnchor="middle" className="b" style={{ fill: '#0284c7', fontSize: '11.5px' }}>
+                  Los haces se contraen y protruyen hacia la luz
+                </text>
+                <text x="165" y="28" textAnchor="middle" style={{ fill: '#475569', fontSize: '9.5px' }}>
+                  → Estrechan la luz y modulan el flujo de catecolaminas
+                </text>
               </g>
-
-              <g id="endo" />
-              <g id="mol" />
-              <g id="rbc" clipPath="url(#lumenClip)" />
-
-              <g id="leuk">
-                <path id="body" fill="#A9B6F6" stroke="#4B5BD0" strokeWidth="2" strokeLinejoin="round" d="M0 0" />
-                <g id="grans" />
-                <g id="lobes" />
-              </g>
-              <g id="bonds" />
-
-              <g className="lab">
-                <text x="14" y="26" fill="#8A3A31">Luz del vaso</text>
-                <text x="14" y="212" dominantBaseline="central" fill="#5A1D16">Endotelio</text>
-                <text x="14" y="254" fill="#5E4870">Membrana basal</text>
-                <text x="14" y="292" fill="#5E4870">Tejido</text>
-                <text x="520" y="462" fill="#7A2C74">Gradiente de quimiocinas</text>
-                <text x="830" y="466" textAnchor="middle" fill="#7A2C74">Foco de infección</text>
-              </g>
-            </svg>
-          </div>
+            </g>
+          </svg>
         </div>
       </div>
     </section>

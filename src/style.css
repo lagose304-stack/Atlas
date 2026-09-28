@@ -4401,62 +4401,217 @@ body {
 
 .atlas-header-flag-stamp {
   position: absolute;
-  left: calc(100% + 12px);
+  left: calc(100% + 10px);
   top: 50%;
-  transform: translateY(-50%) rotate(10.5deg);
+  transform: translateY(-50%) rotate(5deg);
   transform-origin: center center;
-  width: clamp(74px, 1.85em, 114px);
+  width: clamp(54px, 1.45em, 80px);
+  height: clamp(52px, 1.4em, 78px);
   cursor: pointer;
   user-select: none;
   z-index: 30;
-  display: block;
-  animation: atlasStampWave 4s ease-in-out infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: atlasStampWave 4.5s ease-in-out infinite;
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease;
   pointer-events: auto;
-  filter: drop-shadow(0 6px 16px rgba(7, 38, 83, 0.28)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.14));
-}
-
-.atlas-header-flag-img {
-  width: 100%;
-  height: auto;
-  aspect-ratio: 2 / 1;
-  display: block;
-  object-fit: cover;
-  border: none;
-  border-radius: 3px;
+  filter: drop-shadow(0 6px 16px rgba(194, 65, 12, 0.35)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
 @keyframes atlasStampWave {
   0%, 100% {
-    transform: translateY(-50%) rotate(10deg);
-    filter: drop-shadow(0 6px 16px rgba(7, 38, 83, 0.28)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.14));
+    transform: translateY(-50%) rotate(4deg);
+    filter: drop-shadow(0 6px 16px rgba(194, 65, 12, 0.35)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
   }
   50% {
-    transform: translateY(-55%) rotate(13deg);
-    filter: drop-shadow(0 10px 22px rgba(7, 38, 83, 0.36)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.18));
+    transform: translateY(-55%) rotate(8deg);
+    filter: drop-shadow(0 10px 22px rgba(234, 88, 12, 0.48)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.25));
   }
 }
 
 .atlas-header-flag-stamp:hover {
   animation-play-state: paused;
-  transform: translateY(-58%) rotate(15deg) scale(1.14);
-  filter: drop-shadow(0 14px 28px rgba(7, 38, 83, 0.42)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.22));
+  transform: translateY(-56%) rotate(10deg) scale(1.14);
+  filter: drop-shadow(0 14px 28px rgba(234, 88, 12, 0.58)) drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
 }
 
 .atlas-header-flag-stamp:active {
   animation-play-state: paused;
-  transform: translateY(-50%) rotate(7deg) scale(1.04);
+  transform: translateY(-50%) rotate(4deg) scale(1.05);
 }
 
 @media (max-width: 768px) {
   .atlas-header-flag-stamp {
-    width: clamp(52px, 1.5em, 78px);
+    width: clamp(42px, 1.25em, 56px);
+    height: clamp(40px, 1.2em, 54px);
     left: calc(100% + 6px);
   }
 }
 
 /* ========================================================
-   Confeti y destellos festivos patrios decorativos
+   Animaciones e interactividad de la Calabaza de Halloween
+   ======================================================== */
+.atlas-jack-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+  --glow: #ffa61a;
+  --eyec: #ffa61a;
+  --dark: #1a0700;
+  --stem: #39461d;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.18));
+}
+
+.atlas-jack-svg .tb {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.atlas-jack-svg .body {
+  animation: jack-sway 7s ease-in-out infinite;
+}
+
+@keyframes jack-sway {
+  0%, 100% { transform: rotate(-1deg); }
+  50% { transform: rotate(1deg) translateY(-2px); }
+}
+
+.atlas-jack-svg .glow {
+  animation: jack-flicker 1.7s infinite;
+}
+
+@keyframes jack-flicker {
+  0%, 100% { opacity: 0.9; }
+  8% { opacity: 0.5; }
+  14% { opacity: 1; }
+  30% { opacity: 0.7; }
+  45% { opacity: 0.95; }
+  52% { opacity: 0.4; }
+  58% { opacity: 0.85; }
+  80% { opacity: 0.65; }
+}
+
+.atlas-jack-svg .glow.out {
+  animation: none;
+  opacity: 0.04;
+  transition: opacity 0.05s;
+}
+
+.atlas-jack-svg .eyeshape {
+  fill: var(--eyec);
+  transition: fill 0.3s;
+}
+
+.atlas-jack-svg .eye {
+  transition: transform 0.12s ease-out;
+}
+
+.atlas-jack-svg .pupil {
+  transition: transform 0.5s ease-out, ry 0.3s;
+}
+
+.atlas-jack-svg .brow {
+  transition: transform 0.25s ease-out;
+}
+
+.atlas-jack-svg .m {
+  opacity: 0;
+  transition: opacity 0.08s;
+}
+
+.atlas-jack-svg .face .m-idle {
+  opacity: 1;
+}
+
+.atlas-jack-svg .face.snarl .m-idle {
+  opacity: 0;
+}
+
+.atlas-jack-svg .face.snarl .m-snarl {
+  opacity: 1;
+}
+
+.atlas-jack-svg .face.snarl .body-shake {
+  animation: jack-shake 0.07s infinite;
+}
+
+.atlas-jack-svg .face.grin .m-idle {
+  transform: scaleX(1.1) translateY(4px);
+}
+
+.atlas-jack-svg .m-idle {
+  transition: transform 0.5s ease-out, opacity 0.08s;
+}
+
+@keyframes jack-shake {
+  0% { transform: translate(-2px, 1px); }
+  50% { transform: translate(2px, -2px); }
+  100% { transform: translate(-2px, 1px); }
+}
+
+.atlas-jack-svg .face.snarl .brow-l {
+  transform: translateY(8px) rotate(4deg);
+}
+
+.atlas-jack-svg .face.snarl .brow-r {
+  transform: translateY(8px) rotate(-4deg);
+}
+
+.atlas-jack-svg .face.snarl {
+  --eyec: #ff3a12;
+}
+
+.atlas-jack-svg .face.stare {
+  --eyec: #ff5a1a;
+}
+
+.atlas-jack-svg .face.stare .eye-l,
+.atlas-jack-svg .face.stare .eye-r {
+  transform: scale(1.18);
+}
+
+.atlas-jack-svg .face.stare .brow-l {
+  transform: translateY(6px);
+}
+
+.atlas-jack-svg .face.stare .brow-r {
+  transform: translateY(6px);
+}
+
+.atlas-jack-svg .face.grin .brow-l,
+.atlas-jack-svg .face.grin .brow-r {
+  transform: translateY(5px);
+}
+
+.atlas-jack-svg .face.blink .eye-l,
+.atlas-jack-svg .face.blink .eye-r {
+  transform: scaleY(0.05);
+}
+
+.atlas-jack-svg .face.twitch .eye-r {
+  animation: jack-tw 0.35s;
+}
+
+.atlas-jack-svg .face.twitch .brow-r {
+  animation: jack-tw 0.35s;
+}
+
+@keyframes jack-tw {
+  20% { transform: translate(3px, -3px) scaleY(0.4); }
+  40% { transform: translate(-2px, 2px) scaleY(1.2); }
+  60% { transform: translate(2px, -1px) scaleY(0.5); }
+  100% { transform: none; }
+}
+
+.atlas-jack-svg .face.stare .pupil,
+.atlas-jack-svg .face.snarl .pupil {
+  ry: 8;
+}
+
+/* ========================================================
+   Hojas otoñales y destellos festivos de Halloween
    ======================================================== */
 .atlas-header-confetti-cluster {
   position: absolute;
@@ -4474,98 +4629,99 @@ body {
   will-change: transform, opacity;
 }
 
-/* Confeti 1: Cinta dorada arriba izquierda */
+/* Partícula 1: Hoja otoñal dorada arriba izquierda */
 .atlas-confetti-item.c1 {
   top: -6px;
   left: -8px;
-  width: 9px;
-  height: 4.5px;
-  background: linear-gradient(135deg, #fde047, #f59e0b);
-  border-radius: 1.5px;
-  box-shadow: 0 0 6px rgba(245, 158, 11, 0.45);
+  width: 9.5px;
+  height: 5px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border-radius: 8px 0 8px 0;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.55);
   animation: atlasConfettiFlutter1 3.4s ease-in-out infinite;
 }
 
-/* Confeti 2: Estrella diamante turquesa arriba */
+/* Partícula 2: Destello diamante ámbar arriba */
 .atlas-confetti-item.c2 {
   top: -16px;
   left: 40%;
   width: 8px;
   height: 8px;
-  background: #00BCE4;
+  background: #f59e0b;
   clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%);
-  box-shadow: 0 0 8px #00BCE4;
+  box-shadow: 0 0 8px #f59e0b;
   animation: atlasConfettiSparkle 2.8s ease-in-out 0.6s infinite;
 }
 
-/* Confeti 3: Cinta blanca arriba derecha */
+/* Partícula 3: Hoja otoñal carmesí arriba derecha */
 .atlas-confetti-item.c3 {
   top: -10px;
   right: -6px;
-  width: 8px;
-  height: 4px;
-  background: #ffffff;
-  border-radius: 1.5px;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.8), 0 1px 2px rgba(0, 0, 0, 0.15);
+  width: 9px;
+  height: 5px;
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  border-radius: 0 8px 0 8px;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.55);
   animation: atlasConfettiFlutter2 3.6s ease-in-out 1.1s infinite;
 }
 
-/* Confeti 4: Círculo festivo turquesa derecha */
+/* Partícula 4: Perla de luz naranja calabaza derecha */
 .atlas-confetti-item.c4 {
   top: 36%;
   right: -13px;
-  width: 6px;
-  height: 6px;
+  width: 6.5px;
+  height: 6.5px;
   border-radius: 50%;
-  background: #00BCE4;
-  box-shadow: 0 0 8px rgba(0, 188, 228, 0.6);
+  background: #ea580c;
+  box-shadow: 0 0 8px rgba(234, 88, 12, 0.7);
   animation: atlasConfettiFloat 3.2s ease-in-out 0.4s infinite;
 }
 
-/* Confeti 5: Estrella dorada abajo derecha */
+/* Partícula 5: Estrella dorada abajo derecha */
 .atlas-confetti-item.c5 {
   bottom: -10px;
   right: -8px;
   width: 9px;
   height: 9px;
-  background: #fbbf24;
+  background: #facc15;
   clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%);
-  box-shadow: 0 0 8px rgba(251, 191, 36, 0.65);
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.75);
   animation: atlasConfettiSparkle 3s ease-in-out 1.7s infinite;
 }
 
-/* Confeti 6: Cinta celeste abajo izquierda */
+/* Partícula 6: Hoja otoñal bronceada abajo izquierda */
 .atlas-confetti-item.c6 {
   bottom: -8px;
   left: 20%;
-  width: 7px;
-  height: 3.5px;
-  background: #38bdf8;
-  border-radius: 1.5px;
+  width: 8px;
+  height: 4.5px;
+  background: linear-gradient(135deg, #f97316, #c2410c);
+  border-radius: 7px 0 7px 0;
+  box-shadow: 0 0 6px rgba(249, 115, 22, 0.5);
   animation: atlasConfettiFlutter1 3.8s ease-in-out 1.4s infinite;
 }
 
-/* Confeti 7: Destello blanco brillante arriba */
+/* Partícula 7: Destello cálido amarillo brillante arriba */
 .atlas-confetti-item.c7 {
   top: -8px;
   left: 68%;
   width: 7px;
   height: 7px;
-  background: #ffffff;
+  background: #fef08a;
   clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%);
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 8px rgba(254, 240, 138, 0.9);
   animation: atlasConfettiSparkle 2.6s ease-in-out 2.1s infinite;
 }
 
-/* Confeti 8: Círculo dorado abajo izquierda */
+/* Partícula 8: Hoja otoñal amarillo ocre abajo izquierda */
 .atlas-confetti-item.c8 {
   bottom: -12px;
   left: -5px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #f59e0b;
-  box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+  width: 7px;
+  height: 4.5px;
+  background: linear-gradient(135deg, #eab308, #ca8a04);
+  border-radius: 0 7px 0 7px;
+  box-shadow: 0 0 6px rgba(234, 179, 8, 0.5);
   animation: atlasConfettiFloat 3.5s ease-in-out 0.8s infinite;
 }
 

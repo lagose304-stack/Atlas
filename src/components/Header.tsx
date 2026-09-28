@@ -14,7 +14,7 @@ import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } fr
 import logoFacultad from '../assets/logos/facultad.png';
 import microscopioHeader from '../assets/logos/laboratorio.png';
 import fondoHeader from '../assets/imagenes/fondo.webp';
-import banderaHonduras from '../assets/imagenes/honduras.svg';
+import HalloweenPumpkin from './HalloweenPumpkin';
 
 const MENU_ITEMS = [
   { key: 'inicio', label: 'Inicio', icon: House, path: '/' },
@@ -494,12 +494,12 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
                 <span className="atlas-header-title-text">
                   Atlas de Histología
                   <span
-                    className="atlas-header-flag-stamp"
-                    title="¡Felices Fiestas Patrias! 🇭🇳 Honduras"
-                    aria-label="Estampa de la Bandera de Honduras - Mes Patrio"
+                    className="atlas-header-flag-stamp atlas-header-autumn-stamp"
+                    title="¡Bienvenido Octubre! 🍂🎃 Otoño y Halloween"
+                    aria-label="Decoración de Octubre: Otoño y Halloween"
                     role="img"
                   >
-                    {/* Confeti festivo y destellos patrios de celebración */}
+                    {/* Hojas otoñales flotantes y destellos dorados de celebración */}
                     <span className="atlas-header-confetti-cluster" aria-hidden="true">
                       <span className="atlas-confetti-item c1" />
                       <span className="atlas-confetti-item c2" />
@@ -511,12 +511,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
                       <span className="atlas-confetti-item c8" />
                     </span>
 
-                    <img
-                      src={banderaHonduras}
-                      alt="Bandera de Honduras"
-                      className="atlas-header-flag-img"
-                      draggable={false}
-                    />
+                    <HalloweenPumpkin />
                   </span>
                 </span>
               </h1>

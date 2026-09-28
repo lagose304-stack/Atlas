@@ -12,11 +12,111 @@
   --ind-focus: #9aa5f5;
 
   position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1vw, 11px);
+  padding: clamp(14px, 1.6vw, 20px) clamp(16px, 2vw, 26px);
+  overflow: hidden;
+  border: 1.5px solid rgba(147, 213, 248, 0.7);
+  border-radius: clamp(18px, 2.2vw, 26px);
+  color: #0f2a43;
+  background:
+    radial-gradient(circle at 8% 12%, rgba(186, 230, 253, 0.45), transparent 36%),
+    radial-gradient(circle at 92% 88%, rgba(221, 214, 254, 0.4), transparent 38%),
+    radial-gradient(circle at 50% 0%, rgba(240, 249, 255, 0.8), transparent 45%),
+    linear-gradient(135deg, #ffffff 0%, #f8fcff 45%, #f0f7fc 100%);
+  box-shadow:
+    0 18px 40px -8px rgba(12, 69, 104, 0.09),
+    0 4px 14px rgba(12, 69, 104, 0.04),
+    inset 0 1px 0 #ffffff,
+    inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+  will-change: transform, box-shadow;
+  transform: translateZ(0);
+  transition: transform .32s cubic-bezier(.22, 1, .36, 1), border-color .32s ease, box-shadow .32s ease;
   width: 100% !important;
   max-width: 100% !important;
   margin: 0 auto !important;
   box-sizing: border-box;
 }
+
+.home-histology-fact.diapedesis-fact:hover {
+  border-color: rgba(56, 189, 248, 0.9);
+  box-shadow:
+    0 24px 48px -8px rgba(12, 69, 104, 0.13),
+    0 6px 18px rgba(12, 69, 104, 0.05),
+    inset 0 1px 0 #ffffff,
+    inset 0 0 0 1px rgba(255, 255, 255, 0.9);
+  transform: translateY(-2px);
+}
+
+.home-histology-fact.diapedesis-fact::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: linear-gradient(180deg, #0284c7 0%, #38bdf8 55%, #818cf8 100%);
+  border-radius: 0 5px 5px 0;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+  z-index: 2;
+}
+
+/* Destello diagonal interactivo */
+.home-histology-fact.diapedesis-fact .home-fact-shine {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.45) 45%, transparent 60%);
+  transform: translate3d(-100%, 0, 0);
+  transition: transform 0.8s cubic-bezier(.22, 1, .36, 1);
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform;
+}
+
+.home-histology-fact.diapedesis-fact:hover .home-fact-shine {
+  transform: translate3d(100%, 0, 0);
+}
+
+/* Auras de color de fondo */
+.home-histology-fact.diapedesis-fact .home-fact-glow {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(28px);
+  z-index: 0;
+}
+
+.home-histology-fact.diapedesis-fact .home-fact-glow-cyan {
+  width: 220px;
+  height: 220px;
+  left: -40px;
+  top: -60px;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.22), transparent 70%);
+}
+
+.home-histology-fact.diapedesis-fact .home-fact-glow-violet {
+  width: 200px;
+  height: 200px;
+  right: -30px;
+  bottom: -50px;
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.2), transparent 70%);
+}
+
+/* Malla científica de micropuntos */
+.home-histology-fact.diapedesis-fact .home-histology-fact-mesh {
+  position: absolute;
+  inset: 0;
+  opacity: 0.55;
+  background-image:
+    radial-gradient(circle, rgba(14, 165, 233, 0.22) 1.2px, transparent 1.6px),
+    linear-gradient(90deg, rgba(186, 230, 253, 0.08) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(186, 230, 253, 0.08) 1px, transparent 1px);
+  background-size: 22px 22px, 22px 22px, 22px 22px;
+  mask-image: radial-gradient(ellipse at 50% 50%, #000 60%, transparent 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
 
 /* ─── Grid principal de 2 columnas (Rectángulo simétrico) ─── */
 .home-diapedesis-grid {
@@ -309,3 +409,363 @@
     transition: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DATO HISTOLÓGICO DE LA SEMANA: VENA ADRENOMEDULAR (ADAPTADO AL ANCHO)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.home-histology-fact.adrenomedullary-fact {
+  --bg-card-1: #dff1fb;
+  --bg-card-2: #f7fbff;
+  --bg-card-3: #eef1ff;
+  --ink: #12244a;
+  --mute: #475569;
+  --acc: #2563eb;
+  --acc-hover: #1d4ed8;
+  --acc-light: #eff6ff;
+  --line: #cbd5e1;
+  --panel: #ffffff;
+  --sel: #eff6ff;
+
+  --adv: #d9cbb8;
+  --med: #f0c9c3;
+  --lum: #fbe3e3;
+  --bun: #b5665f;
+  --dot: #e2a59f;
+  --txt: #334155;
+
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: clamp(12px, 1.4vw, 18px) clamp(16px, 1.8vw, 24px);
+  overflow: hidden;
+  border: 1.5px solid rgba(147, 213, 248, 0.7);
+  border-radius: clamp(16px, 2vw, 22px);
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 6% 12%, rgba(186, 230, 253, 0.45), transparent 36%),
+    radial-gradient(circle at 94% 88%, rgba(221, 214, 254, 0.4), transparent 38%),
+    radial-gradient(circle at 50% 0%, rgba(240, 249, 255, 0.8), transparent 45%),
+    linear-gradient(135deg, #ffffff 0%, #f8fcff 45%, #f0f7fc 100%);
+  box-shadow:
+    0 18px 40px -8px rgba(12, 69, 104, 0.09),
+    0 4px 14px rgba(12, 69, 104, 0.04),
+    inset 0 1px 0 #ffffff,
+    inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+  box-sizing: border-box;
+  will-change: transform, box-shadow;
+  transform: translateZ(0);
+  transition: transform .32s cubic-bezier(.22, 1, .36, 1), border-color .32s ease, box-shadow .32s ease;
+}
+
+.home-histology-fact.adrenomedullary-fact:hover {
+  border-color: rgba(56, 189, 248, 0.9);
+  box-shadow:
+    0 24px 48px -8px rgba(12, 69, 104, 0.13),
+    0 6px 18px rgba(12, 69, 104, 0.05),
+    inset 0 1px 0 #ffffff,
+    inset 0 0 0 1px rgba(255, 255, 255, 0.9);
+  transform: translateY(-2px);
+}
+
+.home-histology-fact.adrenomedullary-fact::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: linear-gradient(180deg, #0284c7 0%, #38bdf8 55%, #818cf8 100%);
+  border-radius: 0 5px 5px 0;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+  z-index: 2;
+}
+
+/* Grid layout adapted to site width */
+.adreno-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: clamp(14px, 1.6vw, 22px);
+  align-items: center;
+  width: 100%;
+}
+
+@media (max-width: 980px) {
+  .adreno-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* Left side */
+.adreno-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+}
+
+.adreno-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adreno-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+}
+
+.adreno-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #2563eb;
+  border: 1px solid rgba(147, 213, 248, 0.8);
+  background: #ffffff;
+  border-radius: 99px;
+  padding: 3px 10px;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.06);
+}
+
+.adreno-header h2 {
+  margin: 2px 0 1px;
+  font-size: clamp(1.2rem, 1.5vw, 1.5rem);
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.adreno-header .sub {
+  margin: 0 0 5px;
+  color: var(--mute);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.adreno-desc {
+  border-left: 3.5px solid var(--acc);
+  padding: 5px 12px 5px 12px;
+  margin-bottom: 2px;
+  background: rgba(239, 246, 255, 0.55);
+  border-radius: 0 8px 8px 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.adreno-desc h3 {
+  margin: 0 0 2px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.adreno-desc p {
+  margin: 0;
+  color: var(--mute);
+  font-size: 0.80rem;
+  line-height: 1.4;
+  min-height: 2.7em;
+}
+
+/* Tabs: 4 tabs in one row on desktop, 2x2 on medium, 1 col on small */
+.adreno-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.adreno-tab {
+  position: relative;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 6px 8px 8px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.03);
+}
+
+.adreno-tab:hover {
+  border-color: #93c5fd;
+  transform: translateY(-1px);
+}
+
+.adreno-tab.on {
+  background: var(--sel);
+  border-color: var(--acc);
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.12);
+}
+
+.adreno-tab small {
+  display: block;
+  color: var(--mute);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 1px;
+}
+
+.adreno-tab b {
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adreno-tab i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2.5px;
+  width: 0;
+  background: linear-gradient(90deg, #0284c7, #38bdf8);
+  transition: width 0.1s linear;
+}
+
+/* Controls */
+.adreno-ctl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 3px 0;
+}
+
+.adreno-ctl button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 13px;
+  font-size: 0.78rem;
+  font-weight: 650;
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 95px;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.22);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.adreno-ctl button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.32);
+}
+
+.adreno-ctl input[type="range"] {
+  flex: 1;
+  accent-color: var(--acc);
+  cursor: pointer;
+  height: 5px;
+  border-radius: 99px;
+}
+
+/* Legend */
+.adreno-leg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--mute);
+  font-size: 0.72rem;
+  font-weight: 550;
+  padding-top: 5px;
+  border-top: 1px dashed rgba(203, 213, 225, 0.7);
+}
+
+.adreno-leg span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.adreno-leg span::before {
+  content: "";
+  display: inline-block;
+  width: 7.5px;
+  height: 7.5px;
+  border-radius: 50%;
+  background: var(--c);
+  margin-right: 5px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+/* Right side SVG figure */
+.adreno-fig {
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background: #ffffff;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 18px -3px rgba(15, 23, 42, 0.06), 0 1px 4px -1px rgba(0, 0, 0, 0.03);
+  width: 100%;
+  padding: 6px 4px 8px;
+  box-sizing: border-box;
+}
+
+.adreno-fig svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 330px;
+}
+
+.adreno-fig svg text {
+  font-family: "Montserrat", system-ui, sans-serif;
+  fill: var(--txt);
+}
+
+.adreno-fig svg .b {
+  font-weight: 700;
+  font-size: 11.5px;
+}
+
+.adreno-fig svg .l {
+  stroke: #64748b;
+  stroke-width: 1.2;
+  fill: none;
+}
+
+.adreno-fig .g {
+  transition: opacity 0.5s ease;
+}
+
+@media (max-width: 1200px) {
+  .adreno-tabs {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .adreno-tabs {
+    grid-template-columns: 1fr;
+  }
+}
+

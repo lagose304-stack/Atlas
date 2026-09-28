@@ -636,15 +636,15 @@ const WeeklyTopicCard: React.FC<{
         display: 'grid',
         gridTemplateColumns: adaptiveTopicCols,
         alignItems: 'center',
-        gap: topicCount === 1 ? '16px' : '12px',
+        gap: topicCount === 1 ? '16px' : topicCount === 2 ? '12px' : '12px',
         padding: adaptiveTopicPadding,
         overflow: 'hidden',
-        borderRadius: topicCount === 1 ? '16px' : '11px',
+        borderRadius: topicCount === 1 ? '16px' : topicCount === 2 ? '14px' : '11px',
         background: 'linear-gradient(115deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 250, 255, 0.9) 100%)',
         border: '1.3px solid rgba(147, 213, 248, 0.7)',
         boxShadow: '0 2px 10px rgba(12, 69, 104, 0.04), inset 0 1px 0 #ffffff',
         color: weeklyTopicColor || '#071b31',
-        fontSize: weeklyTopicSize || (topicCount === 1 ? '1.38rem' : '0.98rem'),
+        fontSize: weeklyTopicSize || (topicCount === 1 ? '1.38rem' : topicCount === 2 ? '1.15rem' : '0.98rem'),
         textDecoration: 'none',
         transition: 'transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease',
       }}
@@ -658,25 +658,25 @@ const WeeklyTopicCard: React.FC<{
             width: adaptiveTopicLogoSize,
             height: adaptiveTopicLogoSize,
             objectFit: 'cover',
-            borderRadius: '12px',
+            borderRadius: topicCount === 1 ? '12px' : '11px',
             border: '1.2px solid #ffffff',
             boxShadow: `0 2px 6px ${accent}25`,
           }}
         />
       ) : (
-        <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: adaptiveTopicLogoSize, height: adaptiveTopicLogoSize, borderRadius: '12px', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: '1.45em' }}>
+        <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: adaptiveTopicLogoSize, height: adaptiveTopicLogoSize, borderRadius: topicCount === 1 ? '12px' : '11px', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: topicCount === 1 ? '1.45em' : '1.25em' }}>
           🔬
         </span>
       )}
-      <span style={{ display: 'grid', gap: '4px', minWidth: 0 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', width: 'fit-content', padding: topicCount === 1 ? '4px 10px' : '1px 5px', borderRadius: '4px', background: `${accent}14`, color: accent, fontSize: topicCount === 1 ? '0.92rem' : '.72em', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+      <span style={{ display: 'grid', gap: topicCount === 2 ? '2px' : '4px', minWidth: 0 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', width: 'fit-content', padding: topicCount === 1 ? '4px 10px' : topicCount === 2 ? '2px 7px' : '1px 5px', borderRadius: '4px', background: `${accent}14`, color: accent, fontSize: topicCount === 1 ? '0.92rem' : topicCount === 2 ? '0.78rem' : '.72em', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>
           Tema {displayNumber}
         </span>
-        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontSize: topicCount === 1 ? 'clamp(1.38rem, 1.8vw, 1.68rem)' : undefined, fontWeight: Number(weeklyTopicWeight || 800), lineHeight: 1.2 }}>
+        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontSize: topicCount === 1 ? 'clamp(1.38rem, 1.8vw, 1.68rem)' : topicCount === 2 ? 'clamp(1.1rem, 1.4vw, 1.3rem)' : undefined, fontWeight: Number(weeklyTopicWeight || 800), lineHeight: 1.2 }}>
           {topic.name}
         </strong>
       </span>
-      <span className="cb-weekly-topic-arrow" aria-hidden style={{ display: 'grid', placeItems: 'center', width: topicCount === 1 ? '42px' : '28px', height: topicCount === 1 ? '42px' : '28px', borderRadius: '50%', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: topicCount === 1 ? '1.6em' : '1.15em', fontWeight: 700 }}>
+      <span className="cb-weekly-topic-arrow" aria-hidden style={{ display: 'grid', placeItems: 'center', width: topicCount === 1 ? '42px' : topicCount === 2 ? '34px' : '28px', height: topicCount === 1 ? '42px' : topicCount === 2 ? '34px' : '28px', borderRadius: '50%', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: topicCount === 1 ? '1.6em' : topicCount === 2 ? '1.35em' : '1.15em', fontWeight: 700 }}>
         ›
       </span>
     </a>
@@ -1179,32 +1179,30 @@ const BlockItem: React.FC<{
         { id: c.topic_3_id, name: c.topic_3, logo: c.topic_3_logo },
       ].filter(topic => Boolean(topic.name));
       const topicCount = Math.max(1, Math.min(3, topics.length));
-      const adaptiveGridMinHeight = topicCount === 1
+      const adaptiveGridMinHeight = topicCount <= 2
         ? 'clamp(370px, 24vw, 415px)'
-        : topicCount === 2
-          ? 'clamp(170px, 15vw, 185px)'
-          : 'clamp(230px, 19.5vw, 248px)';
+        : 'clamp(230px, 19.5vw, 248px)';
 
       const adaptiveContentPadding = topicCount === 1
         ? '24px clamp(24px, 3vw, 44px)'
         : topicCount === 2
-          ? 'clamp(8px, 1vw, 12px) clamp(16px, 2vw, 24px)'
+          ? '16px clamp(20px, 2.5vw, 36px)'
           : 'clamp(8px, 1vw, 12px) clamp(16px, 1.8vw, 24px)';
 
-      const adaptiveTitleMarginBottom = topicCount === 1 ? '8px' : '0px';
-      const adaptiveDividerMarginBottom = topicCount === 1 ? '14px' : topicCount === 2 ? '6px' : '6px';
-      const adaptiveTopicGap = topicCount === 1 ? '0px' : topicCount === 2 ? '5px' : '5px';
-      const adaptiveDateMarginTop = topicCount === 1 ? '16px' : topicCount === 2 ? '6px' : '6px';
+      const adaptiveTitleMarginBottom = topicCount === 1 ? '8px' : topicCount === 2 ? '4px' : '0px';
+      const adaptiveDividerMarginBottom = topicCount === 1 ? '14px' : topicCount === 2 ? '8px' : '6px';
+      const adaptiveTopicGap = topicCount === 1 ? '0px' : topicCount === 2 ? '8px' : '5px';
+      const adaptiveDateMarginTop = topicCount === 1 ? '16px' : topicCount === 2 ? '8px' : '6px';
       const adaptiveTopicPadding = topicCount === 1
         ? '16px 26px'
         : topicCount === 2
-          ? '5px 11px'
+          ? '10px 18px'
           : '4px 10px';
-      const adaptiveTopicLogoSize = topicCount === 1 ? '66px' : topicCount === 2 ? '34px' : '32px';
+      const adaptiveTopicLogoSize = topicCount === 1 ? '66px' : topicCount === 2 ? '54px' : '32px';
       const adaptiveTopicCols = topicCount === 1
         ? '66px minmax(0, 1fr) 42px'
         : topicCount === 2
-          ? '40px minmax(0, 1fr) 26px'
+          ? '54px minmax(0, 1fr) 34px'
           : '36px minmax(0, 1fr) 26px';
 
       const adaptiveGridCols = imageRight
@@ -1317,11 +1315,11 @@ const BlockItem: React.FC<{
                         width: '100%',
                         margin: '0',
                         color: c.weekly_title_color || c.style_text || '#071b31',
-                        fontSize: c.weekly_title_size || (topicCount === 1 ? 'clamp(1.85rem, 2.7vw, 2.45rem)' : 'clamp(1.05rem, 1.45vw, 1.32rem)'),
+                        fontSize: c.weekly_title_size || (topicCount === 1 ? 'clamp(1.85rem, 2.7vw, 2.45rem)' : topicCount === 2 ? 'clamp(1.4rem, 1.9vw, 1.75rem)' : 'clamp(1.05rem, 1.45vw, 1.32rem)'),
                         fontWeight: Number(c.weekly_title_weight || 900),
                         fontFamily: 'inherit',
                         lineHeight: '1.15',
-                        letterSpacing: topicCount === 1 ? '0.05em' : '-.02em',
+                        letterSpacing: topicCount === 1 ? '0.05em' : topicCount === 2 ? '0.04em' : '-.02em',
                         textTransform: 'inherit',
                         fontStyle: 'inherit',
                         textDecoration: 'inherit',
@@ -1332,7 +1330,7 @@ const BlockItem: React.FC<{
               })()}
 
               {/* Línea decorativa centrada con separación vertical adaptativa */}
-              <div style={{ alignSelf: c.weekly_text_align === 'left' ? 'flex-start' : c.weekly_text_align === 'right' ? 'flex-end' : 'center', width: topicCount === 1 ? '60px' : '30px', height: topicCount === 1 ? '4px' : '2px', borderRadius: '999px', background: `linear-gradient(90deg, ${accent}, #7dd3fc)`, marginBottom: adaptiveDividerMarginBottom }} />
+              <div style={{ alignSelf: c.weekly_text_align === 'left' ? 'flex-start' : c.weekly_text_align === 'right' ? 'flex-end' : 'center', width: topicCount === 1 ? '60px' : topicCount === 2 ? '45px' : '30px', height: topicCount === 1 ? '4px' : topicCount === 2 ? '3px' : '2px', borderRadius: '999px', background: `linear-gradient(90deg, ${accent}, #7dd3fc)`, marginBottom: adaptiveDividerMarginBottom }} />
 
               {/* Lista de temas adaptativa */}
               <div style={{ display: 'grid', gap: adaptiveTopicGap }}>
@@ -1358,7 +1356,7 @@ const BlockItem: React.FC<{
                 const cleanDates = normalizeWeeklyDates(c.eyebrow);
                 if (!cleanDates) return null;
                 return (
-                  <div className={topicCount === 1 ? 'cb-weekly-date-badge cb-weekly-date-badge-large' : 'cb-weekly-date-badge'} style={{ marginTop: adaptiveDateMarginTop }}>
+                  <div className={topicCount <= 2 ? 'cb-weekly-date-badge cb-weekly-date-badge-large' : 'cb-weekly-date-badge'} style={{ marginTop: adaptiveDateMarginTop }}>
                     <span className="cb-weekly-date-icon" aria-hidden="true">📅</span>
                     <span className="cb-weekly-date-label">Semana:</span>
                     <span className="cb-weekly-date-value">
