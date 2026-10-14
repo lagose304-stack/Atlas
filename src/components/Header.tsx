@@ -15,6 +15,7 @@ import logoFacultad from '../assets/logos/facultad.png';
 import microscopioHeader from '../assets/logos/laboratorio.png';
 import fondoHeader from '../assets/imagenes/fondo.webp';
 import HalloweenPumpkin from './HalloweenPumpkin';
+import HalloweenBats from './HalloweenBats';
 
 const MENU_ITEMS = [
   { key: 'inicio', label: 'Inicio', icon: House, path: '/' },
@@ -492,6 +493,8 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
             <div className="atlas-header-center-area" style={styles.centerArea}>
               <h1 className="atlas-header-title" style={styles.title}>
                 <span className="atlas-header-title-text">
+                  {/* Murciélagos animados de Halloween del lado izquierdo */}
+                  <HalloweenBats />
                   Atlas de Histología
                   <span
                     className="atlas-header-flag-stamp atlas-header-autumn-stamp"
