@@ -466,7 +466,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
           className="atlas-header-hero"
           style={{
             ...styles.hero,
-            backgroundImage: `linear-gradient(105deg, rgba(6,33,86,.88), rgba(31,91,151,.48) 25%, rgba(224,242,254,.68) 50%, rgba(125,190,232,.48) 72%, rgba(10,52,112,.7)), url(${fondoHeader})`,
+            backgroundImage: `linear-gradient(108deg, rgba(14, 7, 34, 0.94) 0%, rgba(26, 12, 56, 0.88) 22%, rgba(53, 20, 96, 0.72) 50%, rgba(26, 12, 56, 0.88) 78%, rgba(14, 7, 34, 0.94) 100%), url(${fondoHeader})`,
           }}
         >
           <div className="atlas-header-glass" style={styles.heroGlass} />
@@ -491,11 +491,58 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
             </div>
 
             <div className="atlas-header-center-area" style={styles.centerArea}>
+              {/* Marco interno con borde discontinuo estilo Halloween de la referencia */}
+              <div className="atlas-halloween-inner-frame" aria-hidden="true" />
+
+              {/* Telarañas en las esquinas superiores */}
+              <svg className="atlas-halloween-web atlas-halloween-web-left" viewBox="0 0 100 100" aria-hidden="true" fill="none">
+                <path d="M 0 0 L 100 0 M 0 0 L 92 38 M 0 0 L 71 71 M 0 0 L 38 92 M 0 0 L 0 100" stroke="rgba(245, 235, 255, 0.38)" strokeWidth="1.2" />
+                <path d="M 28 0 Q 24 10 20 20 Q 10 24 0 28" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
+                <path d="M 52 0 Q 45 19 37 37 Q 19 45 0 52" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
+                <path d="M 76 0 Q 66 28 54 54 Q 28 66 0 76" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
+                <path d="M 98 0 Q 86 36 70 70 Q 36 86 0 98" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
+              </svg>
+              <svg className="atlas-halloween-web atlas-halloween-web-right" viewBox="0 0 100 100" aria-hidden="true" fill="none">
+                <path d="M 0 0 L 100 0 M 0 0 L 92 38 M 0 0 L 71 71 M 0 0 L 38 92 M 0 0 L 0 100" stroke="rgba(245, 235, 255, 0.38)" strokeWidth="1.2" />
+                <path d="M 28 0 Q 24 10 20 20 Q 10 24 0 28" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
+                <path d="M 52 0 Q 45 19 37 37 Q 19 45 0 52" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
+                <path d="M 76 0 Q 66 28 54 54 Q 28 66 0 76" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
+                <path d="M 98 0 Q 86 36 70 70 Q 36 86 0 98" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
+              </svg>
+
+              {/* Goteo anaranjado de calabaza/cera a lo largo del borde superior */}
+              <div className="atlas-halloween-drips" aria-hidden="true">
+                <svg viewBox="0 0 800 24" preserveAspectRatio="none" fill="none">
+                  <defs>
+                    <linearGradient id="halloDripGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#ff9a3c" />
+                      <stop offset="60%" stopColor="#ea580c" />
+                      <stop offset="100%" stopColor="#c2410c" />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    d="M0,0 L800,0 L800,3 C785,3 783,16 776,16 C769,16 767,3 755,3 C745,3 743,10 738,10 C733,10 731,3 720,3 C710,3 708,20 700,20 C692,20 690,3 675,3 C662,3 660,12 654,12 C648,12 646,3 630,3 C618,3 616,18 608,18 C600,18 598,3 585,3 C572,3 570,9 564,9 C558,9 556,3 540,3 C528,3 526,22 518,22 C510,22 508,3 490,3 C478,3 476,14 470,14 C464,14 462,3 450,3 C438,3 436,19 428,19 C420,19 418,3 400,3 C382,3 380,19 372,19 C364,19 362,3 350,3 C338,3 336,14 330,14 C324,14 322,3 310,3 C292,3 290,22 282,22 C274,22 272,3 260,3 C244,3 242,9 236,9 C230,9 228,3 215,3 C202,3 200,18 192,18 C184,18 182,3 170,3 C154,3 152,12 146,12 C140,12 138,3 125,3 C110,3 108,20 100,20 C92,20 90,3 80,3 C69,3 67,10 62,10 C57,10 55,3 45,3 C33,3 31,16 24,16 C17,16 15,3 0,3 Z"
+                    fill="url(#halloDripGrad)"
+                    filter="drop-shadow(0 2px 4px rgba(0,0,0,0.4))"
+                  />
+                </svg>
+              </div>
+
+              {/* Chispas y partículas sutiles de Halloween */}
+              <div className="atlas-halloween-embers" aria-hidden="true">
+                <span className="atlas-ember e1" />
+                <span className="atlas-ember e2" />
+                <span className="atlas-ember e3" />
+                <span className="atlas-ember e4" />
+                <span className="atlas-ember e5" />
+                <span className="atlas-ember e6" />
+              </div>
+
               <h1 className="atlas-header-title" style={styles.title}>
                 <span className="atlas-header-title-text">
                   {/* Murciélagos animados de Halloween del lado izquierdo */}
                   <HalloweenBats />
-                  Atlas de Histología
+                  <span className="atlas-halloween-title-gradient">Atlas de Histología</span>
                   <span
                     className="atlas-header-flag-stamp atlas-header-autumn-stamp"
                     title="¡Bienvenido Octubre! 🍂🎃 Otoño y Halloween"
@@ -518,9 +565,18 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
                   </span>
                 </span>
               </h1>
-              <p className="atlas-header-subtitle" style={styles.subtitle}>Laboratorio de Histología - Dr. Rafael Perdomo Vaquero</p>
-              <div className="atlas-header-separator" style={styles.separator} />
-              <p className="atlas-header-subtitle2" style={styles.subtitle2}>Facultad de Ciencias Médicas - UNAH</p>
+
+              <p className="atlas-header-subtitle" style={styles.subtitle}>
+                Laboratorio de Histología – <span className="atlas-halloween-doctor-name">Dr. Rafael Perdomo Vaquero</span>
+              </p>
+
+              <div className="atlas-header-separator atlas-halloween-separator" style={styles.separator}>
+                <span className="atlas-halloween-sep-line" />
+                <span className="atlas-halloween-sep-pumpkin" aria-hidden="true">🎃</span>
+                <span className="atlas-halloween-sep-line" />
+              </div>
+
+              <p className="atlas-header-subtitle2" style={styles.subtitle2}>Facultad de Ciencias Médicas – UNAH</p>
             </div>
 
             <div className="atlas-header-right-area" style={styles.rightArea}>
@@ -621,7 +677,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
           className="atlas-header-bottom-nav"
           style={{
             ...styles.bottomNav,
-            '--atlas-header-nav-background': `linear-gradient(180deg, rgba(4,29,54,.42), rgba(4,29,54,.62)), linear-gradient(105deg, rgba(6,33,86,.62), rgba(31,91,151,.28) 25%, rgba(224,242,254,.34) 50%, rgba(125,190,232,.28) 72%, rgba(10,52,112,.56)), url(${fondoHeader})`,
+            '--atlas-header-nav-background': `linear-gradient(180deg, rgba(14, 7, 34, 0.45), rgba(14, 7, 34, 0.7)), linear-gradient(105deg, rgba(26, 12, 56, 0.8), rgba(53, 20, 96, 0.45) 50%, rgba(26, 12, 56, 0.8)), url(${fondoHeader})`,
           } as React.CSSProperties}
           aria-label="Menú principal"
         >
@@ -761,11 +817,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '100%',
     maxWidth: '1600px',
     margin: '0 auto',
-    boxShadow: '0 16px 42px rgba(8, 33, 75, 0.22)',
+    boxShadow: '0 18px 48px rgba(6, 2, 18, 0.45)',
     borderRadius: '22px 22px 0 0',
     overflow: 'hidden',
-    border: '1px solid rgba(186, 225, 249, 0.92)',
-    backgroundColor: '#f4f7fb',
+    border: '1px solid rgba(251, 146, 60, 0.38)',
+    backgroundColor: '#0d051c',
   },
   hero: {
     position: 'relative',
@@ -775,22 +831,22 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     width: '100%',
-    borderBottom: '1px solid rgba(174, 216, 255, 0.82)',
+    borderBottom: '1px solid rgba(251, 146, 60, 0.35)',
   },
   heroGlass: {
     position: 'absolute',
     inset: '11px',
     borderRadius: '17px',
-    border: '1px solid rgba(210, 239, 255, 0.85)',
-    boxShadow: 'inset 0 0 55px rgba(255,255,255,.25), 0 0 0 1px rgba(13,73,126,.08)',
+    border: '1px solid rgba(251, 146, 60, 0.3)',
+    boxShadow: 'inset 0 0 55px rgba(168, 85, 247, 0.18), 0 0 0 1px rgba(249, 115, 22, 0.15)',
     pointerEvents: 'none',
   },
   heroReadableOverlay: {
     position: 'absolute',
     inset: 0,
     background:
-      'radial-gradient(circle at 50% 48%, rgba(241, 250, 255, 0.52) 0%, rgba(219, 237, 252, 0.16) 36%, rgba(11, 36, 86, 0.01) 64%), linear-gradient(90deg, rgba(7, 28, 78, 0.2) 0%, rgba(7, 28, 78, 0) 18%, rgba(7, 28, 78, 0) 82%, rgba(7, 28, 78, 0.2) 100%)',
-    backdropFilter: 'blur(0.9px)',
+      'radial-gradient(circle at 50% 50%, rgba(147, 51, 234, 0.16) 0%, rgba(67, 18, 110, 0.22) 48%, rgba(12, 5, 28, 0.48) 100%)',
+    backdropFilter: 'blur(0.8px)',
     pointerEvents: 'none',
   },
   heroMainRow: {
@@ -827,71 +883,72 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     background:
-      'radial-gradient(circle at 32% 30%, rgba(233, 246, 255, 0.72) 0%, rgba(131, 183, 233, 0.48) 48%, rgba(31, 83, 151, 0.4) 100%)',
-    boxShadow: '0 10px 24px rgba(5, 30, 80, 0.34), inset 0 0 18px rgba(226, 243, 255, 0.4)',
-    border: '1px solid rgba(201, 228, 252, 0.78)',
-    transition: 'transform 180ms ease, box-shadow 220ms ease, filter 220ms ease',
+      'radial-gradient(circle at 35% 32%, rgba(254, 243, 199, 0.38) 0%, rgba(147, 51, 234, 0.26) 48%, rgba(26, 10, 56, 0.85) 100%)',
+    boxShadow: '0 12px 28px rgba(5, 2, 18, 0.65), 0 0 20px rgba(245, 158, 11, 0.2), inset 0 0 18px rgba(254, 215, 170, 0.25)',
+    border: '1.5px solid rgba(251, 191, 36, 0.55)',
+    transition: 'transform 180ms ease, box-shadow 220ms ease, filter 220ms ease, border-color 220ms ease',
   },
   leftLogoAuraHover: {
     transform: 'scale(1.035)',
-    filter: 'brightness(1.045)',
-    boxShadow: '0 14px 28px rgba(5, 30, 80, 0.4), inset 0 0 20px rgba(236, 247, 255, 0.52)',
+    filter: 'brightness(1.06)',
+    boxShadow: '0 16px 32px rgba(5, 2, 18, 0.75), 0 0 28px rgba(249, 115, 22, 0.45), inset 0 0 24px rgba(254, 215, 170, 0.45)',
+    border: '1.5px solid rgba(251, 146, 60, 0.85)',
   },
   microscopeImage: {
     width: '166px',
     height: '166px',
     objectFit: 'contain',
     objectPosition: 'center center',
-    filter: 'drop-shadow(0 12px 20px rgba(7, 38, 83, 0.42))',
+    filter: 'drop-shadow(0 12px 20px rgba(5, 2, 18, 0.65)) drop-shadow(0 0 10px rgba(251, 191, 36, 0.3))',
   },
   centerArea: {
     width: '100%',
     maxWidth: 'none',
     margin: '0 auto',
-    padding: '4px 10px 5px 10px',
+    padding: '20px clamp(18px, 3.2vw, 44px) 16px',
     textAlign: 'center',
-    color: '#081a42',
+    position: 'relative',
   },
   title: {
     margin: 0,
-    fontSize: 'clamp(48px, 4.8vw, 72px)',
-    lineHeight: 1,
+    fontSize: 'clamp(46px, 4.6vw, 70px)',
+    lineHeight: 1.2,
     letterSpacing: '0.5px',
     fontWeight: 700,
-    color: '#081d4a',
     fontFamily: '"Playfair Display", "Times New Roman", serif',
-    textShadow:
-      '0 0 1px rgba(245, 247, 250, 0.95), 0 0 4px rgba(232, 236, 243, 0.9), 0 0 10px rgba(216, 223, 234, 0.68), 0 0 18px rgba(196, 205, 220, 0.44), 0 0 30px rgba(184, 194, 211, 0.28), 0 0 44px rgba(176, 187, 205, 0.16)',
     whiteSpace: 'nowrap',
+    position: 'relative',
+    zIndex: 3,
+    overflow: 'visible',
   },
   subtitle: {
-    margin: '8px 0 0 0',
-    fontSize: 'clamp(20px, 1.55vw, 28px)',
-    lineHeight: 1.15,
-    fontWeight: 500,
-    color: '#0b214c',
+    margin: '9px 0 0 0',
+    fontSize: 'clamp(18px, 1.45vw, 25px)',
+    lineHeight: 1.2,
+    fontWeight: 600,
+    color: '#f8fafc',
     fontFamily: '"Montserrat", "Segoe UI", sans-serif',
-    textShadow:
-      '0 0 1px rgba(242, 246, 252, 0.9), 0 0 4px rgba(228, 234, 244, 0.78), 0 0 10px rgba(210, 219, 232, 0.52), 0 0 18px rgba(194, 205, 222, 0.3), 0 0 30px rgba(184, 196, 214, 0.18)',
     whiteSpace: 'nowrap',
+    position: 'relative',
+    zIndex: 3,
   },
   separator: {
     width: '100%',
-    maxWidth: '760px',
-    height: '1px',
-    margin: '8px auto 7px auto',
-    background: 'linear-gradient(90deg, transparent, rgba(31, 72, 134, 0.45), transparent)',
+    maxWidth: '640px',
+    margin: '7px auto 6px auto',
+    position: 'relative',
+    zIndex: 3,
   },
   subtitle2: {
     margin: 0,
-    fontSize: 'clamp(18px, 1.35vw, 24px)',
+    fontSize: 'clamp(16px, 1.25vw, 22px)',
     lineHeight: 1.25,
-    fontWeight: 500,
-    color: '#0e2a57',
+    fontWeight: 550,
+    color: '#e9d5ff',
     fontFamily: '"Montserrat", "Segoe UI", sans-serif',
-    textShadow:
-      '0 0 1px rgba(242, 246, 252, 0.88), 0 0 4px rgba(227, 233, 243, 0.74), 0 0 9px rgba(209, 218, 231, 0.48), 0 0 16px rgba(193, 204, 221, 0.28), 0 0 26px rgba(183, 195, 213, 0.16)',
     whiteSpace: 'nowrap',
+    position: 'relative',
+    zIndex: 3,
   },
   rightArea: {
     display: 'flex',
@@ -904,8 +961,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     objectFit: 'contain',
     objectPosition: 'center center',
     borderRadius: '50%',
-    boxShadow: '0 10px 22px rgba(8, 24, 58, 0.38)',
-    filter: 'drop-shadow(0 12px 20px rgba(7, 38, 83, 0.42))',
+    boxShadow: '0 10px 22px rgba(5, 2, 18, 0.65)',
+    filter: 'drop-shadow(0 12px 20px rgba(5, 2, 18, 0.65)) drop-shadow(0 0 10px rgba(251, 191, 36, 0.3))',
   },
   rightLogoAura: {
     width: '180px',
@@ -915,15 +972,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     background:
-      'radial-gradient(circle at 32% 30%, rgba(233, 246, 255, 0.72) 0%, rgba(131, 183, 233, 0.48) 48%, rgba(31, 83, 151, 0.4) 100%)',
-    boxShadow: '0 10px 24px rgba(5, 30, 80, 0.34), inset 0 0 18px rgba(226, 243, 255, 0.4)',
-    border: '1px solid rgba(201, 228, 252, 0.78)',
-    transition: 'transform 180ms ease, box-shadow 220ms ease, filter 220ms ease',
+      'radial-gradient(circle at 35% 32%, rgba(254, 243, 199, 0.38) 0%, rgba(147, 51, 234, 0.26) 48%, rgba(26, 10, 56, 0.85) 100%)',
+    boxShadow: '0 12px 28px rgba(5, 2, 18, 0.65), 0 0 20px rgba(245, 158, 11, 0.2), inset 0 0 18px rgba(254, 215, 170, 0.25)',
+    border: '1.5px solid rgba(251, 191, 36, 0.55)',
+    transition: 'transform 180ms ease, box-shadow 220ms ease, filter 220ms ease, border-color 220ms ease',
   },
   rightLogoAuraHover: {
     transform: 'scale(1.035)',
-    filter: 'brightness(1.045)',
-    boxShadow: '0 14px 28px rgba(5, 30, 80, 0.4), inset 0 0 20px rgba(236, 247, 255, 0.52)',
+    filter: 'brightness(1.06)',
+    boxShadow: '0 16px 32px rgba(5, 2, 18, 0.75), 0 0 28px rgba(249, 115, 22, 0.45), inset 0 0 24px rgba(254, 215, 170, 0.45)',
+    border: '1.5px solid rgba(251, 146, 60, 0.85)',
   },
   lockedActionButton: {
     opacity: 0.55,
@@ -933,10 +991,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   searchPanel: {
     width: '100%',
     padding: '12px 20px',
-    background: 'linear-gradient(180deg, rgba(243, 249, 255, 0.98) 0%, rgba(232, 243, 253, 0.98) 100%)',
-    borderTop: '1px solid rgba(211, 232, 250, 0.9)',
-    borderBottom: '1px solid rgba(211, 232, 250, 0.9)',
-    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.75)',
+    background: 'linear-gradient(180deg, rgba(26, 12, 54, 0.98) 0%, rgba(18, 8, 38, 0.98) 100%)',
+    borderTop: '1px solid rgba(251, 146, 60, 0.35)',
+    borderBottom: '1px solid rgba(251, 146, 60, 0.35)',
+    boxShadow: 'inset 0 1px 0 rgba(251, 191, 36, 0.2)',
   },
   searchPanelInner: {
     width: '100%',
@@ -962,9 +1020,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     minWidth: 0,
     height: '40px',
     borderRadius: '999px',
-    border: '1px solid rgba(155, 194, 227, 0.9)',
-    background: 'rgba(255,255,255,0.98)',
-    color: '#0b214c',
+    border: '1.5px solid rgba(251, 146, 60, 0.55)',
+    background: 'rgba(38, 16, 75, 0.88)',
+    color: '#f8fafc',
     fontSize: '15px',
     fontFamily: '"Montserrat", "Segoe UI", sans-serif',
     padding: '0 14px',
@@ -1040,9 +1098,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     lineHeight: 1.35,
   },
   bottomNav: {
-    background: 'linear-gradient(180deg, rgba(252,254,255,.98), rgba(235,246,253,.98))',
-    borderTop: '1px solid rgba(211, 232, 250, 0.85)',
-    borderBottom: '3px solid #7dd3fc',
+    background: 'linear-gradient(180deg, rgba(252,254,255,.98), rgba(248,245,255,.98))',
+    borderTop: '1px solid rgba(251, 146, 60, 0.35)',
+    borderBottom: '3px solid #ea580c',
     padding: '6px 12px 7px',
     width: '100%',
     boxSizing: 'border-box',
