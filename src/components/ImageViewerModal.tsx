@@ -1,6 +1,6 @@
 import React, { useId, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Pencil, X, Hand, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Shield } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Pencil, X, Hand, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Shield, Eye, EyeOff } from 'lucide-react';
 import { renderBoldText } from './BoldField';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
@@ -917,6 +917,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [mapFocusRequest, setMapFocusRequest] = useState(0);
   const [interactiveMapError, setInteractiveMapError] = useState<string | null>(null);
   const [interactiveMapReloadTick, setInteractiveMapReloadTick] = useState(0);
+  const [hoveredMapVisibilityAction, setHoveredMapVisibilityAction] = useState<'hide' | 'show' | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -4647,6 +4648,104 @@ const panBy = (dx: number, dy: number) => {
                     <button type="button" onClick={() => setInteractiveMapReloadTick(value => value + 1)} style={{ marginLeft: '8px', border: '1px solid #fca5a5', borderRadius: '7px', background: '#fff', color: '#991b1b', padding: '4px 7px', fontWeight: 750, cursor: 'pointer' }}>Reintentar</button>
                   </div>
                 )}
+                {interactiveMapData && viewerMode === 'map' && (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                      gap: '8px',
+                      marginBottom: '12px',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsInteractiveMapVisible(false);
+                        setActiveMapSectionIndex(null);
+                      }}
+                      onMouseEnter={() => setHoveredMapVisibilityAction('hide')}
+                      onMouseLeave={() => setHoveredMapVisibilityAction(null)}
+                      aria-pressed={!isInteractiveMapVisible}
+                      title="Ocultar zonas del mapa interactivo"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        padding: '8px 10px',
+                        borderRadius: '11px',
+                        border: !isInteractiveMapVisible
+                          ? '1px solid #94a3b8'
+                          : hoveredMapVisibilityAction === 'hide'
+                            ? '1px solid #cbd5e1'
+                            : '1px solid #e2e8f0',
+                        background: !isInteractiveMapVisible
+                          ? 'linear-gradient(135deg, #f1f5f9, #e2e8f0)'
+                          : hoveredMapVisibilityAction === 'hide'
+                            ? '#f8fafc'
+                            : '#ffffff',
+                        color: !isInteractiveMapVisible ? '#1e293b' : '#64748b',
+                        fontWeight: !isInteractiveMapVisible ? 750 : 600,
+                        fontSize: '0.72em',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        boxShadow: !isInteractiveMapVisible
+                          ? 'inset 0 1px 2px rgba(0,0,0,0.06)'
+                          : hoveredMapVisibilityAction === 'hide'
+                            ? '0 2px 6px rgba(0,0,0,0.05)'
+                            : 'none',
+                        transition: 'all 0.18s ease',
+                        touchAction: 'manipulation',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      <EyeOff size={14} style={{ flexShrink: 0 }} />
+                      <span>Ocultar mapa</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsInteractiveMapVisible(true)}
+                      onMouseEnter={() => setHoveredMapVisibilityAction('show')}
+                      onMouseLeave={() => setHoveredMapVisibilityAction(null)}
+                      aria-pressed={isInteractiveMapVisible}
+                      title="Mostrar zonas del mapa interactivo"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        padding: '8px 10px',
+                        borderRadius: '11px',
+                        border: isInteractiveMapVisible
+                          ? '1px solid #86efac'
+                          : hoveredMapVisibilityAction === 'show'
+                            ? '1px solid #bbf7d0'
+                            : '1px solid #e2e8f0',
+                        background: isInteractiveMapVisible
+                          ? 'linear-gradient(135deg, #ecfdf5, #dcfce7)'
+                          : hoveredMapVisibilityAction === 'show'
+                            ? '#f0fdf4'
+                            : '#ffffff',
+                        color: isInteractiveMapVisible ? '#15803d' : '#64748b',
+                        fontWeight: isInteractiveMapVisible ? 750 : 600,
+                        fontSize: '0.72em',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        boxShadow: isInteractiveMapVisible
+                          ? '0 3px 10px rgba(34,197,94,0.18)'
+                          : hoveredMapVisibilityAction === 'show'
+                            ? '0 2px 6px rgba(34,197,94,0.1)'
+                            : 'none',
+                        transition: 'all 0.18s ease',
+                        touchAction: 'manipulation',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      <Eye size={14} style={{ flexShrink: 0 }} />
+                      <span>Mostrar mapa</span>
+                    </button>
+                  </div>
+                )}
                 {activeNavigationCount > 1 && (
                   <div style={{ marginBottom: '12px', paddingBottom: '11px', borderBottom: '1px solid #cce7f0', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '8px' }}>
                     <button
@@ -4659,12 +4758,23 @@ const panBy = (dx: number, dy: number) => {
                       onFocus={() => setHoveredNavigationId('senalados-previous')}
                       onBlur={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
                       aria-label="Elemento anterior"
-                      style={{ ...compactNavigationButtonStyle, ...getNavigationButtonInteractionStyle('senalados-previous'), justifyContent: 'flex-start' }}
+                      disabled={viewerMode === 'map' && !isInteractiveMapVisible}
+                      style={{
+                        ...compactNavigationButtonStyle,
+                        ...getNavigationButtonInteractionStyle('senalados-previous'),
+                        justifyContent: 'flex-start',
+                        ...(viewerMode === 'map' && !isInteractiveMapVisible ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
+                      }}
                     >
                       <span style={compactNavigationIconStyle} aria-hidden="true">←</span>
                       <span>Anterior</span>
                     </button>
-                    <span style={compactNavigationCounterStyle}>{activeNavigationPosition || '—'} / {activeNavigationCount}</span>
+                    <span style={{
+                      ...compactNavigationCounterStyle,
+                      ...(viewerMode === 'map' && !isInteractiveMapVisible ? { opacity: 0.5 } : {}),
+                    }}>
+                      {activeNavigationPosition || '—'} / {activeNavigationCount}
+                    </span>
                     <button
                       type="button"
                       onClick={() => navigateActiveItem(1)}
@@ -4675,7 +4785,13 @@ const panBy = (dx: number, dy: number) => {
                       onFocus={() => setHoveredNavigationId('senalados-next')}
                       onBlur={() => { setHoveredNavigationId(null); setPressedNavigationId(null); }}
                       aria-label="Elemento siguiente"
-                      style={{ ...compactNavigationButtonStyle, ...getNavigationButtonInteractionStyle('senalados-next'), justifyContent: 'flex-end' }}
+                      disabled={viewerMode === 'map' && !isInteractiveMapVisible}
+                      style={{
+                        ...compactNavigationButtonStyle,
+                        ...getNavigationButtonInteractionStyle('senalados-next'),
+                        justifyContent: 'flex-end',
+                        ...(viewerMode === 'map' && !isInteractiveMapVisible ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
+                      }}
                     >
                       <span>Siguiente</span>
                       <span style={compactNavigationIconStyle} aria-hidden="true">→</span>
