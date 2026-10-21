@@ -1,18 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Microscope, Play, Pause } from 'lucide-react';
+import { Microscope, Play, Pause, Syringe } from 'lucide-react';
 import '../styles/homeHistologyFact.css';
 
 const NS = 'http://www.w3.org/2000/svg';
 
-function createSvgElement(tag: string, attrs: Record<string, string | number>, parent?: Element | null): SVGElement {
-  const elem = document.createElementNS(NS, tag);
+function createSvgElement<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  attrs: Record<string, string | number>,
+  parent?: Element | null
+): SVGElementTagNameMap[K] {
+  const el = document.createElementNS(NS, tag);
   for (const k in attrs) {
-    elem.setAttribute(k, String(attrs[k]));
+    el.setAttribute(k, String(attrs[k]));
   }
-  if (parent) {
-    parent.appendChild(elem);
-  }
-  return elem;
+  if (parent) parent.appendChild(el);
+  return el as SVGElementTagNameMap[K];
 }
 
 function clearNode(node: Element) {
@@ -25,41 +27,169 @@ function clamp(v: number, a: number, b: number): number {
   return Math.max(a, Math.min(b, v));
 }
 
-const STAGES = [
-  {
-    title: 'Estratos de la epidermis',
-    desc: 'Epitelio plano estratificado queratinizado. De profundo a superficial: basal, espinoso, granuloso, lúcido (solo en piel gruesa) y córneo.',
-  },
-  {
-    title: 'Queratinocitos',
-    desc: 'Son cerca del 90 % de la epidermis. Nacen por mitosis en el estrato basal, ascienden produciendo queratina, se aplanan y mueren como corneocitos sin núcleo que se descaman.',
-  },
-  {
-    title: 'Melanocitos y células de Merkel',
-    desc: 'En el estrato basal: los melanocitos transfieren melanosomas a los queratinocitos para protegerlos de la radiación UV. Las células de Merkel se asocian a terminaciones nerviosas y detectan el tacto.',
-  },
-  {
-    title: 'Células de Langerhans',
-    desc: 'Células dendríticas del estrato espinoso. Capturan antígenos que entran por la epidermis, migran a la dermis y al ganglio linfático para presentarlos a los linfocitos T.',
-  },
-];
-
-const T_TOTAL = 20000;
-const STEP = 5000;
-
-interface TracerItem {
-  g: SVGElement;
-  b: SVGElement;
-  n: SVGElement;
-  cx: number;
-  o: number;
+export interface AxisData {
+  lab: string;
+  h1: string;
+  h1n: string;
+  h2: string;
+  h2n: string;
+  h3: string;
+  gl: string;
+  gla: string;
+  org: string;
+  orgt: string;
+  eff: string;
+  a2: string;
+  a3: string;
 }
 
-interface MelanosomeItem {
-  e: SVGElement;
+export const AXES: Record<'tir' | 'adr' | 'gon', AxisData> = {
+  tir: {
+    lab: 'Eje tiroideo',
+    h1: 'TRH',
+    h1n: 'hormona liberadora de tirotropina',
+    h2: 'TSH',
+    h2n: 'tirotropina',
+    h3: 'T3 / T4',
+    gl: 'Tiroides',
+    gla: 'la tiroides',
+    org: 'Todos los tejidos',
+    orgt: 'todos los tejidos',
+    eff: 'mayor consumo de oxígeno y metabolismo basal',
+    a2: 'thy',
+    a3: 'body',
+  },
+  adr: {
+    lab: 'Eje suprarrenal',
+    h1: 'CRH',
+    h1n: 'hormona liberadora de corticotropina',
+    h2: 'ACTH',
+    h2n: 'corticotropina',
+    h3: 'Cortisol',
+    gl: 'Suprarrenal',
+    gla: 'la corteza suprarrenal',
+    org: 'Hígado y músculo',
+    orgt: 'el hígado y el músculo',
+    eff: 'se moviliza glucosa y se modula la inflamación',
+    a2: 'adr',
+    a3: 'liver',
+  },
+  gon: {
+    lab: 'Eje gonadal (masculino)',
+    h1: 'GnRH',
+    h1n: 'hormona liberadora de gonadotropinas',
+    h2: 'LH / FSH',
+    h2n: 'gonadotropinas',
+    h3: 'Testosterona',
+    gl: 'Testículo',
+    gla: 'el testículo',
+    org: 'Músculo y hueso',
+    orgt: 'el músculo y el hueso',
+    eff: 'se mantienen la masa muscular, el hueso y la función reproductora',
+    a2: 'test',
+    a3: 'bone',
+  },
+};
+
+export function getAxisTexts(a: AxisData): [string, string][] {
+  return [
+    [
+      'Hipotálamo',
+      `Neuronas neurosecretoras del hipotálamo liberan ${a.h1} (${a.h1n}) en la eminencia media. Los capilares del sistema porta hipofisario lo llevan directo a la adenohipófisis.`,
+    ],
+    [
+      'Adenohipófisis',
+      `Las células de la adenohipófisis detectan ${a.h1} y liberan ${a.h2} (${a.h2n}) a la circulación general. Es una señal trófica: su blanco es otra glándula.`,
+    ],
+    [
+      'Glándula y órgano diana',
+      `${a.h2} estimula a ${a.gla} para producir ${a.h3}. Esta señal llega por la sangre a ${a.orgt}: ${a.eff}.`,
+    ],
+    [
+      'Retroalimentación negativa',
+      `Cuando ${a.h3} aumenta en sangre, inhibe al hipotálamo y a la hipófisis y baja su propia producción; si disminuye, se libera la inhibición y el eje se reactiva. Es el asa larga que mantiene el nivel estable.`,
+    ],
+  ];
+}
+
+const DURATIONS = [5000, 5000, 5000, 9000];
+const CUM_TIMES = [0, 5000, 10000, 15000];
+const T_TOTAL = 24000;
+const TAB_NAMES = ['Hipotálamo', 'Hipófisis', 'Glándula y órgano', 'Retroalimentación'];
+
+const NODE_COLORS: [string, string][] = [
+  ['#e3dcf7', '#7a5cc7'],
+  ['#fde8c7', '#f2a13a'],
+  ['#d2f0ec', '#2fa39a'],
+  ['#f6dcd5', '#b8607e'],
+];
+
+const MUS =
+  '<ellipse rx="30" ry="9" fill="#e07a6a" stroke="#a84a40" stroke-width="1.4"/><path d="M-20-6V6M-10-8V8M0-9V9M10-8V8M20-6V6" stroke="#f2b0a6" stroke-width="1.6"/>';
+
+const ART: Record<string, string> = {
+  hyp:
+    '<path d="M-46 4C-48-22-26-36 0-34C26-36 48-22 46 2C45 18 30 26 14 24L10 30L-4 30L-8 24C-30 26-45 20-46 4Z" fill="#f1d6dc" stroke="#b8607e" stroke-width="1.6"/>' +
+    '<path d="M-34-12C-28-22-18-22-12-14M-4-24C4-16 12-16 18-24M26-12C32-4 28 4 20 4M-34 6C-26 0-20 4-14 0" fill="none" stroke="#d9a5b3" stroke-width="1.6" stroke-linecap="round"/>' +
+    '<ellipse cx="0" cy="10" rx="13" ry="8" fill="#7a5cc7"/><circle cx="-5" cy="8" r="2.2" fill="#e3dcf7"/><circle cx="4" cy="11" r="2.2" fill="#e3dcf7"/><circle cx="0" cy="6" r="1.8" fill="#e3dcf7"/>' +
+    '<path d="M0 17C0 24 2 28 2 36" stroke="#7a5cc7" stroke-width="4.5" stroke-linecap="round" fill="none"/>',
+  pit:
+    '<path d="M-40-4Q-36 36 0 36Q36 36 40-4" fill="none" stroke="#b9a58a" stroke-width="4.5" stroke-linecap="round"/>' +
+    '<path d="M0-38C0-28-2-22-4-12" stroke="#7a5cc7" stroke-width="4.5" stroke-linecap="round" fill="none"/>' +
+    '<ellipse cx="-9" cy="10" rx="23" ry="19" fill="#f2a13a" stroke="#c97a10" stroke-width="1.5"/>' +
+    '<circle cx="-16" cy="6" r="2.4" fill="#c97a10"/><circle cx="-6" cy="14" r="2.4" fill="#c97a10"/><circle cx="-18" cy="16" r="2" fill="#c97a10"/><circle cx="-4" cy="3" r="2" fill="#c97a10"/>' +
+    '<ellipse cx="17" cy="9" rx="10" ry="14" fill="#f7dcae" stroke="#c9a36a" stroke-width="1.5"/>',
+  thy:
+    '<rect x="-6" y="-36" width="12" height="72" rx="5" fill="#d5e8f0" stroke="#7aa7bd" stroke-width="1.4"/><path d="M-6-26H6M-6-16H6M-6-6H6M-6 4H6M-6 14H6M-6 24H6" stroke="#7aa7bd" stroke-width="1.2"/>' +
+    '<ellipse cx="-18" cy="-2" rx="12" ry="22" transform="rotate(-10 -18 -2)" fill="#2fa39a" stroke="#1f7d76" stroke-width="1.6"/>' +
+    '<ellipse cx="18" cy="-2" rx="12" ry="22" transform="rotate(10 18 -2)" fill="#2fa39a" stroke="#1f7d76" stroke-width="1.6"/>' +
+    '<rect x="-10" y="6" width="20" height="8" rx="4" fill="#2fa39a" stroke="#1f7d76" stroke-width="1.6"/>' +
+    '<circle cx="-19" cy="-10" r="3" fill="#a8e0da"/><circle cx="-16" cy="2" r="2.6" fill="#a8e0da"/><circle cx="19" cy="-10" r="3" fill="#a8e0da"/><circle cx="16" cy="2" r="2.6" fill="#a8e0da"/>',
+  adr:
+    '<path d="M-34 26C-50 14-48-6-30-12C-12-16 14-16 30-10C48-4 50 16 36 28C24 38-18 38-34 26Z" fill="#d98aa3" stroke="#b8607e" stroke-width="1.6"/><ellipse cx="0" cy="26" rx="9" ry="5" fill="#f6dcd5" stroke="#b8607e"/>' +
+    '<path d="M-18-2L0-34L20-2Q0 4-18-2Z" fill="#2fa39a" stroke="#1f7d76" stroke-width="1.8" stroke-linejoin="round"/><ellipse cx="1" cy="-12" rx="5" ry="9" fill="#145e58"/>',
+  test:
+    '<path d="M0-38V-24" stroke="#c9a5a0" stroke-width="5" stroke-linecap="round"/>' +
+    '<ellipse cx="-4" cy="6" rx="24" ry="30" fill="#2fa39a" stroke="#1f7d76" stroke-width="1.6"/>' +
+    '<path d="M-18 0C-10-8-2 8 6 0M-20 12C-12 4-4 20 6 12M-14 22C-8 16 0 26 6 22" fill="none" stroke="#a8e0da" stroke-width="2" stroke-linecap="round"/>' +
+    '<path d="M10-22C34-16 34 22 14 32" fill="none" stroke="#1f7d76" stroke-width="7" stroke-linecap="round"/><path d="M10-22C34-16 34 22 14 32" fill="none" stroke="#7fcfc7" stroke-width="3" stroke-dasharray="2 3" stroke-linecap="round"/>',
+  body:
+    '<circle cx="0" cy="-28" r="8" fill="#e8a0a8" stroke="#b8607e" stroke-width="1.5"/><rect x="-12" y="-17" width="24" height="30" rx="10" fill="#e8a0a8" stroke="#b8607e" stroke-width="1.5"/>' +
+    '<path d="M-14-12L-26 8M14-12L26 8" stroke="#e8a0a8" stroke-width="7" stroke-linecap="round"/><path d="M-5 12L-8 34M5 12L8 34" stroke="#e8a0a8" stroke-width="8" stroke-linecap="round"/>' +
+    '<circle cx="-4" cy="-8" r="2" fill="#fff" opacity=".7"/><circle cx="5" cy="0" r="2" fill="#fff" opacity=".7"/><circle cx="-3" cy="8" r="2" fill="#fff" opacity=".7"/>',
+  liver:
+    '<g transform="translate(-4,-8) scale(.9)"><path d="M-44-6C-30-28 22-30 44-10C48 4 30 20 4 22C-14 24-36 16-44-6Z" fill="#b5665f" stroke="#8a403b" stroke-width="1.6"/><path d="M-10-14C0-10 6 4 2 18" stroke="#8a403b" stroke-width="1.4" fill="none"/><ellipse cx="14" cy="18" rx="6" ry="4" fill="#6f9a45"/></g>' +
+    '<g transform="translate(8,28)">' +
+    MUS +
+    '</g>',
+  bone:
+    '<g transform="translate(0,-14)"><rect x="-34" y="-5" width="68" height="10" rx="5" fill="#f1e6d2" stroke="#b9a58a" stroke-width="1.5"/>' +
+    '<circle cx="-36" cy="-6" r="7" fill="#f1e6d2" stroke="#b9a58a" stroke-width="1.5"/><circle cx="-36" cy="6" r="7" fill="#f1e6d2" stroke="#b9a58a" stroke-width="1.5"/>' +
+    '<circle cx="36" cy="-6" r="7" fill="#f1e6d2" stroke="#b9a58a" stroke-width="1.5"/><circle cx="36" cy="6" r="7" fill="#f1e6d2" stroke="#b9a58a" stroke-width="1.5"/>' +
+    '<rect x="-30" y="-3" width="60" height="6" rx="3" fill="#f1e6d2"/></g>' +
+    '<g transform="translate(0,22) scale(1.2)">' +
+    MUS +
+    '</g>',
+};
+
+function fitText(el: SVGTextElement, txt: string, base: number, w: number) {
+  el.textContent = txt;
+  const len = txt.length || 1;
+  el.setAttribute('font-size', String(Math.min(base, w / (len * 0.58))));
+}
+
+interface ParticleItem {
+  e: SVGCircleElement;
   p: SVGPathElement;
-  length: number;
-  offset: number;
+  L: number;
+  o: number;
+  k: number;
+  sp: number;
+}
+
+interface NodeItem {
+  g: SVGGElement;
+  r: SVGEllipseElement;
 }
 
 export interface HomeHistologyFactProps {
@@ -73,6 +203,11 @@ export const HomeHistologyFact: React.FC<HomeHistologyFactProps> = ({
 }) => {
   const rootRef = useRef<HTMLElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [selectedAxis, setSelectedAxis] = useState<'tir' | 'adr' | 'gon'>('tir');
+
+  // Mantener referencias para interacción directa suave
+  const selectedAxisRef = useRef<'tir' | 'adr' | 'gon'>('tir');
+  selectedAxisRef.current = selectedAxis;
 
   useEffect(() => {
     const root = rootRef.current;
@@ -80,372 +215,359 @@ export const HomeHistologyFact: React.FC<HomeHistologyFactProps> = ({
 
     const fig = root.querySelector('#fig') as HTMLElement | null;
     const sv = root.querySelector('#sv') as SVGSVGElement | null;
-    const cr = root.querySelector('#cr') as SVGRectElement | null;
-    const gD = root.querySelector('#gD') as SVGGElement | null;
-    const gL = root.querySelector('#L') as SVGGElement | null;
-    const bm = root.querySelector('#bm') as SVGPathElement | null;
-    const lb = root.querySelector('#lb') as SVGGElement | null;
-    const gMit = root.querySelector('#gMit') as SVGGElement | null;
-    const tr = root.querySelector('#tr') as SVGGElement | null;
-    const mt = root.querySelector('#mt') as SVGTextElement | null;
-    const gT = root.querySelector('#gT') as SVGGElement | null;
-    const gA = root.querySelector('#gA') as SVGGElement | null;
-    const gM = root.querySelector('#gM') as SVGGElement | null;
-    const gMel = root.querySelector('#gMel') as SVGGElement | null;
-    const gMer = root.querySelector('#gMer') as SVGGElement | null;
-    const dn = root.querySelector('#dn') as SVGGElement | null;
-    const ms = root.querySelector('#ms') as SVGGElement | null;
-    const rg = root.querySelector('#rg') as SVGCircleElement | null;
-    const np = root.querySelector('#np') as SVGCircleElement | null;
-    const mk1 = root.querySelector('#mk1') as SVGTextElement | null;
-    const mk2 = root.querySelector('#mk2') as SVGTextElement | null;
-    const gLangerhans = root.querySelector('#gL') as SVGGElement | null;
-    const lc = root.querySelector('#lc') as SVGGElement | null;
-    const ag = root.querySelector('#ag') as SVGCircleElement | null;
-    const agt = root.querySelector('#agt') as SVGTextElement | null;
-    const lp = root.querySelector('#lp') as SVGPathElement | null;
-    const lt = root.querySelector('#lt') as SVGTextElement | null;
-    const mg = root.querySelector('#mg') as SVGTextElement | null;
-    const m1 = root.querySelector('#m1') as SVGCircleElement | null;
-    const m2 = root.querySelector('#m2') as SVGCircleElement | null;
+    const gFb = root.querySelector('#gFb') as SVGGElement | null;
+    const gLk = root.querySelector('#gLk') as SVGGElement | null;
+    const gN = root.querySelector('#gN') as SVGGElement | null;
+    const gPt = root.querySelector('#gPt') as SVGGElement | null;
+    const gG = root.querySelector('#gG') as SVGGElement | null;
 
-    const dtEl = root.querySelector('#dt');
-    const dpEl = root.querySelector('#dp');
+    const dhEl = root.querySelector('#dh') as HTMLElement | null;
+    const dpEl = root.querySelector('#dp') as HTMLElement | null;
     const playBtn = root.querySelector('#pb') as HTMLButtonElement | null;
     const slider = root.querySelector('#sl') as HTMLInputElement | null;
-    const tabBtns = Array.from(root.querySelectorAll<HTMLButtonElement>('.epidermis-tab'));
+    const injBtn = root.querySelector('#inj') as HTMLButtonElement | null;
+    const injLabel = root.querySelector('#inj-label') as HTMLSpanElement | null;
+    const tabBtns = Array.from(root.querySelectorAll<HTMLButtonElement>('.hypo-tab'));
+    const axisBtns = Array.from(root.querySelectorAll<HTMLButtonElement>('.hypo-axes button'));
 
-    if (
-      !fig ||
-      !sv ||
-      !cr ||
-      !gD ||
-      !gL ||
-      !bm ||
-      !lb ||
-      !gMit ||
-      !tr ||
-      !mt ||
-      !gT ||
-      !gA ||
-      !gM ||
-      !gMel ||
-      !gMer ||
-      !dn ||
-      !ms ||
-      !rg ||
-      !np ||
-      !mk1 ||
-      !mk2 ||
-      !gLangerhans ||
-      !lc ||
-      !ag ||
-      !agt ||
-      !lp ||
-      !lt ||
-      !mg ||
-      !m1 ||
-      !m2
-    ) {
-      return;
-    }
-
-    const safeFig = fig;
-    const safeSv = sv;
-    const safeCr = cr;
-    const safeGD = gD;
-    const safeGL = gL;
-    const safeBm = bm;
-    const safeLb = lb;
-    const safeGMit = gMit;
-    const safeTr = tr;
-    const safeMt = mt;
-    const safeGT = gT;
-    const safeGA = gA;
-    const safeGM = gM;
-    const safeGMel = gMel;
-    const safeGMer = gMer;
-    const safeDn = dn;
-    const safeGMs = ms;
-    const safeRg = rg;
-    const safeNp = np;
-    const safeMk1 = mk1;
-    const safeMk2 = mk2;
-    const safeGLangerhans = gLangerhans;
-    const safeLc = lc;
-    const safeAg = ag;
-    const safeAgt = agt;
-    const safeLp = lp;
-    const safeLt = lt;
-    const safeMg = mg;
-    const safeM1 = m1;
-    const safeM2 = m2;
-
-    const LY: [string, number, number, string][] = [
-      ['Estrato basal', 250, 290, ''],
-      ['Estrato espinoso', 150, 250, ''],
-      ['Estrato granuloso', 106, 150, ''],
-      ['Estrato lúcido', 92, 106, '(solo piel gruesa)'],
-      ['Estrato córneo', 40, 92, ''],
-    ];
-
-    const XL = 44;
-    let W = 640;
-    let LA = 140;
-    let XR = 500;
-    let TW = 456;
-    let mx = 0;
-    let rx = 0;
-    let mlx = 0;
-    let LX = 0;
-    let LG: SVGElement[] = [];
-    let LT: SVGTextElement[] = [];
-    let TR: TracerItem[] = [];
-    let built = false;
-
-    // Inicializar dendritas del melanocito
-    clearNode(safeDn);
-    clearNode(safeGMs);
-    const DP = [
-      'M150 262Q135 245 118 236',
-      'M150 262Q165 245 184 236',
-      'M142 275Q128 283 116 277',
-      'M158 275Q172 283 184 277',
-    ];
-    const dps: SVGPathElement[] = [];
-    DP.forEach((d) => {
-      dps.push(createSvgElement('path', { d }, safeDn) as SVGPathElement);
-    });
-
-    const MS: MelanosomeItem[] = [];
-    dps.forEach((p, i) => {
-      const len = typeof p.getTotalLength === 'function' ? p.getTotalLength() : 50;
-      for (let j = 0; j < 3; j++) {
-        MS.push({
-          e: createSvgElement('circle', { r: 2.3 }, safeGMs),
-          p,
-          length: len,
-          offset: j / 3 + i * 0.17,
-        });
-      }
-    });
-
-    function build(nw: number) {
-      W = nw;
-      built = true;
-      LA = W < 480 ? 112 : 140;
-      XR = W - LA;
-      TW = XR - XL;
-
-      mx = XL + TW * 0.5;
-      rx = XL + TW * 0.74;
-      mlx = XL + Math.max(52, TW * 0.27);
-      LX = XL + TW * 0.56;
-
-      const flip = rx + 18 + 124 > W - 4;
-
-      safeCr.setAttribute('x', String(XL));
-      safeCr.setAttribute('width', String(TW));
-
-      // Dermis adaptable
-      clearNode(safeGD);
-      createSvgElement('rect', { x: XL, y: 290, width: TW, height: 110, fill: 'var(--der)' }, safeGD);
-      createSvgElement(
-        'path',
-        {
-          d: `M${XL} 322Q${(XL + TW * 0.22).toFixed(1)} 306 ${(XL + TW * 0.41).toFixed(1)} 324T${XR} 316M${XL} 366Q${(XL + TW * 0.24).toFixed(1)} 350 ${(XL + TW * 0.54).toFixed(1)} 368T${XR} 358`,
-          fill: 'none',
-          stroke: 'var(--col)',
-          'stroke-width': 3,
-        },
-        safeGD
-      );
-
-      if (!flip) {
-        createSvgElement(
-          'circle',
-          { cx: XL + TW * 0.17, cy: 352, r: 14, fill: '#e88a97', stroke: '#b8505f', 'stroke-width': 2 },
-          safeGD
-        );
-      }
-      createSvgElement('path', { d: `M${rx.toFixed(1)} 400V296`, stroke: '#e8c400', 'stroke-width': 2, fill: 'none' }, safeGD);
-      safeBm.setAttribute('d', `M${XL} 290H${XR}`);
-
-      // Estratos construidos dinámicamente según el ancho disponible
-      clearNode(safeGL);
-      LG = [];
-      for (let k = 0; k < 5; k++) {
-        LG.push(createSvgElement('g', { class: 'g' }, safeGL));
-      }
-
-      // Estrato basal
-      let n = Math.max(4, Math.round(TW / 27));
-      let cw = TW / n;
-      for (let k = 0; k < n; k++) {
-        const x = XL + k * cw;
-        createSvgElement('rect', { x, y: 252, width: cw - 2, height: 36, rx: 7, fill: 'var(--bas)', stroke: 'var(--basl)' }, LG[0]);
-        createSvgElement('ellipse', { cx: x + cw / 2 - 1, cy: 272, rx: 6.5, ry: 10, fill: 'var(--nuc)' }, LG[0]);
-      }
-
-      // Estrato espinoso
-      n = Math.max(3, Math.round(TW / 46));
-      cw = TW / n;
-      [152, 186, 220].forEach((y, r) => {
-        const off = (r % 2) * 0.5 * cw;
-        for (let k = 0; k <= n; k++) {
-          const x = XL - off + k * cw;
-          createSvgElement(
-            'rect',
-            { x, y, width: cw - 2, height: 32, rx: 12, fill: 'var(--esp)', stroke: 'var(--espl)', 'stroke-dasharray': '2 2' },
-            LG[1]
-          );
-          createSvgElement('ellipse', { cx: x + cw / 2 - 1, cy: y + 16, rx: 8, ry: 7, fill: 'var(--nuc)' }, LG[1]);
-        }
-      });
-
-      // Estrato granuloso
-      n = Math.max(3, Math.round(TW / 56));
-      cw = TW / n;
-      [108, 129].forEach((y, r) => {
-        const off = (r % 2) * 0.5 * cw;
-        for (let k = 0; k <= n; k++) {
-          const x = XL - off + k * cw;
-          createSvgElement(
-            'rect',
-            { x, y, width: cw - 2, height: 19, rx: 6, fill: 'var(--gra)', stroke: 'var(--gral)' },
-            LG[2]
-          );
-          createSvgElement('ellipse', { cx: x + cw / 2 - 1, cy: y + 9.5, rx: 6, ry: 4, fill: 'var(--nuc)' }, LG[2]);
-          [[0.17, 5], [0.33, 14], [0.7, 6], [0.85, 13]].forEach((d) => {
-            createSvgElement('circle', { cx: x + cw * d[0], cy: y + d[1], r: 1.7, fill: 'var(--gran)' }, LG[2]);
-          });
-        }
-      });
-
-      // Estrato lúcido
-      createSvgElement('rect', { x: XL, y: 92, width: TW, height: 14, fill: 'var(--luc)' }, LG[3]);
-
-      // Estrato córneo
-      n = Math.max(3, Math.round(TW / 60));
-      cw = TW / n;
-      for (let i = 0; i < 6; i++) {
-        const off = (i % 2) * 0.5 * cw;
-        for (let k = 0; k <= n; k++) {
-          createSvgElement(
-            'rect',
-            { x: XL - off + k * cw, y: 42 + i * 8.5, width: cw - 2, height: 7.5, rx: 3, fill: 'var(--cor)', stroke: 'var(--corl)' },
-            LG[4]
-          );
-        }
-      }
-
-      // Etiquetas de estratos en el margen derecho
-      clearNode(safeLb);
-      LT = [];
-      LY.forEach((l) => {
-        const m = (l[1] + l[2]) / 2;
-        const tx = createSvgElement('text', { x: XR + 14, y: m + (l[3] ? 0 : 4), class: 'layer-title' }, safeLb) as SVGTextElement;
-        tx.textContent = l[0];
-        LT.push(tx);
-
-        if (l[3]) {
-          const s2 = createSvgElement('text', { x: XR + 14, y: m + 12, class: 'layer-sub', style: 'font-size:10px;' }, safeLb);
-          s2.textContent = l[3];
-        }
-        createSvgElement('path', { d: `M${XR} ${m}H${XR + 9}`, class: 'l' }, safeLb);
-      });
-
-      const tm = createSvgElement('text', { x: XR + 14, y: 296, class: 'layer-sub', style: 'font-size:10px;' }, safeLb);
-      tm.textContent = 'Membrana basal';
-      const td = createSvgElement('text', { x: XR + 14, y: 340, class: 'b', style: 'font-weight:700' }, safeLb);
-      td.textContent = 'Dermis';
-
-      // Paso 2: mitosis y queratinocitos trazadores
-      safeGMit.setAttribute('transform', `translate(${(mx - 237).toFixed(1)},0)`);
-      safeMt.setAttribute('x', String(mx.toFixed(1)));
-
-      clearNode(safeTr);
-      TR = [];
-      let c = 0;
-      for (let cx = XL + 36; cx < XR - 22; cx += 62) {
-        if (Math.abs(cx - mx) < 46) continue;
-        const gg = createSvgElement('g', {}, safeTr);
-        TR.push({
-          g: gg,
-          b: createSvgElement('ellipse', { stroke: 'var(--acc)', 'stroke-width': 2 }, gg),
-          n: createSvgElement('ellipse', { fill: 'var(--nuc)' }, gg),
-          cx,
-          o: (c++ * 0.382) % 1,
-        });
-      }
-
-      // Paso 3: melanocito y célula de Merkel
-      safeGMel.setAttribute('transform', `translate(${(mlx - 150).toFixed(1)},0)`);
-      safeGMer.setAttribute('transform', `translate(${(rx - 330).toFixed(1)},0)`);
-
-      const anchor = flip ? 'end' : 'start';
-      const labelX = flip ? 312 : 348;
-      safeMk1.setAttribute('text-anchor', anchor);
-      safeMk1.setAttribute('x', String(labelX));
-      safeMk1.setAttribute('y', flip ? '338' : '312');
-
-      safeMk2.setAttribute('text-anchor', anchor);
-      safeMk2.setAttribute('x', String(labelX));
-      safeMk2.setAttribute('y', flip ? '350' : '324');
-
-      // Paso 4: Célula de Langerhans y antígeno
-      const right = LX + 60 + 118 <= W - 4;
-      if (right) {
-        safeLp.setAttribute('d', `M${(LX + 14).toFixed(1)} 198L${(LX + 58).toFixed(1)} 184`);
-        safeLt.setAttribute('x', String((LX + 60).toFixed(1)));
-        safeLt.setAttribute('y', '188');
-        safeLt.setAttribute('text-anchor', 'start');
-      } else {
-        safeLp.setAttribute('d', '');
-        safeLt.setAttribute('x', String(clamp(LX, XL + 62, XR - 62).toFixed(1)));
-        safeLt.setAttribute('y', '240');
-        safeLt.setAttribute('text-anchor', 'middle');
-      }
-
-      safeAgt.setAttribute('x', String((LX + 12).toFixed(1)));
-      safeMg.setAttribute('x', String(clamp(LX, XL + 90, W - 90).toFixed(1)));
-
-      draw();
-    }
+    if (!fig || !sv || !gFb || !gLk || !gN || !gPt || !gG) return;
 
     let t = 0;
     let clk = 0;
+    let hormoneLevel = 0.1;
     let play = true;
     let last = 0;
     let cur = -1;
     let drag = false;
-    let rafId: number | null = null;
+    let built = false;
+    let W = 640;
+    let VH = 400;
+    let prod = 1;
+    const la = [0, 0, 0, 0, 0];
 
-    const op: [number, number, number, number][] = [
-      [0, 0, 0, 0],
-      [1, 0, 0, 1],
-      [0, 1, 0, 0],
-      [0, 0, 1, 0],
-    ];
+    let NODES: NodeItem[] = [];
+    let PT: ParticleItem[] = [];
+    let GF: SVGRectElement | null = null;
+    let GL: SVGTextElement | null = null;
+
+    let stageTexts = getAxisTexts(AXES[selectedAxisRef.current]);
+
+    function updateTexts() {
+      const currentAxis = AXES[selectedAxisRef.current];
+      stageTexts = getAxisTexts(currentAxis);
+      const st = Math.max(0, Math.min(3, cur < 0 ? 0 : cur));
+      if (dhEl) dhEl.textContent = stageTexts[st][0];
+      if (dpEl) dpEl.textContent = stageTexts[st][1];
+      if (injLabel) injLabel.textContent = `Subir ${currentAxis.h3}`;
+      if (injBtn) injBtn.setAttribute('aria-label', `Subir nivel de ${currentAxis.h3}`);
+    }
+
+    function build(nw: number, vh: number) {
+      W = nw;
+      VH = vh;
+      built = true;
+      const currentAxis = AXES[selectedAxisRef.current];
+
+      [gFb, gLk, gN, gPt, gG].forEach((g) => {
+        if (g) clearNode(g);
+      });
+      PT = [];
+      NODES = [];
+
+      const horiz = vh === 400;
+      const m = 24;
+      let slot = 0;
+      let s = 1;
+      const cx: number[] = [];
+      const cy: number[] = [];
+
+      if (horiz) {
+        slot = clamp((nw - 2 * m) / 5.4, 88, 140);
+        const g = (nw - 2 * m - 4 * slot) / 3;
+        s = clamp(slot / 105, 0.72, 1.25);
+        for (let i = 0; i < 4; i++) {
+          cx[i] = m + slot / 2 + i * (slot + g);
+          cy[i] = 124;
+        }
+      } else {
+        s = 0.8;
+        const x0 = clamp(nw * 0.2, 60, 130);
+        for (let i = 0; i < 4; i++) {
+          cx[i] = x0;
+          cy[i] = 96 + i * 124;
+        }
+      }
+
+      const hw = 50 * s;
+      const hh = 44 * s;
+      const tx0 = cx[0] + hw + 10;
+      const maxw = clamp(nw - tx0 - 70, 70, 118);
+      const xe = tx0 + maxw;
+
+      // ─── Retroalimentación negativa (asa larga) ───
+      const fbD: string[] = [];
+      if (horiz) {
+        const yb = cy[2] + hh + 33;
+        fbD.push(
+          `M${cx[2] - 10} ${yb + 2} C${cx[2] - 10} ${yb + 90} ${cx[1]} ${yb + 90} ${cx[1]} ${yb + 7}`
+        );
+        fbD.push(
+          `M${cx[2] + 10} ${yb + 2} C${cx[2] + 10} ${yb + 150} ${cx[0]} ${yb + 150} ${cx[0]} ${yb + 7}`
+        );
+        const lab = createSvgElement(
+          'text',
+          {
+            x: (cx[0] + cx[2]) / 2,
+            y: yb + 156,
+            'text-anchor': 'middle',
+            'font-weight': 700,
+            style: 'fill:#d64550',
+          },
+          gFb
+        );
+        lab.textContent = 'Retroalimentación negativa (−)';
+      } else {
+        const av = Math.max(24, nw - xe - 16);
+        const d1 = av * 0.5;
+        const d2 = av;
+        fbD.push(
+          `M${xe + 4} ${cy[2] + 8} C${xe + 4 + d1} ${cy[2] + 8} ${xe + 4 + d1} ${cy[1]} ${xe + 10} ${cy[1]}`
+        );
+        fbD.push(
+          `M${xe + 4} ${cy[2] - 8} C${xe + 4 + d2} ${cy[2] - 8} ${xe + 4 + d2} ${cy[0]} ${xe + 10} ${cy[0]}`
+        );
+        const lab = createSvgElement(
+          'text',
+          {
+            transform: `translate(${nw - 8} ${(cy[0] + cy[2]) / 2}) rotate(-90)`,
+            'text-anchor': 'middle',
+            'font-weight': 700,
+            'font-size': 10,
+            style: 'fill:#d64550',
+          },
+          gFb
+        );
+        lab.textContent = 'Retroalimentación negativa (−)';
+      }
+
+      const fbEl: SVGPathElement[] = fbD.map((d) =>
+        createSvgElement(
+          'path',
+          {
+            d,
+            fill: 'none',
+            stroke: '#d64550',
+            'stroke-width': 2.2,
+            'stroke-dasharray': '6 5',
+            'marker-end': 'url(#ih)',
+          },
+          gFb
+        )
+      );
+
+      // ─── Enlaces directos estimulantes ───
+      const lk: SVGPathElement[] = [];
+      const linkColors = ['#7a5cc7', '#f2a13a', '#2fa39a'];
+      for (let i = 0; i < 3; i++) {
+        const d = horiz
+          ? `M${cx[i] + hw + 3} ${cy[i]} L${cx[i + 1] - hw - 6} ${cy[i + 1]}`
+          : `M${cx[i]} ${cy[i] + hh + 3} L${cx[i + 1]} ${cy[i + 1] - hh - 6}`;
+        lk.push(
+          createSvgElement(
+            'path',
+            {
+              d,
+              fill: 'none',
+              stroke: linkColors[i],
+              'stroke-width': 2.4,
+              'marker-end': `url(#a${i})`,
+              class: 'g',
+            },
+            gLk
+          )
+        );
+      }
+
+      // ─── Nodos Anatómicos ───
+      const arts = ['hyp', 'pit', currentAxis.a2, currentAxis.a3];
+      const names = ['Hipotálamo', 'Adenohipófisis', currentAxis.gl, 'Órgano diana'];
+      const subs = [
+        `secreta ${currentAxis.h1}`,
+        `secreta ${currentAxis.h2}`,
+        `secreta ${currentAxis.h3}`,
+        currentAxis.org,
+      ];
+
+      for (let i = 0; i < 4; i++) {
+        const gg = createSvgElement('g', { class: 'g' }, gN);
+        const r = createSvgElement(
+          'ellipse',
+          {
+            cx: cx[i],
+            cy: cy[i],
+            rx: hw,
+            ry: hh,
+            fill: NODE_COLORS[i][0],
+            'fill-opacity': 0.6,
+            stroke: NODE_COLORS[i][1],
+          },
+          gg
+        );
+        const dg = createSvgElement(
+          'g',
+          { transform: `translate(${cx[i]} ${cy[i]}) scale(${s})` },
+          gg
+        );
+        dg.innerHTML = ART[arts[i]] || '';
+
+        if (horiz) {
+          const n1 = createSvgElement(
+            'text',
+            { x: cx[i], y: cy[i] + hh + 16, 'text-anchor': 'middle', 'font-weight': 700 },
+            gg
+          );
+          const n2 = createSvgElement(
+            'text',
+            { x: cx[i], y: cy[i] + hh + 29, 'text-anchor': 'middle', style: 'opacity:.8' },
+            gg
+          );
+          fitText(n1, names[i], 12.5, slot * 0.95);
+          fitText(n2, subs[i], 10.5, slot * 0.95);
+        } else {
+          const n1 = createSvgElement(
+            'text',
+            { x: tx0, y: cy[i] - 2, 'font-weight': 700 },
+            gg
+          );
+          const n2 = createSvgElement(
+            'text',
+            { x: tx0, y: cy[i] + 13, style: 'opacity:.8' },
+            gg
+          );
+          fitText(n1, names[i], 13, maxw);
+          fitText(n2, subs[i], 10.5, maxw);
+        }
+
+        NODES.push({ g: gg, r });
+      }
+
+      // ─── Partículas hormonales en movimiento ───
+      function mk(
+        path: SVGPathElement,
+        n: number,
+        col: string,
+        rad: number,
+        k: number,
+        sp: number
+      ) {
+        const Ln = typeof path.getTotalLength === 'function' ? path.getTotalLength() : 100;
+        for (let j = 0; j < n; j++) {
+          PT.push({
+            e: createSvgElement('circle', { r: rad, fill: col }, gPt),
+            p: path,
+            L: Ln,
+            o: j / n + k * 0.13,
+            k,
+            sp,
+          });
+        }
+      }
+
+      mk(lk[0], 4, '#7a5cc7', 3.6, 0, 0.32);
+      mk(lk[1], 4, '#f2a13a', 3.6, 1, 0.32);
+      mk(lk[2], 4, '#2fa39a', 3.6, 2, 0.32);
+      mk(fbEl[0], 5, '#d64550', 3.2, 3, 0.16);
+      mk(fbEl[1], 6, '#d64550', 3.2, 4, 0.13);
+
+      // ─── Medidor dinámico del nivel hormonal ───
+      const bw = Math.min(190, nw * 0.42);
+      const gx = m;
+      const gy = horiz ? 36 : 30;
+
+      GL = createSvgElement(
+        'text',
+        { x: gx, y: gy - 8, 'font-weight': 700, 'font-size': 11 },
+        gG
+      );
+      GL.textContent = `Nivel de ${currentAxis.h3}`;
+
+      createSvgElement(
+        'rect',
+        { x: gx, y: gy, width: bw, height: 11, rx: 5.5, fill: '#e8ecf7', stroke: '#c9d3ea' },
+        gG
+      );
+
+      GF = createSvgElement(
+        'rect',
+        { x: gx, y: gy, width: 20, height: 11, rx: 5.5, fill: '#2fa39a' },
+        gG
+      );
+      (GF as any).bw = bw;
+
+      createSvgElement(
+        'path',
+        {
+          d: `M${gx + bw * 0.476} ${gy - 3}V${gy + 14}`,
+          stroke: '#12244a',
+          'stroke-width': 1.5,
+        },
+        gG
+      );
+
+      const nt = createSvgElement(
+        'text',
+        {
+          x: gx + bw * 0.476,
+          y: gy + 25,
+          'text-anchor': 'middle',
+          'font-size': 9.5,
+          style: 'opacity:.75',
+        },
+        gG
+      );
+      nt.textContent = 'nivel normal';
+
+      cur = -1;
+      draw();
+    }
+
+    function stepOf(): number {
+      for (let i = 3; i >= 0; i--) {
+        if (t >= CUM_TIMES[i]) return i;
+      }
+      return 0;
+    }
 
     function draw() {
-      const st = Math.min(3, Math.floor(t / STEP));
-      const fr = (t - st * STEP) / STEP;
+      if (!built) return;
+      const st = stepOf();
+      const fr = (t - CUM_TIMES[st]) / DURATIONS[st];
 
       if (st !== cur) {
         cur = st;
-        if (dtEl) dtEl.textContent = STAGES[st].title;
-        if (dpEl) dpEl.textContent = STAGES[st].desc;
+        if (st === 3) hormoneLevel = 0.1;
+
+        if (dhEl) dhEl.textContent = stageTexts[st][0];
+        if (dpEl) dpEl.textContent = stageTexts[st][1];
 
         tabBtns.forEach((b, i) => {
           b.classList.toggle('on', i === st);
         });
 
-        safeGT.style.opacity = String(op[st][0]);
-        safeGM.style.opacity = String(op[st][1]);
-        safeGLangerhans.style.opacity = String(op[st][2]);
-        safeGA.style.opacity = String(op[st][3]);
-        safeMt.style.opacity = st === 1 ? '1' : '0';
+        NODES.forEach((n, i) => {
+          n.g.style.opacity = String(i <= st + 1 ? 1 : 0.25);
+          n.r.setAttribute('stroke-width', i === st || st === 3 ? '3' : '1.5');
+        });
+
+        if (gLk) {
+          const lks = gLk.children;
+          for (let k = 0; k < lks.length; k++) {
+            (lks[k] as HTMLElement).style.opacity = String(st >= k ? 1 : 0.18);
+          }
+        }
+
+        if (gFb) gFb.style.opacity = String(st === 3 ? 1 : 0.2);
+        if (gG) gG.style.opacity = String(st === 3 ? 1 : 0);
       }
 
       tabBtns.forEach((b, i) => {
@@ -458,118 +580,65 @@ export const HomeHistologyFact: React.FC<HomeHistologyFactProps> = ({
       if (!drag && slider) {
         slider.value = String((t / T_TOTAL) * 1000);
       }
-
-      const act = Math.min(4, Math.floor(fr * 5));
-      LG.forEach((g, i) => {
-        const o = st === 0 ? (i === act ? 1 : 0.3) : st === 1 ? 0.85 : st === 2 ? (i === 0 ? 1 : 0.5) : (i === 1 ? 1 : 0.5);
-        g.style.opacity = String(o);
-        if (LT[i]) {
-          LT[i].style.opacity = String(o);
-          LT[i].style.fontWeight = st === 0 && i === act ? '700' : '500';
-        }
-      });
     }
 
-    function anim() {
-      // Mitosis en estrato basal
-      const d = 3 + 6 * (0.5 + 0.5 * Math.sin(clk * 1.3));
-      safeM1.setAttribute('cx', String(237 - d));
-      safeM2.setAttribute('cx', String(237 + d));
-
-      // Queratinocitos trazadores en ascenso
-      TR.forEach((q) => {
-        const p = (clk * 0.09 + q.o) % 1;
-        const y = 270 - p * 204;
-        const rx_ = 11 + p * 15;
-        const ry = 15 - p * 11;
-        const f = p < 0.2 ? 'var(--bas)' : p < 0.6 ? 'var(--esp)' : p < 0.8 ? 'var(--gra)' : 'var(--cor)';
-        const ds = p > 0.92 ? (p - 0.92) / 0.08 : 0;
-        const o = p < 0.04 ? p / 0.04 : 1 - ds;
-
-        q.g.setAttribute('transform', `translate(${q.cx + ds * 14},${y})`);
-        q.g.setAttribute('opacity', String(o));
-        q.b.setAttribute('rx', String(rx_));
-        q.b.setAttribute('ry', String(ry));
-        q.b.setAttribute('fill', f);
-        q.n.setAttribute('rx', String(7 * (1 - p * 0.6)));
-        q.n.setAttribute('ry', String(Math.max(0.1, 9 * (1 - p * 0.9))));
-        q.n.setAttribute('opacity', String(Math.max(0, Math.min(1, (0.78 - p) * 10))));
-      });
-
-      // Melanosomas a lo largo de las prolongaciones dendríticas
-      MS.forEach((m) => {
-        if (typeof m.p.getPointAtLength === 'function') {
-          const pt = m.p.getPointAtLength(((clk * 0.35 + m.offset) % 1) * m.length);
-          m.e.setAttribute('cx', String(pt.x));
-          m.e.setAttribute('cy', String(pt.y));
-        }
-      });
-
-      // Mecanorreceptor de Merkel (ondas de tacto)
-      const rr = 14 + (clk * 22) % 20;
-      safeRg.setAttribute('r', String(rr));
-      safeRg.setAttribute('opacity', String(1 - (rr - 14) / 20));
-
-      // Impulsos nerviosos descendentes de la célula de Merkel
-      safeNp.setAttribute('cy', String(294 + (clk * 40) % 100));
-
-      // Célula de Langerhans y antígeno
-      const ph = (clk / 9) % 1;
-      let dy = 0;
-      let ay = 36;
-      let ax = LX;
-      let ar = 4.5;
-      let av = 1;
-
-      if (ph < 0.35) {
-        ay = 36 + (ph / 0.35) * 104;
-      } else if (ph < 0.5) {
-        const u = (ph - 0.35) / 0.15;
-        ay = 140 + u * 60;
-        ax = LX - 2 * u;
-        ar = 4.5 * (1 - 0.7 * u);
-      } else {
-        av = 0;
-        ay = 200;
-        dy = Math.min(1, (ph - 0.5) / 0.35) * 125;
+    function anim(dt: number) {
+      const tg = [cur >= 0, cur >= 1, cur >= 2, cur === 3, cur === 3];
+      for (let i = 0; i < 5; i++) {
+        la[i] += ((tg[i] ? 1 : 0) - la[i]) * Math.min(1, dt * 6);
       }
+      prod = cur === 3 ? clamp(1 - 1.6 * hormoneLevel, 0, 1) : 1;
 
-      const lo = ph < 0.04 ? ph / 0.04 : ph > 0.85 ? 1 - (ph - 0.85) / 0.15 : 1;
-      safeAg.setAttribute('cx', String(ax));
-      safeAg.setAttribute('cy', String(ay));
-      safeAg.setAttribute('r', String(ar));
-      safeAg.setAttribute('opacity', String(av));
-      safeLc.setAttribute('transform', `translate(${LX - 260},${dy})`);
-      safeLc.setAttribute('opacity', String(lo));
-      safeAgt.setAttribute('opacity', ph < 0.25 ? '1' : '0');
-      safeMg.setAttribute('opacity', ph > 0.5 && ph < 0.9 ? '1' : '0');
+      PT.forEach((q) => {
+        const p = (clk * q.sp + q.o) % 1;
+        const pt =
+          typeof q.p.getPointAtLength === 'function'
+            ? q.p.getPointAtLength(p * q.L)
+            : { x: 0, y: 0 };
+        const env = p < 0.12 ? p / 0.12 : p > 0.88 ? (1 - p) / 0.12 : 1;
+        const m = q.k < 3 ? (cur === 3 ? 0.12 + 0.88 * prod : 1) : clamp(hormoneLevel / 0.45, 0, 1);
+        q.e.setAttribute('cx', String(pt.x));
+        q.e.setAttribute('cy', String(pt.y));
+        q.e.setAttribute('opacity', String(env * la[q.k] * m));
+      });
+
+      if (GF) {
+        const maxBw = (GF as any).bw || 100;
+        GF.setAttribute('width', String(Math.max(10, maxBw * clamp(hormoneLevel, 0, 1))));
+        GF.setAttribute('fill', hormoneLevel > 0.65 ? '#d64550' : '#2fa39a');
+      }
     }
 
+    let rafId: number | null = null;
     function loop(ts: number) {
       const dt = Math.min((ts - last) / 1000, 0.05);
       last = ts;
       if (play || drag) clk += dt;
-
       if (play && !drag) {
         t += dt * 1000;
         if (t >= T_TOTAL) t = 0;
+        if (cur === 3) {
+          prod = clamp(1 - 1.6 * hormoneLevel, 0, 1);
+          hormoneLevel = clamp(hormoneLevel + dt * (0.6 * prod - 0.3 * hormoneLevel), 0, 1.1);
+        }
       }
-
       draw();
-      anim();
+      anim(dt);
       rafId = requestAnimationFrame(loop);
     }
 
-    // Adaptación reactiva continua al ancho del contenedor
     let pend = false;
     function fit() {
       pend = false;
-      const w = safeFig.clientWidth;
-      const h = safeFig.clientHeight;
-      const nw = w && h ? Math.max(300, Math.round((400 * w) / h)) : 640;
-      safeSv.setAttribute('viewBox', `0 0 ${nw} 400`);
-      if (nw !== W || !built) {
-        build(nw);
+      const w = fig ? fig.clientWidth : 640;
+      const h = fig ? fig.clientHeight : 400;
+      if (!w || !h) return;
+      const r = w / h;
+      const vh = r * 400 >= 500 ? 400 : 520;
+      const nw = Math.max(300, Math.round(vh * r));
+      if (sv) sv.setAttribute('viewBox', `0 0 ${nw} ${vh}`);
+      if (nw !== W || vh !== VH || !built) {
+        build(nw, vh);
       }
     }
 
@@ -580,14 +649,15 @@ export const HomeHistologyFact: React.FC<HomeHistologyFactProps> = ({
       }
     }
 
-    fit();
-
     let resizeObserver: ResizeObserver | null = null;
-    if (typeof window !== 'undefined' && 'ResizeObserver' in window) {
+    if (typeof window !== 'undefined' && 'ResizeObserver' in window && fig) {
       resizeObserver = new ResizeObserver(reqFit);
-      resizeObserver.observe(safeFig);
+      resizeObserver.observe(fig);
     }
     window.addEventListener('resize', reqFit);
+
+    updateTexts();
+    fit();
 
     rafId = requestAnimationFrame((ts) => {
       last = ts;
@@ -604,17 +674,35 @@ export const HomeHistologyFact: React.FC<HomeHistologyFactProps> = ({
       t = (Number(slider.value) / 1000) * T_TOTAL;
       drag = true;
       draw();
-      anim();
     };
 
     const handleSliderChange = () => {
       drag = false;
     };
 
+    const handleInjClick = () => {
+      if (cur !== 3) {
+        t = CUM_TIMES[3] + 200;
+        drag = false;
+        draw();
+      }
+      hormoneLevel = Math.min(1.1, hormoneLevel + 0.55);
+      play = true;
+      setIsPlaying(true);
+    };
+
     const handleTabClick = (idx: number) => {
-      t = idx * STEP;
+      t = CUM_TIMES[idx];
+      drag = false;
       draw();
-      anim();
+    };
+
+    const handleAxisClick = (key: 'tir' | 'adr' | 'gon') => {
+      setSelectedAxis(key);
+      selectedAxisRef.current = key;
+      updateTexts();
+      hormoneLevel = 0.1;
+      build(W, VH);
     };
 
     if (playBtn) playBtn.addEventListener('click', handlePlayClick);
@@ -622,9 +710,17 @@ export const HomeHistologyFact: React.FC<HomeHistologyFactProps> = ({
       slider.addEventListener('input', handleSliderInput);
       slider.addEventListener('change', handleSliderChange);
     }
+    if (injBtn) injBtn.addEventListener('click', handleInjClick);
 
     tabBtns.forEach((btn, idx) => {
       btn.addEventListener('click', () => handleTabClick(idx));
+    });
+
+    axisBtns.forEach((btn) => {
+      const axisKey = btn.getAttribute('data-axis') as 'tir' | 'adr' | 'gon';
+      if (axisKey) {
+        btn.addEventListener('click', () => handleAxisClick(axisKey));
+      }
     });
 
     return () => {
@@ -636,56 +732,75 @@ export const HomeHistologyFact: React.FC<HomeHistologyFactProps> = ({
         slider.removeEventListener('input', handleSliderInput);
         slider.removeEventListener('change', handleSliderChange);
       }
+      if (injBtn) injBtn.removeEventListener('click', handleInjClick);
     };
   }, []);
+
+  const activeAxisData = AXES[selectedAxis];
 
   return (
     <section
       ref={rootRef}
-      className={`home-histology-fact epidermis-fact ${className}`}
-      aria-label="Dato histológico de la semana: Epidermis"
+      className={`home-histology-fact hypo-fact ${className}`}
+      aria-label="Dato histológico de la semana: Eje hipotálamo-hipófisis"
     >
-      <span className="epidermis-fact-shine" aria-hidden="true" />
-      <span className="epidermis-fact-glow epidermis-fact-glow-cyan" aria-hidden="true" />
-      <span className="epidermis-fact-glow epidermis-fact-glow-violet" aria-hidden="true" />
-      <span className="home-histology-fact-mesh" aria-hidden="true" />
+      <span className="hypo-fact-shine" aria-hidden="true" />
+      <span className="hypo-fact-glow hypo-fact-glow-cyan" aria-hidden="true" />
+      <span className="hypo-fact-glow hypo-fact-glow-violet" aria-hidden="true" />
 
-      <div className="epidermis-grid">
-        <div className="epidermis-left">
-          <div className="epidermis-top">
-            <span className="epidermis-badge">
-              <Microscope size={13} className="epidermis-badge-icon" />
+      <div className="hypo-grid">
+        <div className="hypo-info">
+          <div className="hypo-top">
+            <span className="hypo-badge">
+              <Microscope size={13} className="hypo-badge-icon" />
               <span>{badgeLabel.toUpperCase()}</span>
             </span>
           </div>
 
-          <div className="epidermis-header">
-            <h2>Epidermis</h2>
-            <p className="sub">Cinco estratos y cuatro poblaciones celulares: del estrato basal a la descamación.</p>
+          <div className="hypo-header">
+            <h2>Eje hipotálamo-hipófisis</h2>
+            <p className="sub">
+              Una cascada hormonal que se regula sola: del hipotálamo al órgano diana, con retroalimentación negativa.
+            </p>
           </div>
 
-          <div className="epidermis-desc">
-            <h3 id="dt">{STAGES[0].title}</h3>
-            <p id="dp">{STAGES[0].desc}</p>
-          </div>
-
-          <div className="epidermis-tabs" role="tablist" aria-label="Estratos y poblaciones celulares">
-            {STAGES.map((s, i) => (
+          <div className="hypo-axes" role="group" aria-label="Elegir eje hormonal">
+            {(['tir', 'adr', 'gon'] as const).map((key) => (
               <button
-                key={s.title}
+                key={key}
+                type="button"
+                data-axis={key}
+                className={selectedAxis === key ? 'on' : ''}
+              >
+                {AXES[key].lab}
+              </button>
+            ))}
+          </div>
+
+          <div className="hypo-desc">
+            <h3 id="dh">Hipotálamo</h3>
+            <p id="dp">
+              Neuronas neurosecretoras del hipotálamo liberan {activeAxisData.h1} ({activeAxisData.h1n}) en la eminencia media.
+            </p>
+          </div>
+
+          <div className="hypo-tabs" role="tablist" aria-label="Etapas del eje">
+            {TAB_NAMES.map((name, i) => (
+              <button
+                key={name}
                 type="button"
                 role="tab"
-                className={`epidermis-tab ${i === 0 ? 'on' : ''}`}
-                aria-label={`Etapa ${i + 1}: ${s.title}`}
+                className={`hypo-tab ${i === 0 ? 'on' : ''}`}
+                aria-label={`Etapa ${i + 1}: ${name}`}
               >
                 <small>{i + 1}</small>
-                <b>{s.title}</b>
+                <b>{name}</b>
                 <i style={{ width: i === 0 ? '0%' : '0%' }} />
               </button>
             ))}
           </div>
 
-          <div className="epidermis-ctl">
+          <div className="hypo-ctl">
             <button
               id="pb"
               type="button"
@@ -700,101 +815,91 @@ export const HomeHistologyFact: React.FC<HomeHistologyFactProps> = ({
               min="0"
               max="1000"
               defaultValue="0"
-              aria-label="Progreso de la animación de epidermis"
+              aria-label="Progreso de la animación del eje hipotálamo-hipófisis"
             />
+            <button
+              id="inj"
+              className="inj"
+              type="button"
+              aria-label={`Subir nivel de ${activeAxisData.h3}`}
+            >
+              <Syringe size={14} />
+              <span id="inj-label">Subir {activeAxisData.h3}</span>
+            </button>
           </div>
 
-          <div className="epidermis-leg" aria-label="Leyenda celular">
-            <span style={{ ['--c' as string]: 'var(--esp)' }}>Queratinocito</span>
-            <span style={{ ['--c' as string]: '#8a5a2b' }}>Melanocito</span>
-            <span style={{ ['--c' as string]: '#2fa39a' }}>Célula de Merkel</span>
-            <span style={{ ['--c' as string]: '#7a5cc7' }}>Célula de Langerhans</span>
+          <div className="hypo-leg" aria-label="Leyenda de señales hormonales">
+            <span style={{ ['--c' as string]: '#7a5cc7' }}>Hormona liberadora</span>
+            <span style={{ ['--c' as string]: '#f2a13a' }}>Hormona trófica (hipófisis)</span>
+            <span style={{ ['--c' as string]: '#2fa39a' }}>Hormona de la glándula</span>
+            <span style={{ ['--c' as string]: '#d64550' }}>Inhibición (−)</span>
           </div>
         </div>
 
-        {/* ─── Figura SVG dinámica adaptable al 100% de cualquier pantalla ─── */}
-        <div className="epidermis-fig" id="fig">
+        {/* ─── Figura SVG dinámica adaptable ─── */}
+        <div className="hypo-fig" id="fig">
           <svg
             id="sv"
             viewBox="0 0 640 400"
             preserveAspectRatio="xMidYMid meet"
             role="img"
-            aria-label="Corte de la epidermis con sus estratos y poblaciones celulares"
+            aria-label="Esquema del eje hipotálamo, hipófisis, glándula y órgano diana con retroalimentación negativa"
           >
             <defs>
-              <clipPath id="cp">
-                <rect id="cr" x="44" y="0" width="400" height="400" />
-              </clipPath>
+              <marker
+                id="a0"
+                viewBox="0 0 10 10"
+                refX="8"
+                refY="5"
+                markerWidth="11"
+                markerHeight="11"
+                markerUnits="userSpaceOnUse"
+                orient="auto"
+              >
+                <path d="M0 0L10 5L0 10Z" fill="#7a5cc7" />
+              </marker>
+              <marker
+                id="a1"
+                viewBox="0 0 10 10"
+                refX="8"
+                refY="5"
+                markerWidth="11"
+                markerHeight="11"
+                markerUnits="userSpaceOnUse"
+                orient="auto"
+              >
+                <path d="M0 0L10 5L0 10Z" fill="#f2a13a" />
+              </marker>
+              <marker
+                id="a2"
+                viewBox="0 0 10 10"
+                refX="8"
+                refY="5"
+                markerWidth="11"
+                markerHeight="11"
+                markerUnits="userSpaceOnUse"
+                orient="auto"
+              >
+                <path d="M0 0L10 5L0 10Z" fill="#2fa39a" />
+              </marker>
+              <marker
+                id="ih"
+                viewBox="0 0 8 16"
+                refX="4"
+                refY="8"
+                markerWidth="8"
+                markerHeight="16"
+                markerUnits="userSpaceOnUse"
+                orient="auto"
+              >
+                <path d="M4 0V16" stroke="#d64550" strokeWidth="3" />
+              </marker>
             </defs>
-            <g id="gD" />
-            <g id="L" clipPath="url(#cp)" />
-            <path id="bm" d="" stroke="var(--bm)" strokeWidth="3" fill="none" />
-            <g id="lb" />
-            <g id="gT" className="g" opacity="0" clipPath="url(#cp)">
-              <g id="gMit">
-                <ellipse cx="237" cy="272" rx="15" ry="15" fill="none" stroke="var(--acc)" strokeWidth="1.5" strokeDasharray="3 3" />
-                <circle id="m1" cy="272" r="4" fill="#7a2d9a" />
-                <circle id="m2" cy="272" r="4" fill="#7a2d9a" />
-              </g>
-              <g id="tr" />
-            </g>
-            <text id="mt" y="312" textAnchor="middle" className="h" opacity="0">
-              Mitosis
-            </text>
-            <g id="gA" className="g" opacity="0">
-              <path d="M24 285V60" stroke="var(--acc)" strokeWidth="2" fill="none" />
-              <path d="M18 70L24 56L30 70Z" fill="var(--acc)" />
-              <text transform="translate(12 175) rotate(-90)" textAnchor="middle" style={{ fill: 'var(--acc)', fontWeight: 700 }}>
-                ≈ 28 días hasta descamarse
-              </text>
-            </g>
-            <g id="gM" className="g" opacity="0">
-              <g id="gMel">
-                <g id="dn" fill="none" stroke="#8a5a2b" strokeWidth="3" strokeLinecap="round" />
-                <ellipse cx="150" cy="272" rx="11" ry="14" fill="#f0dcc0" stroke="#8a5a2b" strokeWidth="1.5" />
-                <ellipse cx="150" cy="274" rx="6" ry="8" fill="#8a6a8a" />
-                <ellipse cx="123" cy="257" rx="6" ry="2.6" fill="#5a3416" />
-                <ellipse cx="178" cy="257" rx="6" ry="2.6" fill="#5a3416" />
-                <g id="ms" fill="#5a3416" />
-                <path className="l" d="M150 286V302" />
-                <text x="150" y="314" textAnchor="middle" className="h">
-                  Melanocito
-                </text>
-              </g>
-              <g id="gMer">
-                <circle id="rg" cx="330" cy="271" fill="none" stroke="#2fa39a" strokeWidth="2" />
-                <rect x="319" y="289" width="22" height="5" rx="2" fill="#e8c400" />
-                <ellipse cx="330" cy="271" rx="11" ry="14" fill="#2fa39a" />
-                <ellipse cx="330" cy="272" rx="6" ry="8" fill="#145e58" />
-                <circle id="np" cx="330" r="2.6" fill="#e8c400" />
-                <text id="mk1" className="h">
-                  Célula de Merkel
-                </text>
-                <text id="mk2" style={{ fontSize: '10px' }}>
-                  + terminación nerviosa
-                </text>
-              </g>
-            </g>
-            <g id="gL" className="g" opacity="0">
-              <g id="lc">
-                <g fill="none" stroke="#7a5cc7" strokeWidth="3" strokeLinecap="round">
-                  <path d="M252 195Q235 175 226 150M268 195Q285 172 298 152M250 205Q232 215 220 206M270 206Q288 218 300 208M260 191Q258 170 262 140" />
-                </g>
-                <ellipse cx="260" cy="200" rx="12" ry="9" fill="#7a5cc7" />
-                <ellipse cx="260" cy="200" rx="6" ry="5" fill="#3f2a8a" />
-              </g>
-              <circle id="ag" r="4.5" fill="#f2a13a" />
-              <text id="agt" y="52" className="h">
-                Antígeno
-              </text>
-              <path id="lp" className="l" d="" />
-              <text id="lt" className="h">
-                Célula de Langerhans
-              </text>
-              <text id="mg" y="372" textAnchor="middle" className="h">
-                → migra a la dermis y al ganglio
-              </text>
-            </g>
+            <g id="gFb" className="g" />
+            <g id="gLk" />
+            <g id="gN" />
+            <g id="gPt" />
+            <g id="gG" className="g" opacity="0" />
           </svg>
         </div>
       </div>
