@@ -9,43 +9,52 @@
   padding: clamp(12px, 1.4vw, 16px) clamp(16px, 2.2vw, 28px) clamp(10px, 1.2vw, 14px);
   overflow: hidden;
   width: 100%;
-  border: 1.5px solid rgba(220, 38, 38, 0.28);
+  border: 1px solid rgba(242, 202, 113, 0.38);
   border-radius: clamp(16px, 1.8vw, 22px);
-  color: #0f2a43;
+  color: #f8fafc;
   background:
-    radial-gradient(circle at 6% 12%, rgba(239, 68, 68, 0.12) 0%, transparent 35%),
-    radial-gradient(circle at 94% 88%, rgba(16, 185, 129, 0.12) 0%, transparent 38%),
-    radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.08) 0%, transparent 45%),
-    radial-gradient(circle at 80% 20%, rgba(56, 189, 248, 0.06) 0%, transparent 30%),
-    linear-gradient(135deg, #ffffff 0%, #fafdff 45%, #f2f7fc 100%);
+    radial-gradient(circle at 3% 2%, rgba(208, 47, 56, 0.42) 0%, transparent 30%),
+    radial-gradient(circle at 97% 105%, rgba(21, 126, 91, 0.5) 0%, transparent 38%),
+    radial-gradient(circle at 61% -35%, rgba(242, 202, 113, 0.18) 0%, transparent 47%),
+    linear-gradient(115deg, #102f40 0%, #123d4c 46%, #0b3540 100%);
   box-shadow:
-    0 16px 36px -10px rgba(15, 42, 67, 0.08),
-    0 4px 14px rgba(220, 38, 38, 0.04),
-    inset 0 1px 0 #ffffff,
-    inset 0 0 0 1px rgba(255, 255, 255, 0.85);
+    0 16px 36px -10px rgba(15, 42, 67, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
               border-color 0.28s ease,
               box-shadow 0.28s ease;
 }
 
 .christmas-countdown-card:hover {
-  border-color: rgba(220, 38, 38, 0.45);
+  border-color: rgba(252, 211, 122, 0.7);
   box-shadow:
-    0 20px 44px -8px rgba(15, 42, 67, 0.12),
-    0 6px 18px rgba(220, 38, 38, 0.07),
-    inset 0 1px 0 #ffffff,
-    inset 0 0 0 1px rgba(255, 255, 255, 0.95);
+    0 20px 44px -8px rgba(15, 42, 67, 0.31),
+    0 5px 20px rgba(160, 32, 44, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   transform: translateY(-2px);
 }
 
-/* Borde izquierdo festivo */
+/* Línea festiva de acento sin añadir altura. */
 .christmas-countdown-card::before {
   content: "";
   position: absolute;
-  inset: 0 auto 0 0;
-  width: 5px;
-  background: linear-gradient(180deg, #dc2626 0%, #f59e0b 35%, #059669 70%, #dc2626 100%);
-  border-radius: 4px 0 0 4px;
+  inset: 0 12% auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #f5c76a 18%, #fff2c2 50%, #f5c76a 82%, transparent);
+  border-radius: 999px;
+  box-shadow: 0 0 12px rgba(245, 199, 106, 0.56);
+}
+
+.christmas-countdown-card::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  z-index: -1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: calc(clamp(16px, 1.8vw, 22px) - 6px);
+  pointer-events: none;
 }
 
 /* Guirnalda de lucecitas navideñas superior */
@@ -61,9 +70,19 @@
   z-index: 3;
 }
 
+.christmas-fairy-lights::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(206, 222, 218, 0.42);
+}
+
 .christmas-fairy-bulb {
-  width: 8px;
-  height: 11px;
+  width: 7px;
+  height: 9px;
   border-radius: 50% 50% 45% 45%;
   position: relative;
   box-shadow: 0 2px 6px currentColor;
@@ -132,7 +151,7 @@
   border-radius: 50%;
   filter: blur(36px);
   z-index: -1;
-  opacity: 0.55;
+  opacity: 0.72;
 }
 
 .christmas-glow-red {
@@ -178,7 +197,7 @@
   top: 12px;
   right: 32px;
   animation-duration: 9s;
-  color: rgba(220, 38, 38, 0.25);
+  color: rgba(255, 244, 211, 0.32);
 }
 
 .christmas-snowflake-2 {
@@ -186,7 +205,7 @@
   left: 20px;
   animation-duration: 12s;
   animation-delay: -3s;
-  color: rgba(5, 150, 105, 0.25);
+  color: rgba(196, 237, 220, 0.28);
 }
 
 .christmas-snowflake-3 {
@@ -194,7 +213,7 @@
   right: 18%;
   animation-duration: 15s;
   animation-delay: -6s;
-  color: rgba(245, 158, 11, 0.22);
+  color: rgba(255, 230, 162, 0.25);
 }
 
 @keyframes christmas-drift {
@@ -240,13 +259,14 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #b91c1c;
-  background: rgba(254, 226, 226, 0.85);
-  border: 1px solid rgba(252, 165, 165, 0.7);
+  color: #fff4d1;
+  background: rgba(113, 26, 42, 0.64);
+  border: 1px solid rgba(255, 213, 145, 0.38);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
 .christmas-badge-icon {
-  color: #dc2626;
+  color: #f7cf75;
   animation: christmas-pulse 2.2s infinite ease-in-out;
 }
 
@@ -258,9 +278,9 @@
   border-radius: 9999px;
   font-size: 0.68rem;
   font-weight: 600;
-  color: #065f46;
-  background: rgba(209, 250, 229, 0.85);
-  border: 1px solid rgba(167, 243, 208, 0.7);
+  color: #d8f5e8;
+  background: rgba(7, 92, 71, 0.58);
+  border: 1px solid rgba(137, 219, 187, 0.32);
 }
 
 @keyframes christmas-pulse {
@@ -274,9 +294,9 @@
   gap: 5px;
   font-size: 0.68rem;
   font-weight: 600;
-  color: #047857;
-  background: rgba(209, 250, 229, 0.7);
-  border: 1px solid rgba(167, 243, 208, 0.7);
+  color: #d9fbe9;
+  background: rgba(9, 83, 66, 0.64);
+  border: 1px solid rgba(134, 239, 172, 0.29);
   padding: 2px 8px;
   border-radius: 9999px;
 }
@@ -299,7 +319,8 @@
   margin: 9px 0 8px 0;
   font-size: clamp(1.1rem, 1.8vw, 1.45rem);
   font-weight: 800;
-  color: #0b233a;
+  color: #f8fafc;
+  text-shadow: 0 1px 1px rgba(3, 17, 25, 0.2);
   line-height: 1.25;
   letter-spacing: -0.02em;
   display: flex;
@@ -309,11 +330,11 @@
 }
 
 .christmas-tree-icon {
-  color: #059669;
+  color: #91e1ba;
 }
 
 .christmas-title-highlight {
-  background: linear-gradient(120deg, #dc2626 0%, #b91c1c 45%, #059669 100%);
+  background: linear-gradient(120deg, #ffe6a2 0%, #f8c75f 48%, #dff5e5 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -350,10 +371,10 @@
   min-width: clamp(60px, 6.5vw, 76px);
   padding: clamp(6px, 0.8vw, 9px) clamp(8px, 1vw, 12px);
   border-radius: clamp(10px, 1.2vw, 14px);
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border: 1.5px solid rgba(226, 232, 240, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.78);
   box-shadow:
     0 4px 12px -2px rgba(15, 42, 67, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.95);
@@ -374,8 +395,8 @@
 }
 
 .christmas-counter-days {
-  border-color: rgba(220, 38, 38, 0.35);
-  background: linear-gradient(145deg, rgba(254, 242, 242, 0.95) 0%, rgba(255, 255, 255, 0.92) 100%);
+  border-color: rgba(252, 165, 165, 0.62);
+  background: linear-gradient(145deg, #fff7f4 0%, #fff 100%);
 }
 
 .christmas-counter-days .christmas-card-mini-chip {
@@ -387,8 +408,8 @@
 }
 
 .christmas-counter-hours {
-  border-color: rgba(245, 158, 11, 0.35);
-  background: linear-gradient(145deg, rgba(254, 243, 199, 0.65) 0%, rgba(255, 255, 255, 0.92) 100%);
+  border-color: rgba(251, 191, 36, 0.58);
+  background: linear-gradient(145deg, #fffbeb 0%, #fff 100%);
 }
 
 .christmas-counter-hours .christmas-card-mini-chip {
@@ -400,8 +421,8 @@
 }
 
 .christmas-counter-minutes {
-  border-color: rgba(14, 165, 233, 0.32);
-  background: linear-gradient(145deg, rgba(224, 242, 254, 0.65) 0%, rgba(255, 255, 255, 0.92) 100%);
+  border-color: rgba(125, 211, 252, 0.6);
+  background: linear-gradient(145deg, #f0f9ff 0%, #fff 100%);
 }
 
 .christmas-counter-minutes .christmas-card-mini-chip {
@@ -413,8 +434,8 @@
 }
 
 .christmas-counter-seconds {
-  border-color: rgba(16, 185, 129, 0.35);
-  background: linear-gradient(145deg, rgba(209, 250, 229, 0.65) 0%, rgba(255, 255, 255, 0.92) 100%);
+  border-color: rgba(110, 231, 183, 0.55);
+  background: linear-gradient(145deg, #ecfdf5 0%, #fff 100%);
 }
 
 .christmas-counter-seconds .christmas-card-mini-chip {
@@ -452,9 +473,9 @@
   justify-content: space-between;
   gap: 12px;
   padding-top: 6px;
-  border-top: 1px dashed rgba(203, 213, 225, 0.7);
+  border-top: 1px solid rgba(229, 241, 238, 0.18);
   font-size: 0.74rem;
-  color: #526b84;
+  color: rgba(231, 242, 239, 0.74);
   flex-wrap: wrap;
 }
 
@@ -463,12 +484,12 @@
   align-items: center;
   gap: 6px;
   font-size: 0.74rem;
-  color: #475569;
+  color: rgba(235, 246, 242, 0.76);
   font-weight: 500;
 }
 
 .christmas-meta-target-item strong {
-  color: #0f2a43;
+  color: #fff8df;
 }
 
 .christmas-meta-clock {
@@ -476,17 +497,17 @@
   align-items: center;
   gap: 5px;
   font-size: 0.72rem;
-  color: #64748b;
+  color: rgba(235, 246, 242, 0.7);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 
 .christmas-meta-clock strong {
-  color: #0f2a43;
+  color: #fff8df;
 }
 
 .christmas-meta-icon {
-  color: #0284c7;
+  color: #f5cf75;
 }
 
 /* Vista cuando es el día de Navidad (25 de diciembre) */
