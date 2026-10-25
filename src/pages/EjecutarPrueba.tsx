@@ -173,6 +173,86 @@ const parciales: Array<{ key: ParcialKey; label: string }> = [
   { key: 'tercer', label: 'Tercer parcial' },
 ];
 
+// La miniatura debe usar la misma geometría de "aguja" que el visor ampliado.
+// Así el extremo de la aguja coincide exactamente con el punto guardado para la
+// pregunta, incluso en referencias antiguas que no tenían origen guardado.
+const POINTER_CORE_WIDTH_PX = 6;
+const POINTER_OUTLINE_WIDTH_PX = 8.2;
+const POINTER_TAPER_PX = 18;
+const POINTER_MIN_ANGLE_DEG = 7;
+const POINTER_OUTLINE_TIP_BACKOFF_PX = 1.1;
+const POINTER_BASE_OUTSET_PX = 3;
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const getPointerStart = (x: number, y: number, width: number, height: number) => {
+  const distances = [
+    { edge: 'left' as const, value: x },
+    { edge: 'right' as const, value: width - x },
+    { edge: 'top' as const, value: y },
+    { edge: 'bottom' as const, value: height - y },
+  ];
+  const nearest = distances.reduce((previous, current) => current.value < previous.value ? current : previous);
+
+  if (nearest.edge === 'left') return { x: 0, y, edge: nearest.edge };
+  if (nearest.edge === 'right') return { x: width, y, edge: nearest.edge };
+  if (nearest.edge === 'top') return { x, y: 0, edge: nearest.edge };
+  return { x, y: height, edge: nearest.edge };
+};
+
+const clampPointerStartToEdge = (x: number, y: number, width: number, height: number) => (
+  getPointerStart(clamp(x, 0, width), clamp(y, 0, height), width, height)
+);
+
+const enforceMinimumPointerInclination = (
+  start: { x: number; y: number; edge: 'left' | 'right' | 'top' | 'bottom' },
+  end: { x: number; y: number },
+  width: number,
+  height: number,
+) => {
+  const tangent = Math.tan((POINTER_MIN_ANGLE_DEG * Math.PI) / 180);
+  if (start.edge === 'left' || start.edge === 'right') {
+    const minimumDeltaY = Math.abs(end.x - start.x) * tangent;
+    if (Math.abs(end.y - start.y) < minimumDeltaY) {
+      const direction = end.y < height / 2 ? 1 : -1;
+      return { ...start, y: clamp(end.y - direction * minimumDeltaY, 0, height) };
+    }
+    return start;
+  }
+
+  const minimumDeltaX = Math.abs(end.y - start.y) * tangent;
+  if (Math.abs(end.x - start.x) < minimumDeltaX) {
+    const direction = end.x < width / 2 ? 1 : -1;
+    return { ...start, x: clamp(end.x - direction * minimumDeltaX, 0, width) };
+  }
+  return start;
+};
+
+const getPointerPolygon = (
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  bodyWidth: number,
+) => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const unitX = dx / length;
+  const unitY = dy / length;
+  const normalX = -unitY;
+  const normalY = unitX;
+  const halfWidth = bodyWidth / 2;
+  const taper = Math.min(POINTER_TAPER_PX, length * 0.6);
+  const neck = { x: end.x - unitX * taper, y: end.y - unitY * taper };
+
+  return [
+    { x: start.x + normalX * halfWidth, y: start.y + normalY * halfWidth },
+    { x: start.x - normalX * halfWidth, y: start.y - normalY * halfWidth },
+    { x: neck.x - normalX * halfWidth, y: neck.y - normalY * halfWidth },
+    end,
+    { x: neck.x + normalX * halfWidth, y: neck.y + normalY * halfWidth },
+  ].map(point => `${point.x},${point.y}`).join(' ');
+};
+
 const EjecutarPrueba: React.FC = () => {
   const { pruebaId } = useParams<{ pruebaId: string }>();
   const navigate = useNavigate();
@@ -628,35 +708,49 @@ const EjecutarPrueba: React.FC = () => {
                                   }}
                                 />
                                 {currentQuestion.referenceSenaladoLocation && (
-                                  <svg
-                                    viewBox={`0 0 ${referenceThumbNaturalSize?.width ?? 100} ${referenceThumbNaturalSize?.height ?? 100}`}
-                                    style={s.referenceOverlay}
-                                  >
-                                    <defs>
-                                      <marker
-                                        id="referenceThumbnailArrow"
-                                        markerWidth="10"
-                                        markerHeight="10"
-                                        refX="8"
-                                        refY="3"
-                                        orient="auto"
-                                        markerUnits="strokeWidth"
-                                      >
-                                        <path d="M0,0 L9,3 L0,6 Z" fill="#0f172a" />
-                                      </marker>
-                                    </defs>
-                                    <line
-                                      x1={(currentQuestion.referenceSenaladoLocation.startX ?? currentQuestion.referenceSenaladoLocation.x) * (referenceThumbNaturalSize?.width ?? 100)}
-                                      y1={(currentQuestion.referenceSenaladoLocation.startY ?? currentQuestion.referenceSenaladoLocation.y) * (referenceThumbNaturalSize?.height ?? 100)}
-                                      x2={currentQuestion.referenceSenaladoLocation.x * (referenceThumbNaturalSize?.width ?? 100)}
-                                      y2={currentQuestion.referenceSenaladoLocation.y * (referenceThumbNaturalSize?.height ?? 100)}
-                                      stroke="#0f172a"
-                                      strokeWidth={Math.max(4, Math.min(referenceThumbNaturalSize?.width ?? 100, referenceThumbNaturalSize?.height ?? 100) * 0.006)}
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      markerEnd="url(#referenceThumbnailArrow)"
-                                    />
-                                  </svg>
+                                  (() => {
+                                    const width = referenceThumbNaturalSize?.width ?? 100;
+                                    const height = referenceThumbNaturalSize?.height ?? 100;
+                                    // La imagen original puede tener miles de píxeles, pero la miniatura se
+                                    // muestra en pocos cientos. Escalamos solo el grosor para que la aguja
+                                    // siga siendo legible sin cambiar su punta ni su recorrido.
+                                    const thumbnailBase = Math.min(width, height);
+                                    const thumbnailCoreWidth = Math.max(POINTER_CORE_WIDTH_PX, thumbnailBase * 0.012);
+                                    const thumbnailOutlineWidth = Math.max(POINTER_OUTLINE_WIDTH_PX, thumbnailBase * 0.017);
+                                    const location = currentQuestion.referenceSenaladoLocation;
+                                    const end = { x: location.x * width, y: location.y * height };
+                                    const hasSavedStart = location.startX != null && location.startY != null;
+                                    const start = hasSavedStart
+                                      ? clampPointerStartToEdge(location.startX! * width, location.startY! * height, width, height)
+                                      : enforceMinimumPointerInclination(getPointerStart(end.x, end.y, width, height), end, width, height);
+                                    const length = Math.hypot(end.x - start.x, end.y - start.y) || 1;
+                                    const unitX = (end.x - start.x) / length;
+                                    const unitY = (end.y - start.y) / length;
+                                    const drawStart = {
+                                      x: start.x - unitX * POINTER_BASE_OUTSET_PX,
+                                      y: start.y - unitY * POINTER_BASE_OUTSET_PX,
+                                    };
+                                    const outlineEnd = {
+                                      x: end.x - unitX * POINTER_OUTLINE_TIP_BACKOFF_PX,
+                                      y: end.y - unitY * POINTER_OUTLINE_TIP_BACKOFF_PX,
+                                    };
+
+                                    return (
+                                      <svg viewBox={`0 0 ${width} ${height}`} style={s.referenceOverlay} aria-hidden="true">
+                                        <polygon
+                                          points={getPointerPolygon(drawStart, outlineEnd, thumbnailOutlineWidth)}
+                                          fill="#ffffff"
+                                          opacity={0.55}
+                                          shapeRendering="geometricPrecision"
+                                        />
+                                        <polygon
+                                          points={getPointerPolygon(drawStart, end, thumbnailCoreWidth)}
+                                          fill="#0a0a0a"
+                                          shapeRendering="geometricPrecision"
+                                        />
+                                      </svg>
+                                    );
+                                  })()
                                 )}
 
                                 <div style={s.referenceZoomHint}>

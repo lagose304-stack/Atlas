@@ -1,0 +1,539 @@
+/* ─── Contador Navideño Atlas (Compacto, Elegante y de Altura Reducida) ─── */
+
+.christmas-countdown-card {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: clamp(12px, 1.4vw, 16px) clamp(16px, 2.2vw, 28px) clamp(10px, 1.2vw, 14px);
+  overflow: hidden;
+  width: 100%;
+  border: 1.5px solid rgba(220, 38, 38, 0.28);
+  border-radius: clamp(16px, 1.8vw, 22px);
+  color: #0f2a43;
+  background:
+    radial-gradient(circle at 6% 12%, rgba(239, 68, 68, 0.12) 0%, transparent 35%),
+    radial-gradient(circle at 94% 88%, rgba(16, 185, 129, 0.12) 0%, transparent 38%),
+    radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.08) 0%, transparent 45%),
+    radial-gradient(circle at 80% 20%, rgba(56, 189, 248, 0.06) 0%, transparent 30%),
+    linear-gradient(135deg, #ffffff 0%, #fafdff 45%, #f2f7fc 100%);
+  box-shadow:
+    0 16px 36px -10px rgba(15, 42, 67, 0.08),
+    0 4px 14px rgba(220, 38, 38, 0.04),
+    inset 0 1px 0 #ffffff,
+    inset 0 0 0 1px rgba(255, 255, 255, 0.85);
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.28s ease,
+              box-shadow 0.28s ease;
+}
+
+.christmas-countdown-card:hover {
+  border-color: rgba(220, 38, 38, 0.45);
+  box-shadow:
+    0 20px 44px -8px rgba(15, 42, 67, 0.12),
+    0 6px 18px rgba(220, 38, 38, 0.07),
+    inset 0 1px 0 #ffffff,
+    inset 0 0 0 1px rgba(255, 255, 255, 0.95);
+  transform: translateY(-2px);
+}
+
+/* Borde izquierdo festivo */
+.christmas-countdown-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: linear-gradient(180deg, #dc2626 0%, #f59e0b 35%, #059669 70%, #dc2626 100%);
+  border-radius: 4px 0 0 4px;
+}
+
+/* Guirnalda de lucecitas navideñas superior */
+.christmas-fairy-lights {
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.christmas-fairy-bulb {
+  width: 8px;
+  height: 11px;
+  border-radius: 50% 50% 45% 45%;
+  position: relative;
+  box-shadow: 0 2px 6px currentColor;
+  animation: fairy-twinkle 2s infinite alternate ease-in-out;
+}
+
+.christmas-fairy-bulb::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 2px;
+  background: #334155;
+  border-radius: 1px;
+}
+
+.bulb-red {
+  color: #ef4444;
+  background: #ef4444;
+  animation-delay: 0s;
+}
+
+.bulb-gold {
+  color: #f59e0b;
+  background: #fbbf24;
+  animation-delay: 0.4s;
+}
+
+.bulb-green {
+  color: #10b981;
+  background: #10b981;
+  animation-delay: 0.8s;
+}
+
+.bulb-blue {
+  color: #38bdf8;
+  background: #38bdf8;
+  animation-delay: 1.2s;
+}
+
+.bulb-purple {
+  color: #a855f7;
+  background: #c084fc;
+  animation-delay: 1.6s;
+}
+
+@keyframes fairy-twinkle {
+  0% {
+    opacity: 0.4;
+    filter: brightness(0.9);
+    box-shadow: 0 0 3px currentColor;
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1.25);
+    box-shadow: 0 0 10px currentColor, 0 0 16px currentColor;
+  }
+}
+
+/* Resplandores ambientales de fondo */
+.christmas-ambient-glow {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(36px);
+  z-index: -1;
+  opacity: 0.55;
+}
+
+.christmas-glow-red {
+  top: -20px;
+  left: 10%;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.16), transparent 70%);
+}
+
+.christmas-glow-green {
+  bottom: -20px;
+  right: 8%;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.14), transparent 70%);
+}
+
+.christmas-glow-gold {
+  top: 30%;
+  right: 40%;
+  width: 150px;
+  height: 150px;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.12), transparent 70%);
+}
+
+/* Copos de nieve flotantes */
+.christmas-snowflakes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.christmas-snowflake {
+  position: absolute;
+  animation: christmas-drift 10s ease-in-out infinite alternate;
+  user-select: none;
+}
+
+.christmas-snowflake-1 {
+  top: 12px;
+  right: 32px;
+  animation-duration: 9s;
+  color: rgba(220, 38, 38, 0.25);
+}
+
+.christmas-snowflake-2 {
+  bottom: 14px;
+  left: 20px;
+  animation-duration: 12s;
+  animation-delay: -3s;
+  color: rgba(5, 150, 105, 0.25);
+}
+
+.christmas-snowflake-3 {
+  top: 50%;
+  right: 18%;
+  animation-duration: 15s;
+  animation-delay: -6s;
+  color: rgba(245, 158, 11, 0.22);
+}
+
+@keyframes christmas-drift {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(5px) rotate(18deg); }
+  100% { transform: translateY(-4px) rotate(-14deg); }
+}
+
+/* ─── FILA PRINCIPAL HORIZONTAL (Info izquierda + Contadores derecha) ─── */
+.christmas-main-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(14px, 2vw, 24px);
+  flex-wrap: wrap;
+}
+
+/* Columna de información izquierda */
+.christmas-info-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 250px;
+  flex: 1 1 280px;
+}
+
+.christmas-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.christmas-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #b91c1c;
+  background: rgba(254, 226, 226, 0.85);
+  border: 1px solid rgba(252, 165, 165, 0.7);
+}
+
+.christmas-badge-icon {
+  color: #dc2626;
+  animation: christmas-pulse 2.2s infinite ease-in-out;
+}
+
+.christmas-sub-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #065f46;
+  background: rgba(209, 250, 229, 0.85);
+  border: 1px solid rgba(167, 243, 208, 0.7);
+}
+
+@keyframes christmas-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.85; }
+}
+
+.christmas-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #047857;
+  background: rgba(209, 250, 229, 0.7);
+  border: 1px solid rgba(167, 243, 208, 0.7);
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.christmas-live-dot {
+  width: 6px;
+  height: 6px;
+  background-color: #10b981;
+  border-radius: 50%;
+  animation: christmas-dot-pulse 1.8s infinite;
+}
+
+@keyframes christmas-dot-pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.christmas-main-title {
+  margin: 9px 0 8px 0;
+  font-size: clamp(1.1rem, 1.8vw, 1.45rem);
+  font-weight: 800;
+  color: #0b233a;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.christmas-tree-icon {
+  color: #059669;
+}
+
+.christmas-title-highlight {
+  background: linear-gradient(120deg, #dc2626 0%, #b91c1c 45%, #059669 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.christmas-target-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.christmas-target-inline strong {
+  color: #0f2a43;
+}
+
+/* ─── GRID / PILLS DE CONTEO COMPACTOS ─── */
+.christmas-counter-grid {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.1vw, 12px);
+  flex-wrap: nowrap;
+}
+
+.christmas-counter-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: clamp(60px, 6.5vw, 76px);
+  padding: clamp(6px, 0.8vw, 9px) clamp(8px, 1vw, 12px);
+  border-radius: clamp(10px, 1.2vw, 14px);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1.5px solid rgba(226, 232, 240, 0.95);
+  box-shadow:
+    0 4px 12px -2px rgba(15, 42, 67, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  transition: all 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.christmas-counter-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px -4px rgba(15, 42, 67, 0.09);
+}
+
+.christmas-card-mini-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+  opacity: 0.85;
+}
+
+.christmas-counter-days {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: linear-gradient(145deg, rgba(254, 242, 242, 0.95) 0%, rgba(255, 255, 255, 0.92) 100%);
+}
+
+.christmas-counter-days .christmas-card-mini-chip {
+  color: #dc2626;
+}
+
+.christmas-counter-days .christmas-digit {
+  color: #b91c1c;
+}
+
+.christmas-counter-hours {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: linear-gradient(145deg, rgba(254, 243, 199, 0.65) 0%, rgba(255, 255, 255, 0.92) 100%);
+}
+
+.christmas-counter-hours .christmas-card-mini-chip {
+  color: #d97706;
+}
+
+.christmas-counter-hours .christmas-digit {
+  color: #d97706;
+}
+
+.christmas-counter-minutes {
+  border-color: rgba(14, 165, 233, 0.32);
+  background: linear-gradient(145deg, rgba(224, 242, 254, 0.65) 0%, rgba(255, 255, 255, 0.92) 100%);
+}
+
+.christmas-counter-minutes .christmas-card-mini-chip {
+  color: #0284c7;
+}
+
+.christmas-counter-minutes .christmas-digit {
+  color: #0284c7;
+}
+
+.christmas-counter-seconds {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: linear-gradient(145deg, rgba(209, 250, 229, 0.65) 0%, rgba(255, 255, 255, 0.92) 100%);
+}
+
+.christmas-counter-seconds .christmas-card-mini-chip {
+  color: #059669;
+}
+
+.christmas-counter-seconds .christmas-digit {
+  color: #059669;
+}
+
+.christmas-digit {
+  font-family: "Montserrat", "Segoe UI", sans-serif;
+  font-size: clamp(1.35rem, 2.2vw, 1.85rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  margin-bottom: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.christmas-label {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+/* ─── BARRA INFERIOR DELGADA (Deseo navideño + Reloj) ─── */
+.christmas-compact-footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(203, 213, 225, 0.7);
+  font-size: 0.74rem;
+  color: #526b84;
+  flex-wrap: wrap;
+}
+
+.christmas-meta-target-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: #475569;
+  font-weight: 500;
+}
+
+.christmas-meta-target-item strong {
+  color: #0f2a43;
+}
+
+.christmas-meta-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  color: #64748b;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.christmas-meta-clock strong {
+  color: #0f2a43;
+}
+
+.christmas-meta-icon {
+  color: #0284c7;
+}
+
+/* Vista cuando es el día de Navidad (25 de diciembre) */
+.christmas-celebration {
+  text-align: center;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.christmas-celebration-title {
+  font-size: clamp(1.3rem, 2.2vw, 1.8rem);
+  font-weight: 800;
+  color: #b91c1c;
+  margin: 0;
+}
+
+.christmas-celebration-text {
+  font-size: 0.88rem;
+  color: #334155;
+  max-width: 600px;
+  margin: 0;
+}
+
+/* Responsividad en pantallas pequeñas */
+@media (max-width: 720px) {
+  .christmas-main-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .christmas-counter-grid {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .christmas-counter-card {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .christmas-compact-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+}

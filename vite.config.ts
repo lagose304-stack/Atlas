@@ -57,6 +57,41 @@ function r2DevServerPlugin(): Plugin {
       server.middlewares.use((req: any, res: any, next: any) => {
         const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
         const pathname = url.pathname;
+        // Servir archivos estáticos locales cuando se accede vía /@fs/ entre diferentes unidades (ej. D: y C:)
+        if (pathname.startsWith('/@fs/')) {
+          const match = pathname.match(/^\/@fs\/([A-Za-z]:\/[^\?#]+)/);
+          if (match) {
+            const fsPath = decodeURIComponent(match[1]);
+            if (fs.existsSync(fsPath)) {
+              try {
+                const stat = fs.statSync(fsPath);
+                if (stat.isFile()) {
+                  const ext = path.extname(fsPath).toLowerCase();
+                  const mimeTypes: Record<string, string> = {
+                    '.png': 'image/png',
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.webp': 'image/webp',
+                    '.svg': 'image/svg+xml',
+                    '.ico': 'image/x-icon',
+                    '.gif': 'image/gif',
+                    '.mp3': 'audio/mpeg',
+                    '.wav': 'audio/wav',
+                  };
+                  if (mimeTypes[ext]) {
+                    res.setHeader('Content-Type', mimeTypes[ext]);
+                    res.setHeader('Content-Length', stat.size);
+                    res.setHeader('Cache-Control', 'no-cache');
+                    fs.createReadStream(fsPath).pipe(res);
+                    return;
+                  }
+                }
+              } catch (_) {
+                // Continuar si falla lectura
+              }
+            }
+          }
+        }
 
         // Health check
         if (pathname === '/api/health' && req.method === 'GET') {
@@ -307,6 +342,10 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    fs: {
+      strict: false,
+      allow: ['..'],
+    },
   },
 });
 
