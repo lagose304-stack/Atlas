@@ -51,7 +51,7 @@ const ExamWeekTestsCarousel: React.FC<{ parcial: string }> = ({ parcial }) => {
   const [activeSlide, setActiveSlide] = useState(0);
   const autoScroll = useMemo(() => AutoScroll({
     active: !paused,
-    speed: 0.4,
+    speed: 0.6,
     startDelay: 1200,
     stopOnInteraction: false,
     stopOnMouseEnter: true,
