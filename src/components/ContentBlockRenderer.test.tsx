@@ -4,6 +4,10 @@ import ContentBlockRenderer from './ContentBlockRenderer';
 import type { ContentBlock } from '../types/contentBlocks';
 import { createDefaultBlockContent } from './blocks/blockRegistry';
 
+vi.mock('./ExamWeekTestsCarousel', () => ({
+  default: ({ parcial }: { parcial: string }) => <section aria-label="Evaluaciones prácticas" data-parcial={parcial} />,
+}));
+
 vi.mock('./ImageViewerModal', () => ({
   default: () => null,
 }));
@@ -983,17 +987,15 @@ describe('ContentBlockRenderer', () => {
 
     // Textos clave del banner
     expect(screen.getByText('Periodo Oficial de Evaluaciones')).toBeInTheDocument();
-    expect(screen.getByText(/Semana de Exámenes: Primer Parcial/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Semana de Exámenes: Primer Parcial/i })).toBeInTheDocument();
     expect(screen.getByText('¡Mucho éxito en tus evaluaciones! Repasa con las placas del laboratorio.')).toBeInTheDocument();
 
     // Botones de navegación
     expect(screen.getByRole('link', { name: /Repasar temario/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Evaluaciones prácticas/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Evaluaciones prácticas/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Evaluaciones prácticas' })).toHaveAttribute('data-parcial', 'primer');
 
     // Elementos de la estación de estudio de Snoopy
-    expect(screen.getByText('ATLAS LAB · 2026')).toBeInTheDocument();
-    expect(screen.getByText('¡Tú puedes!')).toBeInTheDocument();
-    expect(screen.getByText('Enfoque 100%')).toBeInTheDocument();
     expect(screen.getByText('Modo estudio activado 🔬')).toBeInTheDocument();
   });
 

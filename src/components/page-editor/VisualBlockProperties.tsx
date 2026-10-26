@@ -320,7 +320,7 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
         </p>
         <TextAreaField label="Insignia / Pie de la imagen" value={content.image_caption ?? ''} onChange={image_caption => onChange({ image_caption })} />
         <label className="visual-properties-field"><span>Texto botón de temario</span><input value={content.btn_temario_text || ''} placeholder="Repasar temario" onChange={e => onChange({ btn_temario_text: e.target.value })} /></label>
-        <label className="visual-properties-field"><span>Texto botón de evaluaciones</span><input value={content.btn_evaluaciones_text || ''} placeholder="Evaluaciones prácticas" onChange={e => onChange({ btn_evaluaciones_text: e.target.value })} /></label>
+        <p className="visual-properties-hint">Debajo se mostrarán automáticamente las pruebas publicadas del parcial seleccionado, con su nombre y miniatura.</p>
       </>;
     }
     if (block.block_type === 'image') {

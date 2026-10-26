@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
+import { CalendarDays, BookOpen, ArrowRight, Sparkles } from 'lucide-react';
 import type { ContentBlock, BlockType } from '../types/contentBlocks';
 import ImageViewerModal from './ImageViewerModal';
 import { renderBoldText } from './BoldField';
@@ -22,6 +23,7 @@ import {
   TopicDivisionsBlock,
 } from './histology-blocks';
 import examenIllustration from '../assets/imagenes/examen.png';
+import ExamWeekTestsCarousel from './ExamWeekTestsCarousel';
 
 const RichTextValue: React.FC<{ value: string; className?: string; style?: React.CSSProperties }> = ({ value, className, style }) => {
   if (!value) return null;
@@ -1457,97 +1459,56 @@ const BlockItem: React.FC<{
         segundo: 'Segundo Parcial',
         tercer: 'Tercer Parcial',
       };
+      const defaultExamTitle = !c.title || c.title.trim() === `Semana de Exámenes: ${parcialNames[activeParcial]}`;
 
       return (
         <article
           className="cb-weekly-publication cb-exam-week-block"
           style={{
             ['--weekly-accent' as string]: accent,
+            ['--exam-accent' as string]: accent,
+            ['--exam-bg' as string]: bg,
             width: `min(100%, ${widthMap[c.exam_width || 'full'] || '100%'})`,
             marginInline: 'auto',
             overflow: 'hidden',
             position: 'relative',
             boxSizing: 'border-box',
             borderRadius: 'clamp(20px, 2.6vw, 30px)',
-            border: style === 'outline' ? `1.5px solid ${accent}` : '1.5px solid rgba(147, 213, 248, 0.85)',
+            border: `1px solid color-mix(in srgb, ${accent} ${style === 'outline' ? '70%' : '20%'}, white)`,
             background: style === 'clean'
               ? '#ffffff'
               : style === 'outline'
               ? 'transparent'
-              : `radial-gradient(circle at 8% 15%, rgba(186, 230, 253, 0.65), transparent 40%), radial-gradient(circle at 45% 85%, rgba(221, 214, 254, 0.45), transparent 45%), linear-gradient(135deg, ${bg} 0%, #fbfdff 42%, #f0f7fc 100%)`,
+              : `color-mix(in srgb, ${accent} 13%, #e9edf5)`,
+            backgroundImage: style === 'premium' ? 'radial-gradient(#8097b330 1px, transparent 1px)' : undefined,
+            backgroundSize: '12px 12px',
             boxShadow: style === 'outline'
               ? 'none'
-              : '0 24px 54px -12px rgba(12, 69, 104, 0.15), 0 8px 24px rgba(12, 69, 104, 0.06), inset 0 1.5px 0 #ffffff, inset 0 0 0 1px rgba(255, 255, 255, 0.8)',
+              : '0 20px 55px -22px rgba(15, 55, 85, 0.18), 0 2px 8px rgba(15, 55, 85, 0.03)',
           }}
         >
-          {/* Barra lateral izquierda con gradiente continuo y brillo */}
-          <span aria-hidden style={{ position: 'absolute', inset: '0 auto 0 0', width: '6px', background: 'linear-gradient(180deg, #0284c7 0%, #38bdf8 45%, #818cf8 80%, #6366f1 100%)', zIndex: 3 }} />
-
-          {/* Elementos decorativos científicos de fondo */}
-          <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-            {/* Auras luminosas difusas con respiración suave */}
-            <span style={{ position: 'absolute', width: '340px', height: '340px', left: '-70px', top: '-90px', borderRadius: '50%', background: `radial-gradient(circle, ${accent}33, transparent 70%)`, filter: 'blur(30px)' }} />
-            <span style={{ position: 'absolute', width: '300px', height: '300px', left: '24%', bottom: '-90px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(167, 139, 250, 0.28), transparent 70%)', filter: 'blur(32px)' }} />
-            <span style={{ position: 'absolute', width: '240px', height: '240px', right: '32%', top: '10%', borderRadius: '50%', background: `radial-gradient(circle, #38bdf82a, transparent 70%)`, filter: 'blur(24px)' }} />
-
-            {/* Malla de micropuntos científica */}
-            <span style={{ position: 'absolute', left: '16px', bottom: '12px', width: '130px', height: '80px', opacity: 0.45, backgroundImage: `radial-gradient(${accent} 1.4px, transparent 1.4px)`, backgroundSize: '14px 14px' }} />
-            <span style={{ position: 'absolute', right: '36%', bottom: '16px', width: '100px', height: '60px', opacity: 0.32, backgroundImage: `radial-gradient(${accent} 1.4px, transparent 1.4px)`, backgroundSize: '14px 14px' }} />
-
-            {/* Estructura química / molecular SVG en marca de agua suave */}
-            <svg style={{ position: 'absolute', right: '35%', bottom: '18px', width: '110px', height: '95px', opacity: 0.22 }} viewBox="0 0 90 80" fill="none" stroke={accent} strokeWidth="1.3">
-              <polygon points="30,10 50,10 60,27 50,44 30,44 20,27" />
-              <polygon points="50,44 70,44 80,61 70,78 50,78 40,61" />
-              <circle cx="30" cy="10" r="2.8" fill={accent} />
-              <circle cx="50" cy="10" r="2.8" fill={accent} />
-              <circle cx="60" cy="27" r="2.8" fill={accent} />
-              <circle cx="50" cy="44" r="2.8" fill={accent} />
-              <circle cx="70" cy="44" r="2.8" fill={accent} />
-              <circle cx="80" cy="61" r="2.8" fill={accent} />
-            </svg>
-
-            {/* Destellos animados de estudio */}
-            <span className="cb-exam-sparkle-anim-1" style={{ position: 'absolute', left: '16%', top: '16px', color: accent, fontSize: '16px' }}>✦</span>
-            <span className="cb-exam-sparkle-anim-2" style={{ position: 'absolute', right: '34%', top: '44%', color: accent, fontSize: '13px' }}>✦</span>
-            <span className="cb-exam-sparkle-anim-3" style={{ position: 'absolute', left: '7%', bottom: '38%', color: '#818cf8', fontSize: '12px' }}>✧</span>
-
-            {/* Retícula óptica y coordenadas HUD en esquina superior izquierda */}
-            <svg className="cb-exam-bg-hud" style={{ position: 'absolute', left: '14px', top: '12px', width: '22px', height: '22px', opacity: 0.45 }} viewBox="0 0 20 20">
-              <path d="M10 0v20M0 10h20" stroke={accent} strokeWidth="1.3" />
-              <circle cx="10" cy="10" r="4" stroke={accent} strokeWidth="0.9" fill="none" />
-            </svg>
-            <span className="cb-exam-bg-hud" style={{ position: 'absolute', left: '42px', top: '16px', fontSize: '0.64rem', fontWeight: 800, color: '#0369a1', opacity: 0.7, letterSpacing: '0.09em' }}>
-              ATLAS·HISTOLOGY LAB ⌖ 2026
-            </span>
-
-            {/* Escala micrométrica de laboratorio */}
-            <div className="cb-exam-bg-scale" style={{ position: 'absolute', right: '35%', top: '16px', display: 'flex', alignItems: 'center', gap: '5px', opacity: 0.55 }}>
-              <span style={{ width: '45px', height: '1.5px', background: accent, borderRadius: '1px' }} />
-              <span style={{ fontSize: '0.62rem', fontWeight: 850, color: accent, letterSpacing: '0.04em' }}>50 µm</span>
-            </div>
-          </div>
-
-          {/* Barra superior con gradiente brillante animado */}
-          <div aria-hidden style={{ position: 'absolute', zIndex: 2, inset: '0 0 auto', height: '4px', background: `linear-gradient(90deg, ${accent}, #38bdf8 30%, #818cf8 65%, #0284c7 100%)`, backgroundSize: '200% 100%', animation: 'exam-shimmer 4.5s linear infinite' }} />
+          <div className="cb-exam-wash" aria-hidden="true" />
 
           <div className={`cb-weekly-publication-grid cb-exam-grid ${!imageRight ? 'cb-exam-image-left' : ''}`}>
             {/* Columna de contenido */}
             <div className="cb-exam-content-col" style={{ order: imageRight ? 1 : 2 }}>
+              <div className="cb-exam-binding" aria-hidden="true">{[0, 1, 2, 3, 4, 5].map(ring => <i key={ring} />)}</div>
+              <div className="cb-exam-page-tab" aria-hidden="true">{activeParcial === 'segundo' ? '02' : activeParcial === 'tercer' ? '03' : '01'}</div>
               {/* Badge superior con punto pulsante */}
               <div className="cb-exam-badge">
-                <span className="cb-exam-pulse-dot" style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#0284c7' }} />
-                <span aria-hidden style={{ fontSize: '0.88rem' }}>📅</span>
-                <RichTextValue value={c.eyebrow || 'Periodo Oficial de Evaluaciones'} />
+
+                <span className="cb-exam-calendar" aria-hidden><CalendarDays size={16} /></span>
+                <RichTextValue value={c.eyebrow || 'Periodo Oficial de Evaluaciones'} style={{ color: 'inherit' }} />
               </div>
 
               {/* Título principal con realce de alto impacto */}
               <div className="cb-exam-title-wrap">
                 <h2 className="cb-exam-title">
-                  {c.title ? (
-                    <RichTextValue value={c.title} />
+                  {!defaultExamTitle ? (
+                    <RichTextValue value={c.title} style={{ color: 'inherit' }} />
                   ) : (
                     <>
-                      Semana de Exámenes:{' '}
+                      <span className="cb-exam-title-intro">Semana de Exámenes:</span>{' '}
                       <span className="cb-exam-parcial-text">
                         {parcialNames[activeParcial] || 'Primer Parcial'}
                       </span>
@@ -1556,19 +1517,12 @@ const BlockItem: React.FC<{
                 </h2>
               </div>
 
-              {/* Doble línea decorativa de acento con diamante central */}
-              <div className="cb-exam-divider">
-                <div className="cb-exam-divider-bar-1" style={{ background: `linear-gradient(90deg, ${accent}, #38bdf8)` }} />
-                <span style={{ color: accent, fontSize: '11px', opacity: 0.85 }}>◆</span>
-                <div className="cb-exam-divider-bar-2" />
-              </div>
-
               {/* Mensaje motivacional en tarjeta de cristal editorial */}
               <div className="cb-exam-card" style={{ borderLeftColor: accent }}>
                 <div className="cb-exam-card-inner">
-                  <span className="cb-exam-card-icon" aria-hidden>💡</span>
+                  <span className="cb-exam-card-icon" aria-hidden><Sparkles size={20} /></span>
                   <div style={{ flex: 1 }}>
-                    <RichTextValue value={c.subtitle || '¡Mucho éxito en tus evaluaciones! Repasa los conceptos clave y practica con las placas del laboratorio.'} />
+                    <RichTextValue value={c.subtitle || '¡Mucho éxito en tus evaluaciones! Repasa los conceptos clave y practica con las placas del laboratorio.'} style={{ color: 'inherit' }} />
                   </div>
                 </div>
               </div>
@@ -1579,18 +1533,11 @@ const BlockItem: React.FC<{
                   href={c.btn_temario_url || `/temario?parcial=${activeParcial}`}
                   className="cb-exam-primary-btn"
                 >
-                  <span aria-hidden style={{ fontSize: '1.05em' }}>📖</span>
+                  <BookOpen size={17} aria-hidden="true" />
                   <span>{c.btn_temario_text || 'Repasar temario'}</span>
-                  <span aria-hidden style={{ fontSize: '1.15em', marginLeft: '4px', transition: 'transform 0.2s ease' }}>→</span>
+                  <ArrowRight size={17} aria-hidden="true" />
                 </a>
 
-                <a
-                  href={c.btn_evaluaciones_url || '/evaluaciones'}
-                  className="cb-exam-secondary-btn"
-                >
-                  <span aria-hidden style={{ fontSize: '1.05em' }}>📝</span>
-                  <span>{c.btn_evaluaciones_text || 'Evaluaciones prácticas'}</span>
-                </a>
               </div>
             </div>
 
@@ -1599,37 +1546,17 @@ const BlockItem: React.FC<{
               className="cb-exam-figure-col"
               style={{
                 order: imageRight ? 2 : 1,
-                borderLeft: imageRight ? '1.5px solid rgba(186, 230, 253, 0.8)' : undefined,
-                borderRight: !imageRight ? '1.5px solid rgba(186, 230, 253, 0.8)' : undefined,
+
               }}
             >
+              <div className="cb-exam-note-meta"><BookOpen size={15} aria-hidden="true" /><span>Un momento para repasar</span></div>
               {/* Sistema de retícula óptica concéntrica de microscopio */}
               <span className="cb-exam-reticle-outer" aria-hidden />
               <span className="cb-exam-reticle-mid cb-exam-reticle-spin" aria-hidden />
               <span className="cb-exam-reticle-inner cb-exam-reticle-spin-rev" aria-hidden />
-
-              {/* Insignia científica flotante superior derecha */}
-              <div className="cb-exam-badge-lab">
-                <span>🔬</span>
-                <span>ATLAS LAB · 2026</span>
-              </div>
-
-              {/* Retícula óptica superior izquierda */}
-              <div className="cb-exam-badge-opt">
-                ⊞ OPTICAL 40X
-              </div>
-
-              {/* Micro-badge flotante 1 (izquierda de Snoopy) */}
-              <div className="cb-exam-float-badge-1">
-                <span>⭐</span>
-                <span>¡Tú puedes!</span>
-              </div>
-
-              {/* Micro-badge flotante 2 (derecha de Snoopy) */}
-              <div className="cb-exam-float-badge-2">
-                <span>📚</span>
-                <span>Enfoque 100%</span>
-              </div>
+              <span className="cb-exam-art-spark cb-exam-art-spark-one" aria-hidden>✦</span>
+              <span className="cb-exam-art-spark cb-exam-art-spark-two" aria-hidden>✧</span>
+              <div className="cb-exam-encouragement"><Sparkles size={15} aria-hidden="true" /><span>¡Tú puedes!</span></div>
 
               {/* Contenedor de Snoopy con su sombra dinámica sincronizada */}
               <div className="cb-exam-snoopy-wrap">
@@ -1651,6 +1578,7 @@ const BlockItem: React.FC<{
               </figcaption>
             </figure>
           </div>
+          <ExamWeekTestsCarousel parcial={activeParcial} />
         </article>
       );
     }

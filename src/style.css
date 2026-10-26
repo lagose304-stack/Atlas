@@ -6647,6 +6647,22 @@ body {
   box-shadow: 0 24px 48px -10px rgba(12, 69, 104, 0.14), 0 6px 18px rgba(12, 69, 104, 0.06), inset 0 1px 0 #ffffff !important;
 }
 
+/* Acabado editorial: la paleta configurada en el editor gobierna todo el bloque. */
+.cb-exam-week-block {
+  isolation: isolate;
+}
+
+.cb-exam-week-block::after {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  z-index: 1;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: calc(clamp(20px, 2.6vw, 30px) - 8px);
+  pointer-events: none;
+  opacity: 0.72;
+}
+
 /* Grid principal: 2 columnas adaptativas fluidas que se mantienen proporcionadas */
 .cb-exam-grid {
   display: grid !important;
@@ -6676,6 +6692,18 @@ body {
   box-sizing: border-box !important;
 }
 
+.cb-exam-content-col::before {
+  content: '';
+  position: absolute;
+  top: clamp(22px, 4cqw, 42px);
+  bottom: clamp(22px, 4cqw, 42px);
+  left: clamp(10px, 2.2cqw, 30px);
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--exam-accent, #0284c7) 52%, white), transparent);
+  opacity: 0.72;
+}
+
 /* Badge superior oficial */
 .cb-exam-badge {
   display: inline-flex !important;
@@ -6683,9 +6711,9 @@ body {
   gap: clamp(4px, 1cqw, 9px) !important;
   padding: clamp(3px, 0.7cqw, 6px) clamp(7px, 1.4cqw, 14px) !important;
   border-radius: 999px !important;
-  background: rgba(2, 132, 199, 0.08) !important;
-  border: 1.2px solid rgba(2, 132, 199, 0.25) !important;
-  color: #0369a1 !important;
+  background: color-mix(in srgb, var(--exam-accent, #0284c7) 9%, white) !important;
+  border: 1.2px solid color-mix(in srgb, var(--exam-accent, #0284c7) 28%, white) !important;
+  color: color-mix(in srgb, var(--exam-accent, #0284c7) 82%, #082f49) !important;
   font-size: clamp(0.6rem, 1.6cqw, 0.74rem) !important;
   font-weight: 800 !important;
   text-transform: uppercase !important;
@@ -6708,7 +6736,7 @@ body {
   margin: 0 !important;
   font-size: clamp(0.95rem, 3.2cqw, 2.15rem) !important;
   font-weight: 850 !important;
-  color: #071b31 !important;
+  color: #082f49 !important;
   line-height: 1.2 !important;
   letter-spacing: -0.025em !important;
   word-break: break-word !important;
@@ -6749,8 +6777,8 @@ body {
   margin: 0 0 clamp(8px, 1.6cqw, 18px) !important;
   padding: clamp(7px, 1.4cqw, 13px) clamp(9px, 1.8cqw, 18px) !important;
   border-radius: clamp(9px, 1.6cqw, 14px) !important;
-  background: linear-gradient(135deg, rgba(240, 249, 255, 0.9) 0%, rgba(255, 255, 255, 0.94) 100%) !important;
-  border: 1.2px solid rgba(147, 213, 248, 0.75) !important;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--exam-accent, #0284c7) 7%, white) 0%, rgba(255, 255, 255, 0.96) 100%) !important;
+  border: 1.2px solid color-mix(in srgb, var(--exam-accent, #0284c7) 20%, white) !important;
   border-left-width: clamp(3px, 0.5cqw, 4px) !important;
   border-left-style: solid !important;
   box-shadow: 0 6px 18px rgba(12, 69, 104, 0.05), inset 0 1px 0 #ffffff !important;
@@ -6793,7 +6821,7 @@ body {
   gap: clamp(4px, 1cqw, 8px) !important;
   padding: clamp(7px, 1.4cqw, 11px) clamp(10px, 2.4cqw, 24px) !important;
   border-radius: clamp(8px, 1.5cqw, 13px) !important;
-  background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%) !important;
+  background: linear-gradient(135deg, var(--exam-accent, #0284c7) 0%, color-mix(in srgb, var(--exam-accent, #0284c7) 72%, #38bdf8) 100%) !important;
   color: #ffffff !important;
   font-weight: 800 !important;
   font-size: clamp(0.72rem, 1.8cqw, 0.92rem) !important;
@@ -6834,8 +6862,8 @@ body {
   padding: clamp(7px, 1.4cqw, 11px) clamp(10px, 2.2cqw, 22px) !important;
   border-radius: clamp(8px, 1.5cqw, 13px) !important;
   background: rgba(255, 255, 255, 0.95) !important;
-  color: #0369a1 !important;
-  border: 1.5px solid rgba(147, 213, 248, 0.9) !important;
+  color: color-mix(in srgb, var(--exam-accent, #0284c7) 82%, #082f49) !important;
+  border: 1.5px solid color-mix(in srgb, var(--exam-accent, #0284c7) 28%, white) !important;
   font-weight: 750 !important;
   font-size: clamp(0.72rem, 1.8cqw, 0.92rem) !important;
   text-decoration: none !important;
@@ -6864,7 +6892,9 @@ body {
   align-items: center !important;
   justify-content: center !important;
   overflow: hidden !important;
-  background: radial-gradient(circle at 50% 45%, rgba(224, 242, 254, 0.7) 0%, rgba(240, 249, 255, 0.96) 75%, #f8fafc 100%) !important;
+  background:
+    radial-gradient(circle at 50% 44%, color-mix(in srgb, var(--exam-accent, #0284c7) 19%, transparent) 0%, transparent 42%),
+    linear-gradient(145deg, #fafdff 0%, color-mix(in srgb, var(--exam-accent, #0284c7) 7%, white) 100%) !important;
   padding: clamp(10px, 2.2cqw, 24px) clamp(6px, 1.6cqw, 20px) !important;
   box-sizing: border-box !important;
   min-width: 0 !important;
@@ -6977,7 +7007,7 @@ body {
   background: rgba(255, 255, 255, 0.95) !important;
   border: 1.3px solid rgba(147, 213, 248, 0.9) !important;
   box-shadow: 0 4px 14px rgba(12, 69, 104, 0.08), inset 0 1px 0 #ffffff !important;
-  color: #0369a1 !important;
+  color: color-mix(in srgb, var(--exam-accent, #0284c7) 82%, #082f49) !important;
   font-size: clamp(0.58rem, 1.4cqw, 0.78rem) !important;
   font-weight: 750 !important;
   font-family: "Montserrat", "Segoe UI", sans-serif !important;
@@ -7156,6 +7186,123 @@ body {
     flex-direction: column !important;
     align-items: stretch !important;
   }
+}
+
+/* Libreta de estudio: hoja anillada y tarjeta de ilustración superpuesta. */
+.cb-exam-week-block:hover { transform: none; }
+.cb-exam-week-block::after, .cb-exam-wash { display: none; }
+.cb-exam-week-block .cb-exam-grid {
+  position: relative; isolation: isolate;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr) !important;
+  min-height: 0 !important; align-items: center !important;
+  padding: clamp(20px, 2.4cqw, 30px) clamp(24px, 3cqw, 40px) 22px !important; gap: clamp(24px, 4cqw, 56px) !important;
+  background: transparent;
+}
+.cb-exam-week-block .cb-exam-grid.cb-exam-image-left { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr) !important; }
+.cb-exam-week-block .cb-exam-content-col {
+  padding: 22px clamp(24px, 3cqw, 40px) 24px clamp(48px, 5cqw, 68px) !important;
+  gap: 13px; align-self: stretch; border-radius: 5px 18px 18px 5px;
+  background-color: #fffefb;
+  background-image: repeating-linear-gradient(0deg, transparent, transparent 29px, #d9e4eb66 29px, #d9e4eb66 30px);
+  box-shadow: 0 2px 0 #cdd8df, 0 5px 0 -1px #f8fafc, 0 7px 0 -1px #cdd8df, 0 14px 26px -12px #203d5a45;
+  border: 1px solid #ffffff; overflow: visible;
+}
+.cb-exam-week-block .cb-exam-content-col::before {
+  display: block; content: ''; position: absolute; inset: 0 auto 0 clamp(34px, 3.7cqw, 48px);
+  width: 1px; background: #e2a6ac88; opacity: 1;
+}
+.cb-exam-binding { position: absolute; inset: 26px auto 26px -13px; display: flex; flex-direction: column; justify-content: space-around; pointer-events: none; }
+.cb-exam-binding i {
+  display: block; width: 25px; height: 12px; border: 3px solid #6e879b; border-right-color: #b9c9d6;
+  border-radius: 8px; background: linear-gradient(#dce5ec, #9eb1c0); box-shadow: 0 2px 2px #2f465d25, inset 0 1px #f8fafc;
+}
+.cb-exam-page-tab {
+  position: absolute; right: 22px; top: -1px; padding: 11px 8px 20px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%);
+  background: var(--exam-accent); color: white; font-size: 0.82rem; font-weight: 800; letter-spacing: 0.05em;
+}
+.cb-exam-week-block .cb-exam-badge {
+  margin: 0 !important; padding: 5px 12px 5px 7px !important; border-radius: 6px !important;
+  border: 1px solid #d5e4ec !important; background: #edf5fa !important; color: #396179 !important;
+  box-shadow: none !important; font-size: clamp(0.65rem, 1.15cqw, 0.75rem) !important;
+  letter-spacing: 0.06em !important; gap: 8px !important; max-width: calc(100% - 24px) !important;
+}
+.cb-exam-calendar { display: grid; place-items: center; width: 24px; height: 24px; }
+.cb-exam-week-block .cb-exam-badge p { margin: 0; }
+.cb-exam-week-block .cb-exam-title-wrap { margin: 0 !important; }
+.cb-exam-week-block .cb-exam-title {
+  font-size: clamp(1.5rem, 3cqw, 2.5rem) !important; line-height: 1.14 !important;
+  font-weight: 800 !important; letter-spacing: -0.045em !important; color: #203c52 !important; text-wrap: balance;
+}
+.cb-exam-week-block .cb-exam-title p { margin: 0; }
+.cb-exam-title-intro { display: block; font-size: 0.64em; margin-bottom: 8px; letter-spacing: -0.025em; }
+.cb-exam-week-block .cb-exam-parcial-text {
+  display: inline; background: linear-gradient(transparent 68%, #f5d97699 68%, #f5d97699 92%, transparent 92%);
+  -webkit-text-fill-color: currentColor; color: #203c52; text-shadow: none;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone; padding: 0 3px;
+}
+.cb-exam-week-block .cb-exam-card {
+  border: 0 !important; border-radius: 0 !important; padding: 0 !important; margin: 0 !important;
+  background: transparent !important; box-shadow: none !important; color: #50687a !important;
+  font-size: clamp(0.9rem, 1.45cqw, 1rem) !important; line-height: 1.6 !important; max-width: 52ch !important;
+}
+.cb-exam-week-block .cb-exam-card-icon { display: none !important; }
+.cb-exam-week-block .cb-exam-card p { margin: 0; }
+.cb-exam-week-block .cb-exam-actions { margin-top: 2px !important; }
+.cb-exam-week-block .cb-exam-primary-btn {
+  min-height: 44px; padding: 11px 18px !important; border-radius: 8px !important; font-weight: 700 !important;
+  background: var(--exam-accent) !important; box-shadow: 0 3px 0 color-mix(in srgb, var(--exam-accent) 70%, #203c52), 0 7px 12px #24476818 !important;
+}
+.cb-exam-week-block .cb-exam-primary-btn:focus-visible { outline: 3px solid #203c52; outline-offset: 4px; }
+.cb-exam-week-block .cb-exam-figure-col {
+  width: min(100%, 295px) !important; height: auto !important; min-height: 0 !important;
+  justify-self: center; overflow: visible !important; padding: 12px 12px 16px !important;
+  border-radius: 9px !important; background: #ffffff !important; gap: 9px;
+  transform: rotate(3deg); box-shadow: 0 15px 25px -12px #24476855, 0 0 0 1px #c7d6e155;
+}
+.cb-exam-week-block .cb-exam-figure-col::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: 9px;
+  background: #fff5d8; transform: rotate(-8deg); box-shadow: 0 3px 12px #24476815;
+}
+.cb-exam-week-block .cb-exam-figure-col::after {
+  content: ''; position: absolute; top: -13px; left: 50%; width: 100px; height: 28px;
+  transform: translateX(-50%) rotate(-7deg); background: #f5dba6b8;
+  border-inline: 2px dashed #e4c68788; box-shadow: 0 1px 2px #a98c4a10;
+}
+.cb-exam-note-meta { display: flex; width: 100%; align-items: center; gap: 7px; font-size: 0.7rem; font-weight: 600; color: #7a8996; }
+.cb-exam-week-block .cb-exam-snoopy-wrap {
+  min-height: 160px; padding: 10px; box-sizing: border-box; border: 1px solid #e7edf0; border-radius: 4px;
+  background: radial-gradient(ellipse at 55% 45%, #ffffff, #e7eff6); overflow: hidden;
+}
+.cb-exam-week-block .cb-exam-snoopy-img { max-width: 190px !important; max-height: 160px !important; animation: exam-float 6s ease-in-out infinite; filter: drop-shadow(0 8px 8px #24476818) !important; }
+.cb-exam-week-block .cb-exam-reticle-outer,
+.cb-exam-week-block .cb-exam-reticle-mid,
+.cb-exam-week-block .cb-exam-reticle-inner { display: none !important; }
+.cb-exam-week-block .cb-exam-caption { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; font-family: Georgia, serif !important; font-size: 0.95rem !important; font-style: italic; }
+.cb-exam-week-block .cb-exam-caption > span { display: none !important; }
+.cb-exam-art-spark { position: absolute; pointer-events: none; z-index: 3; color: #92703f; font-size: 34px; }
+.cb-exam-art-spark-one { top: -22px; right: -20px; transform: rotate(12deg); }
+.cb-exam-art-spark-two { bottom: -12px; left: -22px; color: var(--exam-accent); font-size: 40px; }
+.cb-exam-encouragement {
+  position: absolute; bottom: 24%; right: -26px; z-index: 4; display: flex; align-items: center; gap: 6px;
+  padding: 10px 14px; border: 2px solid white; border-radius: 8px; color: #8d641b; background: #fff0af;
+  box-shadow: 0 4px 8px #59461918; transform: rotate(-11deg); font-size: 0.75rem; font-weight: 800;
+}
+@container exam-week (max-width: 650px) {
+  .cb-exam-week-block .cb-exam-grid,
+  .cb-exam-week-block .cb-exam-grid.cb-exam-image-left { grid-template-columns: minmax(0, 1fr) !important; min-height: 0 !important; padding: 22px !important; gap: 32px !important; }
+  .cb-exam-week-block .cb-exam-content-col { order: 1 !important; padding: 22px 22px 24px 44px !important; gap: 13px; }
+  .cb-exam-week-block .cb-exam-title { font-size: clamp(1.6rem, 6.5cqw, 2.4rem) !important; }
+  .cb-exam-week-block .cb-exam-content-col::before { left: 30px; }
+  .cb-exam-week-block .cb-exam-figure-col { order: 2 !important; width: min(86%, 300px) !important; padding: 14px 14px 18px !important; margin-bottom: 12px !important; min-height: 230px !important; }
+  .cb-exam-week-block .cb-exam-snoopy-wrap { min-height: 170px; padding: 12px; }
+  .cb-exam-week-block .cb-exam-snoopy-img { max-width: 180px !important; max-height: 160px !important; }
+  .cb-exam-encouragement { right: -18px; font-size: 0.68rem; padding: 8px; }
+  .cb-exam-week-block .cb-exam-primary-btn { flex: 0 1 auto !important; white-space: normal !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cb-exam-week-block .cb-exam-snoopy-img,
+  .cb-exam-week-block .cb-exam-shadow { animation: none !important; }
 }
 
 /* Tarjetas simples de Fundamentos Histológicos */

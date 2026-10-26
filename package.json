@@ -30,6 +30,7 @@
     "@xyflow/react": "^12.11.3",
     "axios": "^1.13.4",
     "dompurify": "^3.3.3",
+    "embla-carousel-auto-scroll": "^8.6.0",
     "embla-carousel-react": "^8.6.0",
     "konva": "^9.3.18",
     "lucide-react": "^0.577.0",
