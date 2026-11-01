@@ -1,5 +1,15 @@
 # Atlas
 
+## Guía del proyecto y cuidado de producción
+
+Para trabajar en Atlas, comienza por [AGENTS.md](AGENTS.md) y la
+[guía de arquitectura, módulos y datos](docs/guia-atlas.md).
+
+Atlas ya está en producción. Algunas secciones de este README conservan instrucciones
+históricas: no ejecutes sus scripts SQL ni cambies servicios remotos automáticamente.
+El almacenamiento multimedia activo es Cloudflare R2. Comprueba el código actual y el
+estado real del entorno antes de preparar cambios que afecten datos existentes.
+
 ## Pruebas automatizadas
 
 Ejecuta la suite completa con:
@@ -81,69 +91,22 @@ This project runs in two environments:
 - Local dev frontend: http://localhost:5173
 - Local dev backend: http://localhost:3001
 
-In production (Cloudflare Pages), image admin actions (delete/move in Cloudinary) run through Cloudflare Functions:
+### Multimedia y despliegue
 
-- `/api/images-delete`
-- `/api/images-move`
+R2 es el único almacenamiento multimedia activo. Los nombres históricos de los servicios se conservan por compatibilidad. El workflow de despliegue empaqueta `cloudflare/_worker.js`; cambiar solo `functions/` no actualiza ese Worker.
 
-Frontend image admin calls are resolved from `src/services/cloudinary.ts`.
+El frontend usa `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y, opcionalmente, `VITE_R2_PUBLIC_DOMAIN`. Deja `VITE_BACKEND_BASE_URL` vacío para usar las rutas del Worker en producción. Nunca configures un backend de localhost en producción.
 
-### Cloudflare Pages environment variables
+El servidor que atiende las operaciones de imágenes necesita `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`. La clave de servidor nunca lleva `VITE_`, nunca se incorpora al frontend ni se sube a Git. En Pages, configura el binding `R2_BUCKET` y el dominio `R2_PUBLIC_DOMAIN`. Consulta la [guía de Atlas](docs/guia-atlas.md) para el estado verificado y sus límites.
 
-Set these in Cloudflare Pages > Settings > Environment variables:
+En local, Vite atiende `/api/images-upload`, `/api/images-delete` y `/api/images-move` y también sus rutas `/api/images/*`. Lee `.env` y `backend/.env`. El backend Express es opcional y lee `backend/.env`; requiere las variables R2 indicadas en el archivo de ejemplo, además de las de autorización. `PORT` y `FRONTEND_ORIGINS` son opcionales. Los orígenes locales permitidos incluyen `http://localhost:5173` y `http://127.0.0.1:5173`.
 
-- `VITE_SUPABASE_URL`: your Supabase URL
-- `VITE_SUPABASE_ANON_KEY`: your Supabase anon key
-- `VITE_CLOUDINARY_CLOUD_NAME`: your Cloudinary cloud name
-- `VITE_CLOUDINARY_UPLOAD_PRESET`: your upload preset
+### Auditorías multimedia de solo lectura
 
-Also required for Cloudflare Functions (server-side secrets, no `VITE_` prefix):
+- `node scripts/audit-images.mjs`: inventario de referencias y cobertura, sin comprobar disponibilidad de archivos.
+- `node scripts/audit-integrity.mjs`: compara referencias, originales y miniaturas con el inventario de R2.
+- `node scripts/audit-all-urls.mjs`: comprueba por HTTP HEAD las URLs multimedia del almacenamiento conocido; excluye enlaces externos y de navegación.
 
-- `CLOUDINARY_CLOUD_NAME`
-- `CLOUDINARY_API_KEY`
-- `CLOUDINARY_API_SECRET`
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY` (server-side only; never use a `VITE_` prefix)
+Los tres scripts leen las fuentes declaradas de forma paginada, notifican errores y guardan informes locales en `recovered_images/audits/`, excluido de Git. Necesitan la clave de servidor para que los permisos de lectura no oculten filas. La auditoría de integridad requiere también acceso de lectura al bucket R2. Usan consultas de lectura, sin RPC, migraciones, regeneraciones ni borrados automáticos.
 
-Example backend URL value: `https://YOUR_BACKEND_DOMAIN`
-
-### Optional external backend mode
-
-If you still want to use an external backend API instead of Cloudflare Functions, set:
-
-- `VITE_BACKEND_BASE_URL`: public URL of your backend API (no trailing slash)
-
-Important for production:
-
-- Do not set `VITE_BACKEND_BASE_URL` to `localhost` or `127.0.0.1`.
-- If you do not have an external backend deployed, leave it empty to use Cloudflare Functions.
-
-Then frontend will call that URL for `/api/images/*`.
-
-### Backend environment variables (only if you deploy backend)
-
-Set these where your backend is deployed:
-
-- `CLOUDINARY_CLOUD_NAME`
-- `CLOUDINARY_API_KEY`
-- `CLOUDINARY_API_SECRET`
-- `PORT` (optional)
-- `FRONTEND_ORIGINS` (optional extra origins separated by comma)
-
-Current backend CORS already allows:
-
-- `http://localhost:5173`
-- `http://127.0.0.1:5173`
-
-Add your production frontend domain through `FRONTEND_ORIGINS`.
-
-### Local .env (frontend)
-
-In local frontend `.env`, keep:
-
-- `VITE_BACKEND_BASE_URL=http://localhost:3001`
-
-### Important
-
-Cloudflare cannot call `localhost` from production.
-If you rely only on Cloudflare Functions, you do not need a separate backend deployment for image delete/move.
+Una salida `0` indica comprobación completada sin hallazgos según el alcance del modo; `1` indica hallazgos y `2` auditoría incompleta o configuración incorrecta. Una auditoría de referencias no demuestra existencia de archivos. Las imágenes faltantes del catálogo siguen pendientes y provocan hallazgos de integridad; no son una autorización para eliminarlas. Ver [detalle y comprobaciones](docs/revisiones/mantenimiento-multimedia-2026-10-30.md).

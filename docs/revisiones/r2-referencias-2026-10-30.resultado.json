@@ -1,0 +1,12 @@
+{
+  "status": "applied_and_verified",
+  "project_id": "trhwtpgljzwleyoilqda",
+  "questions_verified": 21,
+  "publication_url_verified": 1,
+  "unique_r2_images_verified": 12,
+  "publication_other_blocks_unchanged": true,
+  "publication_status_unchanged": true,
+  "question_test_relationships_unchanged": true,
+  "objects_written_or_deleted": 0,
+  "checked_by": "read_after_commit"
+}

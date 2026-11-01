@@ -12,14 +12,26 @@ export async function onRequest(context: { request: Request; env: Record<string,
     return json(405, { message: 'Method not allowed' });
   }
 
-  if (!(await authorizeEditor(request, env))) {
-    return json(401, { message: 'Unauthorized' });
+  const authorizationStatus = await authorizeEditor(request, env);
+  if (authorizationStatus !== 200) {
+    return json(authorizationStatus, {
+      message: authorizationStatus === 401 ? 'Falta la sesión de Atlas'
+        : authorizationStatus === 403 ? 'Permisos insuficientes'
+        : 'No se pudo verificar la sesión de Atlas',
+    });
   }
 
   try {
     const url = new URL(request.url);
-    const rawPublicId = url.searchParams.get('publicId') || '';
-    const publicId = decodeURIComponent(rawPublicId).replace(/^\/+/, '');
+    const queryKey = url.searchParams.get('publicId');
+    const rawKey = queryKey || (url.pathname.startsWith('/api/images/') ? url.pathname.slice('/api/images/'.length) : '');
+    let publicId: string = '';
+    try {
+      if (typeof rawKey !== 'string') throw new Error('Invalid key');
+      publicId = (queryKey ? rawKey : decodeURIComponent(rawKey)).trim().replace(/^\/+/, '');
+    } catch {
+      return json(400, { message: 'Clave de imagen inválida' });
+    }
 
     if (!publicId) {
       return json(400, { message: 'Missing publicId parameter' });
@@ -29,19 +41,17 @@ export async function onRequest(context: { request: Request; env: Record<string,
     if (r2Bucket && typeof r2Bucket.delete === 'function') {
       await r2Bucket.delete(publicId);
 
-      // Eliminar también la miniatura asociada _thumb.webp
-      try {
-        const thumbKey = publicId.replace(/\.[^.]+$/, '') + '_thumb.webp';
-        await r2Bucket.delete(thumbKey);
-      } catch (_) {}
+      const thumbKey = publicId.replace(/\.[^.]+$/, '') + '_thumb.webp';
+      await r2Bucket.delete(thumbKey);
 
       return json(200, { message: 'Image deleted successfully from Cloudflare R2.', success: true });
     }
 
-    return json(500, { message: 'Cloudflare R2 bucket binding not configured' });
+    return json(503, { message: 'Cloudflare R2 bucket binding not configured' });
   } catch (error) {
     return json(500, {
-      message: 'Error deleting image from R2',
+      message: 'No se pudo completar la eliminación en R2',
+      success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
   }

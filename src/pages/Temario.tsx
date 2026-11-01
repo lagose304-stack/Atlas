@@ -440,12 +440,7 @@ const Temario: React.FC = () => {
         if (upload.secure_url) {
           invalidateImageCache(upload.secure_url);
         }
-        // Borrar imagen antigua de Cloudflare R2 / Cloudinary
-        if (editingTemaLogoUrl) {
-          invalidateImageCache(editingTemaLogoUrl);
-          const publicId = getCloudinaryPublicId(editingTemaLogoUrl);
-          if (publicId) deleteFromCloudinary({ publicId, imageUrl: editingTemaLogoUrl }).catch(e => console.warn('No se pudo borrar imagen antigua:', e));
-        }
+        // Conservar el logo anterior: otras páginas o versiones pueden usarlo.
       }
       const temaIdNum = parseInt(editingTemaId, 10);
       const { error } = await supabase.from('temas').update(updateData).eq('id', temaIdNum);
@@ -487,12 +482,7 @@ const Temario: React.FC = () => {
         if (upload.secure_url) {
           invalidateImageCache(upload.secure_url);
         }
-        // Borrar imagen antigua de Cloudflare R2 / Cloudinary
-        if (editingSubtemaLogoUrl) {
-          invalidateImageCache(editingSubtemaLogoUrl);
-          const publicId = getCloudinaryPublicId(editingSubtemaLogoUrl);
-          if (publicId) deleteFromCloudinary({ publicId, imageUrl: editingSubtemaLogoUrl }).catch(e => console.warn('No se pudo borrar imagen antigua:', e));
-        }
+        // Conservar el logo anterior: otras páginas o versiones pueden usarlo.
       }
       const subtemaIdNum = parseInt(editingSubtemaId, 10);
       const { error } = await supabase.from('subtemas').update(updateData).eq('id', subtemaIdNum);

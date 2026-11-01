@@ -10,6 +10,10 @@ vi.mock('../services/supabase', () => ({
   supabase: { rpc },
 }));
 
+vi.mock('../services/unifiedAuditService', () => ({
+  logAuditEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
 const SessionState = () => {
   const { isAuthenticated, isLoading } = useAuth();
   return <div>{isLoading ? 'loading' : isAuthenticated ? 'authenticated' : 'anonymous'}</div>;
@@ -21,6 +25,17 @@ const LoginState = () => {
     <>
       <div>{isLoading ? 'loading' : 'ready'}</div>
       <button type="button" onClick={() => void login('admin', 'incorrecta')}>Ingresar</button>
+    </>
+  );
+};
+
+const AccountActions = () => {
+  const { isAuthenticated, isLoading, login, logout } = useAuth();
+  return (
+    <>
+      <div>{isLoading ? 'loading' : isAuthenticated ? 'authenticated' : 'anonymous'}</div>
+      <button onClick={() => void login('ADMIN', 'clave-de-prueba')}>Entrar</button>
+      <button onClick={logout}>Salir</button>
     </>
   );
 };
@@ -75,7 +90,50 @@ describe('AuthProvider session validation', () => {
 
     await screen.findByText('anonymous');
     expect(localStorage.getItem(ATLAS_SESSION_TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem('atlas_user')).toBeNull();
+    expect(localStorage.getItem('atlas_auth')).toBeNull();
   });
+
+  it('guarda la sesión confirmada al entrar y la elimina al salir', async () => {
+    localStorage.clear();
+    rpc.mockResolvedValueOnce({
+      data: { ...validSession.data, token: 'token-de-prueba', status: 'success' },
+      error: null,
+    });
+    render(<AuthProvider><AccountActions /></AuthProvider>);
+    await screen.findByText('anonymous');
+
+    act(() => screen.getByRole('button', { name: 'Entrar' }).click());
+    await screen.findByText('authenticated');
+    expect(rpc).toHaveBeenCalledWith('atlas_login', {
+      p_username: 'admin', p_password: 'clave-de-prueba',
+    });
+    expect(localStorage.getItem(ATLAS_SESSION_TOKEN_KEY)).toBe('token-de-prueba');
+    expect(JSON.parse(localStorage.getItem('atlas_user')!)).toEqual(validSession.data.user);
+
+    rpc.mockResolvedValueOnce({ data: null, error: null });
+    act(() => screen.getByRole('button', { name: 'Salir' }).click());
+    await screen.findByText('anonymous');
+    expect(rpc).toHaveBeenCalledWith('atlas_logout');
+    expect(localStorage.getItem(ATLAS_SESSION_TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem('atlas_user')).toBeNull();
+    expect(localStorage.getItem('atlas_auth')).toBeNull();
+  });
+
+  it.each(['invalid_credentials', 'user_deactivated', 'locked'])(
+    'no crea una sesión cuando el servidor responde %s', async status => {
+      localStorage.clear();
+      rpc.mockResolvedValueOnce({ data: { ok: false, status }, error: null });
+      render(<AuthProvider><AccountActions /></AuthProvider>);
+      await screen.findByText('anonymous');
+
+      await act(async () => screen.getByRole('button', { name: 'Entrar' }).click());
+      expect(rpc).toHaveBeenCalledTimes(1);
+      expect(screen.getByText('anonymous')).toBeInTheDocument();
+      expect(localStorage.getItem(ATLAS_SESSION_TOKEN_KEY)).toBeNull();
+      expect(localStorage.getItem('atlas_user')).toBeNull();
+    },
+  );
 
   it('restaura la sesión guardada si la página carga durante una caída temporal', async () => {
     localStorage.setItem('atlas_user', JSON.stringify(validSession.data.user));

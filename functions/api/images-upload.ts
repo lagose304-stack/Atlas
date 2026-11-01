@@ -25,8 +25,13 @@ export async function onRequest(context: { request: Request; env: Record<string,
     return json(405, { message: 'Method not allowed' });
   }
 
-  if (!(await authorizeEditor(request, env))) {
-    return json(401, { message: 'Unauthorized' });
+  const authorizationStatus = await authorizeEditor(request, env);
+  if (authorizationStatus !== 200) {
+    return json(authorizationStatus, {
+      message: authorizationStatus === 401 ? 'Falta la sesión de Atlas'
+        : authorizationStatus === 403 ? 'Permisos insuficientes'
+        : 'No se pudo verificar la sesión de Atlas',
+    });
   }
 
   try {
@@ -92,7 +97,7 @@ export async function onRequest(context: { request: Request; env: Record<string,
       });
     }
 
-    return json(500, {
+    return json(503, {
       message: 'R2 bucket binding (R2_BUCKET) is not configured in Cloudflare Pages',
     });
   } catch (error) {

@@ -95,14 +95,17 @@ export const getStorageInventory = async () => {
     supabase.from('placas_sin_clasificar').select('id, photo_url'),
     supabase.from('pruebas').select('id, image_url'),
     supabase.from('prueba_preguntas').select('id, reference_photo_url'),
-    supabase.from('interactive_maps').select('id, image_url'),
+    supabase.from('interactive_maps').select('id, plate:placas(photo_url)'),
   ]);
   const urls = [
     ...(plates.data ?? []).map((row) => row.photo_url),
     ...(waiting.data ?? []).map((row) => row.photo_url),
     ...(tests.data ?? []).map((row) => row.image_url),
     ...(questionReferences.data ?? []).map((row) => row.reference_photo_url),
-    ...(maps.data ?? []).map((row) => row.image_url),
+    ...(maps.data ?? []).map((row) => {
+      const linked = row.plate as unknown as { photo_url?: string } | { photo_url?: string }[] | null;
+      return (Array.isArray(linked) ? linked[0] : linked)?.photo_url;
+    }),
   ].filter((url): url is string => typeof url === 'string' && url.trim().length > 0);
   return {
     referencedImages: urls.length,

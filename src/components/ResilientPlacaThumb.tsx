@@ -68,12 +68,6 @@ export const ResilientPlacaThumb: React.FC<ResilientPlacaThumbProps> = ({
       if (url && !list.includes(url)) list.push(url);
     });
 
-    // 2. Fallback URL limpia directa sin query string
-    const cleanUrl = photoUrl.trim().split('?')[0];
-    if (cleanUrl && !list.includes(cleanUrl)) {
-      list.push(cleanUrl);
-    }
-
     // 3. Fallback con subtema logo
     if (subtemaLogo) {
       const subtemaResolved = getCloudinaryImageUrl(subtemaLogo, 'thumb');

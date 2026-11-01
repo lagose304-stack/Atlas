@@ -72,13 +72,13 @@ const CreditsAdminPanel: React.FC = () => {
   const uploadPhoto = async (key: CreditProfileKey, file?: File) => {
     if (!file) return;
     setBusyKey(key); setMessage('');
-    const previousUrl = profileFor(key)?.photo_url ?? null;
     try {
       const upload = await uploadToCloudinary(file, { folder: 'creditos', optimizeImage: true });
       const nextUrl = String(upload.secure_url ?? '');
       const { error } = await supabase.from('credit_profiles').upsert({ profile_key: key, photo_url: nextUrl, updated_at: new Date().toISOString() });
-      if (error) { await deleteFromCloudinary(nextUrl).catch(() => undefined); throw error; }
-      if (previousUrl) await deleteFromCloudinary(previousUrl).catch(() => undefined);
+      // Un fallo de respuesta no garantiza que la escritura no se haya confirmado.
+      if (error) throw error;
+      // Conservar la fotografía anterior hasta comprobar referencias compartidas.
       setProfiles(current => [...current.filter(item => item.profile_key !== key), { profile_key: key, photo_url: nextUrl }]);
       setMessage('Fotografía actualizada correctamente.');
     } catch (error: any) {
@@ -128,13 +128,13 @@ const CreditsAdminPanel: React.FC = () => {
     if (!file) return;
     if (!supportsContributorPhotos) { setMessage('Primero ejecuta database/setup_credits.sql en Supabase para habilitar las fotografías de instructores.'); return; }
     setBusyKey(`photo-${item.id}`); setMessage('');
-    const previousUrl = item.photo_url;
     try {
       const upload = await uploadToCloudinary(file, { folder: 'creditos/instructores', optimizeImage: true });
       const nextUrl = String(upload.secure_url ?? '');
       const { error } = await supabase.from('credit_contributors').update({ photo_url: nextUrl, updated_at: new Date().toISOString() }).eq('id', item.id);
-      if (error) { await deleteFromCloudinary(nextUrl).catch(() => undefined); throw error; }
-      if (previousUrl) await deleteFromCloudinary(previousUrl).catch(() => undefined);
+      // Un fallo de respuesta no garantiza que la escritura no se haya confirmado.
+      if (error) throw error;
+      // Conservar la fotografía anterior hasta comprobar referencias compartidas.
       updateContributor(item.id, { photo_url: nextUrl }, false);
       setMessage('Fotografía del instructor actualizada.');
     } catch (error) { setMessage(databaseErrorMessage('No se pudo actualizar la fotografía.', error)); }
@@ -143,8 +143,8 @@ const CreditsAdminPanel: React.FC = () => {
 
   const removeContributorPhoto = async (item: CreditContributor) => {
     if (!item.photo_url || !window.confirm(`¿Eliminar la fotografía de ${item.name}?`)) return;
-    setBusyKey(`photo-${item.id}`); setMessage('');
     const previousUrl = item.photo_url;
+    setBusyKey(`photo-${item.id}`); setMessage('');
     const { error } = await supabase.from('credit_contributors').update({ photo_url: null, updated_at: new Date().toISOString() }).eq('id', item.id);
     if (error) setMessage(databaseErrorMessage('No se pudo eliminar la fotografía.', error));
     else {

@@ -1,3 +1,5 @@
+import { resolveImageLocation } from './r2ImageLocation.mjs';
+
 export type CloudinaryImageProfile = 'thumbSmall' | 'thumb' | 'cardWideSmall' | 'cardWide' | 'view' | 'zoom';
 
 const R2_PUBLIC_DOMAIN = (
@@ -60,129 +62,48 @@ export const getCloudinaryImageUrl = (
   originalUrl: string,
   profile?: CloudinaryImageProfile
 ): string => {
-  if (!originalUrl || typeof originalUrl !== 'string') return '';
+  const location = resolveImageLocation(originalUrl, R2_PUBLIC_DOMAIN);
+  if (!location.storage || !location.key) return location.url;
 
-  const trimmed = originalUrl.trim();
-  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
-    return trimmed;
-  }
-
-  // 1. Separar cualquier query string existente (ej: ?v=123 o ?width=...)
-  const [urlWithoutQuery, existingQuery] = trimmed.split('?');
-
-  // Detectar si la URL ya tiene o requiere versión de cache-busting
-  const cleanOriginal = urlWithoutQuery
-    .replace(/^https?:\/\/[^/]+\//, '')
-    .replace(/^atlas-media\//i, '')
-    .replace(/^\/+/, '');
-  const version = memoryImageVersions[urlWithoutQuery] || memoryImageVersions[cleanOriginal] || memoryImageVersions[trimmed] || null;
-
-  let path = urlWithoutQuery;
-  if (urlWithoutQuery.includes('res.cloudinary.com')) {
-    path = urlWithoutQuery.replace(/^https?:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/(v\d+\/)?/, '');
-    path = path.replace(/^(?:[a-z]{1,3}_[^/]+(?:,[a-z]{1,3}_[^/]+)*\/)+/, '');
-  } else if (urlWithoutQuery.startsWith(R2_PUBLIC_DOMAIN)) {
-    path = urlWithoutQuery.slice(R2_PUBLIC_DOMAIN.length);
-  } else if (/^https?:\/\//i.test(urlWithoutQuery) && !urlWithoutQuery.includes('.r2.dev')) {
-    const v = version || (existingQuery ? existingQuery.replace(/^v=/, '') : null);
-    if (v) {
-      return `${urlWithoutQuery}?v=${v}`;
-    }
-    return urlWithoutQuery;
-  }
-
-  let cleanKey = path
-    .replace(/^\/+/, '')
-    .replace(/^atlas-media\//i, '')
-    .replace(/^atlas\//i, '')
-    .replace(/^placas_sin_clasificar\//i, 'placas/sin_clasificar/')
-    .replace(/^sin_clasificar\//i, 'placas/sin_clasificar/')
-    .replace(/^placas\/sin_clasificar\/atlas-content\//i, 'atlas-content/')
-    .replace(/^placas\/sin_clasificar\/general\//i, 'general/')
-    .replace(/\.(jpe?g|png|bmp|tiff?)$/i, '.webp');
-
-  if (!cleanKey.endsWith('.webp') && !cleanKey.includes('.')) {
-    cleanKey += '.webp';
-  }
-
-  // Si no tiene prefijo de carpeta conocido, deducir la ruta correcta en Cloudflare R2
-  const knownPrefixes = [
-    'placas/',
-    'temas/',
-    'subtemas/',
-    'creditos/',
-    'pruebas/',
-    'atlas-content/',
-    'general/',
-    'test_references/',
-  ];
-  const hasKnownPrefix = knownPrefixes.some(prefix => cleanKey.startsWith(prefix));
-
-  if (!hasKnownPrefix && !cleanKey.includes('/')) {
-    cleanKey = `placas/sin_clasificar/${cleanKey}`;
-  }
-
-  const isThumbProfile = profile === 'thumb' || profile === 'thumbSmall';
-
-  if (isThumbProfile) {
-    if (!cleanKey.endsWith('_thumb.webp')) {
-      cleanKey = cleanKey.replace(/\.webp$/i, '_thumb.webp');
-    }
+  let key = location.key;
+  if (profile === 'thumb' || profile === 'thumbSmall') {
+    if (!key.endsWith('_thumb.webp')) key = key.replace(/\.[^/.]+$/, '') + '_thumb.webp';
   } else {
-    // Para perfiles completos (view, zoom, cardWide), asegurarse de que no use la miniatura
-    cleanKey = cleanKey.replace(/_thumb\.webp$/i, '.webp');
+    key = key.replace(/_thumb\.webp$/i, '.webp');
   }
-
-  const finalUrl = `${R2_PUBLIC_DOMAIN}/${cleanKey}`;
-  const effectiveVersion = version || (existingQuery ? existingQuery.replace(/^v=/, '') : null);
-  if (effectiveVersion) {
-    return `${finalUrl}?v=${effectiveVersion}`;
-  }
-
-  return finalUrl;
+  const resolved = new URL(location.url);
+  const result = new URL(`${R2_PUBLIC_DOMAIN}/${key}`);
+  result.search = resolved.search;
+  result.hash = resolved.hash;
+  const trimmed = originalUrl.trim();
+  const withoutQuery = trimmed.split(/[?#]/)[0];
+  const cleanOriginal = withoutQuery.replace(/^https?:\/\/[^/]+\//, '').replace(/^atlas-media\//i, '').replace(/^\/+/, '');
+  const version = memoryImageVersions[withoutQuery] || memoryImageVersions[cleanOriginal] || memoryImageVersions[trimmed];
+  if (version) result.searchParams.set('v', String(version));
+  return result.href;
 };
 
 export const getImageCandidateUrls = (
   originalUrl: string,
   profile?: CloudinaryImageProfile
 ): string[] => {
-  if (!originalUrl || typeof originalUrl !== 'string') return [];
-  const list: string[] = [];
-  const trimmed = originalUrl.trim();
+  const location = resolveImageLocation(originalUrl, R2_PUBLIC_DOMAIN);
+  if (!location.url) return [];
+  const candidates = new Set<string>([getCloudinaryImageUrl(originalUrl, profile)]);
+  if (!location.storage) return [...candidates];
 
-  // 1. URL procesada Cloudflare R2 / WebP
-  const resolved = getCloudinaryImageUrl(trimmed, profile);
-  if (resolved) {
-    list.push(resolved);
+  const full = getCloudinaryImageUrl(originalUrl, 'view');
+  if (profile === 'thumb' || profile === 'thumbSmall') candidates.add(full);
+
+  // Las alternativas se mantienen en R2, con los parámetros originales intactos.
+  const originalExtension = originalUrl.split(/[?#]/)[0].match(/\.(jpe?g|png|bmp|tiff?)$/i)?.[0];
+  const fallback = new URL(full);
+  if (location.legacy && originalExtension) {
+    fallback.pathname = fallback.pathname.replace(/\.webp$/i, originalExtension);
+    candidates.add(fallback.href);
+  } else if (originalExtension) {
+    fallback.pathname = fallback.pathname.replace(/\.[^/.]+$/, '.webp');
+    candidates.add(fallback.href);
   }
-
-  // 2. Si es perfil de miniatura, agregar la versión full como fallback inmediato
-  if (profile === 'thumb' || profile === 'thumbSmall') {
-    const fullResUrl = getCloudinaryImageUrl(trimmed, 'view');
-    if (fullResUrl && !list.includes(fullResUrl)) {
-      list.push(fullResUrl);
-    }
-  }
-
-  // 3. URL directa original de la BD sin query
-  const cleanOriginal = trimmed.split('?')[0];
-  if (/^https?:\/\//i.test(cleanOriginal) && !list.includes(cleanOriginal)) {
-    list.push(cleanOriginal);
-  }
-
-  // 4. URL con query original si difería
-  if (/^https?:\/\//i.test(trimmed) && !list.includes(trimmed)) {
-    list.push(trimmed);
-  }
-
-  // 5. Fallback con extensión original en R2 si era jpg/png
-  const extMatch = cleanOriginal.match(/\.(jpe?g|png|bmp|tiff?)$/i);
-  if (extMatch && resolved.includes('.webp')) {
-    const originalExtUrl = resolved.replace(/\.webp(\?.*)?$/, extMatch[0]);
-    if (!list.includes(originalExtUrl)) {
-      list.push(originalExtUrl);
-    }
-  }
-
-  return list;
+  return [...candidates].filter(Boolean);
 };

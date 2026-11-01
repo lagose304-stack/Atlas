@@ -76,7 +76,7 @@ const canvasToBlobWithType = (
   new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
-        if (!blob) {
+        if (!blob || !blob.size || blob.type !== mimeType) {
           reject(new Error('No se pudo exportar la imagen optimizada a WebP.'));
           return;
         }
@@ -95,7 +95,7 @@ export const convertAndOptimizeToWebP = async (
   options?: { isPlaque?: boolean; customQuality?: number; customMaxDimension?: number }
 ): Promise<File> => {
   if (!file.type.startsWith('image/')) {
-    return file;
+    throw new Error('Selecciona un archivo de imagen válido.');
   }
 
   const isPlaque = options?.isPlaque ?? true;
@@ -108,6 +108,9 @@ export const convertAndOptimizeToWebP = async (
 
     let width = image.naturalWidth || image.width;
     let height = image.naturalHeight || image.height;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      throw new Error('La imagen no tiene dimensiones válidas.');
+    }
 
     // Solo reescalamos si excede la dimensión máxima ultra-alta permitida
     if (width > maxDim || height > maxDim) {
@@ -125,7 +128,7 @@ export const convertAndOptimizeToWebP = async (
     canvas.height = height;
 
     const ctx = canvas.getContext('2d', { willReadFrequently: false });
-    if (!ctx) return file;
+    if (!ctx) throw new Error('No se pudo preparar la imagen para convertirla a WebP.');
 
     // Renderizar con máxima suavidad
     ctx.imageSmoothingEnabled = true;
@@ -139,9 +142,8 @@ export const convertAndOptimizeToWebP = async (
       type: 'image/webp',
       lastModified: Date.now(),
     });
-  } catch (err) {
-    console.warn('Conversión a WebP en cliente falló, subiendo archivo original:', err);
-    return file;
+  } catch {
+    throw new Error('No se pudo convertir la imagen a WebP. No se ha subido ningún archivo.');
   }
 };
 
@@ -159,6 +161,9 @@ export const generateWebPThumbnail = async (
 
     let width = image.naturalWidth || image.width;
     let height = image.naturalHeight || image.height;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      throw new Error('La imagen no tiene dimensiones válidas.');
+    }
 
     if (width > maxWidth) {
       height = Math.round((height * maxWidth) / width);
@@ -170,7 +175,7 @@ export const generateWebPThumbnail = async (
     canvas.height = height;
 
     const ctx = canvas.getContext('2d', { willReadFrequently: false });
-    if (!ctx) return file;
+    if (!ctx) throw new Error('No se pudo preparar la imagen para convertirla a WebP.');
 
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
@@ -182,9 +187,8 @@ export const generateWebPThumbnail = async (
       type: 'image/webp',
       lastModified: Date.now(),
     });
-  } catch (err) {
-    console.warn('No se pudo generar la miniatura WebP en cliente:', err);
-    return file;
+  } catch {
+    throw new Error('No se pudo generar la miniatura WebP. No se ha subido ningún archivo.');
   }
 };
 
@@ -238,8 +242,8 @@ export const uploadToCloudinary = async (file: File, options?: UploadOptions) =>
 };
 
 /**
- * Reemplaza una imagen existente en Cloudflare R2 con el mismo nombre y clave exacta,
- * convirtiéndola a WebP optimizado y actualizando también su miniatura asociada.
+ * Sube una nueva versión WebP y su miniatura sin borrar la imagen anterior.
+ * El llamador guarda la nueva referencia; la limpieza requiere revisar usos compartidos.
  */
 export const replaceCloudinaryImage = async (
   file: File,
@@ -268,7 +272,7 @@ export const replaceCloudinaryImage = async (
   const timestamp = Date.now();
   const rawFileName = slugify(file.name || 'placa').replace(/\.[^.]+$/, '');
   const cleanName = rawFileName.replace(/^\d+_/, '') || 'placa';
-  const newKey = `${folder}/${timestamp}_${cleanName}.webp`;
+  const newKey = `${folder}/${timestamp}_${crypto.randomUUID()}_${cleanName}.webp`;
 
   // 4. Optimizar imagen principal a WebP de alta fidelidad diagnóstica
   const webpFile = await convertAndOptimizeToWebP(file, {
@@ -300,13 +304,7 @@ export const replaceCloudinaryImage = async (
     });
 
     if (data?.secure_url) {
-      // 6. Eliminar el archivo antiguo y su miniatura en Cloudflare R2 para no acumular archivos huérfanos
-      if (oldKey && oldKey !== newKey) {
-        deleteFromCloudinary({ publicId: oldKey }).catch((delErr) => {
-          console.warn('[replaceCloudinaryImage] No se pudo borrar el archivo antiguo en R2:', delErr);
-        });
-      }
-
+      // Conservar el origen aunque falle después el guardado de la referencia.
       return {
         secure_url: data.secure_url.split('?')[0],
         public_id: data.public_id || newKey,
@@ -369,6 +367,10 @@ export const deleteFromCloudinary = async (input: DeleteFromCloudinaryInput) => 
   }
 };
 
+/**
+ * Copia a un destino único conservando el origen. El llamador debe guardar
+ * la URL devuelta: la clave efectiva puede diferir del destino solicitado.
+ */
 export const moveCloudinaryImage = async (fromPublicId: string, toPublicId: string): Promise<{ secure_url: string; public_id: string }> => {
   const payload = {
     from_public_id: fromPublicId,

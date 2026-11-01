@@ -17,9 +17,13 @@ import {
   getQuickSubtemas,
   getCachedPlacasForSubtema,
   getQuickPlacasForSubtema,
+  invalidatePlacasCache,
 } from '../services/catalogService';
 import { usePreservedParam } from '../hooks/usePreservedParam';
 import { syncUrlSearchParam, getPreservedSearchParam } from '../services/navigationStateKeeper';
+import BoldField, { renderBoldText } from '../components/BoldField';
+import { isEditableTarget } from '../utils/editableTarget';
+import { boldTextContent } from '../utils/boldTextContent';
 
 interface Tema {
   id: number;
@@ -624,6 +628,7 @@ const MapasInteractivos: React.FC = () => {
   const [placas, setPlacas] = useState<Placa[]>([]);
   const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
   const [temaMaps, setTemaMaps] = useState<InteractiveMapManagerRow[]>([]);
+  const [mapListRevision, setMapListRevision] = useState(0);
   const [loadingTemaMaps, setLoadingTemaMaps] = useState(false);
   const [temaMapsError, setTemaMapsError] = useState<string | null>(null);
   const [openingMapId, setOpeningMapId] = useState<number | null>(null);
@@ -711,6 +716,9 @@ const MapasInteractivos: React.FC = () => {
   const targetPanRef = useRef<Point2D>({ x: 0, y: 0 });
   const animationFrameRef = useRef<number | null>(null);
   const previousImageRectRef = useRef<RectBox | null>(null);
+  const isRebindingPlateRef = useRef(false);
+  const persistedPlacaRef = useRef<Placa | null>(null);
+  const retryImageRef = useRef<(() => void) | null>(null);
   const moveAllDragStartRef = useRef<Point2D | null>(null);
   const moveAllSelectionsSnapshotRef = useRef<number[][] | null>(null);
   const moveAllPendingSnapshotRef = useRef<number[] | null>(null);
@@ -896,7 +904,7 @@ const MapasInteractivos: React.FC = () => {
     return () => {
       isEffectActive = false;
     };
-  }, [isManageMode, numTemaId]);
+  }, [isManageMode, numTemaId, mapListRevision]);
 
   useEffect(() => {
     if (!selectedPlaca) {
@@ -916,6 +924,8 @@ const MapasInteractivos: React.FC = () => {
 
     let isEffectActive = true;
 
+    const isRebindingPlate = isRebindingPlateRef.current;
+    isRebindingPlateRef.current = false;
     if (animationFrameRef.current !== null) {
       window.cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
@@ -925,30 +935,37 @@ const MapasInteractivos: React.FC = () => {
 
     setZoomScale(1);
     setPanOffset({ x: 0, y: 0 });
-    setLassoInteractionMode('draw');
-    setIsEditingExistingMap(false);
-    setSelectionPoints([]);
-    setSavedSelections([]);
-    setSavedSelectionDetails([]);
-    setActiveSavedSelectionIndex(null);
-    setEditingSelectionIndex(null);
-    setShowSelectionInfoForm(false);
-    setPendingSelectionDetails({
-      title: '',
-      color: DEFAULT_SELECTION_COLOR,
-      description: '',
-    });
-    setSelectionInfoError(null);
-    setShowPendingReplaceConfirm(false);
-    setPendingLassoStartPoint(null);
-    setPendingHydrationMapRow(null);
-    setCurrentMapId(null);
-    setCurrentMapNumber(null);
-    setHasUnsavedMapChanges(false);
-    setMapPersistMessage(null);
-    setPersistedSelectionsSnapshot([]);
-    setPersistedSelectionDetailsSnapshot([]);
-    setShowUnsavedExitConfirm(false);
+    if (!isRebindingPlate) {
+      previousImageRectRef.current = null;
+      persistedPlacaRef.current = selectedPlaca;
+      setLassoInteractionMode('draw');
+      setIsEditingExistingMap(false);
+      setSelectionPoints([]);
+      setSavedSelections([]);
+      setSavedSelectionDetails([]);
+      setActiveSavedSelectionIndex(null);
+      setEditingSelectionIndex(null);
+      setShowSelectionInfoForm(false);
+      setPendingSelectionDetails({
+        title: '',
+        color: DEFAULT_SELECTION_COLOR,
+        description: '',
+      });
+      setSelectionInfoError(null);
+      setShowPendingReplaceConfirm(false);
+      setPendingLassoStartPoint(null);
+      setPendingHydrationMapRow(null);
+      setCurrentMapId(null);
+      setCurrentMapNumber(null);
+      setHasUnsavedMapChanges(false);
+      setMapPersistMessage(null);
+      setPersistedSelectionsSnapshot([]);
+      setPersistedSelectionDetailsSnapshot([]);
+      setShowUnsavedExitConfirm(false);
+    } else {
+      setHasUnsavedMapChanges(true);
+      setMapPersistMessage('Placa cambiada. Revisa las selecciones y actualiza el mapa para guardar.');
+    }
     isSelectionHandleInteractingRef.current = false;
     isPointerGestureActiveRef.current = false;
     targetZoomRef.current = 1;
@@ -957,9 +974,14 @@ const MapasInteractivos: React.FC = () => {
 
     const candidateUrls = getImageCandidateUrls(selectedPlaca.photo_url, 'zoom');
     let candidateIndex = 0;
+    let currentImage: HTMLImageElement | null = null;
+    let imageTimeout: ReturnType<typeof setTimeout> | undefined;
+    let retryNonce: string | null = null;
 
     const tryNextCandidate = () => {
       if (!isEffectActive) return;
+      clearTimeout(imageTimeout);
+      if (currentImage) { currentImage.onload = null; currentImage.onerror = null; }
       if (candidateIndex >= candidateUrls.length) {
         setImageLoadError(true);
         return;
@@ -968,18 +990,34 @@ const MapasInteractivos: React.FC = () => {
       candidateIndex += 1;
 
       const img = new window.Image();
+      currentImage = img;
       img.onload = () => {
-        if (!isEffectActive) return;
+        if (!isEffectActive || currentImage !== img) return;
+        clearTimeout(imageTimeout);
         setImageLoadError(false);
         setImageElement(img);
       };
       img.onerror = () => {
-        if (!isEffectActive) return;
+        if (!isEffectActive || currentImage !== img) return;
         tryNextCandidate();
       };
-      img.src = currentUrl;
+      imageTimeout = setTimeout(tryNextCandidate, 15000);
+      if (retryNonce) {
+        const retryUrl = new URL(currentUrl, window.location.href);
+        retryUrl.searchParams.set('_atlas_reload', retryNonce);
+        img.src = retryUrl.toString();
+      } else {
+        img.src = currentUrl;
+      }
     };
 
+    retryImageRef.current = () => {
+      candidateIndex = 0;
+      retryNonce = String(Date.now());
+      setImageLoadError(false);
+      setImageElement(null);
+      tryNextCandidate();
+    };
     tryNextCandidate();
 
     const loadSavedMap = async () => {
@@ -1016,10 +1054,13 @@ const MapasInteractivos: React.FC = () => {
       setMapPersistMessage(`Mapa #${mapRow.map_number} cargado.`);
     };
 
-    void loadSavedMap();
+    if (!isRebindingPlate) void loadSavedMap();
 
     return () => {
       isEffectActive = false;
+      retryImageRef.current = null;
+      clearTimeout(imageTimeout);
+      if (currentImage) { currentImage.onload = null; currentImage.onerror = null; }
       if (animationFrameRef.current !== null) {
         window.cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
@@ -1156,10 +1197,11 @@ const MapasInteractivos: React.FC = () => {
   }, [pendingHydrationMapRow, imageRect, baseImageRect]);
 
   useEffect(() => {
-    if (!selectedPlaca || !imageRect) {
+    if (!selectedPlaca) {
       previousImageRectRef.current = null;
       return;
     }
+    if (!imageRect) return;
 
     const previousRect = previousImageRectRef.current;
     if (!previousRect) {
@@ -1328,7 +1370,7 @@ const MapasInteractivos: React.FC = () => {
     });
   };
 
-  const clearSelection = () => {
+  const clearSelection = (discardMapChanges = true) => {
     const hadDraftSelection = isDrawing || activeLassoPoints.length > 0 || selectionPoints.length > 0;
 
     setIsDrawing(false);
@@ -1348,7 +1390,10 @@ const MapasInteractivos: React.FC = () => {
     setShowPendingReplaceConfirm(false);
     setPendingLassoStartPoint(null);
 
-    if (hasUnsavedMapChanges) {
+    if (discardMapChanges && hasUnsavedMapChanges) {
+      if (persistedPlacaRef.current && persistedPlacaRef.current.id !== selectedPlaca?.id) {
+        setSelectedPlaca(persistedPlacaRef.current);
+      }
       const restoredSelections = cloneSelections(persistedSelectionsSnapshot);
       const restoredDetails = cloneSelectionDetails(persistedSelectionDetailsSnapshot);
       setSavedSelections(restoredSelections);
@@ -1367,6 +1412,19 @@ const MapasInteractivos: React.FC = () => {
     if (!currentMapId) return;
     setHasUnsavedMapChanges(true);
     setMapPersistMessage('Cambios pendientes: recuerda actualizar el mapa.');
+  };
+
+  const markMapBindingPersisted = () => {
+    if (!selectedPlaca) return;
+    const previousPlaca = persistedPlacaRef.current;
+    setPlacasConMapa(prev => {
+      const next = new Set(prev);
+      if (previousPlaca && previousPlaca.id !== selectedPlaca.id) next.delete(previousPlaca.id);
+      next.add(selectedPlaca.id);
+      return next;
+    });
+    persistedPlacaRef.current = selectedPlaca;
+    if (numSubtemaId) invalidatePlacasCache(numSubtemaId);
   };
 
   const createInteractiveMapRecord = async (
@@ -1419,6 +1477,7 @@ const MapasInteractivos: React.FC = () => {
       });
       setHasUnsavedMapChanges(false);
       setMapPersistMessage(`Mapa #${existingMapRow.map_number} actualizado.`);
+      markMapBindingPersisted();
       return { id: existingMapRow.id, mapNumber: existingMapRow.map_number };
     }
 
@@ -1466,11 +1525,12 @@ const MapasInteractivos: React.FC = () => {
     });
     setHasUnsavedMapChanges(false);
     setMapPersistMessage(`Mapa #${mapNumber} creado.`);
+    markMapBindingPersisted();
     return { id: mapId, mapNumber };
   };
 
   const updateInteractiveMapRecord = async (): Promise<boolean> => {
-    if (!numTemaId || !selectedPlaca) return false;
+    if (!numTemaId || !selectedPlaca || !imageElement || !imageRect || imageLoadError) return false;
 
     const sectionsPayload = buildSectionsPayload(savedSelections, savedSelectionDetails, imageRect ?? baseImageRect);
     if (sectionsPayload.length === 0) {
@@ -1506,6 +1566,7 @@ const MapasInteractivos: React.FC = () => {
         setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(savedSelectionDetails));
         setHasUnsavedMapChanges(false);
         setMapPersistMessage(`Mapa #${currentMapNumber ?? currentMapId} actualizado.`);
+        markMapBindingPersisted();
         return true;
       }
     } catch (error) {
@@ -1520,6 +1581,7 @@ const MapasInteractivos: React.FC = () => {
   const closeWorkspaceEditor = () => {
     setShowUnsavedExitConfirm(false);
     setSelectedPlaca(null);
+    setMapListRevision(revision => revision + 1);
   };
 
   const handleCancelWorkspace = () => {
@@ -1598,7 +1660,7 @@ const MapasInteractivos: React.FC = () => {
 
   const saveSelectionWithDetails = async () => {
     const normalizedTitle = pendingSelectionDetails.title.trim();
-    if (!normalizedTitle) {
+    if (!boldTextContent(normalizedTitle).trim()) {
       setSelectionInfoError('El titulo es obligatorio.');
       return;
     }
@@ -1722,11 +1784,12 @@ const MapasInteractivos: React.FC = () => {
         setIsEditingExistingMap(false);
         setLassoInteractionMode('draw');
         setPlacasConMapa((prev) => {
-          if (!selectedPlaca || !prev.has(selectedPlaca.id)) return prev;
           const next = new Set(prev);
-          next.delete(selectedPlaca.id);
+          if (selectedPlaca) next.delete(selectedPlaca.id);
+          if (persistedPlacaRef.current) next.delete(persistedPlacaRef.current.id);
           return next;
         });
+        if (numSubtemaId) invalidatePlacasCache(numSubtemaId);
         setHasUnsavedMapChanges(false);
         setMapPersistMessage(`Mapa #${mapNumberToDelete} eliminado automaticamente al quedar sin selecciones.`);
         return;
@@ -1735,6 +1798,9 @@ const MapasInteractivos: React.FC = () => {
       const { error: deleteError } = await supabase
         .from(INTERACTIVE_MAPS_TABLE)
         .update({
+          tema_id: numTemaId,
+          subtema_id: numSubtemaId,
+          placa_id: selectedPlaca?.id,
           sections: sectionsPayload,
         })
         .eq('id', currentMapId);
@@ -1747,6 +1813,7 @@ const MapasInteractivos: React.FC = () => {
       setSavedSelectionDetails(nextDetails);
       setPersistedSelectionsSnapshot(cloneSelections(nextSelections));
       setPersistedSelectionDetailsSnapshot(cloneSelectionDetails(nextDetails));
+      markMapBindingPersisted();
       setHasUnsavedMapChanges(false);
       setMapPersistMessage(
         nextSelections.length > 0
@@ -2334,9 +2401,11 @@ const MapasInteractivos: React.FC = () => {
     if (!selectedPlaca) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || isEditableTarget(event.target) ||
+        showSelectionInfoForm || showUnsavedExitConfirm || showPendingReplaceConfirm || showDeleteConfirm || showPlatePickerModal || isPersistingMap) return;
       if (event.key === 'Escape') {
         event.preventDefault();
-        clearSelection();
+        clearSelection(false);
       }
     };
 
@@ -2350,6 +2419,7 @@ const MapasInteractivos: React.FC = () => {
     hasUnsavedMapChanges,
     persistedSelectionsSnapshot,
     persistedSelectionDetailsSnapshot,
+    showSelectionInfoForm, showUnsavedExitConfirm, showPendingReplaceConfirm, showDeleteConfirm, showPlatePickerModal, isPersistingMap,
   ]);
 
   const selectedTema = temas.find(t => Number(t.id) === numTemaId) ?? null;
@@ -2522,13 +2592,9 @@ const MapasInteractivos: React.FC = () => {
         return;
       }
 
-      // Si el mapa no tenía subtema_id pero la placa sí, reparar el registro silenciosamente en Supabase
+      // Completar el contexto local; el registro se actualiza al guardar,
+      // nunca por el solo hecho de abrir el editor.
       if (mapRow.subtema_id === null && targetSubtemaId !== null) {
-        void supabase
-          .from(INTERACTIVE_MAPS_TABLE)
-          .update({ subtema_id: targetSubtemaId })
-          .eq('id', mapRow.id);
-
         setTemaMaps((prev) =>
           prev.map((item) => (item.id === mapRow.id ? { ...item, subtema_id: targetSubtemaId } : item))
         );
@@ -2689,10 +2755,10 @@ const MapasInteractivos: React.FC = () => {
                   type="button"
                   style={{
                     ...s.updateMapBtn,
-                    ...((isPersistingMap || !hasUnsavedMapChanges || savedSelections.length === 0) ? s.updateMapBtnDisabled : {}),
+                    ...((isPersistingMap || !hasUnsavedMapChanges || savedSelections.length === 0 || !imageElement || !imageRect || imageLoadError) ? s.updateMapBtnDisabled : {}),
                   }}
                   onClick={updateInteractiveMapRecord}
-                  disabled={isPersistingMap || !hasUnsavedMapChanges || savedSelections.length === 0}
+                  disabled={isPersistingMap || !hasUnsavedMapChanges || savedSelections.length === 0 || !imageElement || !imageRect || imageLoadError}
                 >
                   {isPersistingMap ? 'Guardando...' : 'Actualizar mapa'}
                 </button>
@@ -2704,7 +2770,7 @@ const MapasInteractivos: React.FC = () => {
                 >
                   🔄 Cambiar placa
                 </button>
-                <button type="button" style={s.secondaryWorkspaceBtn} onClick={clearSelection}>
+                <button type="button" style={s.secondaryWorkspaceBtn} onClick={() => clearSelection()}>
                   Limpiar no guardadas
                 </button>
                 <button
@@ -3134,15 +3200,7 @@ const MapasInteractivos: React.FC = () => {
                       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '4px' }}>
                         <button
                           type="button"
-                          onClick={() => {
-                            if (!selectedPlaca) return;
-                            setImageLoadError(false);
-                            setImageElement(null);
-                            const img = new window.Image();
-                            img.onload = () => setImageElement(img);
-                            img.onerror = () => setImageLoadError(true);
-                            img.src = `${selectedPlaca.photo_url}?t=${Date.now()}`;
-                          }}
+                          onClick={() => retryImageRef.current?.()}
                           style={{
                             padding: '8px 16px',
                             borderRadius: '10px',
@@ -3413,8 +3471,8 @@ const MapasInteractivos: React.FC = () => {
                       >
                         ✎
                       </button>
-                      <span style={s.savedSelectionTitlePill} title={activeSavedSelectionTitle}>
-                        {activeSavedSelectionTitle}
+                      <span style={s.savedSelectionTitlePill} title={boldTextContent(activeSavedSelectionTitle)}>
+                        {renderBoldText(activeSavedSelectionTitle)}
                       </span>
                     </div>
 
@@ -3531,8 +3589,8 @@ const MapasInteractivos: React.FC = () => {
 
             {showSelectionInfoForm && (
               <div style={s.selectionInfoBackdrop}>
-                <div style={s.selectionInfoModal}>
-                  <h3 style={s.selectionInfoTitle}>
+                <div style={s.selectionInfoModal} role="dialog" aria-modal="true" aria-labelledby="selection-info-heading">
+                  <h3 id="selection-info-heading" style={s.selectionInfoTitle}>
                     {editingSelectionIndex !== null ? 'Editar selección guardada' : 'Información de la selección'}
                   </h3>
                   <p style={s.selectionInfoText}>
@@ -3541,21 +3599,16 @@ const MapasInteractivos: React.FC = () => {
                       : 'Completa los datos antes de confirmar esta selección.'}
                   </p>
 
-                  <label style={s.selectionInfoLabel} htmlFor="selection-title-input">
+                  <label id="selection-title-label" style={s.selectionInfoLabel} htmlFor="selection-title-input" onClick={() => document.getElementById('selection-title-input')?.focus()}>
                     Título <span style={s.selectionInfoRequired}>*</span>
                   </label>
-                  <input
+                  <BoldField
                     id="selection-title-input"
-                    type="text"
-                    spellCheck={true}
-                    autoCorrect="on"
-                    autoCapitalize="sentences"
-                    lang="es"
+                    labelledBy="selection-title-label"
                     value={pendingSelectionDetails.title}
-                    onChange={(event) => {
-                      const nextTitle = event.target.value;
+                    onChange={(nextTitle) => {
                       setPendingSelectionDetails(prev => ({ ...prev, title: nextTitle }));
-                      if (selectionInfoError && nextTitle.trim().length > 0) {
+                      if (selectionInfoError && boldTextContent(nextTitle).trim().length > 0) {
                         setSelectionInfoError(null);
                       }
                     }}
@@ -3587,17 +3640,14 @@ const MapasInteractivos: React.FC = () => {
                     })}
                   </div>
 
-                  <label style={s.selectionInfoLabel} htmlFor="selection-description-input">Información</label>
-                  <textarea
+                  <label id="selection-description-label" style={s.selectionInfoLabel} htmlFor="selection-description-input" onClick={() => document.getElementById('selection-description-input')?.focus()}>Información</label>
+                  <BoldField
                     id="selection-description-input"
-                    spellCheck={true}
-                    autoCorrect="on"
-                    autoCapitalize="sentences"
-                    lang="es"
+                    labelledBy="selection-description-label"
+                    as="textarea"
                     value={pendingSelectionDetails.description}
-                    onChange={(event) => setPendingSelectionDetails(prev => ({ ...prev, description: event.target.value }))}
+                    onChange={(description) => setPendingSelectionDetails(prev => ({ ...prev, description }))}
                     placeholder="Escribe un párrafo descriptivo para esta selección..."
-                    rows={4}
                     style={s.selectionInfoTextarea}
                   />
 
@@ -3609,10 +3659,10 @@ const MapasInteractivos: React.FC = () => {
                       type="button"
                       style={{
                         ...s.selectionInfoSaveBtn,
-                        ...(pendingSelectionDetails.title.trim().length === 0 ? s.selectionInfoSaveBtnDisabled : {}),
+                        ...(boldTextContent(pendingSelectionDetails.title).trim().length === 0 ? s.selectionInfoSaveBtnDisabled : {}),
                       }}
                       onClick={saveSelectionWithDetails}
-                      disabled={pendingSelectionDetails.title.trim().length === 0}
+                      disabled={boldTextContent(pendingSelectionDetails.title).trim().length === 0}
                     >
                       {editingSelectionIndex !== null ? 'Actualizar' : 'Guardar'}
                     </button>
@@ -3859,22 +3909,29 @@ const MapasInteractivos: React.FC = () => {
             <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
               {placas.map((p, idx) => {
                 const isCurrent = p.id === selectedPlaca?.id;
+                const hasOtherMap = placasConMapa.has(p.id) && p.id !== persistedPlacaRef.current?.id && !isCurrent;
                 return (
                   <div
                     key={p.id}
                     onClick={() => {
+                      if (hasOtherMap || isPersistingMap) return;
+                      if (isCurrent) { setShowPlatePickerModal(false); return; }
+                      isRebindingPlateRef.current = true;
                       setSelectedPlaca(p);
                       setHasUnsavedMapChanges(true);
                       setShowPlatePickerModal(false);
                       setImageLoadError(false);
                       setImageElement(null);
                     }}
+                    aria-disabled={hasOtherMap || isPersistingMap}
+                    title={hasOtherMap ? 'Esta placa ya tiene otro mapa interactivo' : undefined}
                     style={{
                       borderRadius: '14px',
                       border: isCurrent ? '2.5px solid #2563eb' : '1.5px solid #e2e8f0',
                       background: isCurrent ? '#eff6ff' : '#fff',
                       padding: '10px',
-                      cursor: 'pointer',
+                      cursor: hasOtherMap ? 'not-allowed' : 'pointer',
+                      opacity: hasOtherMap ? 0.55 : 1,
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '8px',
@@ -4864,6 +4921,8 @@ const s: { [key: string]: React.CSSProperties } = {
     boxSizing: 'border-box',
   },
   selectionInfoModal: {
+    maxHeight: '90dvh',
+    overflowY: 'auto',
     width: 'min(94vw, 460px)',
     borderRadius: '14px',
     border: '1.5px solid #bfdbfe',

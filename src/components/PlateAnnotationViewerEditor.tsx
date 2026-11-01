@@ -31,8 +31,10 @@ import {
 } from 'lucide-react';
 import BoldField, { renderBoldText } from './BoldField';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
-import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
+import { getImageCandidateUrls } from '../services/cloudinaryImages';
 import AllSenaladosMoverModal from './AllSenaladosMoverModal';
+import { isEditableTarget } from '../utils/editableTarget';
+export { isEditableTarget } from '../utils/editableTarget';
 
 export interface MarkerLocation {
   x: number;
@@ -117,14 +119,6 @@ const POINTER_BASE_OUTSET_PX = 3;
 const ARROW_TAIL_DISTANCE_PX = 21;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-
-export const isEditableTarget = (target: EventTarget | null): boolean => {
-  if (!target || !(target instanceof HTMLElement)) return false;
-  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return true;
-  if (target.isContentEditable || target.getAttribute('contenteditable') === 'true') return true;
-  if (target.closest('[contenteditable="true"], input, textarea, select')) return true;
-  return false;
-};
 
 // Ramer-Douglas-Peucker algorithm for silky smooth, lightweight freehand polygons
 const perpendicularDistance = (pt: { x: number; y: number }, lineStart: { x: number; y: number }, lineEnd: { x: number; y: number }) => {
@@ -393,24 +387,27 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   onSaveBatch,
   onCancel,
 }) => {
-  // Resolve true high-definition image URL (avoiding _thumb)
+  // El editor trabaja con originales; nunca sustituirlos silenciosamente por miniaturas.
+  const preferredImageSrc = highResImageSrc?.startsWith('blob:') || highResImageSrc?.startsWith('data:')
+    ? highResImageSrc
+    : imageSrc?.startsWith('blob:') || imageSrc?.startsWith('data:')
+      ? imageSrc : highResImageSrc || imageSrc;
+  const imageCandidates = useMemo(() => getImageCandidateUrls(preferredImageSrc, 'view'), [preferredImageSrc]);
+  const [imageCandidateIndex, setImageCandidateIndex] = useState(0);
+  const [imageRetryCount, setImageRetryCount] = useState(0);
+  const [imageStatus, setImageStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const resolvedImageSrc = useMemo(() => {
-    if (highResImageSrc) {
-      if (highResImageSrc.startsWith('blob:') || highResImageSrc.startsWith('data:')) {
-        return highResImageSrc;
-      }
-    }
-    if (imageSrc && (imageSrc.startsWith('blob:') || imageSrc.startsWith('data:'))) {
-      return imageSrc;
-    }
-    if (highResImageSrc) return highResImageSrc;
-    if (!imageSrc) return '';
-    if (imageSrc.includes('r2.dev') || imageSrc.includes('cloudinary.com') || imageSrc.includes('_thumb')) {
-      const full = getCloudinaryImageUrl(imageSrc, 'view');
-      return full || imageSrc.replace(/_thumb\.webp$/i, '.webp');
-    }
-    return imageSrc;
-  }, [highResImageSrc, imageSrc]);
+    const candidate = imageCandidates[imageCandidateIndex] || '';
+    if (!imageRetryCount || !/^https?:\/\//i.test(candidate)) return candidate;
+    const url = new URL(candidate);
+    url.searchParams.set('v', `${Date.now()}-${imageRetryCount}`);
+    return url.href;
+  }, [imageCandidates, imageCandidateIndex, imageRetryCount]);
+
+  useEffect(() => {
+    setImageCandidateIndex(0);
+    setImageRetryCount(0);
+  }, [preferredImageSrc]);
 
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
   const isDesktop = windowWidth >= SIDEBAR_BREAKPOINT;
@@ -576,6 +573,22 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   const [rotation, setRotation] = useState(0);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
 
+  const handleImageError = useCallback(() => {
+    setImageSize(null);
+    if (imageCandidateIndex + 1 < imageCandidates.length) {
+      setImageStatus('loading');
+      setImageCandidateIndex(index => index + 1);
+    } else {
+      setImageStatus('error');
+    }
+  }, [imageCandidateIndex, imageCandidates.length]);
+
+  useEffect(() => {
+    if (imageStatus !== 'loading') return;
+    const timer = window.setTimeout(() => setImageStatus('error'), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [resolvedImageSrc, imageStatus]);
+
   // Visibility toggle
   const [showAllMarkers, setShowAllMarkers] = useState(true);
 
@@ -706,7 +719,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   // Keyboard navigation & shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isEditableTarget(e.target)) {
+      if (showMoveAllModal || e.defaultPrevented || e.isComposing || isEditableTarget(e.target)) {
         return;
       }
       if (e.code === 'Space' && !e.repeat) {
@@ -780,21 +793,21 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (isEditableTarget(e.target)) {
-        return;
-      }
       if (e.code === 'Space') {
         setIsSpacePressed(false);
       }
     };
+    const handleBlur = () => setIsSpacePressed(false);
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
     };
-  }, [drawingPolygonPoints.length, handleDeleteHole, handleUndo, markers, pushHistory, reassigningTipMarkerId, required, selectedHoleIndex, selectedMarkerId, selectedVertex]);
+  }, [drawingPolygonPoints.length, handleDeleteHole, handleUndo, markers, pushHistory, reassigningTipMarkerId, required, selectedHoleIndex, selectedMarkerId, selectedVertex, showMoveAllModal]);
 
   // Update image size
   const updateImageDimensions = useCallback(() => {
@@ -804,9 +817,14 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   }, []);
 
   useEffect(() => {
-    updateImageDimensions();
+    setImageSize(null);
+    setImageStatus('loading');
     const img = imageRef.current;
-    if (!img) return;
+    if (!img || !resolvedImageSrc) { setImageStatus('error'); return; }
+    if (img.complete && img.naturalWidth > 0) {
+      setImageStatus('ready');
+      updateImageDimensions();
+    }
     let observer: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
       observer = new ResizeObserver(() => updateImageDimensions());
@@ -863,13 +881,13 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   // Convert client coordinates to normalized image coords (0..1)
   const clientToImageCoords = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
     const img = imageRef.current;
-    if (!img) return null;
+    if (!img || imageStatus !== 'ready') return null;
     const rect = img.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return null;
     const x = clamp((clientX - rect.left) / rect.width, 0, 1);
     const y = clamp((clientY - rect.top) / rect.height, 0, 1);
     return { x, y };
-  }, []);
+  }, [imageStatus]);
 
   // Active selected marker object
   const activeSelectedMarker = useMemo(() => {
@@ -1668,6 +1686,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   }, [activeTool, currentCreationLabel, markers.length, sessionMarkerIds]);
 
   const handleConfirmSave = () => {
+    if (imageStatus !== 'ready') return;
     setIsSavingLocally(true);
     setHasUnsavedModifications(false);
 
@@ -1753,7 +1772,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     // Finish saving spinner and display persistent confirmation toast
     setTimeout(() => {
       setIsSavingLocally(false);
-      setSaveSuccessNotification('¡Señalados guardados correctamente!');
+      setSaveSuccessNotification('Señalados aplicados al editor.');
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
       toastTimeoutRef.current = setTimeout(() => {
         setSaveSuccessNotification(null);
@@ -1763,7 +1782,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   return createPortal(
     <div
-      onContextMenu={e => e.preventDefault()}
+      onContextMenu={e => { if (!isEditableTarget(e.target)) e.preventDefault(); }}
       style={{
         position: 'fixed',
         inset: 0,
@@ -1825,6 +1844,31 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         onTouchCancel={handleTouchEnd}
         onDoubleClick={handleCanvasDoubleClick}
       >
+        {imageStatus !== 'ready' && (
+          <div
+            role={imageStatus === 'error' ? 'alert' : 'status'}
+            style={{ position: 'absolute', inset: 0, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: '#f1f5f9' }}
+            onPointerDown={event => event.stopPropagation()}
+            onClick={event => event.stopPropagation()}
+          >
+            <div style={{ maxWidth: 420, textAlign: 'center', padding: 24, background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 16, color: '#334155' }}>
+              <strong style={{ display: 'block', marginBottom: 10 }}>
+                {imageStatus === 'error' ? 'No se pudo cargar la imagen de la placa' : 'Cargando imagen de la placa…'}
+              </strong>
+              <p style={{ margin: '0 0 16px', lineHeight: 1.5 }}>
+                {imageStatus === 'error' ? 'Tus señalados se conservan. Reintenta la carga o vuelve al editor para revisar la imagen.' : 'Espera a que cargue el original para colocar y guardar señalados.'}
+              </p>
+              {imageStatus === 'error' && (
+                <button type="button" onClick={() => {
+                  setImageStatus('loading');
+                  setImageCandidateIndex(0);
+                  setImageRetryCount(count => count + 1);
+                }} style={{ padding: '10px 16px', borderRadius: 8, cursor: 'pointer' }}>Reintentar carga de imagen</button>
+              )}
+              <button type="button" onClick={handleRequestClose} style={{ padding: '10px 16px', marginLeft: 8, borderRadius: 8, cursor: 'pointer' }}>Volver al editor</button>
+            </div>
+          </div>
+        )}
         {/* Top Left Title & Topic Info */}
         {(temaNombre || subtemaNombre) && (
           <div
@@ -1889,7 +1933,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
             {isSavingLocally ? (
               <>
                 <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                <span>Guardando señalados en la placa...</span>
+                <span>Aplicando señalados al editor...</span>
               </>
             ) : (
               <>
@@ -2288,6 +2332,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         >
           {/* Base Plate Image (High Resolution) */}
           <img
+            key={resolvedImageSrc}
             ref={imageRef}
             src={resolvedImageSrc}
             alt={imageAlt ?? 'Placa histológica de alta calidad'}
@@ -2303,7 +2348,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
               pointerEvents: 'none',
               background: '#ffffff',
             }}
-            onLoad={updateImageDimensions}
+            onLoad={() => { setImageStatus('ready'); updateImageDimensions(); }}
+            onError={handleImageError}
           />
 
           {/* Interactive SVG Overlay */}
@@ -4129,18 +4175,18 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           >
             <button
               type="button"
-              disabled={isSavingLocally}
+              disabled={isSavingLocally || imageStatus !== 'ready'}
               onClick={handleConfirmSave}
               style={{
                 width: '100%',
                 padding: '12px 14px',
                 borderRadius: '12px',
                 border: 'none',
-                background: isSavingLocally ? '#94a3b8' : 'linear-gradient(135deg, #16a34a 0%, #0ea5e9 100%)',
+                background: isSavingLocally || imageStatus !== 'ready' ? '#94a3b8' : 'linear-gradient(135deg, #16a34a 0%, #0ea5e9 100%)',
                 color: '#ffffff',
                 fontSize: '0.95em',
                 fontWeight: 900,
-                cursor: isSavingLocally ? 'not-allowed' : 'pointer',
+                cursor: isSavingLocally || imageStatus !== 'ready' ? 'not-allowed' : 'pointer',
                 boxShadow: '0 8px 24px rgba(14, 165, 233, 0.3)',
                 display: 'flex',
                 alignItems: 'center',
@@ -4268,6 +4314,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
             startX: m.startX ?? null,
             startY: m.startY ?? null,
             regionPoints: m.regionPoints ?? null,
+            regionHoles: m.regionHoles ?? null,
             regionColor: m.regionColor ?? '#22c55e',
             regionOpacity: m.regionOpacity ?? 0.28,
           } : null))}
@@ -4284,6 +4331,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 startX: u.startX ?? null,
                 startY: u.startY ?? null,
                 regionPoints: u.regionPoints ?? null,
+                regionHoles: u.regionHoles ?? null,
                 regionColor: u.regionColor ?? m.regionColor,
                 regionOpacity: u.regionOpacity ?? m.regionOpacity,
               };

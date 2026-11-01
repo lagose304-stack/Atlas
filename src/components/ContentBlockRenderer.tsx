@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
-import { CalendarDays, BookOpen, ArrowRight, Sparkles } from 'lucide-react';
+import { CalendarDays, BookOpen, ArrowRight, Sparkles, Microscope, Maximize2 } from 'lucide-react';
+import '../styles/weeklyHistology.css';
 import type { ContentBlock, BlockType } from '../types/contentBlocks';
 import ImageViewerModal from './ImageViewerModal';
 import { renderBoldText } from './BoldField';
@@ -631,6 +632,7 @@ const WeeklyTopicCard: React.FC<{
   return (
     <a
       className="cb-weekly-topic"
+      data-topic-number={displayNumber}
       href={finalId ? `/subtemas/${finalId}` : undefined}
       style={{
         ['--weekly-accent' as string]: accent,
@@ -652,8 +654,10 @@ const WeeklyTopicCard: React.FC<{
       }}
     >
       <span aria-hidden style={{ position: 'absolute', inset: '4px auto 4px 0', width: '3.5px', borderRadius: '0 999px 999px 0', background: `linear-gradient(180deg, ${accent}, #38bdf8)` }} />
+      <span className="cb-weekly-lens" aria-hidden="true"><span className="cb-weekly-lens-window">
       {finalLogo ? (
         <img
+          className="cb-weekly-topic-thumb"
           src={getCloudinaryImageUrl(finalLogo, 'thumbSmall')}
           alt=""
           style={{
@@ -667,14 +671,16 @@ const WeeklyTopicCard: React.FC<{
         />
       ) : (
         <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: adaptiveTopicLogoSize, height: adaptiveTopicLogoSize, borderRadius: topicCount === 1 ? '12px' : '11px', color: accent, background: `${accent}12`, border: `1px solid ${accent}25`, fontSize: topicCount === 1 ? '1.45em' : '1.25em' }}>
-          🔬
+          <Microscope size={24} strokeWidth={1.5} />
         </span>
       )}
-      <span style={{ display: 'grid', gap: topicCount === 2 ? '2px' : '4px', minWidth: 0 }}>
+      <i className="cb-weekly-lens-reticle" />
+      </span></span>
+      <span className="cb-weekly-topic-copy" style={{ display: 'grid', gap: topicCount === 2 ? '2px' : '4px', minWidth: 0 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', width: 'fit-content', padding: topicCount === 1 ? '4px 10px' : topicCount === 2 ? '2px 7px' : '1px 5px', borderRadius: '4px', background: `${accent}14`, color: accent, fontSize: topicCount === 1 ? '0.92rem' : topicCount === 2 ? '0.78rem' : '.72em', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>
           Tema {displayNumber}
         </span>
-        <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontSize: topicCount === 1 ? 'clamp(1.38rem, 1.8vw, 1.68rem)' : topicCount === 2 ? 'clamp(1.1rem, 1.4vw, 1.3rem)' : undefined, fontWeight: Number(weeklyTopicWeight || 800), lineHeight: 1.2 }}>
+        <strong style={{ overflow: 'visible', fontSize: topicCount === 1 ? 'clamp(1.38rem, 1.8vw, 1.68rem)' : topicCount === 2 ? 'clamp(1.1rem, 1.4vw, 1.3rem)' : undefined, fontWeight: Number(weeklyTopicWeight || 800), lineHeight: 1.25 }}>
           {topic.name}
         </strong>
       </span>
@@ -1168,7 +1174,7 @@ const BlockItem: React.FC<{
       const style = c.weekly_style || 'premium';
       const weeklyTextStyle: React.CSSProperties = {
         textAlign: (c.weekly_text_align || 'left') as React.CSSProperties['textAlign'],
-        fontFamily: c.weekly_font_family || '"Montserrat", "Segoe UI", sans-serif',
+        fontFamily: c.weekly_font_family || '"IBM Plex Mono", ui-monospace, monospace',
         lineHeight: Number(c.weekly_line_height || 1.2),
         letterSpacing: c.weekly_letter_spacing || 'normal',
         textTransform: (c.weekly_text_transform || 'none') as React.CSSProperties['textTransform'],
@@ -1182,8 +1188,8 @@ const BlockItem: React.FC<{
       ].filter(topic => Boolean(topic.name));
       const topicCount = Math.max(1, Math.min(3, topics.length));
       const adaptiveGridMinHeight = topicCount <= 2
-        ? 'clamp(370px, 24vw, 415px)'
-        : 'clamp(230px, 19.5vw, 248px)';
+        ? '357px'
+        : '416.5px';
 
       const adaptiveContentPadding = topicCount === 1
         ? '24px clamp(24px, 3vw, 44px)'
@@ -1200,24 +1206,34 @@ const BlockItem: React.FC<{
         : topicCount === 2
           ? '10px 18px'
           : '4px 10px';
-      const adaptiveTopicLogoSize = topicCount === 1 ? '66px' : topicCount === 2 ? '54px' : '32px';
+      const adaptiveTopicLogoSize = topicCount === 3 ? '45.9px' : '52.7px';
       const adaptiveTopicCols = topicCount === 1
-        ? '66px minmax(0, 1fr) 42px'
+        ? '62px minmax(0, 1fr) 34px'
         : topicCount === 2
-          ? '54px minmax(0, 1fr) 34px'
-          : '36px minmax(0, 1fr) 26px';
+          ? '62px minmax(0, 1fr) 34px'
+          : '54px minmax(0, 1fr) 34px';
 
       const adaptiveGridCols = imageRight
-        ? 'minmax(0, 60%) minmax(0, 40%)'
-        : 'minmax(0, 40%) minmax(0, 60%)';
+        ? 'minmax(0, 56%) minmax(0, 44%)'
+        : 'minmax(0, 44%) minmax(0, 56%)';
 
       return (
         <article
-          className={`cb-weekly-publication cb-weekly-topics-${topicCount}`}
+          className={`cb-weekly-publication cb-weekly-topics-${topicCount} cb-weekly-lab`}
           data-topic-count={topicCount}
+          data-weekly-style={style}
           style={{
             ['--weekly-accent' as string]: accent,
             ['--cb-weekly-min-height' as string]: adaptiveGridMinHeight,
+            ['--weekly-title-weight' as string]: c.weekly_title_weight || '800',
+            ['--weekly-title-size' as string]: c.weekly_title_size || 'clamp(1.45rem, 2.3vw, 2.065rem)',
+            ['--weekly-title-color' as string]: c.weekly_title_color || '#2a1d5c',
+            ['--weekly-display-font' as string]: c.weekly_font_family || '"Fraunces", Georgia, serif',
+            ['--weekly-topic-weight' as string]: c.weekly_topic_weight || '700',
+            ['--weekly-topic-color' as string]: c.weekly_topic_color || '#2a1d5c',
+            ['--weekly-topic-size' as string]: c.weekly_topic_size || (topicCount === 3 ? '1.35rem' : '1.5625rem'),
+            ['--weekly-lens-size' as string]: adaptiveTopicLogoSize,
+            ['--weekly-label-bg' as string]: c.weekly_bg && c.weekly_bg !== '#eef8ff' ? c.weekly_bg : '#f7eef3',
             minHeight: adaptiveGridMinHeight,
             width: `min(100%, ${widthMap[c.weekly_width || 'full'] || '100%'})`,
             marginInline: 'auto',
@@ -1230,56 +1246,6 @@ const BlockItem: React.FC<{
             boxShadow: style === 'outline' ? 'none' : '0 18px 42px -8px rgba(12, 69, 104, 0.1), 0 4px 14px rgba(12, 69, 104, 0.04), inset 0 1px 0 #ffffff, inset 0 0 0 1px rgba(255, 255, 255, 0.7)',
           }}
         >
-          {/* Barra lateral izquierda con gradiente */}
-          <span aria-hidden style={{ position: 'absolute', inset: '0 auto 0 0', width: '4.5px', background: 'linear-gradient(180deg, #0284c7 0%, #38bdf8 55%, #818cf8 100%)', zIndex: 3 }} />
-
-          {/* Elementos decorativos de fondo */}
-          <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-            {/* Auras luminosas de profundidad */}
-            <span style={{ position: 'absolute', width: '280px', height: '280px', left: '-60px', top: '-80px', borderRadius: '50%', background: `radial-gradient(circle, ${accent}28, transparent 70%)`, filter: 'blur(24px)' }} />
-            <span style={{ position: 'absolute', width: '240px', height: '240px', left: '24%', bottom: '-80px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(167, 139, 250, 0.22), transparent 70%)', filter: 'blur(26px)' }} />
-            <span style={{ position: 'absolute', width: '180px', height: '180px', right: '35%', top: '20%', borderRadius: '50%', background: `radial-gradient(circle, ${accent}18, transparent 70%)`, filter: 'blur(20px)' }} />
-
-            {/* Sistema de órbitas microscópicas concéntricas */}
-            <span style={{ position: 'absolute', width: '210px', height: '210px', right: '36%', top: '-85px', borderRadius: '50%', border: `1px solid ${accent}18` }} />
-            <span style={{ position: 'absolute', width: '150px', height: '150px', right: '38%', top: '-55px', borderRadius: '50%', border: `1px dashed ${accent}38` }} />
-            <span style={{ position: 'absolute', width: '8px', height: '8px', right: '43%', top: '24px', borderRadius: '50%', background: `linear-gradient(135deg, ${accent}, #38bdf8)`, boxShadow: `0 0 10px ${accent}` }} />
-            <span style={{ position: 'absolute', width: '5px', height: '5px', right: '37%', top: '-15px', borderRadius: '50%', background: '#818cf8', boxShadow: '0 0 6px #818cf8' }} />
-
-            {/* Malla de micropuntos científica */}
-            <span style={{ position: 'absolute', left: '16px', bottom: '12px', width: '110px', height: '65px', opacity: 0.38, backgroundImage: `radial-gradient(${accent} 1.3px, transparent 1.3px)`, backgroundSize: '13px 13px' }} />
-            <span style={{ position: 'absolute', right: '38%', bottom: '16px', width: '80px', height: '45px', opacity: 0.25, backgroundImage: `radial-gradient(${accent} 1.3px, transparent 1.3px)`, backgroundSize: '13px 13px' }} />
-            <span style={{ position: 'absolute', left: '38%', top: '14px', width: '70px', height: '35px', opacity: 0.2, backgroundImage: `radial-gradient(${accent} 1.3px, transparent 1.3px)`, backgroundSize: '13px 13px' }} />
-
-            {/* Marca de agua molecular (Estructura química/hexágonos) */}
-            <svg style={{ position: 'absolute', right: '37%', bottom: '25px', width: '90px', height: '80px', opacity: 0.18 }} viewBox="0 0 90 80" fill="none" stroke={accent} strokeWidth="1.3">
-              <polygon points="30,10 50,10 60,27 50,44 30,44 20,27" />
-              <polygon points="50,44 70,44 80,61 70,78 50,78 40,61" />
-              <circle cx="30" cy="10" r="2.5" fill={accent} />
-              <circle cx="50" cy="10" r="2.5" fill={accent} />
-              <circle cx="60" cy="27" r="2.5" fill={accent} />
-              <circle cx="50" cy="44" r="2.5" fill={accent} />
-              <circle cx="70" cy="44" r="2.5" fill={accent} />
-              <circle cx="80" cy="61" r="2.5" fill={accent} />
-            </svg>
-
-            {/* Destellos científicos sutiles */}
-            <span style={{ position: 'absolute', left: '18%', top: '16px', color: accent, fontSize: '13px', opacity: 0.45 }}>✦</span>
-            <span style={{ position: 'absolute', left: '8%', bottom: '42%', color: '#818cf8', fontSize: '10px', opacity: 0.4 }}>✧</span>
-            <span style={{ position: 'absolute', right: '35%', top: '48%', color: accent, fontSize: '11px', opacity: 0.35 }}>✦</span>
-
-            {/* Líneas de escala y calibración óptica */}
-            <span style={{ position: 'absolute', right: '35%', top: '12px', width: '60px', height: '1px', background: `linear-gradient(90deg, transparent, ${accent}40, transparent)` }} />
-            <span style={{ position: 'absolute', left: '32px', top: '50%', width: '1px', height: '40px', background: `linear-gradient(180deg, transparent, ${accent}30, transparent)` }} />
-
-            {/* Cruces y retículas de enfoque */}
-            <svg style={{ position: 'absolute', left: '10px', top: '8px', width: '18px', height: '18px', opacity: 0.32 }} viewBox="0 0 18 18"><path d="M9 0v18M0 9h18" stroke={accent} strokeWidth="1.2" /></svg>
-            <svg style={{ position: 'absolute', left: '10px', bottom: '8px', width: '18px', height: '18px', opacity: 0.28 }} viewBox="0 0 18 18"><path d="M9 0v18M0 9h18" stroke={accent} strokeWidth="1.2" /></svg>
-          </div>
-
-          {/* Barra superior con gradiente de acento */}
-          <div aria-hidden style={{ position: 'absolute', zIndex: 2, inset: '0 0 auto', height: '3.5px', background: `linear-gradient(90deg, ${accent}, #38bdf8 45%, #818cf8 80%, transparent)` }} />
-
           <div
             className="cb-weekly-publication-grid"
             style={{
@@ -1293,6 +1259,7 @@ const BlockItem: React.FC<{
           >
             {/* Columna de contenido */}
             <div
+              className="cb-weekly-lab-content"
               style={{
                 order: imageRight ? 1 : 2,
                 display: 'flex',
@@ -1302,6 +1269,8 @@ const BlockItem: React.FC<{
                 ...weeklyTextStyle,
               }}
             >
+              <div className="cb-weekly-slide-imprint" aria-hidden="true"><span>Lámina · Histología</span><span>Atlas</span></div>
+              <span className="cb-weekly-slide-registration" aria-hidden="true" />
               {/* Título centrado */}
               {(() => {
                 const defaultTitle = topics.length > 1 ? 'TEMAS DE LA SEMANA:' : 'TEMA DE LA SEMANA:';
@@ -1310,7 +1279,7 @@ const BlockItem: React.FC<{
                 const resolvedTitle = isGenericTitle ? defaultTitle : rawTitle;
 
                 return (
-                  <div style={{ position: 'relative', width: '100%', marginBottom: adaptiveTitleMarginBottom, textAlign: (c.weekly_text_align || 'center') as React.CSSProperties['textAlign'] }}>
+                  <div className="cb-weekly-lab-title" style={{ position: 'relative', width: '100%', marginBottom: adaptiveTitleMarginBottom, textAlign: (c.weekly_text_align || 'center') as React.CSSProperties['textAlign'] }}>
                     <RichTextValue
                       value={resolvedTitle}
                       style={{
@@ -1335,7 +1304,7 @@ const BlockItem: React.FC<{
               <div style={{ alignSelf: c.weekly_text_align === 'left' ? 'flex-start' : c.weekly_text_align === 'right' ? 'flex-end' : 'center', width: topicCount === 1 ? '60px' : topicCount === 2 ? '45px' : '30px', height: topicCount === 1 ? '4px' : topicCount === 2 ? '3px' : '2px', borderRadius: '999px', background: `linear-gradient(90deg, ${accent}, #7dd3fc)`, marginBottom: adaptiveDividerMarginBottom }} />
 
               {/* Lista de temas adaptativa */}
-              <div style={{ display: 'grid', gap: adaptiveTopicGap }}>
+              <div className="cb-weekly-topic-list" style={{ display: 'grid', gap: adaptiveTopicGap }}>
                 {topics.map((topic, index) => (
                   <WeeklyTopicCard
                     key={topic.id || index}
@@ -1359,7 +1328,7 @@ const BlockItem: React.FC<{
                 if (!cleanDates) return null;
                 return (
                   <div className={topicCount <= 2 ? 'cb-weekly-date-badge cb-weekly-date-badge-large' : 'cb-weekly-date-badge'} style={{ marginTop: adaptiveDateMarginTop }}>
-                    <span className="cb-weekly-date-icon" aria-hidden="true">📅</span>
+                    <span className="cb-weekly-date-icon" aria-hidden="true"><CalendarDays size={15} strokeWidth={1.7} /></span>
                     <span className="cb-weekly-date-label">Semana:</span>
                     <span className="cb-weekly-date-value">
                       <RichTextValue value={cleanDates} style={{ minWidth: 0, fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit' }} />
@@ -1372,6 +1341,7 @@ const BlockItem: React.FC<{
             {/* Figura / Placa con barra lateral vertical y foto limpia sin obstrucciones */}
             <figure
               className={c.image_url ? 'cb-zoom-trigger cb-weekly-plate-figure' : 'cb-weekly-plate-figure'}
+              data-image-fit={c.weekly_image_fit || 'cover'}
               role={c.image_url ? 'button' : undefined}
               tabIndex={c.image_url ? 0 : undefined}
               onClick={c.image_url ? () => onZoom(c.image_url, c.weekly_placa_id || undefined) : undefined}
@@ -1403,7 +1373,7 @@ const BlockItem: React.FC<{
                 return (
                   <div className="cb-weekly-vertical-bar">
                     <div className="cb-weekly-vertical-top">
-                      <span className="cb-weekly-vertical-icon" aria-hidden="true" title="Preparación histológica">🔬</span>
+                      <span className="cb-weekly-vertical-icon" aria-hidden="true" title="Preparación histológica"><Microscope size={17} strokeWidth={1.5} /></span>
                       <span className="cb-weekly-vertical-spark" aria-hidden="true">✦</span>
                     </div>
                     <div className="cb-weekly-vertical-text-wrap" title={displayCaption}>
@@ -1413,7 +1383,7 @@ const BlockItem: React.FC<{
                     </div>
                     <div className="cb-weekly-vertical-bottom">
                       <span className="cb-weekly-vertical-spark" aria-hidden="true">✧</span>
-                      <span className="cb-weekly-vertical-action" aria-hidden="true" title="Ampliar placa">↗</span>
+                      <span className="cb-weekly-vertical-action" aria-hidden="true" title="Ampliar placa"><Maximize2 size={14} strokeWidth={1.6} /></span>
                     </div>
                   </div>
                 );
@@ -1421,6 +1391,7 @@ const BlockItem: React.FC<{
 
               {/* Contenedor de la placa histológica 100% visible sin obstrucciones */}
               <div className="cb-weekly-plate-image-wrap" style={{ position: 'relative', flex: 1, height: '100%', minHeight: 0, overflow: 'hidden' }}>
+                <span className="cb-weekly-lab-focus" aria-hidden="true"><i /><i /><i /><i /></span>
                 {c.image_url ? (
                   <img
                     src={getCloudinaryImageUrl(c.image_url, 'view')}
@@ -1440,6 +1411,7 @@ const BlockItem: React.FC<{
                     Placa semanal
                   </div>
                 )}
+                {c.image_url && <span className="cb-weekly-specimen-mark" aria-hidden="true" />}
               </div>
             </figure>
           </div>

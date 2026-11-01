@@ -1,0 +1,171 @@
+@font-face { font-family: 'Atlas Credits Serif'; font-style: normal; font-weight: 600 800; font-display: swap; src: url('../assets/fonts/weekly-slide/fraunces-600-800.woff2') format('woff2'); }
+@font-face { font-family: 'Atlas Credits Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('../assets/fonts/weekly-slide/ibm-plex-mono-400.woff2') format('woff2'); }
+
+.credits-lab {
+  --credits-ink: #302346;
+  --credits-muted: #6e657c;
+  --credits-line: #dcd6e3;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: clamp(8px, 2vw, 24px);
+  color: var(--credits-ink);
+  background: radial-gradient(ellipse at 95% 30%, #e9e1ef80, transparent 45%), #f7f5f8;
+  font-family: 'Montserrat', 'Segoe UI', sans-serif;
+}
+.credits-lab, .credits-lab * { box-sizing: border-box; }
+.credits-lab__main { width: 100%; max-width: 1280px; flex: 1; padding: 44px 16px 36px; }
+/* La base compartida define el fondo del main con !important; limitar esta variante a Créditos. */
+#root > .credits-lab > main.credits-lab__main {
+  padding: clamp(24px, 3vw, 48px) clamp(16px, 3vw, 40px) !important;
+  background: radial-gradient(ellipse at 95% 20%, #e9e1ef80, transparent 45%), linear-gradient(180deg, #faf9fb, #f1edf5) !important;
+}
+.credits-lab__intro { display: grid; grid-template-columns: minmax(0, 1fr) 330px; align-items: center; gap: clamp(28px, 4vw, 64px); padding-bottom: 38px; border-bottom: 1px solid var(--credits-line); margin-bottom: 34px; }
+.credits-lab__eyebrow { display: flex; align-items: center; gap: 10px; font: 400 11px/1.6 'Atlas Credits Mono', monospace; letter-spacing: .1em; text-transform: uppercase; color: #77618e; }
+.credits-lab__eyebrow > span { color: #b7a9c5; }
+.credits-lab__intro > div { min-width: 0; container-type: inline-size; }
+.credits-lab__intro h1 { margin: 0; font: 600 clamp(.7rem, 5.2cqi, 3.25rem)/1.2 'Atlas Credits Serif', Georgia, serif; letter-spacing: -.045em; white-space: nowrap; text-wrap: nowrap; }
+.credits-lab__intro h1 em { display: inline; font-style: normal; color: #8763a4; }
+.credits-lab__intro-text { max-width: 740px; margin: 20px 0 0; color: var(--credits-muted); font-size: .9rem; line-height: 1.85; }
+.credits-lab__groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.credits-lab__group { min-width: 0; padding: 9px; background: #fff9; border: 1px solid #e1dce7; border-radius: 8px; box-shadow: 0 12px 30px -22px #42324e66; }
+.credits-lab__slide { position: relative; display: grid; grid-template-columns: 96px minmax(0, 1fr); height: 206px; gap: 14px; padding: 12px; border: 1px solid #c6d7d8; border-radius: 4px; background: linear-gradient(120deg, #eff7f6, #deebeb 70%, #f4faf9); box-shadow: inset 0 0 0 3px #ffffff75, 0 3px 0 #b6cccc; }
+.credits-lab__slide-label { display: flex; flex-direction: column; justify-content: space-between; padding: 12px 10px; border: 1px solid #dfd5e7; border-left: 3px solid var(--credit-accent); border-radius: 2px; background: repeating-linear-gradient(0deg, transparent 0 23px, #79628a0a 23px 24px), #faf7fc; }
+.credits-lab__slide-label span { font: 400 9px/1.4 'Atlas Credits Mono', monospace; letter-spacing: .06em; color: #7d6b8d; }
+.credits-lab__slide-label strong { font: 600 36px/1 'Atlas Credits Serif', Georgia, serif; color: #8a6b9d; }
+.credits-lab__specimen { position: relative; overflow: hidden; min-width: 0; border-radius: 2px; background: #f5eff7; border: 1px solid #ffffffc9; }
+.credits-lab__specimen img, .credits-lab__contributor-specimen img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.credits-lab__coverslip { position: absolute; inset: 9px; pointer-events: none; border: 1px solid #ffffff6b; box-shadow: 0 2px 7px #39294b1a; background: linear-gradient(115deg, transparent 40%, #ffffff18 49%, transparent 57%); }
+.credits-lab__placeholder { display: flex; height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: 13px; color: #9b82ac; background-image: linear-gradient(#9b82ac0a 1px, transparent 1px), linear-gradient(90deg, #9b82ac0a 1px, transparent 1px); background-size: 18px 18px; }
+.credits-lab__placeholder span { font: 400 9px 'Atlas Credits Mono', monospace; letter-spacing: .07em; text-transform: uppercase; }
+.credits-lab__group-body { padding: 27px 19px 21px; }
+.credits-lab__group-category { display: flex; align-items: center; gap: 9px; font-size: .75rem; font-weight: 700; color: #76588e; }
+.credits-lab__group-category svg { flex-shrink: 0; }
+.credits-lab__group-description { min-height: 78px; margin: 12px 0 23px; font-size: .85rem; line-height: 1.8; color: var(--credits-muted); }
+.credits-lab__identity { border-top: 1px solid var(--credits-line); padding-top: 20px; }
+.credits-lab__identity h2, .credits-lab__person h2 { margin: 0; max-width: 460px; font: 600 clamp(1.2rem, 1.8vw, 1.5rem)/1.3 'Atlas Credits Serif', Georgia, serif; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.credits-lab__roles { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 12px; }
+.credits-lab__roles span { display: block; color: #776383; font: 400 11px/1.7 'Atlas Credits Mono', monospace; }
+.credits-lab__people { display: grid; gap: 16px; }
+.credits-lab__person { display: flex; align-items: flex-start; gap: 12px; }
+.credits-lab__person p { font-size: .8rem; line-height: 1.6; }
+.credits-lab__initials { padding: 10px; color: #76588e; background: #eee6f4; border-radius: 4px; }
+.credits-lab__contributors { margin-top: 58px; }
+.credits-lab__section-heading { container-type: inline-size; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding-bottom: 25px; margin-bottom: 25px; border-bottom: 1px solid var(--credits-line); }
+.credits-lab__section-heading h2 { max-width: none; margin: 9px 0 0; white-space: nowrap; font: 600 clamp(.65rem, 3.5cqi, 2rem)/1.2 'Atlas Credits Serif', Georgia, serif; letter-spacing: -.035em; text-wrap: nowrap; }
+.credits-lab__section-heading p { max-width: none; margin: 0; font-size: .8rem; color: var(--credits-muted); line-height: 1.8; }
+.credits-lab__contributors-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.credits-lab__contributor { overflow: hidden; min-width: 0; border: 1px solid #ded7e4; border-radius: 5px; background: #fff9; }
+.credits-lab__contributor-specimen { height: 124px; margin: 7px 7px 0; display: grid; place-items: center; position: relative; overflow: hidden; color: #a28bb4; background: radial-gradient(ellipse at 25% 65%, #eacbdc88, transparent 65%), repeating-linear-gradient(90deg, #9479aa08 0 1px, transparent 1px 20px), #eee8f2; border: 1px solid #fff; }
+.credits-lab__specimen-index { position: absolute; top: 8px; left: 8px; display: grid; place-items: center; min-width: 25px; height: 25px; padding: 0 4px; background: #faf7f4ed; color: #7f638f; font: 400 10px 'Atlas Credits Mono', monospace; border: 1px solid #ffffffa8; border-radius: 2px; }
+.credits-lab__contributor-body { padding: 18px 17px 21px; }
+.credits-lab__period { display: flex; align-items: center; gap: 6px; color: #8b6c9f; font: 400 9px/1.6 'Atlas Credits Mono', monospace; }
+.credits-lab__period::before { content: ''; width: 5px; height: 5px; flex-shrink: 0; background: #b38bbd; border-radius: 50%; }
+.credits-lab__contributor h3 { margin: 9px 0 0; font: 600 1.08rem/1.3 'Atlas Credits Serif', Georgia, serif; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.credits-lab__contributor p { margin: 10px 0 0; color: var(--credits-muted); font-size: .8rem; line-height: 1.75; overflow-wrap: anywhere; }
+.credits-lab__closing { position: relative; display: flex; flex-direction: column; align-items: center; gap: 13px; padding: 40px 20px 30px; margin-top: 42px; border-top: 1px solid var(--credits-line); text-align: center; }
+.credits-lab__closing svg { color: #aa7398; }
+.credits-lab__closing p { margin: 0; font: 600 clamp(1.1rem, 2vw, 1.4rem)/1.35 'Atlas Credits Serif', Georgia, serif; letter-spacing: -.025em; }
+.credits-lab__closing > span:not(.credits-lab__closing-signature) { max-width: 600px; font-size: .8rem; color: var(--credits-muted); line-height: 1.7; }
+.credits-lab__closing-signature { font: 400 9px 'Atlas Credits Mono', monospace; letter-spacing: .22em; color: #92809d; }
+@media (max-width: 1000px) {
+  .credits-lab__intro { gap: 28px; }
+  .credits-lab__contributors-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .credits-lab__slide { grid-template-columns: 76px minmax(0, 1fr); gap: 9px; }
+  .credits-lab__slide-label { padding-inline: 7px; }
+  .credits-lab__slide-label span { font-size: 8px; }
+}
+@media (max-width: 700px) {
+  .credits-lab__main { padding: 28px 7px 20px; }
+  .credits-lab__intro { grid-template-columns: 1fr; gap: 20px; padding-bottom: 26px; margin-bottom: 25px; }
+  .credits-lab__intro-text { max-width: none; font-size: .82rem; line-height: 1.8; }
+  .credits-lab__groups { grid-template-columns: 1fr; gap: 22px; }
+  .credits-lab__group-body { padding: 25px 16px 18px; }
+  .credits-lab__group-description { min-height: 0; }
+  .credits-lab__section-heading { grid-template-columns: 1fr; gap: 15px; }
+  .credits-lab__contributors { margin-top: 38px; }
+  .credits-lab__contributors-grid { gap: 12px; }
+  .credits-lab__contributor-body { padding: 14px 12px 18px; }
+}
+@media (max-width: 380px) {
+  .credits-lab__contributors-grid { grid-template-columns: 1fr; }
+  .credits-lab__contributor { display: grid; grid-template-columns: 92px minmax(0, 1fr); }
+  .credits-lab__contributor-specimen { height: auto; min-height: 112px; margin: 6px 0 6px 6px; }
+}
+
+.credits-lab__snoopy {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  min-height: 140px;
+  overflow: hidden;
+  border: 1px solid #ded3e7;
+  border-radius: 10px;
+  background: linear-gradient(125deg, #fff, #f5eff8);
+  box-shadow: 0 8px 22px -15px #60467955;
+}
+.credits-lab__snoopy-image {
+  position: relative;
+  min-width: 0;
+  min-height: 140px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: #a17aab;
+  background: #f6eecf;
+  border-right: 1px solid #e5dbe8;
+}
+.credits-lab__snoopy-image img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; }
+.credits-lab__snoopy-body { position: relative; min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 20px; border-top: 3px solid #cbb5dc; }
+.credits-lab__snoopy-body > span { display: block; font: 400 9px/1.5 'Atlas Credits Mono', monospace; letter-spacing: .03em; text-transform: uppercase; color: #876a99; }
+.credits-lab__snoopy h2 { margin: 8px 0; font: 600 1.25rem/1.2 'Atlas Credits Serif', Georgia, serif; }
+.credits-lab__snoopy p { margin: 0; font-size: .75rem; color: var(--credits-muted); line-height: 1.6; overflow-wrap: anywhere; }
+.credits-lab__snoopy h2 { display: flex; align-items: center; gap: 9px; }
+.credits-lab__snoopy h2 svg { flex-shrink: 0; color: #a080b4; transform: rotate(-12deg); }
+
+/* Marcas de registro decorativas: no representan una medida del tejido. */
+.credits-lab__intro, .credits-lab__section-heading, .credits-lab__closing { position: relative; }
+.credits-lab__intro::after, .credits-lab__section-heading::after, .credits-lab__closing::before {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  right: 0;
+  width: 78px;
+  height: 7px;
+  pointer-events: none;
+  opacity: .48;
+  background: repeating-linear-gradient(90deg, #9a7aaf 0 1px, transparent 1px 7px) bottom / 100% 4px no-repeat,
+    repeating-linear-gradient(90deg, #9a7aaf 0 1px, transparent 1px 35px) bottom / 100% 7px no-repeat;
+}
+.credits-lab__closing::before { top: -1px; bottom: auto; right: auto; left: 0; transform: rotate(180deg); }
+
+/* Reflejo dentro del cubreobjetos, sin desplazar la tarjeta ni tapar su contenido. */
+.credits-lab__coverslip { overflow: hidden; }
+.credits-lab__coverslip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 20%, #ffffff08 38%, #ffffff40 50%, #ffffff08 62%, transparent 80%);
+  transform: translateX(-130%);
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .credits-lab__group:hover .credits-lab__coverslip::after { animation: credits-glass-reflection 1s ease-out both; }
+}
+@keyframes credits-glass-reflection {
+  from { transform: translateX(-130%); }
+  to { transform: translateX(130%); }
+}
+@media (max-width: 1000px) {
+  .credits-lab__intro { grid-template-columns: minmax(0, 1fr) 290px; gap: 28px; }
+  .credits-lab__snoopy { grid-template-columns: 95px minmax(0, 1fr); }
+  .credits-lab__snoopy-body { padding: 16px; }
+}
+@media (max-width: 700px) {
+  .credits-lab__intro { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .credits-lab__snoopy { max-width: 360px; grid-template-columns: 100px minmax(0, 1fr); }
+  .credits-lab__snoopy, .credits-lab__snoopy-image { min-height: 125px; }
+}

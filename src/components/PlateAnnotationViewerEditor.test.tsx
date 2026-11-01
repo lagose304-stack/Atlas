@@ -1,6 +1,15 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render as renderComponent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import PlateAnnotationViewerEditor from './PlateAnnotationViewerEditor';
+
+// Los casos de edición parten de un original ya cargado. Los errores de carga
+// se comprueban por separado en PlateAnnotationViewerEditor.imageLoading.test.tsx.
+const render = (...args: Parameters<typeof renderComponent>) => {
+  const result = renderComponent(...args);
+  const image = screen.queryByAltText('Placa histológica de alta calidad');
+  if (image) fireEvent.load(image);
+  return result;
+};
 
 describe('PlateAnnotationViewerEditor', () => {
   it('inicia con la herramienta Mano (Paneo) por defecto con el formulario de creación oculto', () => {

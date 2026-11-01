@@ -10,7 +10,7 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
 import { supabase } from '../services/supabase';
-import { deleteFromCloudinary, getCloudinaryPublicId, uploadToCloudinary } from '../services/cloudinary';
+import { uploadToCloudinary } from '../services/cloudinary';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { BLOCK_TYPES, createDefaultBlockContent, getBlockMeta, normalizeBlockContent, normalizeWeeklyDates } from './blocks/blockRegistry';
 import { getPublicationInfo, setPublicationDraft } from '../services/contentPublication';
@@ -143,7 +143,6 @@ interface AllSubtema {
   tema_id: number;
 }
 
-const ATLAS_CONTENT_PREFIX = 'atlas-content/';
 const AUTO_SAVE_DELAY_MS = 30_000;
 
 const STYLE_CONTENT_KEYS = [
@@ -193,19 +192,6 @@ const pickStyleContent = (content: Record<string, string>): Record<string, strin
     acc[key] = content[key] ?? '';
     return acc;
   }, {});
-};
-
-const getAtlasContentPublicIdsFromBlock = (block: Pick<ContentBlock, 'content'>): string[] => {
-  const content = block.content ?? {};
-  const ids = Object.entries(content)
-    .filter(([key, value]) => {
-      if (typeof value !== 'string' || !value) return false;
-      if (key === 'image_url' && content.weekly_image_source === 'existing') return false;
-      return true;
-    })
-    .map(([, url]) => getCloudinaryPublicId(url))
-    .filter(pid => pid.startsWith(ATLAS_CONTENT_PREFIX));
-  return [...new Set(ids)];
 };
 
 // ── Props del componente ─────────────────────────────────────────────────────
@@ -355,7 +341,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
   const [dropIdx, setDropIdx] = useState<number | null>(null);
   const [collapsedBlockIds, setCollapsedBlockIds] = useState<Set<string>>(new Set());
   const blocksRef = useRef<EditorBlock[]>([]);
-  const pendingAssetDeleteIdsRef = useRef<Set<string>>(new Set());
   const persistedBlocksFingerprintRef = useRef<string>('[]');
   const historyPastRef = useRef<EditorBlock[][]>([]);
   const historyFutureRef = useRef<EditorBlock[][]>([]);
@@ -890,8 +875,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
 
   const updateBlockContent = useCallback(
     (blockId: string, updates: Record<string, string>) => {
-      const replacedAtlasContentIds: string[] = [];
-
       setBlocks(prev =>
         prev.map(b => {
           if (b.content.layout_parent_id === blockId && updates.columns) {
@@ -907,21 +890,10 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
           }
           if (b.id !== blockId) return b;
 
-          Object.entries(updates).forEach(([key, nextValue]) => {
-            const prevValue = b.content[key];
-            if (typeof prevValue !== 'string' || !prevValue || prevValue === nextValue) return;
-            const oldPublicId = getCloudinaryPublicId(prevValue);
-            const isSharedWeeklyImage = key === 'image_url' && b.block_type === 'weekly_publication' && b.content.weekly_image_source === 'existing';
-            if (!isSharedWeeklyImage && oldPublicId.startsWith(ATLAS_CONTENT_PREFIX)) {
-              replacedAtlasContentIds.push(oldPublicId);
-            }
-          });
-
           return { ...b, content: { ...b.content, ...updates } };
         })
       );
 
-      replacedAtlasContentIds.forEach(pid => pendingAssetDeleteIdsRef.current.add(pid));
       setHasChanges(true);
     },
     []
@@ -1020,11 +992,6 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
         while (boundary < prev.length && prev[boundary].block_type !== 'section' && prev[boundary].block_type !== 'section_end') boundary += 1;
         if (prev[boundary]?.block_type === 'section_end') pairedSectionEndId = prev[boundary].id;
       }
-      const blocksToDelete = prev.filter(block => block.id === blockId || (deletingContainer && block.content.layout_parent_id === blockId));
-      blocksToDelete.forEach(block => {
-        const publicIds = getAtlasContentPublicIdsFromBlock(block);
-        publicIds.forEach(pid => pendingAssetDeleteIdsRef.current.add(pid));
-      });
       return prev.filter(b => b.id !== blockId && b.id !== pairedSectionEndId && (!deletingContainer || b.content.layout_parent_id !== blockId)).map((block, index) => ({ ...block, sort_order: index }));
     });
     setSelectedBlockIds(prev => {
@@ -1401,43 +1368,16 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
         if (error) throw error;
       }
 
-      // 3. Limpia assets de atlas-content que hayan quedado huérfanos tras persistir cambios.
-      const pendingAssetDeletes = [...pendingAssetDeleteIdsRef.current];
-      if (pendingAssetDeletes.length > 0) {
-        const { data: allBlocks, error: allBlocksError } = await supabase
-          .from('content_blocks')
-          .select('content');
+      // Conservar los archivos de los bloques retirados o reemplazados: pueden
+      // seguir en publicaciones, versiones, plantillas o referencias compartidas.
+      // Guardar el borrador no autoriza una limpieza física de R2.
 
-        // No bloquear el guardado si la verificacion global de referencias falla.
-        if (allBlocksError) {
-          console.warn('No se pudo verificar referencias globales de assets. Se omite limpieza en este guardado.', allBlocksError);
-        } else {
-          const stillReferenced = new Set<string>();
-          (allBlocks ?? []).forEach(row => {
-            const content = (row as { content: Record<string, string> }).content ?? {};
-            const ids = getAtlasContentPublicIdsFromBlock({ content });
-            ids.forEach(pid => stillReferenced.add(pid));
-          });
-
-          for (const publicId of pendingAssetDeletes) {
-            if (!stillReferenced.has(publicId)) {
-              try {
-                await deleteFromCloudinary(publicId);
-              } catch (cleanupError) {
-                console.warn('No se pudo limpiar asset huérfano en Cloudinary:', publicId, cleanupError);
-              }
-            }
-          }
-        }
-      }
-
-      // 4. Actualizar estado local
+      // 3. Actualizar estado local
       const persistedBlocks = blocksToSave.map((b, i) => ({ ...b, sort_order: i, _isNew: false }));
       persistedBlocksFingerprintRef.current = getBlocksFingerprint(persistedBlocks);
       blocksRef.current = persistedBlocks;
       setSavedIds(new Set(persistedBlocks.map(b => b.id)));
       setBlocks(persistedBlocks);
-      pendingAssetDeleteIdsRef.current.clear();
       setHasChanges(false);
 
       if (activeVersion) {
@@ -1463,6 +1403,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     }
   };
 
+  // Exponer el guardado del render actual: necesita savedIds, versión e isSaving vigentes.
   React.useImperativeHandle(ref, () => ({
     updateBlock: updateBlockContent,
     duplicateBlock,
@@ -1474,7 +1415,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       const ok = await handleSave();
       return ok;
     },
-  }), [duplicateBlock, openImageModal, redoBlocks, requestDeleteBlock, undoBlocks, updateBlockContent]);
+  }));
 
   useEffect(() => {
     if (!autoSave || loading || isSaving || !hasPendingChangesFor(blocks) && !hasChanges) return;

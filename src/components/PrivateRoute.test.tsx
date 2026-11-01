@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PrivateRoute from './PrivateRoute';
+import type { ComponentProps } from 'react';
 
 const authState = vi.hoisted(() => ({
   current: {
@@ -19,7 +20,10 @@ vi.mock('../services/securityAudit', () => ({
   logSecurityEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
-const renderProtectedRoute = (allowedRoles?: Array<'Administrador' | 'Microscopía' | 'Instructor'>) => render(
+const renderProtectedRoute = (
+  allowedRoles?: Array<'Administrador' | 'Microscopía' | 'Instructor'>,
+  restrictions: Pick<ComponentProps<typeof PrivateRoute>, 'allowedUserIds' | 'requireProtectedUser'> = {},
+) => render(
   <MemoryRouter initialEntries={['/privada']}>
     <Routes>
       <Route path="/" element={<div>Página pública</div>} />
@@ -27,7 +31,7 @@ const renderProtectedRoute = (allowedRoles?: Array<'Administrador' | 'Microscop�
       <Route
         path="/privada"
         element={(
-          <PrivateRoute allowedRoles={allowedRoles}>
+          <PrivateRoute allowedRoles={allowedRoles} {...restrictions}>
             <div>Contenido privado</div>
           </PrivateRoute>
         )}
@@ -44,6 +48,31 @@ describe('PrivateRoute', () => {
   it('redirige al inicio cuando no existe una sesión', () => {
     renderProtectedRoute(['Administrador']);
     expect(screen.getByText('Página pública')).toBeInTheDocument();
+  });
+
+  it('no muestra contenido privado ni redirige mientras se verifica la sesión', () => {
+    authState.current.isLoading = true;
+    renderProtectedRoute(['Administrador']);
+    expect(screen.queryByText('Contenido privado')).not.toBeInTheDocument();
+    expect(screen.queryByText('Página pública')).not.toBeInTheDocument();
+    expect(screen.getByText('Verificando acceso…')).toBeInTheDocument();
+  });
+
+  it.each([
+    { id: 4, role: 'Administrador' as const, expected: 'Contenido privado' },
+    { id: 5, role: 'Administrador' as const, expected: 'Acceso denegado' },
+    { id: 4, role: 'Instructor' as const, expected: 'Acceso denegado' },
+  ])('aplica conjuntamente rol e identidad para $role con ID $id', ({ id, role, expected }) => {
+    authState.current = {
+      isAuthenticated: true,
+      isLoading: false,
+      user: { id, username: 'usuario_prueba', rol: role },
+    };
+    renderProtectedRoute(['Administrador'], { allowedUserIds: [4] });
+    expect(screen.getByText(expected)).toBeInTheDocument();
+    if (expected === 'Acceso denegado') {
+      expect(screen.queryByText('Contenido privado')).not.toBeInTheDocument();
+    }
   });
 
   it('permite entrar cuando el rol está autorizado', () => {

@@ -1,0 +1,163 @@
+{
+  "status": "applied_and_verified",
+  "project_id": "trhwtpgljzwleyoilqda",
+  "thumbnails": [
+    {
+      "table": "placas",
+      "id": "812",
+      "original_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Tejido_Nervioso/Cerebelo/1788144762461_1000437207.webp",
+      "original_key": "placas/Tejido_Nervioso/Cerebelo/1788144762461_1000437207.webp",
+      "thumbnail_key": "placas/Tejido_Nervioso/Cerebelo/1788144762461_1000437207_thumb.webp"
+    },
+    {
+      "table": "placas",
+      "id": "813",
+      "original_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Tejido_Nervioso/Cerebelo/1788144778805_1000437208.webp",
+      "original_key": "placas/Tejido_Nervioso/Cerebelo/1788144778805_1000437208.webp",
+      "thumbnail_key": "placas/Tejido_Nervioso/Cerebelo/1788144778805_1000437208_thumb.webp"
+    },
+    {
+      "table": "placas",
+      "id": "817",
+      "original_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Tejido_Nervioso/Cerebelo/1788144892467_1000419858.webp",
+      "original_key": "placas/Tejido_Nervioso/Cerebelo/1788144892467_1000419858.webp",
+      "thumbnail_key": "placas/Tejido_Nervioso/Cerebelo/1788144892467_1000419858_thumb.webp"
+    },
+    {
+      "table": "placas",
+      "id": "819",
+      "original_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Tejido_Nervioso/Cerebelo/1788144866664_1000436840.webp",
+      "original_key": "placas/Tejido_Nervioso/Cerebelo/1788144866664_1000436840.webp",
+      "thumbnail_key": "placas/Tejido_Nervioso/Cerebelo/1788144866664_1000436840_thumb.webp"
+    },
+    {
+      "table": "placas",
+      "id": "820",
+      "original_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Tejido_Nervioso/Nervio_Periferico/1788144801285_1000437203.webp",
+      "original_key": "placas/Tejido_Nervioso/Nervio_Periferico/1788144801285_1000437203.webp",
+      "thumbnail_key": "placas/Tejido_Nervioso/Nervio_Periferico/1788144801285_1000437203_thumb.webp"
+    },
+    {
+      "table": "placas",
+      "id": "898",
+      "original_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Epitelios/Epitelio_Cubico_Simple/1787966670933_cess.webp",
+      "original_key": "placas/Epitelios/Epitelio_Cubico_Simple/1787966670933_cess.webp",
+      "thumbnail_key": "placas/Epitelios/Epitelio_Cubico_Simple/1787966670933_cess_thumb.webp"
+    },
+    {
+      "table": "placas",
+      "id": "899",
+      "original_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Tejido_Nervioso/Plexos_Coroideos/1787966676192_cs3.webp",
+      "original_key": "placas/Tejido_Nervioso/Plexos_Coroideos/1787966676192_cs3.webp",
+      "thumbnail_key": "placas/Tejido_Nervioso/Plexos_Coroideos/1787966676192_cs3_thumb.webp"
+    },
+    {
+      "table": "placas",
+      "id": "900",
+      "original_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/Epitelios/Epitelio_Cilindrico_Simple/1787966681986_0064ces.webp",
+      "original_key": "placas/Epitelios/Epitelio_Cilindrico_Simple/1787966681986_0064ces.webp",
+      "thumbnail_key": "placas/Epitelios/Epitelio_Cilindrico_Simple/1787966681986_0064ces_thumb.webp"
+    },
+    {
+      "table": "pruebas",
+      "id": "56b9a583-0701-4b3d-ba83-435ad85def1a",
+      "original_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/pruebas/1788069511872_ch_005.webp",
+      "original_key": "pruebas/1788069511872_ch_005.webp",
+      "thumbnail_key": "pruebas/1788069511872_ch_005_thumb.webp"
+    }
+  ],
+  "missing_references": [
+    {
+      "table": "content_blocks",
+      "column": "content",
+      "id": "1c83d576-220c-4fee-b780-b9d3851adebe",
+      "old_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/atlas-content/1790482015851_captura_de_pantalla_2026-09-26_220640.webp",
+      "resolved_key": "atlas-content/1790482015851_captura_de_pantalla_2026-09-26_220640.webp"
+    },
+    {
+      "table": "content_blocks",
+      "column": "content",
+      "id": "5e20ba09-f16d-4256-ba0a-14413e936654",
+      "old_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/placas/sin_clasificar/ppepuh0g3qujispoiupv.webp",
+      "resolved_key": "placas/sin_clasificar/ppepuh0g3qujispoiupv.webp"
+    },
+    {
+      "table": "content_blocks",
+      "column": "content",
+      "id": "7d074d99-278c-4c90-b1ff-4915e4a363d1",
+      "old_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/atlas-content/1790480116885_0031_m_l.webp",
+      "resolved_key": "atlas-content/1790480116885_0031_m_l.webp"
+    },
+    {
+      "table": "content_page_publications",
+      "column": "published_blocks",
+      "id": "52",
+      "old_url": "https://res.cloudinary.com/dvvycmp8j/image/upload/v1774074680/atlas-content/txuahci9nq0qva1gwklu.png",
+      "resolved_key": "atlas-content/txuahci9nq0qva1gwklu.webp"
+    },
+    {
+      "table": "content_page_versions",
+      "column": "blocks",
+      "id": "229",
+      "old_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/atlas-content/1790480116885_0031_m_l.webp",
+      "resolved_key": "atlas-content/1790480116885_0031_m_l.webp"
+    },
+    {
+      "table": "content_page_versions",
+      "column": "blocks",
+      "id": "229",
+      "old_url": "https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/atlas-content/1790482015851_captura_de_pantalla_2026-09-26_220640.webp",
+      "resolved_key": "atlas-content/1790482015851_captura_de_pantalla_2026-09-26_220640.webp"
+    },
+    {
+      "table": "credit_contributors",
+      "column": "photo_url",
+      "id": "10",
+      "old_url": "https://res.cloudinary.com/dvvycmp8j/image/upload/v1786199575/creditos/instructores/zhkn1pq3ejn8qujv4m3m.jpg",
+      "resolved_key": "creditos/instructores/zhkn1pq3ejn8qujv4m3m.webp"
+    },
+    {
+      "table": "credit_contributors",
+      "column": "photo_url",
+      "id": "4",
+      "old_url": "https://res.cloudinary.com/dvvycmp8j/image/upload/v1786199070/creditos/instructores/p8wjto6ltnwciazdqww2.jpg",
+      "resolved_key": "creditos/instructores/p8wjto6ltnwciazdqww2.webp"
+    },
+    {
+      "table": "credit_contributors",
+      "column": "photo_url",
+      "id": "5",
+      "old_url": "https://res.cloudinary.com/dvvycmp8j/image/upload/v1786199374/creditos/instructores/fd4x5fuf0sdoyreepktt.jpg",
+      "resolved_key": "creditos/instructores/fd4x5fuf0sdoyreepktt.webp"
+    },
+    {
+      "table": "credit_contributors",
+      "column": "photo_url",
+      "id": "6",
+      "old_url": "https://res.cloudinary.com/dvvycmp8j/image/upload/v1786199155/creditos/instructores/tgngwtpmksbclykt9evp.jpg",
+      "resolved_key": "creditos/instructores/tgngwtpmksbclykt9evp.webp"
+    },
+    {
+      "table": "credit_contributors",
+      "column": "photo_url",
+      "id": "7",
+      "old_url": "https://res.cloudinary.com/dvvycmp8j/image/upload/v1786199396/creditos/instructores/gwlayw69poysg0zpyt7b.jpg",
+      "resolved_key": "creditos/instructores/gwlayw69poysg0zpyt7b.webp"
+    },
+    {
+      "table": "credit_contributors",
+      "column": "photo_url",
+      "id": "8",
+      "old_url": "https://res.cloudinary.com/dvvycmp8j/image/upload/v1786199467/creditos/instructores/l9jpfl3ari4tq2zczrqx.jpg",
+      "resolved_key": "creditos/instructores/l9jpfl3ari4tq2zczrqx.webp"
+    },
+    {
+      "table": "credit_contributors",
+      "column": "photo_url",
+      "id": "9",
+      "old_url": "https://res.cloudinary.com/dvvycmp8j/image/upload/v1786199501/creditos/instructores/d9suymrp9xx1rumfk9zv.jpg",
+      "resolved_key": "creditos/instructores/d9suymrp9xx1rumfk9zv.webp"
+    }
+  ],
+  "authorization": "Petición explícita del usuario de regenerar miniaturas y eliminar referencias irrecuperables"
+}

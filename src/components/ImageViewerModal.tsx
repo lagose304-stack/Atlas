@@ -1,6 +1,8 @@
 import React, { useId, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Pencil, X, Hand, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Shield, Eye, EyeOff } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Pencil, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Shield, Eye, EyeOff } from 'lucide-react';
+import { appendLaserPoint, LASER_TRAIL_LIFETIME, splitLaserTrail, type LaserPoint } from './laserTrail';
+import ViewerWhiteboard, { type WhiteboardTool } from './ViewerWhiteboard';
 import { renderBoldText } from './BoldField';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
@@ -14,6 +16,9 @@ import { invalidateImageCache } from '../services/cloudinaryImages';
 import { invalidatePlacasCache } from '../services/catalogService';
 import { logPlateActivity } from '../services/plateActivityAudit';
 import { computePlateChangesDiff, type PlateComparisonState } from '../services/plateDiffHelper';
+import './plateWatermark.css';
+import { isEditableTarget } from '../utils/editableTarget';
+import { boldTextContent } from '../utils/boldTextContent';
 
 interface SenaladoMetaItem {
   label: string;
@@ -810,9 +815,17 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [position, setPosition]     = useState({ x: 0, y: 0 });
   const [rotation, setRotation]     = useState(0);
   const [isAnnotationMode, setIsAnnotationMode] = useState(false);
-  const [annotationTool, setAnnotationTool] = useState<'laser' | 'hand' | null>(null);
+  const [annotationTool, setAnnotationTool] = useState<WhiteboardTool | null>(null);
+  const [whiteboardLauncherLayer, setWhiteboardLauncherLayer] = useState<HTMLDivElement | null>(null);
+  const [whiteboardImageLayer, setWhiteboardImageLayer] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    setIsAnnotationMode(false);
+    setAnnotationTool(null);
+    laserTrailRef.current = [];
+    laserCurrentPosRef.current = null;
+  }, [placaId, src]);
   const laserCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const laserTrailRef = useRef<Array<{ x: number; y: number; time: number }>>([]);
+  const laserTrailRef = useRef<LaserPoint[]>([]);
   const laserCurrentPosRef = useRef<{ x: number; y: number } | null>(null);
   const laserStabilizedPosRef = useRef<{ x: number; y: number } | null>(null);
   const [isZoomImageReady, setIsZoomImageReady] = useState(false);
@@ -1341,66 +1354,24 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, [src, useZoomSource, srcZoom]);
 
   const addLaserPoint = (rawX: number, rawY: number, isNewStroke = false) => {
-    const now = performance.now();
-    const trail = laserTrailRef.current;
-
-    // Si es un trazo nuevo o se había levantado el dedo/cursor, inicializar de inmediato en el nuevo punto
-    if (isNewStroke || !laserStabilizedPosRef.current) {
-      laserStabilizedPosRef.current = { x: rawX, y: rawY };
-      laserCurrentPosRef.current = { x: rawX, y: rawY };
-      laserTrailRef.current = [{ x: rawX, y: rawY, time: now }];
-      return;
-    }
-
-    // Estabilizador Streamline de pulso (amortiguador de temblor continuo)
-    const prevStable = laserStabilizedPosRef.current;
-    const smoothFactor = 0.38;
-    const sx = prevStable.x + (rawX - prevStable.x) * smoothFactor;
-    const sy = prevStable.y + (rawY - prevStable.y) * smoothFactor;
-    laserStabilizedPosRef.current = { x: sx, y: sy };
-    laserCurrentPosRef.current = { x: sx, y: sy };
-
-    const lastPoint = trail.length > 0 ? trail[trail.length - 1] : null;
-
-    if (lastPoint) {
-      const dx = sx - lastPoint.x;
-      const dy = sy - lastPoint.y;
-      const dist = Math.hypot(dx, dy);
-      const timeDelta = now - lastPoint.time;
-
-      // Si hubo un salto brusco en distancia o tiempo (ej. tocar en otro lugar de la pantalla)
-      if (dist > 75 || timeDelta > 200) {
-        laserStabilizedPosRef.current = { x: rawX, y: rawY };
-        laserCurrentPosRef.current = { x: rawX, y: rawY };
-        laserTrailRef.current = [{ x: rawX, y: rawY, time: now }];
-        return;
-      }
-
-      // Si el cursor se mueve muy poco, evitamos acumulación
-      if (dist < 4) {
-        return;
-      }
-
-      // Si el movimiento es rápido y continuo, interpolamos para mantener densidad homogénea
-      if (dist > 14 && dist <= 75) {
-        const steps = Math.min(5, Math.floor(dist / 7));
-        for (let i = 1; i < steps; i++) {
-          const t = i / steps;
-          trail.push({
-            x: lastPoint.x + dx * t,
-            y: lastPoint.y + dy * t,
-            time: lastPoint.time + (now - lastPoint.time) * t,
-          });
-        }
-      }
-    }
-
-    trail.push({ x: sx, y: sy, time: now });
+    const next = appendLaserPoint(laserTrailRef.current, laserStabilizedPosRef.current, { x: rawX, y: rawY }, performance.now(), isNewStroke);
+    laserTrailRef.current = next.trail;
+    laserStabilizedPosRef.current = next.position;
+    laserCurrentPosRef.current = next.position;
   };
 
   useEffect(() => {
     const canvas = laserCanvasRef.current;
     if (!canvas) return;
+
+    laserTrailRef.current = [];
+    laserCurrentPosRef.current = null;
+    laserStabilizedPosRef.current = null;
+    if (!isAnnotationMode || annotationTool !== 'laser') {
+      // Limpiar de inmediato al cambiar de herramienta y evitar animación inactiva.
+      canvas.width = canvas.width;
+      return;
+    }
 
     let running = true;
 
@@ -1415,7 +1386,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     window.addEventListener('resize', resizeCanvas);
 
     // Duración de la estela (~1750ms)
-    const TRAIL_LIFETIME = 1750;
+    const TRAIL_LIFETIME = LASER_TRAIL_LIFETIME;
 
     const render = () => {
       if (!running) return;
@@ -1431,149 +1402,160 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         ctx.clearRect(0, 0, width, height);
 
         laserTrailRef.current = laserTrailRef.current.filter(p => now - p.time < TRAIL_LIFETIME);
-        const rawPoints = laserTrailRef.current;
+        for (const rawPoints of splitLaserTrail(laserTrailRef.current)) {
 
-        if (rawPoints.length >= 2) {
-          // Generador de Curva Spline Catmull-Rom continua (tensión = 0.5)
-          // Elimina cualquier quiebre angular o irregularidad por falta de pulso
-          const generateSmoothSpline = (pts: typeof rawPoints, stepsPerSeg = 5): typeof rawPoints => {
-            if (pts.length < 3) return pts;
-            const res: typeof rawPoints = [];
-            const ext = [pts[0], ...pts, pts[pts.length - 1]];
+          if (rawPoints.length === 1) {
+            const point = rawPoints[0];
+            const alpha = Math.pow(Math.max(0, 1 - (now - point.time) / TRAIL_LIFETIME), 1.25);
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 4.2 * Math.sqrt(alpha), 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 65, 100, ${alpha})`;
+            ctx.fill();
+          }
 
-            for (let i = 1; i < ext.length - 2; i++) {
-              const p0 = ext[i - 1];
-              const p1 = ext[i];
-              const p2 = ext[i + 1];
-              const p3 = ext[i + 2];
+          if (rawPoints.length >= 2) {
+            // Generador de Curva Spline Catmull-Rom continua (tensión = 0.5)
+            // Elimina cualquier quiebre angular o irregularidad por falta de pulso
+            const generateSmoothSpline = (pts: typeof rawPoints, stepsPerSeg = 5): typeof rawPoints => {
+              if (pts.length < 3) return pts;
+              const res: typeof rawPoints = [];
+              const ext = [pts[0], ...pts, pts[pts.length - 1]];
 
-              for (let s = 0; s < stepsPerSeg; s++) {
-                const t = s / stepsPerSeg;
-                const t2 = t * t;
-                const t3 = t2 * t;
+              for (let i = 1; i < ext.length - 2; i++) {
+                const p0 = ext[i - 1];
+                const p1 = ext[i];
+                const p2 = ext[i + 1];
+                const p3 = ext[i + 2];
 
-                const f1 = -0.5 * t3 + t2 - 0.5 * t;
-                const f2 = 1.5 * t3 - 2.5 * t2 + 1.0;
-                const f3 = -1.5 * t3 + 2.0 * t2 + 0.5 * t;
-                const f4 = 0.5 * t3 - 0.5 * t2;
+                for (let s = 0; s < stepsPerSeg; s++) {
+                  const t = s / stepsPerSeg;
+                  const t2 = t * t;
+                  const t3 = t2 * t;
 
-                const cx = p0.x * f1 + p1.x * f2 + p2.x * f3 + p3.x * f4;
-                const cy = p0.y * f1 + p1.y * f2 + p2.y * f3 + p3.y * f4;
-                const ctime = p1.time + (p2.time - p1.time) * t;
+                  const f1 = -0.5 * t3 + t2 - 0.5 * t;
+                  const f2 = 1.5 * t3 - 2.5 * t2 + 1.0;
+                  const f3 = -1.5 * t3 + 2.0 * t2 + 0.5 * t;
+                  const f4 = 0.5 * t3 - 0.5 * t2;
 
-                res.push({ x: cx, y: cy, time: ctime });
-              }
-            }
+                  const cx = p0.x * f1 + p1.x * f2 + p2.x * f3 + p3.x * f4;
+                  const cy = p0.y * f1 + p1.y * f2 + p2.y * f3 + p3.y * f4;
+                  const ctime = p1.time + (p2.time - p1.time) * t;
 
-            res.push(pts[pts.length - 1]);
-            return res;
-          };
-
-          const points = generateSmoothSpline(rawPoints, 5);
-
-          const drawLaserRibbon = (
-            baseWidth: number,
-            r: number,
-            g: number,
-            b: number,
-            baseAlpha: number
-          ) => {
-            const n = points.length;
-            if (n < 2) return;
-
-            const rawNormals: Array<{ nx: number; ny: number }> = [];
-            const alphas: number[] = [];
-
-            for (let i = 0; i < n; i++) {
-              const p = points[i];
-              const age = now - p.time;
-              const progress = Math.max(0, Math.min(1, age / TRAIL_LIFETIME));
-              const alpha = Math.pow(1 - progress, 1.25);
-              alphas.push(alpha);
-
-              let tx = 0;
-              let ty = 0;
-              if (i === 0) {
-                tx = points[1].x - p.x;
-                ty = points[1].y - p.y;
-              } else if (i === n - 1) {
-                tx = p.x - points[n - 2].x;
-                ty = p.y - points[n - 2].y;
-              } else {
-                tx = points[i + 1].x - points[i - 1].x;
-                ty = points[i + 1].y - points[i - 1].y;
+                  res.push({ x: cx, y: cy, time: ctime });
+                }
               }
 
-              const len = Math.hypot(tx, ty);
-              if (len > 0.0001) {
-                rawNormals.push({ nx: -ty / len, ny: tx / len });
-              } else {
-                rawNormals.push(i > 0 ? rawNormals[i - 1] : { nx: 0, ny: 1 });
+              res.push(pts[pts.length - 1]);
+              return res;
+            };
+
+            const points = generateSmoothSpline(rawPoints, 5);
+
+            const drawLaserRibbon = (
+              baseWidth: number,
+              r: number,
+              g: number,
+              b: number,
+              baseAlpha: number
+            ) => {
+              const n = points.length;
+              if (n < 2) return;
+
+              const rawNormals: Array<{ nx: number; ny: number }> = [];
+              const alphas: number[] = [];
+
+              for (let i = 0; i < n; i++) {
+                const p = points[i];
+                const age = now - p.time;
+                const progress = Math.max(0, Math.min(1, age / TRAIL_LIFETIME));
+                const alpha = Math.pow(1 - progress, 1.25);
+                alphas.push(alpha);
+
+                let tx = 0;
+                let ty = 0;
+                if (i === 0) {
+                  tx = points[1].x - p.x;
+                  ty = points[1].y - p.y;
+                } else if (i === n - 1) {
+                  tx = p.x - points[n - 2].x;
+                  ty = p.y - points[n - 2].y;
+                } else {
+                  tx = points[i + 1].x - points[i - 1].x;
+                  ty = points[i + 1].y - points[i - 1].y;
+                }
+
+                const len = Math.hypot(tx, ty);
+                if (len > 0.0001) {
+                  rawNormals.push({ nx: -ty / len, ny: tx / len });
+                } else {
+                  rawNormals.push(i > 0 ? rawNormals[i - 1] : { nx: 0, ny: 1 });
+                }
               }
-            }
 
-            // Suavizado de normales para mantener grosor homogéneo
-            const smoothNormals = rawNormals.map((norm, i, arr) => {
-              if (i === 0 || i === arr.length - 1) return norm;
-              const prev = arr[i - 1];
-              const next = arr[i + 1];
-              const sx = 0.25 * prev.nx + 0.5 * norm.nx + 0.25 * next.nx;
-              const sy = 0.25 * prev.ny + 0.5 * norm.ny + 0.25 * next.ny;
-              const sLen = Math.hypot(sx, sy);
-              return sLen > 0.0001 ? { nx: sx / sLen, ny: sy / sLen } : norm;
-            });
+              // Suavizado de normales para mantener grosor homogéneo
+              const smoothNormals = rawNormals.map((norm, i, arr) => {
+                if (i === 0 || i === arr.length - 1) return norm;
+                const prev = arr[i - 1];
+                const next = arr[i + 1];
+                const sx = 0.25 * prev.nx + 0.5 * norm.nx + 0.25 * next.nx;
+                const sy = 0.25 * prev.ny + 0.5 * norm.ny + 0.25 * next.ny;
+                const sLen = Math.hypot(sx, sy);
+                return sLen > 0.0001 ? { nx: sx / sLen, ny: sy / sLen } : norm;
+              });
 
-            const lefts: Array<{ x: number; y: number }> = [];
-            const rights: Array<{ x: number; y: number }> = [];
+              const lefts: Array<{ x: number; y: number }> = [];
+              const rights: Array<{ x: number; y: number }> = [];
 
-            for (let i = 0; i < n; i++) {
-              const p = points[i];
-              const norm = smoothNormals[i];
-              const alpha = alphas[i];
-              const halfW = (baseWidth * alpha + 0.4) / 2;
-              lefts.push({ x: p.x + norm.nx * halfW, y: p.y + norm.ny * halfW });
-              rights.push({ x: p.x - norm.nx * halfW, y: p.y - norm.ny * halfW });
-            }
+              for (let i = 0; i < n; i++) {
+                const p = points[i];
+                const norm = smoothNormals[i];
+                const alpha = alphas[i];
+                const halfW = (baseWidth * alpha + 0.4) / 2;
+                lefts.push({ x: p.x + norm.nx * halfW, y: p.y + norm.ny * halfW });
+                rights.push({ x: p.x - norm.nx * halfW, y: p.y - norm.ny * halfW });
+              }
 
-            for (let i = 1; i < n; i++) {
-              const a0 = alphas[i - 1];
-              const a1 = alphas[i];
-              const avgAlpha = (a0 + a1) / 2;
-              if (avgAlpha <= 0.01) continue;
+              for (let i = 1; i < n; i++) {
+                const a0 = alphas[i - 1];
+                const a1 = alphas[i];
+                const avgAlpha = (a0 + a1) / 2;
+                if (avgAlpha <= 0.01) continue;
 
-              const L0 = lefts[i - 1];
-              const L1 = lefts[i];
-              const R1 = rights[i];
-              const R0 = rights[i - 1];
+                const L0 = lefts[i - 1];
+                const L1 = lefts[i];
+                const R1 = rights[i];
+                const R0 = rights[i - 1];
 
-              ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(avgAlpha * baseAlpha).toFixed(3)})`;
-              ctx.beginPath();
-              ctx.moveTo(L0.x, L0.y);
-              ctx.lineTo(L1.x, L1.y);
-              ctx.lineTo(R1.x, R1.y);
-              ctx.lineTo(R0.x, R0.y);
-              ctx.closePath();
-              ctx.fill();
-            }
+                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(avgAlpha * baseAlpha).toFixed(3)})`;
+                ctx.beginPath();
+                ctx.moveTo(L0.x, L0.y);
+                ctx.lineTo(L1.x, L1.y);
+                ctx.lineTo(R1.x, R1.y);
+                ctx.lineTo(R0.x, R0.y);
+                ctx.closePath();
+                ctx.fill();
+              }
 
-            const tailAlpha = alphas[0];
-            if (tailAlpha > 0.02) {
-              const tailW = (baseWidth * tailAlpha + 0.4) / 2;
-              ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(tailAlpha * baseAlpha).toFixed(3)})`;
-              ctx.beginPath();
-              ctx.arc(points[0].x, points[0].y, tailW, 0, Math.PI * 2);
-              ctx.fill();
-            }
-          };
+              const tailAlpha = alphas[0];
+              if (tailAlpha > 0.02) {
+                const tailW = (baseWidth * tailAlpha + 0.4) / 2;
+                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(tailAlpha * baseAlpha).toFixed(3)})`;
+                ctx.beginPath();
+                ctx.arc(points[0].x, points[0].y, tailW, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            };
 
-          // Capa 1: Halo exterior amplio neón carmesí
-          drawLaserRibbon(16, 255, 15, 65, 0.28);
-          // Capa 2: Resplandor medio rojo neón eléctrico
-          drawLaserRibbon(7.5, 255, 30, 75, 0.68);
-          // Capa 3: Haz de luz de alta intensidad
-          drawLaserRibbon(3.4, 255, 110, 140, 0.88);
-          // Capa 4: Núcleo blanco-rosado incandescente
-          drawLaserRibbon(1.5, 255, 255, 255, 0.98);
+            // Capa 1: Halo exterior amplio neón carmesí
+            drawLaserRibbon(16, 255, 15, 65, 0.28);
+            // Capa 2: Resplandor medio rojo neón eléctrico
+            drawLaserRibbon(7.5, 255, 30, 75, 0.68);
+            // Capa 3: Haz de luz de alta intensidad
+            drawLaserRibbon(3.4, 255, 110, 140, 0.88);
+            // Capa 4: Núcleo blanco-rosado incandescente
+            drawLaserRibbon(1.5, 255, 255, 255, 0.98);
+          }
+
         }
 
         if (isAnnotationMode && annotationTool === 'laser' && laserCurrentPosRef.current) {
@@ -1629,7 +1611,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     };
   };
 
-  const getTouchCoords = (touch: React.Touch) => {
+  const getTouchCoords = (touch: React.Touch | Touch) => {
     const canvas = laserCanvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
@@ -1658,19 +1640,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       x: clamp(nextPos.x, -maxOffsetX, maxOffsetX),
       y: clamp(nextPos.y, -maxOffsetY, maxOffsetY),
     };
-  };
-
-const panBy = (dx: number, dy: number) => {
-    const containerEl = containerRef.current;
-    const containerSize = containerEl ? { width: containerEl.clientWidth, height: containerEl.clientHeight } : { width: 800, height: 600 };
-    const targetPos = {
-      x: stateRef.current.pos.x + dx,
-      y: stateRef.current.pos.y + dy,
-    };
-    const clamped = clampPositionToViewport(targetPos, stateRef.current.zoom, imageSize, containerSize);
-    stateRef.current.zoom = stateRef.current.zoom;
-    stateRef.current.pos = clamped;
-    setPosition(clamped);
   };
 
   const panToMinimapCoord = (clientX: number, clientY: number) => {
@@ -1797,7 +1766,7 @@ const panBy = (dx: number, dy: number) => {
   const handleCanvasMouseLeave = () => {
     laserCurrentPosRef.current = null;
     laserStabilizedPosRef.current = null;
-    laserTrailRef.current = [];
+
   };
 
   const getTouchDistance = (t0: { clientX: number; clientY: number }, t1: { clientX: number; clientY: number }) => {
@@ -1866,7 +1835,7 @@ const panBy = (dx: number, dy: number) => {
     return { targetZoom, clampedPos };
   };
 
-  const handleLaserTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+  const handleLaserTouchStart = (e: React.TouchEvent<HTMLCanvasElement> | TouchEvent) => {
     if (!isAnnotationMode || !annotationTool || e.touches.length === 0) return;
     e.preventDefault();
 
@@ -1936,7 +1905,7 @@ const panBy = (dx: number, dy: number) => {
     }
   };
 
-  const handleLaserTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+  const handleLaserTouchMove = (e: React.TouchEvent<HTMLCanvasElement> | TouchEvent) => {
     if (!isAnnotationMode || !annotationTool || e.touches.length === 0) return;
     e.preventDefault();
 
@@ -1983,7 +1952,7 @@ const panBy = (dx: number, dy: number) => {
     }
   };
 
-  const handleLaserTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+  const handleLaserTouchEnd = (e: React.TouchEvent<HTMLCanvasElement> | TouchEvent) => {
     if (e.touches.length < 2) {
       if (laserPinchRef.current) {
         lastPinchEndedAtRef.current = Date.now();
@@ -2057,7 +2026,8 @@ const panBy = (dx: number, dy: number) => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !e.repeat && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+      if (isEditModalOpen || e.defaultPrevented || e.isComposing || isEditableTarget(e.target)) return;
+      if (e.code === 'Space' && !e.repeat) {
         e.preventDefault();
         isSpacePressedRef.current = true;
         setIsSpacePressed(true);
@@ -2073,16 +2043,25 @@ const panBy = (dx: number, dy: number) => {
         }
       }
     };
+    const handleBlur = () => {
+      isSpacePressedRef.current = false;
+      setIsSpacePressed(false);
+      isDraggingRef.current = false;
+      setIsDragging(false);
+    };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
     };
-  }, []);
+  }, [isEditModalOpen]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      if (isEditModalOpen || e.defaultPrevented || e.isComposing || isEditableTarget(e.target)) return;
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S' || e.key === 'c' || e.key === 'C')) {
         if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
           e.preventDefault();
@@ -2099,7 +2078,7 @@ const panBy = (dx: number, dy: number) => {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose, isAnnotationMode]);
+  }, [onClose, isAnnotationMode, isEditModalOpen]);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -2264,7 +2243,7 @@ const panBy = (dx: number, dy: number) => {
       if (count === 0) return;
       const next = activeMapSectionIndex === null ? (direction > 0 ? 0 : count - 1) : (activeMapSectionIndex + direction + count) % count;
       setActiveMapSectionIndex(next);
-      setAnnouncement(`Zona ${next + 1} de ${count}: ${interactiveMapData.sections[next].title}`);
+      setAnnouncement(`Zona ${next + 1} de ${count}: ${boldTextContent(interactiveMapData.sections[next].title)}`);
       vibrateSelection();
       return;
     }
@@ -2470,7 +2449,7 @@ const panBy = (dx: number, dy: number) => {
     setRotation(0);
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
+  const handleWheel = (e: React.WheelEvent | WheelEvent) => {
     e.preventDefault();
     applyZoom(stateRef.current.zoom + (e.deltaY < 0 ? 0.15 : -0.15), undefined, { clientX: e.clientX, clientY: e.clientY });
   };
@@ -2654,7 +2633,7 @@ const panBy = (dx: number, dy: number) => {
 
   return createPortal(
     <div
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={(e) => { if (!isEditableTarget(e.target)) e.preventDefault(); }}
       onDragStart={(e) => e.preventDefault()}
       style={{
         position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
@@ -2758,7 +2737,7 @@ const panBy = (dx: number, dy: number) => {
             inset: 0,
             width: '100%',
             height: '100%',
-            pointerEvents: isAnnotationMode ? 'auto' : 'none',
+            pointerEvents: isAnnotationMode && (annotationTool === 'laser' || annotationTool === 'hand' || isSpacePressed) ? 'auto' : 'none',
             zIndex: 10,
             cursor: isSpacePressed || isDragging
               ? (isDragging ? 'grabbing' : 'grab')
@@ -3008,6 +2987,7 @@ const panBy = (dx: number, dy: number) => {
           </svg>
 
           <div
+            ref={setWhiteboardImageLayer}
             style={{
               position: 'relative',
               display: 'inline-block',
@@ -3074,6 +3054,8 @@ const panBy = (dx: number, dy: number) => {
               />
             )}
 
+
+
             {grainOpacity > 0 && (
               <div
                 style={{
@@ -3126,7 +3108,7 @@ const panBy = (dx: number, dy: number) => {
                 }
                 if (bestCandidate) activeZoneCenter = { x: bestCandidate.x, y: bestCandidate.y };
               }
-              const calloutTitle = activeMapSection?.title ?? '';
+              const calloutTitle = boldTextContent(activeMapSection?.title ?? '');
               const containerWidth = containerRef.current?.clientWidth ?? imageSize.width;
               const containerHeight = containerRef.current?.clientHeight ?? imageSize.height;
               const visibleLeft = clamp(imageSize.width / 2 + (-containerWidth / 2 - position.x) / zoomLevel, 0, imageSize.width);
@@ -3232,7 +3214,7 @@ const panBy = (dx: number, dy: number) => {
                           pointerEvents="visiblePainted"
                           tabIndex={0}
                           role="button"
-                          aria-label={`Seleccionar zona ${section.title}`}
+                          aria-label={`Seleccionar zona ${boldTextContent(section.title)}`}
                           style={{ cursor: 'pointer', transition: 'fill-opacity 0.18s ease, stroke-width 0.18s ease', outline: 'none' }}
                           onClick={event => {
                             event.stopPropagation();
@@ -3252,7 +3234,7 @@ const panBy = (dx: number, dy: number) => {
                           onMouseDown={event => event.stopPropagation()}
                           onTouchStart={event => event.stopPropagation()}
                         >
-                          <title>{section.title}</title>
+                          <title>{boldTextContent(section.title)}</title>
                         </path>
                       );
                     })}
@@ -3623,9 +3605,18 @@ const panBy = (dx: number, dy: number) => {
           );
         })()}
 
+        {!isPlateImageLoading && (
+          <div className="atlas-plate-watermark" aria-hidden="true">
+            <span className="atlas-plate-watermark-name">Atlas Histolab</span>
+            <span className="atlas-plate-watermark-domain">https://atlas-histolab.pages.dev</span>
+          </div>
+        )}
+
         {/* Barra de herramientas vertical fija al lado de la barra lateral (Modo normal) */}
-        {!isAnnotationMode && (
+        {(
           <div
+            ref={setWhiteboardLauncherLayer}
+            className="viewer-visualization-toolbar"
             role="toolbar"
             aria-label="Controles de zoom y visualización"
             style={{
@@ -3636,7 +3627,7 @@ const panBy = (dx: number, dy: number) => {
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
+              justifyContent: 'flex-start',
               gap: '6px',
               background: 'rgba(255, 255, 255, 0.95)',
               backdropFilter: 'blur(16px) saturate(140%)',
@@ -3647,11 +3638,13 @@ const panBy = (dx: number, dy: number) => {
               zIndex: 20,
               userSelect: 'none',
               width: '46px',
+              maxHeight: 'calc(100% - 130px)',
               boxSizing: 'border-box',
               flexShrink: 0,
               touchAction: 'manipulation',
             }}
           >
+            <div className="viewer-visualization-toolbar__controls">
             {/* Botón Zoom In */}
             <button
               type="button"
@@ -3905,411 +3898,33 @@ const panBy = (dx: number, dy: number) => {
               <RotateCcw size={15} strokeWidth={2.4} />
             </button>
 
-            <div style={{ width: '26px', height: '1px', background: 'rgba(186, 230, 253, 0.85)', margin: '2px 0', flexShrink: 0 }} />
-
-            {/* Botón Lápiz (Abre modo especial) */}
-            <button
-              type="button"
-              onClick={() => {
-                setIsAnnotationMode(true);
-                setAnnotationTool('laser');
-              }}
-              title="Abrir herramientas de anotación y puntero láser"
-              aria-label="Abrir herramientas de anotación"
-              style={{
-                border: '1px solid #bae6fd',
-                background: '#ffffff',
-                color: '#0369a1',
-                borderRadius: '50%',
-                width: '34px',
-                height: '34px',
-                minWidth: '34px',
-                minHeight: '34px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.15s ease, transform 0.12s ease',
-                boxShadow: '0 2px 4px rgba(15, 75, 105, 0.08)',
-                flexShrink: 0,
-                touchAction: 'manipulation',
-                WebkitTapHighlightColor: 'transparent',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.08)';
-                e.currentTarget.style.borderColor = '#38bdf8';
-                e.currentTarget.style.color = '#0284c7';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.borderColor = '#bae6fd';
-                e.currentTarget.style.color = '#0369a1';
-              }}
-            >
-              <Pencil size={15} strokeWidth={2.4} />
-            </button>
+            </div>
           </div>
         )}
 
-        {/* Barra de herramientas horizontal para Modo Especial / Anotaciones */}
-        {isAnnotationMode && (
-          <div
-            role="toolbar"
-            aria-label="Herramientas de anotación y presentación"
-            style={{
-              position: 'absolute',
-              bottom: '24px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: 'rgba(15, 23, 42, 0.94)',
-              backdropFilter: 'blur(20px) saturate(160%)',
-              padding: '6px 12px',
-              borderRadius: '999px',
-              boxShadow: '0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.1)',
-              zIndex: 25,
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              color: '#ffffff',
-              animation: prefersReducedMotion ? 'none' : 'specialBarIn 260ms cubic-bezier(0.22, 1, 0.36, 1) both',
-              userSelect: 'none',
-              maxWidth: '94vw',
-              overflowX: 'auto',
-              touchAction: 'manipulation',
-            }}
-          >
-            {/* Opción 1: Puntero Láser Rojo */}
-            <button
-              type="button"
-              onClick={() => setAnnotationTool(annotationTool === 'laser' ? null : 'laser')}
-              title="Puntero Láser Rojo (deja una estela de luz que se disipa sola)"
-              aria-label="Puntero Láser Rojo"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-                background: annotationTool === 'laser'
-                  ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.38), rgba(185, 28, 28, 0.55))'
-                  : 'rgba(30, 41, 59, 0.75)',
-                border: annotationTool === 'laser' ? '1.5px solid #ef4444' : '1px solid rgba(148, 163, 184, 0.3)',
-                borderRadius: '999px',
-                padding: '6px 13px',
-                color: annotationTool === 'laser' ? '#ffffff' : '#cbd5e1',
-                cursor: 'pointer',
-                fontWeight: 750,
-                fontSize: '0.82em',
-                fontFamily: 'inherit',
-                boxShadow: annotationTool === 'laser' ? '0 0 16px rgba(239, 68, 68, 0.48)' : 'none',
-                transition: 'all 0.18s ease',
-                flexShrink: 0,
-                touchAction: 'manipulation',
-                WebkitTapHighlightColor: 'transparent',
-              }}
-            >
-              <span
-                style={{
-                  width: '9px',
-                  height: '9px',
-                  borderRadius: '50%',
-                  background: '#ef4444',
-                  boxShadow: '0 0 8px #ef4444, 0 0 12px #ef4444',
-                  display: 'inline-block',
-                }}
-              />
-              <span>Láser</span>
-            </button>
-
-            {/* Opción 2: Mover Placa (Herramienta Mano) */}
-            <button
-              type="button"
-              onClick={() => setAnnotationTool(annotationTool === 'hand' ? null : 'hand')}
-              title="Mover Placa (arrastrar con clic izquierdo para navegar la imagen)"
-              aria-label="Mover Placa"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-                background: annotationTool === 'hand'
-                  ? 'linear-gradient(135deg, rgba(14, 165, 233, 0.38), rgba(2, 132, 199, 0.55))'
-                  : 'rgba(30, 41, 59, 0.75)',
-                border: annotationTool === 'hand' ? '1.5px solid #38bdf8' : '1px solid rgba(148, 163, 184, 0.3)',
-                borderRadius: '999px',
-                padding: '6px 13px',
-                color: annotationTool === 'hand' ? '#ffffff' : '#cbd5e1',
-                cursor: 'pointer',
-                fontWeight: 750,
-                fontSize: '0.82em',
-                fontFamily: 'inherit',
-                boxShadow: annotationTool === 'hand' ? '0 0 16px rgba(56, 189, 248, 0.48)' : 'none',
-                transition: 'all 0.18s ease',
-                flexShrink: 0,
-                touchAction: 'manipulation',
-                WebkitTapHighlightColor: 'transparent',
-              }}
-            >
-              <Hand size={15} strokeWidth={2.4} color={annotationTool === 'hand' ? '#38bdf8' : '#94a3b8'} />
-              <span>Mover</span>
-            </button>
-
-            {/* Separador */}
-            <div style={{ width: '1px', height: '20px', background: 'rgba(148, 163, 184, 0.35)', margin: '0 2px', flexShrink: 0 }} />
-
-            {/* Controles de Navegación Direccional (◄ ▲ ▼ ►) */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '2px',
-                background: 'rgba(30, 41, 59, 0.65)',
-                padding: '2px 4px',
-                borderRadius: '999px',
-                border: '1px solid rgba(148, 163, 184, 0.25)',
-                flexShrink: 0,
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => panBy(120, 0)}
-                title="Mover vista a la izquierda"
-                aria-label="Mover a la izquierda"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#cbd5e1',
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  padding: 0,
-                  transition: 'all 0.12s ease',
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
-              >
-                <ChevronLeft size={16} strokeWidth={2.4} />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => panBy(0, 120)}
-                title="Mover vista hacia arriba"
-                aria-label="Mover hacia arriba"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#cbd5e1',
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  padding: 0,
-                  transition: 'all 0.12s ease',
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
-              >
-                <ChevronUp size={16} strokeWidth={2.4} />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => panBy(0, -120)}
-                title="Mover vista hacia abajo"
-                aria-label="Mover hacia abajo"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#cbd5e1',
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  padding: 0,
-                  transition: 'all 0.12s ease',
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
-              >
-                <ChevronDown size={16} strokeWidth={2.4} />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => panBy(-120, 0)}
-                title="Mover vista a la derecha"
-                aria-label="Mover a la derecha"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#cbd5e1',
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  padding: 0,
-                  transition: 'all 0.12s ease',
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
-              >
-                <ChevronRight size={16} strokeWidth={2.4} />
-              </button>
-            </div>
-
-            {/* Controles de Zoom rápidos */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '2px',
-                background: 'rgba(30, 41, 59, 0.65)',
-                padding: '2px 4px',
-                borderRadius: '999px',
-                border: '1px solid rgba(148, 163, 184, 0.25)',
-                flexShrink: 0,
-              }}
-            >
-              <button
-                type="button"
-                onClick={handleZoomOut}
-                title="Alejar imagen (-)"
-                aria-label="Alejar imagen"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#cbd5e1',
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  padding: 0,
-                  transition: 'all 0.12s ease',
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
-              >
-                <ZoomOut size={14} strokeWidth={2.4} />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleResetViewport}
-                title="Clic para volver al 100%"
-                aria-label="Volver al 100%"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#94a3b8',
-                  fontSize: '0.74em',
-                  fontWeight: 800,
-                  padding: '0 3px',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
-              >
-                {Math.round(zoomLevel * 100)}%
-              </button>
-
-              <button
-                type="button"
-                onClick={handleZoomIn}
-                title="Acercar imagen (+)"
-                aria-label="Acercar imagen"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#cbd5e1',
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  padding: 0,
-                  transition: 'all 0.12s ease',
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#ffffff'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}
-              >
-                <ZoomIn size={14} strokeWidth={2.4} />
-              </button>
-            </div>
-
-            {/* Separador */}
-            <div style={{ width: '1px', height: '20px', background: 'rgba(148, 163, 184, 0.35)', margin: '0 2px', flexShrink: 0 }} />
-
-            {/* Botón Salir / Volver */}
-            <button
-              type="button"
-              onClick={() => {
-                setIsAnnotationMode(false);
-                setAnnotationTool(null);
-              }}
-              title="Cerrar modo especial y volver a la barra de zoom"
-              aria-label="Volver a controles de zoom"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                color: '#fca5a5',
-                borderRadius: '999px',
-                padding: '6px 12px',
-                cursor: 'pointer',
-                fontWeight: 700,
-                fontSize: '0.78em',
-                fontFamily: 'inherit',
-                transition: 'all 0.15s ease',
-                flexShrink: 0,
-                touchAction: 'manipulation',
-                WebkitTapHighlightColor: 'transparent',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)';
-                e.currentTarget.style.color = '#ffffff';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
-                e.currentTarget.style.color = '#fca5a5';
-              }}
-            >
-              <X size={14} strokeWidth={2.4} />
-              <span>Salir</span>
-            </button>
-          </div>
-        )}
+        {/* Pizarra temporal: herramientas a la izquierda y trazos ligados a la imagen */}
+        <ViewerWhiteboard
+          key={`${placaId ?? ''}:${src}`}
+          active={isAnnotationMode}
+          tool={annotationTool}
+          onToggle={() => {
+            setIsAnnotationMode(value => !value);
+            setAnnotationTool(isAnnotationMode ? null : 'pen');
+          }}
+          onTool={setAnnotationTool}
+          exportContext={{ sources: [srcZoom, src].filter((value): value is string => Boolean(value)), temaNombre, subtemaNombre, plateId: placaId, rotation }}
+          launcherContainer={whiteboardLauncherLayer}
+          imageLayer={whiteboardImageLayer}
+          size={imageSize}
+          zoom={zoomLevel}
+          viewTransform={`${position.x}:${position.y}:${rotation}:${isDragging}:${isPinching}:${prefersReducedMotion}`}
+          navigating={isSpacePressed}
+          disabled={isPlateImageLoading || isEditModalOpen}
+          onWheel={handleWheel}
+          onPinchStart={handleLaserTouchStart}
+          onPinchMove={handleLaserTouchMove}
+          onPinchEnd={handleLaserTouchEnd}
+        />
       </div>
 
       {showSidebar && (
@@ -5072,7 +4687,7 @@ const panBy = (dx: number, dy: number) => {
                               }}
                             >
                               <span style={{ flex: 1, minWidth: 0, textAlign: 'center', letterSpacing: '0.01em' }}>
-                                {section.title}
+                                {renderBoldText(section.title)}
                               </span>
                               <span style={{
                                 minWidth: '31px',
@@ -5094,7 +4709,7 @@ const panBy = (dx: number, dy: number) => {
                             </button>
                             {isActive && section.description && (
                               <p style={{ gridColumn: '2', margin: 0, padding: '8px 10px', borderRadius: '9px', border: `1px solid ${section.color}38`, background: '#ffffff', color: '#475569', fontSize: '0.73em', lineHeight: 1.48 }}>
-                                {section.description}
+                                {renderBoldText(section.description)}
                               </p>
                             )}
                             {isActive && (

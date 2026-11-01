@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="10 34 305 308" width="305" height="308" role="img" aria-label="Árbol de Navidad animado con tema de laboratorio de histología">
+  <style>
+    .light { animation: twinkle 1.8s ease-in-out infinite; animation-delay: var(--d, 0s); }
+    @keyframes twinkle { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+    .swing { transform-box: fill-box; transform-origin: 50% 0; animation: swing 3.2s ease-in-out infinite alternate; animation-delay: var(--d, 0s); }
+    @keyframes swing { from { transform: rotate(-7deg); } to { transform: rotate(7deg); } }
+    .bob { animation: bob 2.6s ease-in-out infinite alternate; animation-delay: var(--d, 0s); }
+    @keyframes bob { from { transform: translateY(-1.5px); } to { transform: translateY(1.5px); } }
+    .star-glow { transform-box: fill-box; transform-origin: center; animation: pulse 2.2s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 0.2; transform: scale(0.9); } 50% { opacity: 0.55; transform: scale(1.15); } }
+    .star { transform-box: fill-box; transform-origin: center; animation: spin 4s ease-in-out infinite alternate; }
+    @keyframes spin { from { transform: rotate(-8deg) scale(1); } to { transform: rotate(8deg) scale(1.08); } }
+    .garland { animation: crawl 6s linear infinite; }
+    @keyframes crawl { to { stroke-dashoffset: -48; } }
+    .blink { animation: blink 1.2s steps(2, jump-none) infinite; }
+    @keyframes blink { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .light, .swing, .bob, .star-glow, .star, .garland, .blink { animation: none; }
+      .light { opacity: 0.9; }
+    }
+  </style>
+  <defs>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffd86b" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#ffd86b" stop-opacity="0"/>
+    </radialGradient>
+    <g id="cell">
+      <circle r="7.5" fill="#f4a7c4" stroke="#d9709a" stroke-width="1"/>
+      <circle cx="-1" cy="0.5" r="3.4" fill="#5a2f93"/>
+      <circle cx="-1.6" cy="0" r="1" fill="#2e1459"/>
+      <circle cx="3.2" cy="-3.6" r="1.4" fill="#fff" opacity="0.65"/>
+    </g>
+  </defs>
+
+  <!-- trunk -->
+  <rect x="148" y="284" width="24" height="34" fill="#7a4b2a"/>
+
+  <!-- tiers -->
+  <path d="M160 148 L266 292 Q160 308 54 292 Z" fill="#23744a"/>
+  <path d="M160 148 L54 292 Q107 300 160 300 Z" fill="#fff" opacity="0.06"/>
+  <path d="M160 104 L236 216 Q160 230 84 216 Z" fill="#2b8a58"/>
+  <path d="M160 104 L84 216 Q122 224 160 224 Z" fill="#fff" opacity="0.07"/>
+  <path d="M160 66 L208 150 Q160 162 112 150 Z" fill="#34a06a"/>
+  <path d="M160 66 L112 150 Q136 156 160 156 Z" fill="#fff" opacity="0.08"/>
+
+  <!-- garlands -->
+  <path class="garland" d="M76 266 Q118 292 160 272 T244 266" fill="none" stroke="#f08ab4" stroke-width="3.2" stroke-linecap="round" stroke-dasharray="0 8"/>
+  <path class="garland" d="M104 196 Q160 218 216 196" fill="none" stroke="#9b78e6" stroke-width="3" stroke-linecap="round" stroke-dasharray="0 8" style="animation-direction: reverse"/>
+
+  <!-- coplin jar -->
+  <g>
+    <rect x="120" y="300" width="80" height="40" rx="7" fill="#a9d4f0" fill-opacity="0.22" stroke="#bfe0f7" stroke-opacity="0.7" stroke-width="1.5"/>
+    <rect x="123" y="314" width="74" height="23" rx="4" fill="#e0679a" fill-opacity="0.8"/>
+    <rect x="116" y="297" width="88" height="6" rx="3" fill="#cfe6f7" fill-opacity="0.8"/>
+    <text x="160" y="330" text-anchor="middle" font-family="DM Mono, ui-monospace, monospace" font-size="9" fill="#fff" fill-opacity="0.95">H&amp;E</text>
+  </g>
+
+  <!-- cell baubles -->
+  <g transform="translate(150,114)"><g class="bob" style="--d:0s"><use href="#cell" xlink:href="#cell"/></g></g>
+  <g transform="translate(176,134)"><g class="bob" style="--d:.5s"><use href="#cell" xlink:href="#cell"/></g></g>
+  <g transform="translate(122,176)"><g class="bob" style="--d:.9s"><use href="#cell" xlink:href="#cell"/></g></g>
+  <g transform="translate(192,178)"><g class="bob" style="--d:.3s"><use href="#cell" xlink:href="#cell"/></g></g>
+  <g transform="translate(158,204)"><g class="bob" style="--d:1.2s"><use href="#cell" xlink:href="#cell"/></g></g>
+  <g transform="translate(106,246)"><g class="bob" style="--d:.7s"><use href="#cell" xlink:href="#cell"/></g></g>
+  <g transform="translate(214,246)"><g class="bob" style="--d:1.5s"><use href="#cell" xlink:href="#cell"/></g></g>
+  <g transform="translate(160,248)"><g class="bob" style="--d:.2s"><use href="#cell" xlink:href="#cell"/></g></g>
+  <g transform="translate(84,280)"><g class="bob" style="--d:1s"><use href="#cell" xlink:href="#cell"/></g></g>
+  <g transform="translate(238,280)"><g class="bob" style="--d:.6s"><use href="#cell" xlink:href="#cell"/></g></g>
+
+  <!-- hanging glass slides -->
+  <g transform="translate(138,160)"><g class="swing" style="--d:0s">
+    <line x1="0" y1="-6" x2="0" y2="0" stroke="#ffd86b" stroke-width="1"/>
+    <rect x="-7" y="0" width="14" height="26" rx="2" fill="#cfe8ff" fill-opacity="0.35" stroke="#d6ecff" stroke-opacity="0.9"/>
+    <rect x="-7" y="0" width="14" height="7" fill="#f4f0e8"/>
+    <ellipse cx="0" cy="17" rx="4.6" ry="5" fill="#e58fb0"/>
+    <circle cx="-1.5" cy="16" r="1" fill="#5a2f93"/><circle cx="1.5" cy="18.5" r="1" fill="#5a2f93"/><circle cx="1" cy="15" r="0.8" fill="#5a2f93"/>
+  </g></g>
+  <g transform="translate(182,228)"><g class="swing" style="--d:-1.2s">
+    <line x1="0" y1="-6" x2="0" y2="0" stroke="#ffd86b" stroke-width="1"/>
+    <rect x="-7" y="0" width="14" height="26" rx="2" fill="#cfe8ff" fill-opacity="0.35" stroke="#d6ecff" stroke-opacity="0.9"/>
+    <rect x="-7" y="0" width="14" height="7" fill="#f4f0e8"/>
+    <ellipse cx="0" cy="17" rx="4.6" ry="5" fill="#c58ae0"/>
+    <circle cx="-1.2" cy="16.5" r="1" fill="#4a2380"/><circle cx="1.6" cy="18" r="1" fill="#4a2380"/>
+  </g></g>
+  <g transform="translate(130,226)"><g class="swing" style="--d:-2s">
+    <line x1="0" y1="-6" x2="0" y2="0" stroke="#ffd86b" stroke-width="1"/>
+    <rect x="-7" y="0" width="14" height="26" rx="2" fill="#cfe8ff" fill-opacity="0.35" stroke="#d6ecff" stroke-opacity="0.9"/>
+    <rect x="-7" y="0" width="14" height="7" fill="#f4f0e8"/>
+    <ellipse cx="0" cy="17" rx="4.6" ry="5" fill="#e58fb0"/>
+    <circle cx="0.5" cy="16.5" r="1" fill="#5a2f93"/><circle cx="-1.8" cy="18" r="0.9" fill="#5a2f93"/>
+  </g></g>
+
+  <!-- hanging test tubes -->
+  <g transform="translate(112,208)"><g class="swing" style="--d:-.6s">
+    <line x1="0" y1="-6" x2="0" y2="-2" stroke="#ffd86b" stroke-width="1"/>
+    <path d="M-4 0 V19 a4 4 0 0 0 8 0 V0 Z" fill="#cfe8ff" fill-opacity="0.3" stroke="#d6ecff" stroke-opacity="0.9"/>
+    <path d="M-4 9 V19 a4 4 0 0 0 8 0 V9 Z" fill="#4cc9ff" fill-opacity="0.85"/>
+    <rect x="-5" y="-3" width="10" height="4" rx="1.5" fill="#e0b43a"/>
+  </g></g>
+  <g transform="translate(206,268)"><g class="swing" style="--d:-1.6s">
+    <line x1="0" y1="-6" x2="0" y2="-2" stroke="#ffd86b" stroke-width="1"/>
+    <path d="M-4 0 V19 a4 4 0 0 0 8 0 V0 Z" fill="#cfe8ff" fill-opacity="0.3" stroke="#d6ecff" stroke-opacity="0.9"/>
+    <path d="M-4 8 V19 a4 4 0 0 0 8 0 V8 Z" fill="#7dff8a" fill-opacity="0.85"/>
+    <rect x="-5" y="-3" width="10" height="4" rx="1.5" fill="#e0b43a"/>
+  </g></g>
+  <g transform="translate(160,162)"><g class="swing" style="--d:-.2s">
+    <line x1="0" y1="-6" x2="0" y2="-2" stroke="#ffd86b" stroke-width="1"/>
+    <path d="M-4 0 V17 a4 4 0 0 0 8 0 V0 Z" fill="#cfe8ff" fill-opacity="0.3" stroke="#d6ecff" stroke-opacity="0.9"/>
+    <path d="M-4 7 V17 a4 4 0 0 0 8 0 V7 Z" fill="#ff5b6e" fill-opacity="0.85"/>
+    <rect x="-5" y="-3" width="10" height="4" rx="1.5" fill="#e0b43a"/>
+  </g></g>
+
+  <!-- fairy lights -->
+  <g class="light" style="--d:0s"><circle cx="140" cy="132" r="5" fill="#4cc9ff" opacity="0.3"/><circle cx="140" cy="132" r="2.2" fill="#4cc9ff"/></g>
+  <g class="light" style="--d:.4s"><circle cx="186" cy="150" r="5" fill="#7dff8a" opacity="0.3"/><circle cx="186" cy="150" r="2.2" fill="#7dff8a"/></g>
+  <g class="light" style="--d:.8s"><circle cx="108" cy="198" r="5" fill="#ff5b6e" opacity="0.3"/><circle cx="108" cy="198" r="2.2" fill="#ff5b6e"/></g>
+  <g class="light" style="--d:1.2s"><circle cx="212" cy="204" r="5" fill="#ffd24c" opacity="0.3"/><circle cx="212" cy="204" r="2.2" fill="#ffd24c"/></g>
+  <g class="light" style="--d:.2s"><circle cx="146" cy="186" r="5" fill="#7dff8a" opacity="0.3"/><circle cx="146" cy="186" r="2.2" fill="#7dff8a"/></g>
+  <g class="light" style="--d:.6s"><circle cx="82" cy="262" r="5" fill="#4cc9ff" opacity="0.3"/><circle cx="82" cy="262" r="2.2" fill="#4cc9ff"/></g>
+  <g class="light" style="--d:1s"><circle cx="238" cy="262" r="5" fill="#ff5b6e" opacity="0.3"/><circle cx="238" cy="262" r="2.2" fill="#ff5b6e"/></g>
+  <g class="light" style="--d:1.4s"><circle cx="132" cy="268" r="5" fill="#ffd24c" opacity="0.3"/><circle cx="132" cy="268" r="2.2" fill="#ffd24c"/></g>
+  <g class="light" style="--d:.3s"><circle cx="190" cy="270" r="5" fill="#4cc9ff" opacity="0.3"/><circle cx="190" cy="270" r="2.2" fill="#4cc9ff"/></g>
+  <g class="light" style="--d:.9s"><circle cx="168" cy="114" r="5" fill="#ff5b6e" opacity="0.3"/><circle cx="168" cy="114" r="2.2" fill="#ff5b6e"/></g>
+
+  <!-- star -->
+  <circle class="star-glow" cx="160" cy="56" r="22" fill="url(#glow)"/>
+  <polygon class="star" points="160,42 163.4,51.3 173.3,51.7 165.5,57.8 168.2,67.3 160,61.8 151.8,67.3 154.5,57.8 146.7,51.7 156.6,51.3" fill="#ffd24c" stroke="#e8a800" stroke-width="1" stroke-linejoin="round"/>
+
+  <!-- microscope -->
+  <g transform="translate(6,0)">
+    <rect x="14" y="328" width="38" height="10" rx="3" fill="#aab6c8"/>
+    <path d="M40 328 C58 322 58 300 40 292" fill="none" stroke="#cfd8e6" stroke-width="6" stroke-linecap="round"/>
+    <rect x="18" y="313" width="22" height="3" rx="1" fill="#8795ab"/>
+    <rect x="23" y="290" width="9" height="26" rx="2" fill="#e6edf7" transform="rotate(-20 27 303)"/>
+    <rect x="15" y="280" width="9" height="8" rx="2" fill="#7f8da6" transform="rotate(-20 19 284)"/>
+    <circle class="blink" cx="48" cy="318" r="1.8" fill="#7dff8a"/>
+  </g>
+
+  <!-- slide-box gifts -->
+  <g>
+    <rect x="236" y="312" width="42" height="26" rx="3" fill="#3b7dd8"/>
+    <rect x="236" y="312" width="42" height="7" rx="2" fill="#2f66b3"/>
+    <rect x="254" y="312" width="6" height="26" fill="#f4a7c4"/>
+    <path d="M257 312 q-9 -9 -12 -2 q4 6 12 2 Z M257 312 q9 -9 12 -2 q-4 6 -12 2 Z" fill="#f4a7c4"/>
+    <rect x="282" y="324" width="24" height="14" rx="2" fill="#8b63d6"/>
+    <rect x="291" y="324" width="5" height="14" fill="#ffd24c"/>
+  </g>
+</svg>

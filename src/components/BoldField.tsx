@@ -28,9 +28,10 @@ function fromHtml(html: string): string {
   return html
     .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, '**$1**')
     .replace(/<b[^>]*>([\s\S]*?)<\/b>/gi, '**$1**')
-    .replace(/<br\s*\/?>\s*/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/div>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
+    .replace(/([^\n])<(?:div|p)(?:\s[^>]*)?>/gi, '$1\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -70,6 +71,8 @@ export function renderBoldText(text: string | null | undefined): React.ReactNode
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface BoldFieldProps {
+  id?: string;
+  labelledBy?: string;
   value: string;
   onChange: (value: string) => void;
   /** 'input' (una línea) o 'textarea' (multilinea). Default: 'input' */
@@ -87,6 +90,8 @@ export interface BoldFieldProps {
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 const BoldField: React.FC<BoldFieldProps> = ({
+  id,
+  labelledBy,
   value,
   onChange,
   as = 'input',
@@ -99,11 +104,15 @@ const BoldField: React.FC<BoldFieldProps> = ({
 }) => {
   const divRef = useRef<HTMLDivElement>(null);
   const isFocused = useRef(false);
+  const savedSelection = useRef<Range | null>(null);
 
   // Sincronizar value → innerHTML solo cuando el campo NO está enfocado
   // (evita mover el cursor mientras el usuario escribe)
   useEffect(() => {
     if (!divRef.current || isFocused.current) return;
+    // Mantener la selección al pasar con Tab al botón de formato: <b> y
+    // <strong> representan el mismo valor y no requieren reconstruir el DOM.
+    if (fromHtml(divRef.current.innerHTML) === value) return;
     const next = toHtml(value);
     if (divRef.current.innerHTML !== next) divRef.current.innerHTML = next;
   });
@@ -118,13 +127,21 @@ const BoldField: React.FC<BoldFieldProps> = ({
   // Aplica negrita con execCommand (toggle: aplica o quita según selección)
   const applyBold = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+    if (disabled) return;
     divRef.current?.focus();
+    const range = savedSelection.current;
+    if (range && divRef.current?.contains(range.commonAncestorContainer)) {
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
     document.execCommand('bold', false);
     sync();
-  }, [sync]);
+  }, [disabled, sync]);
 
   // Ctrl/Cmd+B o N / Enter (bloqueado en modo input)
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.nativeEvent.isComposing) return;
     if (as === 'input' && e.key === 'Enter') e.preventDefault();
     if ((e.ctrlKey || e.metaKey) && ['b', 'n'].includes(e.key.toLowerCase())) {
       e.preventDefault();
@@ -137,7 +154,7 @@ const BoldField: React.FC<BoldFieldProps> = ({
   const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
     e.preventDefault();
     let text = e.clipboardData.getData('text/plain');
-    if (as === 'input') text = text.replace(/\n/g, ' ');
+    if (as === 'input') text = text.replace(/\r\n?|\n/g, ' ');
     document.execCommand('insertText', false, text);
     sync();
   }, [as, sync]);
@@ -162,9 +179,12 @@ const BoldField: React.FC<BoldFieldProps> = ({
 
   const divStyle: React.CSSProperties = {
     ...safeStyle,
+    // Un peso seminegrita heredado hace que Chromium interprete Ctrl+B como
+    // quitar negrita y genere un span que no pertenece al formato guardado.
+    fontWeight: 400,
     outline: 'none',
     cursor: disabled ? 'default' : 'text',
-    whiteSpace: as === 'textarea' ? 'pre-wrap' : 'nowrap',
+    whiteSpace: as === 'textarea' ? 'pre-wrap' : 'pre',
     overflowX: as === 'input' ? 'auto' : undefined,
     overflowY: as === 'textarea' ? 'auto' : 'hidden',
     wordBreak: as === 'textarea' ? 'break-word' : undefined,
@@ -193,15 +213,30 @@ const BoldField: React.FC<BoldFieldProps> = ({
   // ── Div editable ─────────────────────────────────────────────────────────
   const editableDiv = (
     <div
+      id={id}
       ref={divRef}
       contentEditable={!disabled}
       suppressContentEditableWarning
       spellCheck
       lang="es"
+      autoCorrect="on"
+      autoCapitalize="sentences"
+      role="textbox"
+      aria-label={placeholder}
+      aria-labelledby={labelledBy}
+      aria-multiline={as === 'textarea'}
+      aria-disabled={disabled || undefined}
       data-placeholder={placeholder}
       style={inline ? divStyle : divStyleFull}
       onFocus={e => { isFocused.current = true; onFocus?.(e); }}
-      onBlur={e => { isFocused.current = false; sync(); onBlur?.(e); }}
+      onBlur={e => {
+        const selection = window.getSelection();
+        if (selection?.rangeCount && e.currentTarget.contains(selection.anchorNode)) {
+          savedSelection.current = selection.getRangeAt(0).cloneRange();
+        }
+        isFocused.current = false; sync(); onBlur?.(e);
+      }}
+      onContextMenu={e => e.stopPropagation()}
       onInput={sync}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
@@ -216,6 +251,7 @@ const BoldField: React.FC<BoldFieldProps> = ({
         <button
           type="button"
           title="Negrita (Ctrl/Cmd+N o B)"
+          aria-label="Negrita (Ctrl/Cmd+N o B)"
           style={{
             flexShrink: 0,
             width: 28,
@@ -235,7 +271,9 @@ const BoldField: React.FC<BoldFieldProps> = ({
             fontFamily: 'inherit',
             userSelect: 'none',
           }}
-          onMouseDown={applyBold}
+          disabled={disabled}
+          onMouseDown={e => { e.preventDefault(); savedSelection.current = null; }}
+          onClick={applyBold}
           onMouseEnter={e => hover(e, true)}
           onMouseLeave={e => hover(e, false)}
         >
@@ -263,6 +301,7 @@ const BoldField: React.FC<BoldFieldProps> = ({
         <button
           type="button"
           title="Negrita (Ctrl/Cmd+N o B)"
+          aria-label="Negrita (Ctrl/Cmd+N o B)"
           style={{
             fontWeight: 900,
             fontSize: '0.82em',
@@ -278,7 +317,9 @@ const BoldField: React.FC<BoldFieldProps> = ({
             fontFamily: 'inherit',
             userSelect: 'none',
           }}
-          onMouseDown={applyBold}
+          disabled={disabled}
+          onMouseDown={e => { e.preventDefault(); savedSelection.current = null; }}
+          onClick={applyBold}
           onMouseEnter={e => hover(e, true)}
           onMouseLeave={e => hover(e, false)}
         >

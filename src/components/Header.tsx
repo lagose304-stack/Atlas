@@ -14,8 +14,8 @@ import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } fr
 import logoFacultad from '../assets/logos/facultad.png';
 import microscopioHeader from '../assets/logos/laboratorio.png';
 import fondoHeader from '../assets/imagenes/fondo.webp';
-import HalloweenPumpkin from './HalloweenPumpkin';
-import HalloweenBats from './HalloweenBats';
+import { ChristmasHeaderDecor, ChristmasHeaderLights, ChristmasHeaderSnow, ChristmasSleigh, ChristmasTree } from './ChristmasHeaderDecor';
+import '../styles/christmasHeader.css';
 
 const MENU_ITEMS = [
   { key: 'inicio', label: 'Inicio', icon: House, path: '/' },
@@ -461,16 +461,18 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
 
   return (
     <>
-      <header ref={headerRef} className="atlas-header-wrapper" style={styles.wrapper}>
+      <header ref={headerRef} className="atlas-header-wrapper atlas-header-christmas" style={styles.wrapper}>
+        <ChristmasHeaderSnow />
         <section
           className="atlas-header-hero"
           style={{
             ...styles.hero,
-            backgroundImage: `linear-gradient(108deg, rgba(14, 7, 34, 0.94) 0%, rgba(26, 12, 56, 0.88) 22%, rgba(53, 20, 96, 0.72) 50%, rgba(26, 12, 56, 0.88) 78%, rgba(14, 7, 34, 0.94) 100%), url(${fondoHeader})`,
+            backgroundImage: `linear-gradient(108deg, rgba(4, 25, 48, 0.43), rgba(8, 37, 59, 0.12) 50%, rgba(4, 25, 48, 0.43)), url(${fondoHeader})`,
           }}
         >
           <div className="atlas-header-glass" style={styles.heroGlass} />
           <div className="atlas-header-readable-overlay" style={styles.heroReadableOverlay} />
+          <ChristmasHeaderLights />
 
           <div className="atlas-header-main-row" style={styles.heroMainRow}>
             <div className="atlas-header-left-area" style={styles.leftArea}>
@@ -491,92 +493,26 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
             </div>
 
             <div className="atlas-header-center-area" style={styles.centerArea}>
-              {/* Marco interno con borde discontinuo estilo Halloween de la referencia */}
-              <div className="atlas-halloween-inner-frame" aria-hidden="true" />
-
-              {/* Telarañas en las esquinas superiores */}
-              <svg className="atlas-halloween-web atlas-halloween-web-left" viewBox="0 0 100 100" aria-hidden="true" fill="none">
-                <path d="M 0 0 L 100 0 M 0 0 L 92 38 M 0 0 L 71 71 M 0 0 L 38 92 M 0 0 L 0 100" stroke="rgba(245, 235, 255, 0.38)" strokeWidth="1.2" />
-                <path d="M 28 0 Q 24 10 20 20 Q 10 24 0 28" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
-                <path d="M 52 0 Q 45 19 37 37 Q 19 45 0 52" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
-                <path d="M 76 0 Q 66 28 54 54 Q 28 66 0 76" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
-                <path d="M 98 0 Q 86 36 70 70 Q 36 86 0 98" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
-              </svg>
-              <svg className="atlas-halloween-web atlas-halloween-web-right" viewBox="0 0 100 100" aria-hidden="true" fill="none">
-                <path d="M 0 0 L 100 0 M 0 0 L 92 38 M 0 0 L 71 71 M 0 0 L 38 92 M 0 0 L 0 100" stroke="rgba(245, 235, 255, 0.38)" strokeWidth="1.2" />
-                <path d="M 28 0 Q 24 10 20 20 Q 10 24 0 28" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
-                <path d="M 52 0 Q 45 19 37 37 Q 19 45 0 52" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
-                <path d="M 76 0 Q 66 28 54 54 Q 28 66 0 76" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
-                <path d="M 98 0 Q 86 36 70 70 Q 36 86 0 98" stroke="rgba(245, 235, 255, 0.4)" strokeWidth="1" fill="none" />
-              </svg>
-
-              {/* Goteo anaranjado de calabaza/cera a lo largo del borde superior */}
-              <div className="atlas-halloween-drips" aria-hidden="true">
-                <svg viewBox="0 0 800 24" preserveAspectRatio="none" fill="none">
-                  <defs>
-                    <linearGradient id="halloDripGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" stopColor="#ff9a3c" />
-                      <stop offset="60%" stopColor="#ea580c" />
-                      <stop offset="100%" stopColor="#c2410c" />
-                    </linearGradient>
-                  </defs>
-                  <path
-                    d="M0,0 L800,0 L800,3 C785,3 783,16 776,16 C769,16 767,3 755,3 C745,3 743,10 738,10 C733,10 731,3 720,3 C710,3 708,20 700,20 C692,20 690,3 675,3 C662,3 660,12 654,12 C648,12 646,3 630,3 C618,3 616,18 608,18 C600,18 598,3 585,3 C572,3 570,9 564,9 C558,9 556,3 540,3 C528,3 526,22 518,22 C510,22 508,3 490,3 C478,3 476,14 470,14 C464,14 462,3 450,3 C438,3 436,19 428,19 C420,19 418,3 400,3 C382,3 380,19 372,19 C364,19 362,3 350,3 C338,3 336,14 330,14 C324,14 322,3 310,3 C292,3 290,22 282,22 C274,22 272,3 260,3 C244,3 242,9 236,9 C230,9 228,3 215,3 C202,3 200,18 192,18 C184,18 182,3 170,3 C154,3 152,12 146,12 C140,12 138,3 125,3 C110,3 108,20 100,20 C92,20 90,3 80,3 C69,3 67,10 62,10 C57,10 55,3 45,3 C33,3 31,16 24,16 C17,16 15,3 0,3 Z"
-                    fill="url(#halloDripGrad)"
-                    filter="drop-shadow(0 2px 4px rgba(0,0,0,0.4))"
-                  />
-                </svg>
-              </div>
-
-              {/* Chispas y partículas sutiles de Halloween */}
-              <div className="atlas-halloween-embers" aria-hidden="true">
-                <span className="atlas-ember e1" />
-                <span className="atlas-ember e2" />
-                <span className="atlas-ember e3" />
-                <span className="atlas-ember e4" />
-                <span className="atlas-ember e5" />
-                <span className="atlas-ember e6" />
-              </div>
-
+              <ChristmasHeaderDecor />
               <h1 className="atlas-header-title" style={styles.title}>
                 <span className="atlas-header-title-text">
-                  {/* Murciélagos animados de Halloween del lado izquierdo */}
-                  <HalloweenBats />
-                  <span className="atlas-halloween-title-gradient">Atlas de Histología</span>
-                  <span
-                    className="atlas-header-flag-stamp atlas-header-autumn-stamp"
-                    title="¡Bienvenido Octubre! 🍂🎃 Otoño y Halloween"
-                    aria-label="Decoración de Octubre: Otoño y Halloween"
-                    role="img"
-                  >
-                    {/* Hojas otoñales flotantes y destellos dorados de celebración */}
-                    <span className="atlas-header-confetti-cluster" aria-hidden="true">
-                      <span className="atlas-confetti-item c1" />
-                      <span className="atlas-confetti-item c2" />
-                      <span className="atlas-confetti-item c3" />
-                      <span className="atlas-confetti-item c4" />
-                      <span className="atlas-confetti-item c5" />
-                      <span className="atlas-confetti-item c6" />
-                      <span className="atlas-confetti-item c7" />
-                      <span className="atlas-confetti-item c8" />
-                    </span>
-
-                    <HalloweenPumpkin />
-                  </span>
+                  <ChristmasSleigh />
+                  <span className="atlas-christmas-title-gradient">Atlas de Histología</span>
+                  <ChristmasTree />
                 </span>
               </h1>
 
               <p className="atlas-header-subtitle" style={styles.subtitle}>
-                Laboratorio de Histología – <span className="atlas-halloween-doctor-name">Dr. Rafael Perdomo Vaquero</span>
+                <span className="atlas-christmas-lab-label">Laboratorio de Histología</span>
+                <span className="atlas-christmas-doctor-name">Dr. Rafael Perdomo Vaquero</span>
               </p>
 
-              <div className="atlas-header-separator atlas-halloween-separator" style={styles.separator}>
-                <span className="atlas-halloween-sep-line" />
-                <span className="atlas-halloween-sep-pumpkin" aria-hidden="true">🎃</span>
-                <span className="atlas-halloween-sep-line" />
+              <div className="atlas-header-separator atlas-christmas-separator" style={styles.separator}>
+                <span className="atlas-christmas-sep-line" />
+                <span className="atlas-christmas-sep-star" aria-hidden="true">✦</span>
+                <span className="atlas-christmas-sep-line" />
               </div>
 
-              <p className="atlas-header-subtitle2" style={styles.subtitle2}>Facultad de Ciencias Médicas – UNAH</p>
             </div>
 
             <div className="atlas-header-right-area" style={styles.rightArea}>
@@ -677,7 +613,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
           className="atlas-header-bottom-nav"
           style={{
             ...styles.bottomNav,
-            '--atlas-header-nav-background': `linear-gradient(180deg, rgba(14, 7, 34, 0.45), rgba(14, 7, 34, 0.7)), linear-gradient(105deg, rgba(26, 12, 56, 0.8), rgba(53, 20, 96, 0.45) 50%, rgba(26, 12, 56, 0.8)), url(${fondoHeader})`,
+            '--atlas-header-nav-background': `linear-gradient(180deg, rgba(5, 34, 29, 0.55), rgba(5, 34, 29, 0.85)), linear-gradient(105deg, rgba(12, 69, 53, 0.8), rgba(19, 88, 65, 0.55) 50%, rgba(12, 69, 53, 0.8)), url(${fondoHeader})`,
           } as React.CSSProperties}
           aria-label="Menú principal"
         >
@@ -736,7 +672,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
       </header>
 
       <div
-        className="atlas-compact-bar"
+        className="atlas-compact-bar atlas-compact-christmas"
         style={{
           ...styles.compactBar,
           left: `${compactBarFrame.left}px`,

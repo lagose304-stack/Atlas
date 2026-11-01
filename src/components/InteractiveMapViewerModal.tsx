@@ -5,6 +5,8 @@ import Konva from 'konva';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, type ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
 import { getImageCandidateUrls } from '../services/cloudinaryImages';
+import { renderBoldText } from './BoldField';
+import { boldTextContent } from '../utils/boldTextContent';
 
 export interface InteractiveMapViewerSection {
   title: string;
@@ -855,7 +857,7 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
       bounds
     );
 
-    const title = activeSection.title?.trim() || `Zona ${activeSectionIndex + 1}`;
+    const title = boldTextContent(activeSection.title?.trim() || `Zona ${activeSectionIndex + 1}`);
     const isCompact = isNarrowLayout;
     const fontSize = isCompact ? 14 : 15;
     const textPaddingX = isCompact ? 8 : 9;
@@ -1698,7 +1700,7 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
                                 outlineOffset: '1px',
                               }}
                             >
-                              <span style={s.sectionActionTitle} title={section.title}>{section.title}</span>
+                              <span style={s.sectionActionTitle} title={boldTextContent(section.title)}>{renderBoldText(section.title)}</span>
 
                               <span
                                 style={{
@@ -1747,7 +1749,7 @@ const InteractiveMapViewerModal: React.FC<InteractiveMapViewerModalProps> = ({
                             {isActive && (
                               <div id={`section-panel-${idx}`} style={s.sectionDescriptionCard}>
                                 {section.description ? (
-                                  <p style={s.sectionDescription}>{section.description}</p>
+                                  <p style={s.sectionDescription}>{renderBoldText(section.description)}</p>
                                 ) : (
                                   <p style={s.sectionDescriptionMuted}>Sin descripcion registrada.</p>
                                 )}
