@@ -256,11 +256,13 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
     const svg = svgRef.current;
     if (!svg) return;
     const start = (event: TouchEvent) => {
+      event.stopPropagation(); if (event.cancelable) event.preventDefault();
       if (gesture.current?.pointerType === 'pen') return;
       if (event.touches.length >= 2) { pinch.current = true; touchBlocked.current = true; finish(true); onPinchStart?.(event); }
     };
-    const move = (event: TouchEvent) => { if (pinch.current) { event.preventDefault(); onPinchMove?.(event); } };
+    const move = (event: TouchEvent) => { event.stopPropagation(); if (event.cancelable) event.preventDefault(); if (pinch.current) onPinchMove?.(event); };
     const end = (event: TouchEvent) => {
+      event.stopPropagation();
       if (pinch.current) onPinchEnd?.(event);
       if (!event.touches.length) { pinch.current = false; touchBlocked.current = false; touchIds.current.clear(); }
     };
@@ -412,8 +414,8 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
       onMouseDown={event => event.stopPropagation()} onTouchStart={event => event.stopPropagation()} onTouchMove={event => event.stopPropagation()}
       onPointerDown={event => {
         if (!drawing || event.button !== 0) return;
-        if (event.pointerType === 'touch' && gesture.current?.pointerType === 'pen') return;
         event.preventDefault(); event.stopPropagation();
+        if (event.pointerType === 'touch' && gesture.current?.pointerType === 'pen') return;
         event.currentTarget.setPointerCapture(event.pointerId);
         if (event.pointerType === 'touch') {
           touchIds.current.add(event.pointerId);

@@ -155,6 +155,36 @@ describe('Pizarra temporal del visor', () => {
     expect(count()).toBe(2);
   });
 
+  it('aísla los eventos táctiles del contenedor mientras dibuja y pellizca', () => {
+    const inherited = vi.fn();
+    for (const name of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) layer.addEventListener(name, inherited);
+    render(<Harness />);
+    fireEvent.pointerDown(canvas(), { pointerType: 'touch', pointerId: 11, button: 0, clientX: 100, clientY: 100 });
+    fireEvent.touchStart(canvas(), { touches: [{ identifier: 11, clientX: 100, clientY: 100 }] });
+    fireEvent.pointerMove(canvas(), { pointerType: 'touch', pointerId: 11, clientX: 160, clientY: 150 });
+    fireEvent.touchMove(canvas(), { touches: [{ identifier: 11, clientX: 160, clientY: 150 }] });
+    fireEvent.pointerUp(canvas(), { pointerType: 'touch', pointerId: 11 });
+    fireEvent.touchEnd(canvas(), { touches: [] });
+    expect(count()).toBe(1);
+    fireEvent.touchStart(canvas(), { touches: [{ clientX: 100, clientY: 100 }, { clientX: 200, clientY: 200 }] });
+    fireEvent.touchMove(canvas(), { touches: [{ clientX: 80, clientY: 80 }, { clientX: 230, clientY: 230 }] });
+    fireEvent.touchCancel(canvas(), { touches: [] });
+    expect(inherited).not.toHaveBeenCalled();
+    expect(count()).toBe(1);
+  });
+
+  it('no cancela un trazo de lápiz digital al apoyar un dedo o la palma', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(canvas(), { pointerType: 'pen', pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(canvas(), { pointerType: 'touch', pointerId: 2, button: 0, clientX: 240, clientY: 240 });
+    fireEvent.touchStart(canvas(), { touches: [{ clientX: 240, clientY: 240 }, { clientX: 260, clientY: 260 }] });
+    fireEvent.pointerMove(canvas(), { pointerType: 'pen', pointerId: 1, clientX: 180, clientY: 160 });
+    fireEvent.pointerUp(canvas(), { pointerType: 'pen', pointerId: 1 });
+    fireEvent.touchEnd(canvas(), { touches: [] });
+    expect(count()).toBe(1);
+    expect(layer.querySelector('[data-whiteboard-mark] path')).toHaveAttribute('d');
+  });
+
   it('recuerda el estilo de cada herramienta y no registra formas sin arrastre', () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', { name: 'Ajustes de pizarra' }));

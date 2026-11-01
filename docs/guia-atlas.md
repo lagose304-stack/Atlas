@@ -116,6 +116,8 @@ Solo la foto se rasteriza primero a un máximo de 1080 px en su lado mayor, cons
 
 Los apuntes permanecen al cerrar las herramientas, pero se descartan al cambiar la identidad o URL de la placa o desmontar el visor. Solo existen en memoria del componente: no se guardan en el navegador ni se envían a Supabase/R2, y no modifican señalados ni mapas publicados. Este comportamiento describe el cambio local, no un despliegue verificado.
 
+En pantallas táctiles, los eventos de la pizarra no se propagan al controlador de navegación del contenedor. Un dedo utiliza la herramienta elegida, la mano desplaza la placa y dos dedos cancelan el trazo provisional para navegar con pellizco; el dedo restante queda bloqueado hasta levantar ambos. El lápiz digital activo tiene prioridad sobre contactos táctiles en la superficie de dibujo. El controlador táctil de mano/láser usa listeners no pasivos y agrupa los cambios de vista por fotograma. El visor normal comparte la actualización por fotograma, confirma el último estado al terminar/cancelar y descarta taps pendientes al empezar un pellizco. Ambos modos reajustan la referencia al sustituir dedos, y durante el pellizco se mantienen el filtro, enfoque y grano de partida y se aplaza el cambio de fuente de alta resolución; los límites de arrastre consideran el giro. Los botones principales de pizarra aumentan a 44 px en dispositivos de puntero grueso. Verificación local con multitáctil emulado en Chromium; no equivale a una prueba física de iOS/Android.
+
 **Revisiones locales:** [herramientas y nitidez con zoom](revisiones/pizarra-publica-nitidez-2026-10-31.md) y [descarga de apuntes](revisiones/pizarra-exportacion-apuntes-2026-10-31.md).
 
 ### Acceso y permisos

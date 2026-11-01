@@ -99,3 +99,10 @@
   .viewer-whiteboard-export { bottom: 30px; }
 }
 @media (prefers-reduced-motion: reduce) { .viewer-whiteboard button { transition: none; } }
+
+@media (pointer: coarse) {
+  .viewer-whiteboard { width: 60px; }
+  .viewer-whiteboard button { width: 44px; min-height: 44px; }
+  .viewer-whiteboard__panel button, .viewer-whiteboard__selection-actions button { min-height: 44px; }
+  .viewer-whiteboard__swatches button { min-width: 36px; min-height: 36px; }
+}

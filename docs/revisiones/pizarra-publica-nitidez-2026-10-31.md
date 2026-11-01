@@ -37,3 +37,19 @@ Las comprobaciones usan contenido ficticio y no demuestran un despliegue en prod
 Se encontró un reinicio completo de la estela ante saltos mayores de 75 px entre muestras y ante pausas de 200 ms. Salir del lienzo también vaciaba los puntos inmediatamente. `laserTrail.ts` elimina el reinicio por distancia, adapta el seguimiento a la velocidad e interpola el recorrido; las pausas y reentradas conservan los trazos anteriores pero comienzan segmentos separados. La densidad se reduce sin recortar los extremos todavía visibles.
 
 En Chromium con la misma placa ficticia y red externa bloqueada se verificaron saltos de 800–1000 px, inversión rápida de dirección, continuidad de la estela anterior, ausencia de líneas entre posiciones separadas por una pausa, desvanecimiento al salir del lienzo, un punto aislado, caducidad después de 1750 ms y limpieza inmediata al cambiar de herramienta. No cambia la persistencia de apuntes ni la publicación.
+
+
+## Corrección de interacción táctil
+
+Se detectó que los eventos touch del SVG llegaban también al listener nativo del contenedor, que iniciaba arrastre mientras Pointer Events dibujaba y ejecutaba otro pellizco. El SVG aísla ahora start/move/end/cancel y el contenedor no gestiona gestos mientras está abierta la pizarra. Mano/láser usan listeners touch nativos no pasivos; las actualizaciones de vista se agrupan mediante requestAnimationFrame y se confirman al finalizar. Se espera a levantar todos los dedos antes de reanudar tras un pellizco, sin pausas temporales arbitrarias en mano/láser. Las cancelaciones de trazo descartan el borrador y apoyar un contacto táctil no cancela el lápiz digital activo.
+
+Se conserva el filtro inicial durante el pellizco, se pospone el cambio a srcZoom hasta acabar y el clamp considera placas giradas. Los controles principales de pizarra tienen objetivos de 44 px con pointer:coarse.
+
+Pruebas unitarias añadidas: aislamiento de eventos frente al contenedor y contacto de palma/dedo durante un trazo de lápiz digital. Comprobación aislada en Chromium con Input.dispatchTouchEvent: dibujo sin movimiento de placa, zoom ×2 con ancla entre dedos (incluido desplazamiento del punto medio), transición 2→1→0 sin apuntes ni arrastre accidental, mano con desplazamiento previsto, touchcancel, lápiz/resaltador/flecha/línea/elipse/rectángulo/texto, mover texto con selección, borrar con el dedo y deshacer, láser sin arrastrar ni dejar marcas permanentes y pellizco con placa girada en 390×844 y 768×1024. No se probó hardware físico ni Safari; no se declara compatibilidad certificada. Ninguna escritura remota ni publicación.
+
+
+## Verificación ampliada del pellizco: visor público y pizarra
+
+El visor normal usa ahora la misma cola de actualización por fotograma y confirma el último valor al terminar o cancelar. Al comenzar el pellizco se descarta el candidato a tap/doble tap o navegación por deslizamiento. Se admite un tercer contacto sin reiniciar el gesto, y al sustituir un dedo se toma una nueva referencia desde la vista actual para evitar saltos. Los dos modos mantienen constantes filtro, matriz de enfoque y opacidad de grano durante el gesto; el cambio a la imagen de alta resolución sigue aplazado hasta finalizar.
+
+Se añadieron pruebas de componente para confirmar el último fotograma al pasar de dos dedos a uno, ignorar el dedo restante y cancelar/reiniciar desde el zoom alcanzado. La prueba aislada en Chromium cubre 24 combinaciones: 390×844, 768×1024 y 1440×1000; visor público, pizarra con lápiz, mano y láser; placa normal y girada 90°. Comprueba escala continua, desplazamiento del punto medio, zoom mínimo, filtros/enfoque y número de capas estables durante el gesto, tercer dedo, sustitución de contacto, zoom hacia fuera, cancelación sin salto tardío y ausencia de apuntes accidentales. Es emulación de eventos táctiles, sin certificación de hardware físico.

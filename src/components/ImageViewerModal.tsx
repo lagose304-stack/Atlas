@@ -883,6 +883,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [markerColorKey, setMarkerColorKey] = useState<MarkerColorKey>('black');
   const [isDragging, setIsDragging] = useState(false);
   const [isPinching, setIsPinching] = useState(false);
+  const annotationHadPinchRef = useRef(false);
+  const pinchFilterRef = useRef('none');
+  const pinchOpticsRef = useRef({ sharpen: 0, grain: 0 });
+  const touchFrameRef = useRef<number | null>(null);
+  const pendingTouchViewRef = useRef<{ zoom: number; pos: { x: number; y: number } } | null>(null);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(() => ({ width: 1200, height: 800 }));
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(() => ({ width: 1200, height: 800 }));
   const [interactiveMapData, setInteractiveMapData] = useState<InteractiveMapData | null>(null);
@@ -1187,10 +1192,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, [src, srcZoom]);
 
   useEffect(() => {
+    if (isPinching) return;
     if (srcZoom && zoomLevel > 1.01 && !zoomSourceFailed) {
       setUseZoomSource(true);
     }
-  }, [zoomLevel, srcZoom, zoomSourceFailed]);
+  }, [zoomLevel, srcZoom, zoomSourceFailed, isPinching]);
 
   useEffect(() => {
     setHoveredMarkerIndex(null);
@@ -1325,6 +1331,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     const boosted = Math.pow(perceptualEnhanceLevel, 1.2);
     return 0.018 + boosted * 0.034;
   }, [perceptualEnhanceLevel]);
+
+  const renderedSharpen = isPinching ? pinchOpticsRef.current.sharpen : sharpenK;
+  const renderedGrain = isPinching ? pinchOpticsRef.current.grain : grainOpacity;
 
   useEffect(() => {
     setIsPlateImageLoading(true);
@@ -1631,8 +1640,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       return { x: 0, y: 0 };
     }
 
-    const scaledWidth = displayedSize.width * zoom;
-    const scaledHeight = displayedSize.height * zoom;
+    const sideways = Math.abs(rotation % 180) === 90;
+    const scaledWidth = (sideways ? displayedSize.height : displayedSize.width) * zoom;
+    const scaledHeight = (sideways ? displayedSize.width : displayedSize.height) * zoom;
     const maxOffsetX = Math.max(0, (scaledWidth - containerSize.width) / 2);
     const maxOffsetY = Math.max(0, (scaledHeight - containerSize.height) / 2);
 
@@ -1835,13 +1845,27 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     return { targetZoom, clampedPos };
   };
 
+  const flushTouchView = () => {
+    if (touchFrameRef.current !== null) cancelAnimationFrame(touchFrameRef.current);
+    touchFrameRef.current = null;
+    const next = pendingTouchViewRef.current;
+    pendingTouchViewRef.current = null;
+    if (next) { setZoomLevel(next.zoom); setPosition(next.pos); }
+  };
+  const scheduleTouchView = (zoom: number, pos: { x: number; y: number }) => {
+    stateRef.current = { zoom, pos };
+    pendingTouchViewRef.current = { zoom, pos };
+    if (touchFrameRef.current === null) touchFrameRef.current = requestAnimationFrame(flushTouchView);
+  };
+  useEffect(() => () => { if (touchFrameRef.current !== null) cancelAnimationFrame(touchFrameRef.current); }, []);
+
   const handleLaserTouchStart = (e: React.TouchEvent<HTMLCanvasElement> | TouchEvent) => {
     if (!isAnnotationMode || !annotationTool || e.touches.length === 0) return;
-    e.preventDefault();
+    e.preventDefault(); e.stopPropagation();
 
     if (e.touches.length === 1) {
-      // Cooldown después de soltar un pinch para evitar trazos o saltos accidentales
-      if (Date.now() - lastPinchEndedAtRef.current < 260) {
+      // Tras un pellizco, esperar a que se levanten todos los dedos.
+      if (annotationHadPinchRef.current) {
         return;
       }
 
@@ -1866,12 +1890,18 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         }
       }
     } else if (e.touches.length >= 2) {
+      if (e.touches.length > 2 && laserPinchRef.current) return;
+      annotationHadPinchRef.current = true;
       // 2 o más dedos: Zoom táctil ultra-fluido en puntero láser
       laserCurrentPosRef.current = null;
       laserStabilizedPosRef.current = null;
       laserTrailRef.current = [];
       isDraggingRef.current = false;
       setIsDragging(false);
+      if (!laserPinchRef.current) {
+        pinchFilterRef.current = imageFilterStyle;
+        pinchOpticsRef.current = { sharpen: sharpenK, grain: grainOpacity };
+      }
       setIsPinching(true);
 
       // Si el primer dedo dejó un punto accidental dentro de los últimos 260ms, limpiarlo
@@ -1907,10 +1937,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const handleLaserTouchMove = (e: React.TouchEvent<HTMLCanvasElement> | TouchEvent) => {
     if (!isAnnotationMode || !annotationTool || e.touches.length === 0) return;
-    e.preventDefault();
+    e.preventDefault(); e.stopPropagation();
 
     if (e.touches.length === 1 && !laserPinchRef.current) {
-      if (Date.now() - lastPinchEndedAtRef.current < 260) {
+      if (annotationHadPinchRef.current) {
         return;
       }
 
@@ -1926,8 +1956,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           y: touch.clientY - dragStartRef.current.y,
         };
         const clampedPos = clampPositionToViewport(rawNextPos, stateRef.current.zoom, imageSize, containerSize);
-        stateRef.current.pos = clampedPos;
-        setPosition(clampedPos);
+        scheduleTouchView(stateRef.current.zoom, clampedPos);
       }
     } else if (e.touches.length >= 2 && laserPinchRef.current) {
       laserCurrentPosRef.current = null;
@@ -1944,15 +1973,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       );
 
       if (pinchResult) {
-        stateRef.current.zoom = pinchResult.targetZoom;
-        stateRef.current.pos = pinchResult.clampedPos;
-        setZoomLevel(pinchResult.targetZoom);
-        setPosition(pinchResult.clampedPos);
+        scheduleTouchView(pinchResult.targetZoom, pinchResult.clampedPos);
       }
     }
   };
 
   const handleLaserTouchEnd = (e: React.TouchEvent<HTMLCanvasElement> | TouchEvent) => {
+    e.stopPropagation(); flushTouchView();
+    if (e.touches.length >= 2) { handleLaserTouchStart(e); return; }
     if (e.touches.length < 2) {
       if (laserPinchRef.current) {
         lastPinchEndedAtRef.current = Date.now();
@@ -1961,6 +1989,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       setIsPinching(false);
     }
     if (e.touches.length === 0) {
+      annotationHadPinchRef.current = false;
       laserCurrentPosRef.current = null;
       laserStabilizedPosRef.current = null;
       laserTrailRef.current = [];
@@ -1970,8 +1999,37 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     }
   };
 
+  // Listener no pasivo: React delega touchmove como pasivo en algunos navegadores.
   useEffect(() => {
-    const handleGlobalRelease = () => {
+    const canvas = laserCanvasRef.current;
+    if (!canvas) return;
+    canvas.addEventListener('touchstart', handleLaserTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleLaserTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleLaserTouchEnd);
+    canvas.addEventListener('touchcancel', handleLaserTouchEnd);
+    return () => {
+      canvas.removeEventListener('touchstart', handleLaserTouchStart);
+      canvas.removeEventListener('touchmove', handleLaserTouchMove);
+      canvas.removeEventListener('touchend', handleLaserTouchEnd);
+      canvas.removeEventListener('touchcancel', handleLaserTouchEnd);
+    };
+  });
+  useEffect(() => {
+    flushTouchView();
+    laserPinchRef.current = null; normalPinchRef.current = null;
+    annotationHadPinchRef.current = false;
+    isDraggingRef.current = false;
+    setIsDragging(false); setIsPinching(false);
+  }, [isAnnotationMode, annotationTool, src]);
+
+  useEffect(() => {
+    const handleGlobalRelease = (event: Event) => {
+      if (event.type === 'blur') {
+        flushTouchView();
+        laserPinchRef.current = null; normalPinchRef.current = null;
+        annotationHadPinchRef.current = false;
+        setIsPinching(false);
+      }
       if (isDraggingRef.current) {
         isDraggingRef.current = false;
         setIsDragging(false);
@@ -2304,13 +2362,20 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     if (!el) return;
 
     const onTouchStart = (e: TouchEvent) => {
+      if (isAnnotationMode) return;
       const target = e.target as HTMLElement | null;
       const isInteractive = target?.closest('button, a, input, textarea, select, [role="button"]');
-      if (!isInteractive) {
-        e.preventDefault();
-      }
+      if (isInteractive) return;
+      if (e.cancelable) e.preventDefault();
 
-      if (e.touches.length === 2) {
+      if (e.touches.length >= 2) {
+        if (e.touches.length > 2 && normalPinchRef.current) return;
+        touchGestureRef.current = null;
+        lastTapAtRef.current = 0;
+        if (!normalPinchRef.current) {
+          pinchFilterRef.current = imageFilterStyle;
+          pinchOpticsRef.current = { sharpen: sharpenK, grain: grainOpacity };
+        }
         const t0 = e.touches[0];
         const t1 = e.touches[1];
         const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
@@ -2352,13 +2417,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      if (isAnnotationMode) return;
       const target = e.target as HTMLElement | null;
       const isInteractive = target?.closest('button, a, input, textarea, select, [role="button"]');
-      if (!isInteractive) {
-        e.preventDefault();
-      }
+      if (isInteractive) return;
+      if (e.cancelable) e.preventDefault();
 
-      if (e.touches.length === 2 && normalPinchRef.current) {
+      if (e.touches.length >= 2 && normalPinchRef.current) {
         const t0 = e.touches[0];
         const t1 = e.touches[1];
         const pinchResult = calculatePinchTransform(
@@ -2371,10 +2436,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         );
 
         if (pinchResult) {
-          stateRef.current.zoom = pinchResult.targetZoom;
-          stateRef.current.pos = pinchResult.clampedPos;
-          setZoomLevel(pinchResult.targetZoom);
-          setPosition(pinchResult.clampedPos);
+          scheduleTouchView(pinchResult.targetZoom, pinchResult.clampedPos);
         }
       } else if (e.touches.length === 1 && isDraggingRef.current && stateRef.current.zoom > 1) {
         const containerEl = containerRef.current;
@@ -2384,12 +2446,19 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           y: e.touches[0].clientY - dragStartRef.current.y,
         };
         const clampedPos = clampPositionToViewport(rawNextPos, stateRef.current.zoom, imageSize, containerSize);
-        stateRef.current.pos = clampedPos;
-        setPosition(clampedPos);
+        scheduleTouchView(stateRef.current.zoom, clampedPos);
       }
     };
 
     const onTouchEnd = (e: TouchEvent) => {
+      if (isAnnotationMode) return;
+      flushTouchView();
+      if (e.type === 'touchcancel') {
+        normalPinchRef.current = null; touchGestureRef.current = null; lastTapAtRef.current = 0;
+        isDraggingRef.current = false; setIsDragging(false); setIsPinching(false);
+        return;
+      }
+      if (e.touches.length >= 2) { onTouchStart(e); return; }
       if (e.touches.length < 2) {
         if (normalPinchRef.current) {
           lastPinchEndedAtRef.current = Date.now();
@@ -2430,12 +2499,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     el.addEventListener('touchstart', onTouchStart, { passive: false });
     el.addEventListener('touchmove',  onTouchMove,  { passive: false });
     el.addEventListener('touchend',   onTouchEnd,   { passive: false });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: false });
     return () => {
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove',  onTouchMove);
       el.removeEventListener('touchend',   onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [effectiveMaxZoom, viewerMode, interactiveMapData, activeMapSectionIndex, activeMarkerIndex, groupedSenaladosItems, imageSize]);
+  }, [isAnnotationMode, effectiveMaxZoom, viewerMode, interactiveMapData, activeMapSectionIndex, activeMarkerIndex, groupedSenaladosItems, imageSize, rotation, imageFilterStyle, sharpenK, grainOpacity]);
 
   const handleZoomIn  = () => applyZoom(stateRef.current.zoom + 0.25);
   const handleZoomOut = () => applyZoom(stateRef.current.zoom - 0.25);
@@ -2749,9 +2820,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           onMouseUp={handleCanvasMouseUp}
           onMouseEnter={handleCanvasMouseEnter}
           onMouseLeave={handleCanvasMouseLeave}
-          onTouchStart={handleLaserTouchStart}
-          onTouchMove={handleLaserTouchMove}
-          onTouchEnd={handleLaserTouchEnd}
           onContextMenu={(e) => e.preventDefault()}
           onWheel={handleWheel}
         />
@@ -2979,7 +3047,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               <filter id={sharpenFilterId} x="-10%" y="-10%" width="120%" height="120%">
                 <feConvolveMatrix
                   order="3"
-                  kernelMatrix={`0 -${sharpenK.toFixed(3)} 0 -${sharpenK.toFixed(3)} ${(1 + 4 * sharpenK).toFixed(3)} -${sharpenK.toFixed(3)} 0 -${sharpenK.toFixed(3)} 0`}
+                  kernelMatrix={`0 -${renderedSharpen.toFixed(3)} 0 -${renderedSharpen.toFixed(3)} ${(1 + 4 * renderedSharpen).toFixed(3)} -${renderedSharpen.toFixed(3)} 0 -${renderedSharpen.toFixed(3)} 0`}
                   preserveAlpha="true"
                 />
               </filter>
@@ -3021,7 +3089,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 WebkitTouchCallout: 'none',
                 pointerEvents: 'none',
                 display: 'block',
-                filter: isPinching ? 'none' : imageFilterStyle,
+                filter: isPinching ? pinchFilterRef.current : imageFilterStyle,
                 imageRendering: 'auto',
               } as React.CSSProperties}
             />
@@ -3048,7 +3116,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                   WebkitTouchCallout: 'none',
                   pointerEvents: 'none',
                   display: 'block',
-                  filter: isPinching ? 'none' : imageFilterStyle,
+                  filter: isPinching ? pinchFilterRef.current : imageFilterStyle,
                   imageRendering: 'auto',
                 } as React.CSSProperties}
               />
@@ -3056,7 +3124,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
 
 
-            {grainOpacity > 0 && (
+            {renderedGrain > 0 && (
               <div
                 style={{
                   position: 'absolute',
@@ -3064,7 +3132,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                   pointerEvents: 'none',
                   zIndex: 2,
                   mixBlendMode: 'soft-light',
-                  opacity: grainOpacity,
+                  opacity: renderedGrain,
                   backgroundImage:
                     'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.28) 0 1px, rgba(0,0,0,0) 1px), radial-gradient(circle at 80% 60%, rgba(0,0,0,0.22) 0 1px, rgba(0,0,0,0) 1px), radial-gradient(circle at 40% 80%, rgba(255,255,255,0.2) 0 1px, rgba(0,0,0,0) 1px)',
                   backgroundSize: '3px 3px, 4px 4px, 5px 5px',
