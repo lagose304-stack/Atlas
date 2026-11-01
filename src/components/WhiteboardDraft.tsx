@@ -46,7 +46,11 @@ export default forwardRef<WhiteboardDraftHandle, {
     const preview = { canvas, context, paint: createLiveStrokePainter(), dpr: window.devicePixelRatio || 1 };
     const resize = () => {
       preview.dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.round(svg.clientWidth * preview.dpr); canvas.height = Math.round(svg.clientHeight * preview.dpr);
+      const width = Math.round(svg.clientWidth * preview.dpr), height = Math.round(svg.clientHeight * preview.dpr);
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width; canvas.height = height;
+        preview.paint = createLiveStrokePainter();
+      }
       paint(current.current);
     };
     svg.parentElement.appendChild(canvas); live.current = preview;

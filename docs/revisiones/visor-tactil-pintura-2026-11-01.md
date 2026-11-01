@@ -45,4 +45,14 @@ Los intervalos P95 entre fotogramas de este equipo permanecieron próximos a 6�
 - Se descargaron PNG de vista actual y placa completa. Se repitieron formas, texto, selección, duplicado, borrador, deshacer/rehacer y giro. Sin errores JavaScript.
 - SVG como alternativa sin Canvas se comprueba en jsdom. No se instaló ni ejecutó WebKit; el navegador de emulación es Chromium. No equivale a probar iPad/Safari o una tablet Android física.
 
-Los cambios permanecen locales. La comprobación perceptual en la tablet del usuario y la validación en producción siguen pendientes.
+Esta primera corrección se subió a `main` en `9b0d2d3`. Posteriormente, el usuario confirmó gestos y escritura fluidos en celular Android, pero retraso persistente en tablet Android con el mismo navegador y tanto con dedo como con lápiz. No se conoce el modelo concreto ni se ha medido ese hardware.
+
+## Ajuste posterior para superficies grandes (local)
+
+La limpieza de la tinta provisional abarcaba toda la capa en cada actualización. Ahora se acumulan los límites del trazo y se limpia su huella completa, proyectada a píxeles físicos con margen de grosor y antialias. Se conserva el repintado completo del propio trazo para no acumular opacidad en los cruces. Cambiar proyección, estilo o tamaño invalida la región y limpia toda la capa. ResizeObserver evita reasignar dimensiones idénticas, operación que reinicia el Canvas. Se conservan resolución, curva y formato persistido. [MDN sobre optimización de Canvas](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Optimizing_canvas) describe limitar trabajo de dibujo y separar capas.
+
+También faltaba pausar el desenfoque de ocho controles del visor, incluida la barra de herramientas. Se marcan con `data-viewer-backdrop` y su desenfoque se desactiva sin transición durante el contacto; vuelve al terminar. [WebKit sobre backdrop-filter](https://webkit.org/blog/3632/introducing-backdrop-filters/) explica los pasos de renderizado adicionales de estos efectos. Su contribución al retraso de la tablet concreta sigue siendo una hipótesis.
+
+Verificación local: 20 pruebas relacionadas aprobadas, tipos y compilación correctos. En Chromium se comparó la salida Canvas con un repintado completo independiente, incluyendo muestras agrupadas, cruces, zoom, giro, lápiz y resaltador a DPR 2 y 3: ninguna diferencia de píxeles en las capturas comparadas. También se comprobaron contactos táctiles, alineación, cancelación por pellizco, pausa de desenfoques y exportación de vista/placa completa, sin errores JavaScript. No se interpreta la menor superficie limpiada como una medición de FPS o de latencia física.
+
+Este ajuste posterior permanece local y no permite dar por resuelto el retraso de la tablet.

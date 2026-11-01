@@ -2817,7 +2817,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           onWheel={handleWheel}
         />
 
-        <button
+        <button data-viewer-backdrop
           onClick={handleCloseViewer}
           title="Cerrar visor"
           aria-label="Cerrar visor"
@@ -2861,7 +2861,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         </button>
 
         {!hideSidebar && hasInfo && !showSidebar && (
-          <button
+          <button data-viewer-backdrop
             type="button"
             onClick={() => setSidebarOpen(true)}
             title="Mostrar barra lateral"
@@ -2909,7 +2909,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
         {/* Botón circular de atajo para editar placa (Solo Administrador o Microscopía) */}
         {isAdminOrMicroscopia && Boolean(placaId) && (
-          <button
+          <button data-viewer-backdrop
             type="button"
             onClick={openPlateEditor}
             title="Editar esta placa"
@@ -2960,7 +2960,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         )}
 
         {showCommentHint && (
-          <div
+          <div data-viewer-backdrop
             role="status"
             aria-live="polite"
             style={{
@@ -3685,7 +3685,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
         {/* Barra de herramientas vertical fija al lado de la barra lateral (Modo normal) */}
         {(
-          <div
+          <div data-viewer-backdrop
             ref={setWhiteboardLauncherLayer}
             className="viewer-visualization-toolbar"
             role="toolbar"
@@ -4000,7 +4000,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       </div>
 
       {showSidebar && (
-        <div style={{
+        <div data-viewer-backdrop style={{
           width: isDesktop ? '320px' : 'min(320px, 90vw)',
           position: isDesktop ? 'relative' : 'absolute',
           top: 0, right: 0, height: '100%',
@@ -4015,7 +4015,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             : '-12px 0 34px rgba(15, 75, 105, 0.24)',
         }}>
           {/* Cabecera */}
-          <div style={{
+          <div data-viewer-backdrop style={{
             position: 'sticky',
             top: 0,
             zIndex: 2,
@@ -4808,7 +4808,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               </div>
             )}
             {hasPlateNavigation && (
-              <nav aria-label="Navegación entre placas del subtema" style={{ ...sidebarSectionStyle, order: 5, margin: 'auto -12px -18px', flexShrink: 0, borderRadius: '14px 14px 0 0', borderInline: 0, borderBottom: 0, background: 'linear-gradient(135deg, rgba(231, 247, 252, 0.98), rgba(255, 255, 255, 0.98))', boxShadow: '0 -8px 22px rgba(15, 75, 105, 0.09)', backdropFilter: 'blur(8px)' }}>
+              <nav data-viewer-backdrop aria-label="Navegación entre placas del subtema" style={{ ...sidebarSectionStyle, order: 5, margin: 'auto -12px -18px', flexShrink: 0, borderRadius: '14px 14px 0 0', borderInline: 0, borderBottom: 0, background: 'linear-gradient(135deg, rgba(231, 247, 252, 0.98), rgba(255, 255, 255, 0.98))', boxShadow: '0 -8px 22px rgba(15, 75, 105, 0.09)', backdropFilter: 'blur(8px)' }}>
                 <span style={{ ...labelStyle, textAlign: 'center' }}>Placas del subtema</span>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '8px' }}>
                   <button
