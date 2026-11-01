@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import ViewerWhiteboard, { type WhiteboardTool } from './ViewerWhiteboard';
@@ -31,6 +31,47 @@ beforeEach(() => {
 afterEach(() => { layer.remove(); vi.unstubAllGlobals(); });
 
 describe('Pizarra temporal del visor', () => {
+  it('recoge las muestras agrupadas con una sola lectura de coordenadas y conserva el extremo al terminar', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(canvas(), { button: 0, pointerId: 1, clientX: 80, clientY: 60 });
+    const matrix = vi.spyOn(SVGElement.prototype as SVGGraphicsElement, 'getScreenCTM');
+    matrix.mockClear();
+    const event = new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: 200, clientY: 120 });
+    Object.defineProperty(event, 'getCoalescedEvents', { value: () => [{ clientX: 100, clientY: 70 }, { clientX: 140, clientY: 95 }] });
+    fireEvent(canvas(), event);
+    expect(matrix).toHaveBeenCalledTimes(1);
+    // Terminar antes del siguiente fotograma también debe guardar todas las muestras.
+    fireEvent.pointerUp(canvas(), { pointerId: 1 });
+    const path = layer.querySelector('[data-whiteboard-mark] path')!.getAttribute('d');
+    expect(path).toContain('Q100,70');
+    expect(path).toContain('Q140,95');
+    expect(path).toMatch(/L200,120$/);
+    draw();
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer apunte' }));
+    expect(layer.querySelector('[data-whiteboard-mark] path')).toHaveAttribute('d', path);
+    matrix.mockRestore();
+  });
+
+  it('repinta el trazo activo sin reinstalar los controles de la pizarra en cada fotograma', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<Harness />);
+      fireEvent.pointerDown(canvas(), { button: 0, clientX: 80, clientY: 60 });
+      const listeners = vi.spyOn(window, 'addEventListener');
+      for (let i = 1; i <= 5; i++) {
+        fireEvent.pointerMove(canvas(), { clientX: 80 + i * 10, clientY: 60 + i * 10 });
+        await act(async () => { await vi.advanceTimersByTimeAsync(20); });
+      }
+      const end = layer.querySelector('[data-whiteboard-mark] path')!.getAttribute('d')!.split(' L').pop()!.split(',').map(Number);
+      expect(end[0]).toBeCloseTo(130);
+      expect(end[1]).toBeCloseTo(110);
+      expect(listeners.mock.calls.filter(([name]) => name === 'keydown')).toHaveLength(0);
+      listeners.mockRestore();
+      fireEvent.pointerCancel(canvas());
+      expect(count()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+
   it('dibuja en un SVG independiente de la capa CSS ampliada y solo captura sobre la placa', () => {
     render(<Harness zoom={6} />);
     expect(imageLayer.contains(canvas())).toBe(false);

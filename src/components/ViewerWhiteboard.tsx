@@ -2,8 +2,9 @@ import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } f
 import { createPortal } from 'react-dom';
 import { ArrowUpRight, Check, ChevronRight, Circle, Copy, Download, Eraser, Hand, Highlighter, Minus, MousePointer2, Pencil, Redo2, SlidersHorizontal, Square, Trash2, Type, Undo2, X, Zap } from 'lucide-react';
 import { isEditableTarget } from '../utils/editableTarget';
-import { constrainedEnd, isVisibleMark, markBounds, moveMark, strokePath, type BoardMark as Mark, type BoardPoint as Point, type WhiteboardTool } from './viewerWhiteboardGeometry';
-import WhiteboardText, { textBounds } from './WhiteboardText';
+import { constrainedEnd, isVisibleMark, markBounds, moveMark, type BoardMark as Mark, type BoardPoint as Point, type WhiteboardTool } from './viewerWhiteboardGeometry';
+import { textBounds } from './WhiteboardText';
+import WhiteboardMark from './WhiteboardMark';
 import { captureWhiteboardScene, createWhiteboardPNG, downloadWhiteboard, whiteboardFileName, type ExportArea, type WhiteboardExportContext } from './whiteboardExport';
 import { useWhiteboardProjection } from './useWhiteboardProjection';
 import './viewerWhiteboard.css';
@@ -27,7 +28,14 @@ const colors = ['#ef4444', '#facc15', '#22c55e', '#38bdf8', '#a78bfa', '#ffffff'
 type Style = { color: string; width: number; opacity: number; fontSize: number; background: boolean };
 const defaultStyle = (tool: WhiteboardTool): Style => ({ color: tool === 'pen' ? '#111827' : tool === 'highlight' ? '#facc15' : tool === 'text' ? '#ffffff' : '#ef4444', width: tool === 'highlight' ? 16 : 3, opacity: tool === 'highlight' ? 0.3 : 1, fontSize: 22, background: true });
 type History = { marks: Mark[]; past: Mark[][]; future: Mark[][] };
-type Gesture = { pointer: number; kind: 'draw' | 'move' | 'resize' | 'erase'; handle?: number; pointerType?: string; lastClient?: Point; bounds?: ReturnType<typeof markBounds>; start: Point; original: Mark[]; item: Mark | null; erased: Set<number>; moved: boolean };
+type Gesture = { pointer: number; kind: 'draw' | 'move' | 'resize' | 'erase'; handle?: number; pointerType?: string; lastClient?: Point; bounds?: ReturnType<typeof markBounds>; start: Point; original: Mark[]; item: Mark | null; points?: Point[]; erased: Set<number>; moved: boolean };
+
+// El trazo activo se repinta sin reconciliar barras, paneles ni apuntes terminados.
+const WhiteboardDraft = React.forwardRef<{ update: (mark: Mark) => void }, { initial: Mark; renderMark: (mark: Mark) => React.ReactNode }>(function WhiteboardDraft({ initial, renderMark }, ref) {
+  const [mark, setMark] = useState(initial);
+  React.useImperativeHandle(ref, () => ({ update: setMark }), []);
+  return <>{renderMark(mark)}</>;
+});
 interface Props {
   active: boolean;
   tool: WhiteboardTool | null;
@@ -53,6 +61,7 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
   const { marks, past, future } = history;
   const [draft, setDraft] = useState<Mark | null>(null);
   const draftRef = useRef<Mark | null>(null);
+  const draftView = useRef<{ update: (mark: Mark) => void }>(null);
   const frame = useRef<number | null>(null);
   const [selectionBounds, setSelectionBounds] = useState<ReturnType<typeof markBounds> | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -100,7 +109,12 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
   const publish = (mark: Mark | null, buffered = false) => {
     draftRef.current = mark;
     if (!buffered) { setDraft(mark); return; }
-    if (frame.current === null) frame.current = requestAnimationFrame(() => { frame.current = null; setDraft(draftRef.current); });
+    if (frame.current === null) frame.current = requestAnimationFrame(() => {
+      frame.current = null;
+      const next = draftRef.current;
+      if (next && gesture.current?.kind === 'draw' && draftView.current) draftView.current.update({ ...next, points: [...next.points] });
+      else setDraft(next);
+    });
   };
   const cancelDraft = () => {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
@@ -122,7 +136,8 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
   const finish = (cancel = false) => {
     const g = gesture.current;
     if (!g) return;
-    const item = draftRef.current;
+    // El buffer pertenece solo al gesto: el historial siempre conserva una copia inmutable.
+    const item = draftRef.current ? { ...draftRef.current, points: [...draftRef.current.points] } : null;
     if (!cancel) {
       if (g.kind === 'erase' && g.erased.size) commit(g.original.filter(mark => !g.erased.has(mark.id)));
       else if (item && (g.kind === 'move' || g.kind === 'resize') && g.moved && (g.kind === 'move' || isVisibleMark(item, w, h, zoom))) commit(g.original.map(mark => mark.id === item.id ? item : mark));
@@ -202,10 +217,9 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
     setTextStyle({ color: mark.color, width: mark.width * w * zoom, opacity: mark.opacity, fontSize: Math.round((mark.fontSize ?? mark.width * 6) * w * zoom), background: mark.background ?? false });
     setSettingsOpen(false); setShapesOpen(false);
   };
-  const point = (event: { clientX: number; clientY: number }): Point | null => {
-    const matrix = sceneRef.current?.getScreenCTM();
-    if (!matrix) return null;
-    const local = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+  const point = (event: { clientX: number; clientY: number }, inverse = sceneRef.current?.getScreenCTM()?.inverse()): Point | null => {
+    if (!inverse) return null;
+    const local = new DOMPoint(event.clientX, event.clientY).matrixTransform(inverse);
     return { x: Math.max(0, Math.min(1, local.x / w)), y: Math.max(0, Math.min(1, local.y / h)) };
   };
   const hitAt = (x: number, y: number): Mark | null => {
@@ -226,7 +240,9 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
       for (let i = 1; i <= steps; i++) eraseAt(from.x + (event.clientX - from.x) * i / steps, from.y + (event.clientY - from.y) * i / steps);
       g.lastClient = { x: event.clientX, y: event.clientY }; return;
     }
-    const p = point(event); if (!p || !g.item) return;
+    const inverse = sceneRef.current?.getScreenCTM()?.inverse();
+    if (!inverse) return;
+    const p = point(event, inverse); if (!p || !g.item) return;
     if (Math.hypot((p.x - g.start.x) * w * zoom, (p.y - g.start.y) * h * zoom) > 2) g.moved = true;
     if (g.kind === 'resize') {
       const points = [...g.item.points], index = g.handle ?? 1;
@@ -237,13 +253,16 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
     const regular = event.shiftKey || constrain;
     if (g.item.tool === 'pen' || (g.item.tool === 'highlight' && !regular)) {
       const samples = event.nativeEvent.getCoalescedEvents?.() ?? [];
-      const points = [...(draftRef.current?.points ?? g.item.points)];
+      const points = g.points ??= [...(draftRef.current?.points ?? g.item.points)];
       for (const sample of samples.length ? [...samples, event] : [event]) {
-        const next = point(sample), last = points[points.length - 1];
+        const next = point(sample, inverse), last = points[points.length - 1];
         if (next && Math.hypot((next.x - last.x) * w * zoom, (next.y - last.y) * h * zoom) >= 0.65) points.push(next);
       }
       publish({ ...g.item, points }, true);
-    } else publish({ ...g.item, points: [g.start, regular ? constrainedEnd(g.start, p, g.item.tool, w, h) : p] }, true);
+    } else {
+      g.points = undefined;
+      publish({ ...g.item, points: [g.start, regular ? constrainedEnd(g.start, p, g.item.tool, w, h) : p] }, true);
+    }
   };
 
   useEffect(() => {
@@ -305,26 +324,7 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
     return () => document.removeEventListener('pointerdown', outside);
   }, []);
 
-  const renderMark = (mark: Mark) => {
-    const first = mark.points[0]; if (!first) return null;
-    const last = mark.points[mark.points.length - 1];
-    const x = first.x * w, y = first.y * h, x2 = last.x * w, y2 = last.y * h;
-    const stroke = mark.width * w;
-    const common = { stroke: mark.color, strokeWidth: stroke, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, pointerEvents: 'none' as const };
-    if (mark.tool === 'text') return <g key={mark.id} data-whiteboard-mark={mark.id} opacity={mark.opacity}><WhiteboardText mark={mark} w={w} h={h} zoom={zoom} interactive={selectable} /></g>;
-    let shape: React.ReactElement;
-    if (mark.tool === 'rectangle') shape = <rect {...common} x={Math.min(x, x2)} y={Math.min(y, y2)} width={Math.abs(x2 - x)} height={Math.abs(y2 - y)} />;
-    else if (mark.tool === 'ellipse') shape = <ellipse {...common} cx={(x + x2) / 2} cy={(y + y2) / 2} rx={Math.abs(x2 - x) / 2} ry={Math.abs(y2 - y) / 2} />;
-    else if (mark.tool === 'arrow') {
-      const angle = Math.atan2(y2 - y, x2 - x), head = Math.min(Math.hypot(x2 - x, y2 - y) * 0.45, stroke * 5);
-      shape = <path {...common} d={`M${x},${y} L${x2},${y2} M${x2 - head * Math.cos(angle - 0.5)},${y2 - head * Math.sin(angle - 0.5)} L${x2},${y2} L${x2 - head * Math.cos(angle + 0.5)},${y2 - head * Math.sin(angle + 0.5)}`} />;
-    } else if (mark.points.length === 1) shape = <circle cx={x} cy={y} r={stroke / 2} fill={mark.color} pointerEvents="none" />;
-    else shape = <path {...common} d={mark.tool === 'line' ? `M${x},${y} L${x2},${y2}` : strokePath(mark.points, w, h)} />;
-    return <g key={mark.id} data-whiteboard-mark={mark.id} opacity={mark.opacity}>
-      {shape}
-      {selectable && React.cloneElement(shape, { className: 'viewer-whiteboard__hit', stroke: 'transparent', strokeWidth: Math.max(stroke, 16 / zoom), fill: tool === 'select' && (shapes.includes(mark.tool) || mark.points.length === 1) ? 'transparent' : 'none', pointerEvents: tool === 'select' && (shapes.includes(mark.tool) || mark.points.length === 1) ? 'all' : 'stroke' })}
-    </g>;
-  };
+  const renderMark = (mark: Mark) => <WhiteboardMark key={mark.id} mark={mark} w={w} h={h} zoom={zoom} selectable={selectable} tool={tool} />;
   const renderedMarks = useMemo(() => marks.map(mark => ({ id: mark.id, node: renderMark(mark) })), [marks, w, h, zoom, selectable, tool]);
   const shownSelected = draft?.id === selected?.id ? draft : selected;
   useLayoutEffect(() => {
@@ -458,7 +458,7 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
       <g ref={sceneRef} data-whiteboard-scene transform="matrix(1 0 0 1 0 0)" clipPath={`url(#${clipId})`}>
       <rect data-whiteboard-surface width={w} height={h} fill="transparent" style={{ pointerEvents: drawing ? 'all' : 'none' }} />
       {renderedMarks.filter(mark => !erased.has(mark.id) && mark.id !== draft?.id && mark.id !== editingId).map(mark => mark.node)}
-      {draft && renderMark(draft)}{preview && renderMark(preview)}
+      {draft && (gesture.current?.kind === 'draw' ? <WhiteboardDraft key={draft.id} ref={draftView} initial={draft} renderMark={renderMark} /> : renderMark(draft))}{preview && renderMark(preview)}
       {bounds && !textAt && <rect className="viewer-whiteboard__selection" x={bounds.x - 5 / zoom} y={bounds.y - 5 / zoom} width={bounds.width + 10 / zoom} height={bounds.height + 10 / zoom} rx={4 / zoom} strokeWidth={1.5 / zoom} strokeDasharray={`${5 / zoom} ${3 / zoom}`} pointerEvents="none" />}
       {shownSelected && shapes.includes(shownSelected.tool) && !textAt && drawing && shownSelected.points.map((p, index) => <g key={index} data-whiteboard-handle={index} style={{ cursor: 'nwse-resize' }}>
         <circle cx={p.x * w} cy={p.y * h} r={11 / zoom} fill="transparent" pointerEvents="all" />

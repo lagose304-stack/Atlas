@@ -1,7 +1,7 @@
 import React, { useId, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Pencil, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Shield, Eye, EyeOff } from 'lucide-react';
-import { appendLaserPoint, LASER_TRAIL_LIFETIME, splitLaserTrail, type LaserPoint } from './laserTrail';
+import { appendLaserPoint, LASER_TRAIL_LIFETIME, prepareLaserStroke, splitLaserTrail, type LaserPoint } from './laserTrail';
 import ViewerWhiteboard, { type WhiteboardTool } from './ViewerWhiteboard';
 import { renderBoldText } from './BoldField';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
@@ -850,6 +850,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const isSpacePressedRef = useRef(false);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const laserAnimFrameRef = useRef<number | null>(null);
+  const laserWakeRef = useRef<(() => void) | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
   const isMinimapDraggingRef = useRef(false);
   const [activeMarkerIndex, setActiveMarkerIndexState] = useState<number | null>(() => {
@@ -886,8 +887,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const annotationHadPinchRef = useRef(false);
   const pinchFilterRef = useRef('none');
   const pinchOpticsRef = useRef({ sharpen: 0, grain: 0 });
-  const touchFrameRef = useRef<number | null>(null);
-  const pendingTouchViewRef = useRef<{ zoom: number; pos: { x: number; y: number } } | null>(null);
+  const viewFrameRef = useRef<number | null>(null);
+  const pendingViewRef = useRef<{ zoom: number; pos: { x: number; y: number } } | null>(null);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(() => ({ width: 1200, height: 800 }));
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(() => ({ width: 1200, height: 800 }));
   const [interactiveMapData, setInteractiveMapData] = useState<InteractiveMapData | null>(null);
@@ -1170,6 +1171,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     setUseZoomSource(false);
     setZoomSourceFailed(false);
     setIsZoomImageReady(false);
+    if (viewFrameRef.current !== null) cancelAnimationFrame(viewFrameRef.current);
+    viewFrameRef.current = null;
+    pendingViewRef.current = null;
+    stateRef.current = { zoom: 1, pos: { x: 0, y: 0 } };
     setZoomLevel(1);
     setPosition({ x: 0, y: 0 });
 
@@ -1366,7 +1371,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     const next = appendLaserPoint(laserTrailRef.current, laserStabilizedPosRef.current, { x: rawX, y: rawY }, performance.now(), isNewStroke);
     laserTrailRef.current = next.trail;
     laserStabilizedPosRef.current = next.position;
-    laserCurrentPosRef.current = next.position;
+    laserCurrentPosRef.current = { x: rawX, y: rawY };
+    laserWakeRef.current?.();
   };
 
   useEffect(() => {
@@ -1383,23 +1389,31 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     }
 
     let running = true;
+    const ctx = canvas.getContext('2d');
+    let cachedTrail: LaserPoint[] | null = null;
+    let prepared: ReturnType<typeof prepareLaserStroke>[] = [];
 
     const resizeCanvas = () => {
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.round(rect.width * dpr);
-      canvas.height = Math.round(rect.height * dpr);
+      const width = Math.round(rect.width * dpr), height = Math.round(rect.height * dpr);
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width; canvas.height = height;
+        laserWakeRef.current?.();
+      }
     };
 
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
+    const canvasObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resizeCanvas) : null;
+    canvasObserver?.observe(canvas);
 
     // Duración de la estela (~1750ms)
     const TRAIL_LIFETIME = LASER_TRAIL_LIFETIME;
 
     const render = () => {
+      laserAnimFrameRef.current = null;
       if (!running) return;
-      const ctx = canvas.getContext('2d');
       if (ctx) {
         const dpr = window.devicePixelRatio || 1;
         const now = performance.now();
@@ -1410,11 +1424,17 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         ctx.scale(dpr, dpr);
         ctx.clearRect(0, 0, width, height);
 
-        laserTrailRef.current = laserTrailRef.current.filter(p => now - p.time < TRAIL_LIFETIME);
-        for (const rawPoints of splitLaserTrail(laserTrailRef.current)) {
+        const trail = laserTrailRef.current;
+        if (trail.length && now - trail[0].time >= TRAIL_LIFETIME) laserTrailRef.current = trail.filter(p => now - p.time < TRAIL_LIFETIME);
+        if (cachedTrail !== laserTrailRef.current) {
+          cachedTrail = laserTrailRef.current;
+          prepared = splitLaserTrail(cachedTrail).map(prepareLaserStroke);
+        }
+        for (const { points, normals: smoothNormals } of prepared) {
+          const alphas = points.map(p => Math.pow(Math.max(0, 1 - (now - p.time) / TRAIL_LIFETIME), 1.25));
 
-          if (rawPoints.length === 1) {
-            const point = rawPoints[0];
+          if (points.length === 1) {
+            const point = points[0];
             const alpha = Math.pow(Math.max(0, 1 - (now - point.time) / TRAIL_LIFETIME), 1.25);
             ctx.beginPath();
             ctx.arc(point.x, point.y, 4.2 * Math.sqrt(alpha), 0, Math.PI * 2);
@@ -1422,44 +1442,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             ctx.fill();
           }
 
-          if (rawPoints.length >= 2) {
-            // Generador de Curva Spline Catmull-Rom continua (tensión = 0.5)
-            // Elimina cualquier quiebre angular o irregularidad por falta de pulso
-            const generateSmoothSpline = (pts: typeof rawPoints, stepsPerSeg = 5): typeof rawPoints => {
-              if (pts.length < 3) return pts;
-              const res: typeof rawPoints = [];
-              const ext = [pts[0], ...pts, pts[pts.length - 1]];
-
-              for (let i = 1; i < ext.length - 2; i++) {
-                const p0 = ext[i - 1];
-                const p1 = ext[i];
-                const p2 = ext[i + 1];
-                const p3 = ext[i + 2];
-
-                for (let s = 0; s < stepsPerSeg; s++) {
-                  const t = s / stepsPerSeg;
-                  const t2 = t * t;
-                  const t3 = t2 * t;
-
-                  const f1 = -0.5 * t3 + t2 - 0.5 * t;
-                  const f2 = 1.5 * t3 - 2.5 * t2 + 1.0;
-                  const f3 = -1.5 * t3 + 2.0 * t2 + 0.5 * t;
-                  const f4 = 0.5 * t3 - 0.5 * t2;
-
-                  const cx = p0.x * f1 + p1.x * f2 + p2.x * f3 + p3.x * f4;
-                  const cy = p0.y * f1 + p1.y * f2 + p2.y * f3 + p3.y * f4;
-                  const ctime = p1.time + (p2.time - p1.time) * t;
-
-                  res.push({ x: cx, y: cy, time: ctime });
-                }
-              }
-
-              res.push(pts[pts.length - 1]);
-              return res;
-            };
-
-            const points = generateSmoothSpline(rawPoints, 5);
-
+          if (points.length >= 2) {
             const drawLaserRibbon = (
               baseWidth: number,
               r: number,
@@ -1469,48 +1452,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             ) => {
               const n = points.length;
               if (n < 2) return;
-
-              const rawNormals: Array<{ nx: number; ny: number }> = [];
-              const alphas: number[] = [];
-
-              for (let i = 0; i < n; i++) {
-                const p = points[i];
-                const age = now - p.time;
-                const progress = Math.max(0, Math.min(1, age / TRAIL_LIFETIME));
-                const alpha = Math.pow(1 - progress, 1.25);
-                alphas.push(alpha);
-
-                let tx = 0;
-                let ty = 0;
-                if (i === 0) {
-                  tx = points[1].x - p.x;
-                  ty = points[1].y - p.y;
-                } else if (i === n - 1) {
-                  tx = p.x - points[n - 2].x;
-                  ty = p.y - points[n - 2].y;
-                } else {
-                  tx = points[i + 1].x - points[i - 1].x;
-                  ty = points[i + 1].y - points[i - 1].y;
-                }
-
-                const len = Math.hypot(tx, ty);
-                if (len > 0.0001) {
-                  rawNormals.push({ nx: -ty / len, ny: tx / len });
-                } else {
-                  rawNormals.push(i > 0 ? rawNormals[i - 1] : { nx: 0, ny: 1 });
-                }
-              }
-
-              // Suavizado de normales para mantener grosor homogéneo
-              const smoothNormals = rawNormals.map((norm, i, arr) => {
-                if (i === 0 || i === arr.length - 1) return norm;
-                const prev = arr[i - 1];
-                const next = arr[i + 1];
-                const sx = 0.25 * prev.nx + 0.5 * norm.nx + 0.25 * next.nx;
-                const sy = 0.25 * prev.ny + 0.5 * norm.ny + 0.25 * next.ny;
-                const sLen = Math.hypot(sx, sy);
-                return sLen > 0.0001 ? { nx: sx / sLen, ny: sy / sLen } : norm;
-              });
 
               const lefts: Array<{ x: number; y: number }> = [];
               const rights: Array<{ x: number; y: number }> = [];
@@ -1596,16 +1537,24 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         ctx.restore();
       }
 
-      laserAnimFrameRef.current = requestAnimationFrame(render);
+      // Una vez apagada la estela, el punto quieto no necesita repintarse continuamente.
+      if (laserTrailRef.current.length) wake();
     };
 
-    laserAnimFrameRef.current = requestAnimationFrame(render);
+    const wake = () => {
+      if (running && laserAnimFrameRef.current === null) laserAnimFrameRef.current = requestAnimationFrame(render);
+    };
+    laserWakeRef.current = wake;
+    wake();
 
     return () => {
       running = false;
+      laserWakeRef.current = null;
       window.removeEventListener('resize', resizeCanvas);
+      canvasObserver?.disconnect();
       if (laserAnimFrameRef.current !== null) {
         cancelAnimationFrame(laserAnimFrameRef.current);
+        laserAnimFrameRef.current = null;
       }
     };
   }, [isAnnotationMode, annotationTool]);
@@ -1674,8 +1623,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       : { width: 800, height: 600 };
 
     const clamped = clampPositionToViewport(targetPos, stateRef.current.zoom, imageSize, containerSize);
-    stateRef.current.pos = clamped;
-    setPosition(clamped);
+    scheduleView(stateRef.current.zoom, clamped);
   };
 
   const handleMinimapMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -1714,6 +1662,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         };
       }
       laserCurrentPosRef.current = null;
+      laserWakeRef.current?.();
       return;
     }
 
@@ -1730,6 +1679,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
     // Si no hay ningún botón de ratón presionado, asegurar que se desactive el arrastre
     if (e.buttons === 0 && isDraggingRef.current) {
+      flushView();
       isDraggingRef.current = false;
       setIsDragging(false);
     }
@@ -1746,9 +1696,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         x: e.clientX - dragStartRef.current.x,
         y: e.clientY - dragStartRef.current.y,
       };
-      stateRef.current.pos = newPos;
-      setPosition(newPos);
+      scheduleView(stateRef.current.zoom, newPos);
       laserCurrentPosRef.current = null;
+      laserWakeRef.current?.();
       return;
     }
 
@@ -1759,6 +1709,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   };
 
   const handleCanvasMouseUp = () => {
+    flushView();
     isDraggingRef.current = false;
     setIsDragging(false);
   };
@@ -1776,6 +1727,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const handleCanvasMouseLeave = () => {
     laserCurrentPosRef.current = null;
     laserStabilizedPosRef.current = null;
+    laserWakeRef.current?.();
 
   };
 
@@ -1845,19 +1797,19 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     return { targetZoom, clampedPos };
   };
 
-  const flushTouchView = () => {
-    if (touchFrameRef.current !== null) cancelAnimationFrame(touchFrameRef.current);
-    touchFrameRef.current = null;
-    const next = pendingTouchViewRef.current;
-    pendingTouchViewRef.current = null;
+  const flushView = () => {
+    if (viewFrameRef.current !== null) cancelAnimationFrame(viewFrameRef.current);
+    viewFrameRef.current = null;
+    const next = pendingViewRef.current;
+    pendingViewRef.current = null;
     if (next) { setZoomLevel(next.zoom); setPosition(next.pos); }
   };
-  const scheduleTouchView = (zoom: number, pos: { x: number; y: number }) => {
+  const scheduleView = (zoom: number, pos: { x: number; y: number }) => {
     stateRef.current = { zoom, pos };
-    pendingTouchViewRef.current = { zoom, pos };
-    if (touchFrameRef.current === null) touchFrameRef.current = requestAnimationFrame(flushTouchView);
+    pendingViewRef.current = { zoom, pos };
+    if (viewFrameRef.current === null) viewFrameRef.current = requestAnimationFrame(flushView);
   };
-  useEffect(() => () => { if (touchFrameRef.current !== null) cancelAnimationFrame(touchFrameRef.current); }, []);
+  useEffect(() => () => { if (viewFrameRef.current !== null) cancelAnimationFrame(viewFrameRef.current); }, []);
 
   const handleLaserTouchStart = (e: React.TouchEvent<HTMLCanvasElement> | TouchEvent) => {
     if (!isAnnotationMode || !annotationTool || e.touches.length === 0) return;
@@ -1896,6 +1848,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       laserCurrentPosRef.current = null;
       laserStabilizedPosRef.current = null;
       laserTrailRef.current = [];
+      laserWakeRef.current?.();
       isDraggingRef.current = false;
       setIsDragging(false);
       if (!laserPinchRef.current) {
@@ -1956,7 +1909,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           y: touch.clientY - dragStartRef.current.y,
         };
         const clampedPos = clampPositionToViewport(rawNextPos, stateRef.current.zoom, imageSize, containerSize);
-        scheduleTouchView(stateRef.current.zoom, clampedPos);
+        scheduleView(stateRef.current.zoom, clampedPos);
       }
     } else if (e.touches.length >= 2 && laserPinchRef.current) {
       laserCurrentPosRef.current = null;
@@ -1973,13 +1926,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       );
 
       if (pinchResult) {
-        scheduleTouchView(pinchResult.targetZoom, pinchResult.clampedPos);
+        scheduleView(pinchResult.targetZoom, pinchResult.clampedPos);
       }
     }
   };
 
   const handleLaserTouchEnd = (e: React.TouchEvent<HTMLCanvasElement> | TouchEvent) => {
-    e.stopPropagation(); flushTouchView();
+    e.stopPropagation(); flushView();
     if (e.touches.length >= 2) { handleLaserTouchStart(e); return; }
     if (e.touches.length < 2) {
       if (laserPinchRef.current) {
@@ -2015,7 +1968,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     };
   });
   useEffect(() => {
-    flushTouchView();
+    flushView();
     laserPinchRef.current = null; normalPinchRef.current = null;
     annotationHadPinchRef.current = false;
     isDraggingRef.current = false;
@@ -2024,8 +1977,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   useEffect(() => {
     const handleGlobalRelease = (event: Event) => {
+      if (isDraggingRef.current || isMinimapDraggingRef.current || event.type === 'blur') flushView();
       if (event.type === 'blur') {
-        flushTouchView();
         laserPinchRef.current = null; normalPinchRef.current = null;
         annotationHadPinchRef.current = false;
         setIsPinching(false);
@@ -2063,6 +2016,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     };
     const handleGlobalMinimapUp = () => {
       if (isMinimapDraggingRef.current) {
+        flushView();
         isMinimapDraggingRef.current = false;
         isDraggingRef.current = false;
         setIsDragging(false);
@@ -2320,14 +2274,12 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     const oldZoom = stateRef.current.zoom;
     const z = clamp(newZoom, ZOOM_MIN, effectiveMaxZoom);
     stateRef.current.zoom = z;
-    setZoomLevel(z);
 
     const frame = containerRef.current;
     const containerSize = frame ? { width: frame.clientWidth, height: frame.clientHeight } : { width: 800, height: 600 };
 
     if (z <= 1.001) {
-      stateRef.current.pos = { x: 0, y: 0 };
-      setPosition({ x: 0, y: 0 });
+      scheduleView(z, { x: 0, y: 0 });
       return;
     }
 
@@ -2353,8 +2305,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     }
 
     const clampedPos = clampPositionToViewport(rawNextPos, z, imageSize, containerSize);
-    stateRef.current.pos = clampedPos;
-    setPosition(clampedPos);
+    scheduleView(z, clampedPos);
   };
 
   useEffect(() => {
@@ -2436,7 +2387,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         );
 
         if (pinchResult) {
-          scheduleTouchView(pinchResult.targetZoom, pinchResult.clampedPos);
+          scheduleView(pinchResult.targetZoom, pinchResult.clampedPos);
         }
       } else if (e.touches.length === 1 && isDraggingRef.current && stateRef.current.zoom > 1) {
         const containerEl = containerRef.current;
@@ -2446,13 +2397,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           y: e.touches[0].clientY - dragStartRef.current.y,
         };
         const clampedPos = clampPositionToViewport(rawNextPos, stateRef.current.zoom, imageSize, containerSize);
-        scheduleTouchView(stateRef.current.zoom, clampedPos);
+        scheduleView(stateRef.current.zoom, clampedPos);
       }
     };
 
     const onTouchEnd = (e: TouchEvent) => {
       if (isAnnotationMode) return;
-      flushTouchView();
+      flushView();
       if (e.type === 'touchcancel') {
         normalPinchRef.current = null; touchGestureRef.current = null; lastTapAtRef.current = 0;
         isDraggingRef.current = false; setIsDragging(false); setIsPinching(false);
@@ -2513,6 +2464,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const handleRotateCw = () => setRotation(r => (r + 90) % 360);
   const handleRotateCcw = () => setRotation(r => (r - 90 + 360) % 360);
   const handleResetViewport = () => {
+    flushView();
     stateRef.current.zoom = 1;
     stateRef.current.pos = { x: 0, y: 0 };
     setZoomLevel(1);
@@ -2538,6 +2490,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (e.buttons === 0 && isDraggingRef.current) {
+      flushView();
       isDraggingRef.current = false;
       setIsDragging(false);
       return;
@@ -2547,12 +2500,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         x: e.clientX - dragStartRef.current.x,
         y: e.clientY - dragStartRef.current.y,
       };
-      stateRef.current.pos = newPos;
-      setPosition(newPos);
+      scheduleView(stateRef.current.zoom, newPos);
     }
   };
 
-  const handleMouseUp = () => { isDraggingRef.current = false; setIsDragging(false); };
+  const handleMouseUp = () => { flushView(); isDraggingRef.current = false; setIsDragging(false); };
 
   useEffect(() => {
     if (activeMapSectionIndex === null || !mapGeometry || !imageSize) return;

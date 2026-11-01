@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { appendLaserPoint, LASER_TRAIL_LIFETIME, splitLaserTrail } from './laserTrail';
+import { appendLaserPoint, LASER_TRAIL_LIFETIME, prepareLaserStroke, splitLaserTrail } from './laserTrail';
 
 describe('Continuidad y desvanecimiento del láser', () => {
+  it('prepara una curva con los mismos extremos, tiempos y normales para las cuatro capas de luz', () => {
+    const raw = [{ x: 0, y: 0, time: 0 }, { x: 10, y: 10, time: 10 }, { x: 20, y: 0, time: 20 }];
+    const prepared = prepareLaserStroke(raw);
+    expect(prepared.points).toHaveLength(11);
+    expect(prepared.points[0]).toEqual(raw[0]);
+    expect(prepared.points[10]).toEqual(raw[2]);
+    expect(prepared.points[1].x).toBeCloseTo(1.36);
+    expect(prepared.points[1].y).toBeCloseTo(1.68);
+    expect(prepared.points[1].time).toBe(2);
+    expect(prepared.normals).toHaveLength(prepared.points.length);
+    expect(prepared.normals.every(n => Math.abs(Math.hypot(n.nx, n.ny) - 1) < 0.00001)).toBe(true);
+    expect(raw).toHaveLength(3);
+    expect(prepareLaserStroke([{ x: 1, y: 1, time: 0 }]).normals).toEqual([{ nx: 0, ny: 1 }]);
+  });
   it('conserva el rastro al recorrer cientos de píxeles en un solo evento', () => {
     const first = appendLaserPoint([], null, { x: 50, y: 80 }, 0);
     const fast = appendLaserPoint(first.trail, first.position, { x: 1150, y: 80 }, 16);

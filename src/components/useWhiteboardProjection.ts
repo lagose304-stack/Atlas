@@ -24,7 +24,8 @@ export function useWhiteboardProjection(svgRef: RefObject<SVGSVGElement>, sceneR
       const rect = imageLayer.getBoundingClientRect();
       const next = imageProjection(matrix, { left: rect.left, top: rect.top, width: imageLayer.clientWidth || size.width, height: imageLayer.clientHeight || size.height }, svg.getBoundingClientRect(), size);
       // Actualizar antes del mismo repintado, sin esperar otro render de React.
-      sceneRef.current?.setAttribute('transform', next);
+      const scene = sceneRef.current;
+      if (scene && scene.getAttribute('transform') !== next) scene.setAttribute('transform', next);
     };
     // Seguir también los valores intermedios de la transición real de la imagen.
     const animate = () => {
@@ -42,5 +43,5 @@ export function useWhiteboardProjection(svgRef: RefObject<SVGSVGElement>, sceneR
       if (frame !== null) cancelAnimationFrame(frame);
       observer?.disconnect(); imageLayer.removeEventListener('transitionrun', animate); window.removeEventListener('resize', update);
     };
-  }, [svgRef, sceneRef, imageLayer, size, zoom, viewTransform]);
+  }, [svgRef, sceneRef, imageLayer, size?.width, size?.height, zoom, viewTransform]);
 }
