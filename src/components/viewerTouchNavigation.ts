@@ -1,20 +1,22 @@
 export const DIRECT_VIEW_TRANSFORM_EVENT = 'atlas-direct-view-transform';
 export type ViewerTransform = { zoom: number; pos: { x: number; y: number } };
+export type DirectViewDetail = ViewerTransform & { rotation: number };
 
 /** Solo la posición visual del gesto; el estado de React se confirma al levantar los dedos. */
 export function paintTouchView(layer: HTMLElement, view: ViewerTransform, rotation: number, ui: {
-  frame: HTMLElement | null; zoom: HTMLButtonElement | null; minimap: HTMLDivElement | null;
+  frameSize: { width: number; height: number }; zoom: HTMLButtonElement | null; minimap: HTMLDivElement | null;
   size: { width: number; height: number } | null;
 }) {
-  const frameWidth = ui.frame?.clientWidth ?? 800, frameHeight = ui.frame?.clientHeight ?? 600;
+  const { width: frameWidth, height: frameHeight } = ui.frameSize;
   layer.style.transition = 'none';
   layer.style.transform = `translate3d(${view.pos.x}px, ${view.pos.y}px, 0) scale(${view.zoom}) rotate(${rotation}deg)`;
   // La pizarra se proyecta en el mismo fotograma que la imagen.
-  layer.dispatchEvent(new Event(DIRECT_VIEW_TRANSFORM_EVENT));
+  layer.dispatchEvent(new CustomEvent<DirectViewDetail>(DIRECT_VIEW_TRANSFORM_EVENT, { detail: { ...view, rotation } }));
   if (ui.zoom) {
     const percentage = Math.round(view.zoom * 100);
-    ui.zoom.textContent = `${percentage}%`;
-    ui.zoom.setAttribute('aria-label', `Zoom actual ${percentage}%. Clic para 100%`);
+    const text = `${percentage}%`, label = `Zoom actual ${percentage}%. Clic para 100%`;
+    if (ui.zoom.textContent !== text) ui.zoom.textContent = text;
+    if (ui.zoom.getAttribute('aria-label') !== label) ui.zoom.setAttribute('aria-label', label);
   }
   if (ui.minimap && ui.size) {
     const { width, height } = ui.size;
@@ -26,6 +28,6 @@ export function paintTouchView(layer: HTMLElement, view: ViewerTransform, rotati
     ui.minimap.style.display = view.zoom > 1.05 ? 'block' : 'none';
     ui.minimap.setAttribute('aria-hidden', String(view.zoom <= 1.05));
     const viewport = ui.minimap.querySelector<HTMLElement>('[data-viewer-minimap-viewport]');
-    if (viewport) Object.assign(viewport.style, { left: `${left / width * miniWidth}px`, top: `${top / height * miniHeight}px`, width: `${visibleWidth / width * miniWidth}px`, height: `${visibleHeight / height * miniHeight}px` });
+    if (viewport) Object.assign(viewport.style, { left: '0px', top: '0px', transform: `translate(${left / width * miniWidth}px, ${top / height * miniHeight}px)`, width: `${visibleWidth / width * miniWidth}px`, height: `${visibleHeight / height * miniHeight}px` });
   }
 }

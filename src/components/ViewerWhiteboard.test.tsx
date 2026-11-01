@@ -85,7 +85,9 @@ describe('Pizarra temporal del visor', () => {
     expect(layer.querySelector('[data-whiteboard-surface]')).toHaveStyle({ pointerEvents: 'all' });
     expect(layer.querySelector('[data-whiteboard-scene]')).toHaveAttribute('transform', 'matrix(1 0 0 1 0 0)');
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar herramientas de pizarra' }));
-    expect(layer.querySelector('[data-whiteboard-surface]')).toHaveStyle({ pointerEvents: 'none' });
+    expect(layer.querySelector('[data-whiteboard-surface]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir pizarra' }));
+    expect(layer.querySelector('[data-whiteboard-surface]')).toHaveStyle({ pointerEvents: 'all' });
   });
 
   it('normaliza la fuente al escribir con aumento para no dibujar letras diminutas y estirarlas', () => {

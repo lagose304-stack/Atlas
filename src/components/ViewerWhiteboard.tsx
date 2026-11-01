@@ -83,7 +83,8 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
   const svgRef = useRef<SVGSVGElement>(null);
   const sceneRef = useRef<SVGGElement>(null);
   const pointMatrix = useRef<{ scene: SVGGElement; transform: string | null; inverse: DOMMatrix } | null>(null);
-  useWhiteboardProjection(svgRef, sceneRef, imageLayer, size, zoom, viewTransform);
+  const showScene = active || marks.length > 0;
+  useWhiteboardProjection(svgRef, sceneRef, imageLayer, size, zoom, viewTransform, showScene);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
   const colorId = useId();
@@ -421,7 +422,7 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
       <button className="viewer-whiteboard-export__button" type="button" aria-label="Guardar apuntes" aria-expanded={exportMenuOpen} disabled={disabled || exporting || (!marks.length && !text.trim())} onClick={() => { setExportMenuOpen(value => !value); setExportStatus(null); }}><Download size={18} /><span>{exporting ? 'Preparando imagen…' : 'Guardar apuntes'}</span></button>
     </div>}
     {active && <div className="viewer-whiteboard__notice">Solo en este dispositivo · Guarda la imagen antes de salir</div>}
-    {imageLayer?.parentElement && size && createPortal(<svg ref={svgRef} className={`viewer-whiteboard__canvas tool-${currentTool}`} aria-label="Apuntes temporales sobre la placa" style={{ pointerEvents: 'none' }}
+    {imageLayer?.parentElement && size && showScene && createPortal(<svg ref={svgRef} className={`viewer-whiteboard__canvas tool-${currentTool}`} aria-label="Apuntes temporales sobre la placa" style={{ pointerEvents: 'none' }}
       onMouseDown={event => event.stopPropagation()} onTouchStart={event => event.stopPropagation()} onTouchMove={event => event.stopPropagation()}
       onPointerDown={event => {
         if (!drawing || event.button !== 0) return;

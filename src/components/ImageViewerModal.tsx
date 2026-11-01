@@ -4,6 +4,7 @@ import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Pencil, Maximize2, Minimize2, Pan
 import { appendLaserPoint, LASER_TRAIL_LIFETIME, prepareLaserStroke, splitLaserTrail, type LaserPoint } from './laserTrail';
 import ViewerWhiteboard, { type WhiteboardTool } from './ViewerWhiteboard';
 import { paintTouchView, type ViewerTransform } from './viewerTouchNavigation';
+import { useViewerInteraction } from './useViewerInteraction';
 import { renderBoldText } from './BoldField';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
@@ -819,6 +820,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [annotationTool, setAnnotationTool] = useState<WhiteboardTool | null>(null);
   const [whiteboardLauncherLayer, setWhiteboardLauncherLayer] = useState<HTMLDivElement | null>(null);
   const [whiteboardImageLayer, setWhiteboardImageLayer] = useState<HTMLDivElement | null>(null);
+  const interactionRootRef = useViewerInteraction();
   useEffect(() => {
     setIsAnnotationMode(false);
     setAnnotationTool(null);
@@ -893,6 +895,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const pendingViewRef = useRef<{ zoom: number; pos: { x: number; y: number } } | null>(null);
   const directTouchViewRef = useRef(false);
   const directViewPainterRef = useRef<((view: ViewerTransform) => void) | null>(null);
+  const touchFrameSizeRef = useRef({ width: 800, height: 600 });
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(() => ({ width: 1200, height: 800 }));
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(() => ({ width: 1200, height: 800 }));
   const [interactiveMapData, setInteractiveMapData] = useState<InteractiveMapData | null>(null);
@@ -1327,15 +1330,19 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     return 0.08 + Math.pow(factor, 0.9) * 0.24;
   }, [zoomLevel]);
 
-  const imageFilterStyle = useMemo(() => {
+  const imageColorFilterStyle = useMemo(() => {
     if (perceptualEnhanceLevel <= 0) return 'none';
     const boosted = Math.pow(perceptualEnhanceLevel, 1.25);
     const contrast = 1 + boosted * 0.14;
     const saturate = 1 + boosted * 0.06;
     const brightness = 1 + boosted * 0.018;
+    return `contrast(${contrast.toFixed(3)}) saturate(${saturate.toFixed(3)}) brightness(${brightness.toFixed(3)})`;
+  }, [perceptualEnhanceLevel]);
+  const imageFilterStyle = useMemo(() => {
+    if (perceptualEnhanceLevel <= 0) return 'none';
     const svgFilter = sharpenK > 0 ? `url(#${CSS.escape ? CSS.escape(sharpenFilterId) : sharpenFilterId})` : '';
-    return `${svgFilter} contrast(${contrast.toFixed(3)}) saturate(${saturate.toFixed(3)}) brightness(${brightness.toFixed(3)}) drop-shadow(0 0 0.35px rgba(0,0,0,0.45))`.trim();
-  }, [perceptualEnhanceLevel, sharpenK, sharpenFilterId]);
+    return `${svgFilter} ${imageColorFilterStyle} drop-shadow(0 0 0.35px rgba(0,0,0,0.45))`.trim();
+  }, [perceptualEnhanceLevel, sharpenK, sharpenFilterId, imageColorFilterStyle]);
 
   const grainOpacity = useMemo(() => {
     if (perceptualEnhanceLevel <= 0) return 0;
@@ -1804,8 +1811,18 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   };
 
   React.useLayoutEffect(() => {
+    const frame = containerRef.current;
+    if (!frame) return;
+    const measure = () => { touchFrameSizeRef.current = { width: frame.clientWidth || 800, height: frame.clientHeight || 600 }; };
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    observer?.observe(frame);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [whiteboardImageLayer]);
+  React.useLayoutEffect(() => {
     directViewPainterRef.current = view => {
-      if (whiteboardImageLayer) paintTouchView(whiteboardImageLayer, view, rotation, { frame: containerRef.current, zoom: zoomReadoutRef.current, minimap: minimapRef.current, size: imageSize });
+      if (whiteboardImageLayer) paintTouchView(whiteboardImageLayer, view, rotation, { frameSize: touchFrameSizeRef.current, zoom: zoomReadoutRef.current, minimap: minimapRef.current, size: imageSize });
     };
   }, [whiteboardImageLayer, rotation, imageSize]);
   const paintDirectView = (view: ViewerTransform) => directViewPainterRef.current?.(view);
@@ -1924,8 +1941,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         const { x, y } = getTouchCoords(touch);
         addLaserPoint(x, y);
       } else if (annotationTool === 'hand' && isDraggingRef.current && stateRef.current.zoom > 1) {
-        const containerEl = containerRef.current;
-        const containerSize = containerEl ? { width: containerEl.clientWidth, height: containerEl.clientHeight } : { width: 800, height: 600 };
+        const containerSize = touchFrameSizeRef.current;
         const rawNextPos = {
           x: touch.clientX - dragStartRef.current.x,
           y: touch.clientY - dragStartRef.current.y,
@@ -2046,7 +2062,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     };
 
     window.addEventListener('mousemove', handleGlobalMinimapMove);
-    window.addEventListener('touchmove', handleGlobalMinimapTouchMove, { passive: false });
+    window.addEventListener('touchmove', handleGlobalMinimapTouchMove, { passive: true });
     window.addEventListener('mouseup', handleGlobalMinimapUp);
     window.addEventListener('touchend', handleGlobalMinimapUp);
 
@@ -2412,8 +2428,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           scheduleView(pinchResult.targetZoom, pinchResult.clampedPos, true);
         }
       } else if (e.touches.length === 1 && isDraggingRef.current && stateRef.current.zoom > 1) {
-        const containerEl = containerRef.current;
-        const containerSize = containerEl ? { width: containerEl.clientWidth, height: containerEl.clientHeight } : { width: 800, height: 600 };
+        const containerSize = touchFrameSizeRef.current;
         const rawNextPos = {
           x: e.touches[0].clientX - dragStartRef.current.x,
           y: e.touches[0].clientY - dragStartRef.current.y,
@@ -2679,15 +2694,16 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const availableViewerModeCount = (groupedSenaladosItems.length > 0 ? 2 : 0) + (interactiveMapData || loadingInteractiveMap ? 1 : 0);
 
   return createPortal(
-    <div
+    <div ref={interactionRootRef}
       onContextMenu={(e) => { if (!isEditableTarget(e.target)) e.preventDefault(); }}
       onDragStart={(e) => e.preventDefault()}
       style={{
+        '--viewer-motion-filter': imageColorFilterStyle,
         position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
         zIndex: 1000, display: 'flex', flexDirection: 'row',
         background: 'rgba(2,6,23,0.78)',
         fontFamily: "'Inter', 'Segoe UI', sans-serif",
-      }}
+      } as React.CSSProperties}
     >
       <div aria-live="polite" style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 }}>
         {announcement}
@@ -2779,6 +2795,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         {/* Canvas de estela de luz / Puntero Láser y Paneo */}
         <canvas
           ref={laserCanvasRef}
+          data-viewer-laser-surface
           style={{
             position: 'absolute',
             inset: 0,
@@ -3004,6 +3021,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
         <div
           ref={containerRef}
+          data-viewer-image-frame
           onContextMenu={(e) => e.preventDefault()}
           onDragStart={(e) => e.preventDefault()}
           style={{
@@ -3044,6 +3062,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             {/* Imagen base principal: siempre presente para garantizar 0 parpadeos ni cuadros negros */}
             <img
               ref={imageRef}
+              data-viewer-photo
               src={src}
               alt="Vista ampliada"
               draggable={false}
@@ -3074,6 +3093,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             {srcZoom && isZoomImageReady && useZoomSource && (
               <img
                 src={srcZoom}
+                data-viewer-photo
                 alt=""
                 aria-hidden="true"
                 draggable={false}
@@ -3102,6 +3122,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
             {renderedGrain > 0 && (
               <div
+                data-viewer-grain
                 style={{
                   position: 'absolute',
                   inset: 0,
@@ -3584,6 +3605,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           return (
             <div
               ref={minimapRef}
+              data-viewer-minimap
               aria-hidden={zoomLevel <= 1.05}
               role="region"
               aria-label="Minimapa de navegación interactivo"
@@ -3592,6 +3614,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               onTouchStart={handleMinimapTouchStart}
               style={{
                 display: zoomLevel > 1.05 ? 'block' : 'none',
+                contain: 'layout paint',
                 position: 'absolute',
                 left: '16px',
                 bottom: '18px',
@@ -3636,8 +3659,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 data-viewer-minimap-viewport
                 style={{
                   position: 'absolute',
-                  left: `${(visibleLeft / imageSize.width) * miniWidth}px`,
-                  top: `${(visibleTop / imageSize.height) * miniHeight}px`,
+                  left: '0px',
+                  top: '0px',
+                  transform: `translate(${(visibleLeft / imageSize.width) * miniWidth}px, ${(visibleTop / imageSize.height) * miniHeight}px)`,
                   width: `${(visibleWidth / imageSize.width) * miniWidth}px`,
                   height: `${(visibleHeight / imageSize.height) * miniHeight}px`,
                   border: '2px solid #38bdf8',

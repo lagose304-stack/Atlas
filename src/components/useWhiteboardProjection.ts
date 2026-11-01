@@ -1,5 +1,12 @@
 import { useLayoutEffect, type RefObject } from 'react';
-import { DIRECT_VIEW_TRANSFORM_EVENT } from './viewerTouchNavigation';
+import { DIRECT_VIEW_TRANSFORM_EVENT, type DirectViewDetail } from './viewerTouchNavigation';
+
+export function directImageProjection(view: DirectViewDetail, layout: { centerX: number; centerY: number; width: number; height: number }, size: { width: number; height: number }) {
+  const radians = view.rotation * Math.PI / 180;
+  const a = Math.cos(radians) * view.zoom, b = Math.sin(radians) * view.zoom;
+  const c = -b, d = a;
+  return `matrix(${a * layout.width / size.width} ${b * layout.width / size.width} ${c * layout.height / size.height} ${d * layout.height / size.height} ${layout.centerX + view.pos.x - (a * layout.width + c * layout.height) / 2} ${layout.centerY + view.pos.y - (b * layout.width + d * layout.height) / 2})`;
+}
 
 /** Proyección en SVG nativo; el texto nunca se amplía como una textura CSS. */
 export function imageProjection(
@@ -14,16 +21,21 @@ export function imageProjection(
   return `matrix(${a * layer.width / size.width} ${b * layer.width / size.width} ${c * layer.height / size.height} ${d * layer.height / size.height} ${layer.left - viewport.left - minX} ${layer.top - viewport.top - minY})`;
 }
 
-export function useWhiteboardProjection(svgRef: RefObject<SVGSVGElement>, sceneRef: RefObject<SVGGElement>, imageLayer: HTMLDivElement | null, size: { width: number; height: number } | null, zoom: number, viewTransform: string) {
+export function useWhiteboardProjection(svgRef: RefObject<SVGSVGElement>, sceneRef: RefObject<SVGGElement>, imageLayer: HTMLDivElement | null, size: { width: number; height: number } | null, zoom: number, viewTransform: string, enabled = true) {
   useLayoutEffect(() => {
     const svg = svgRef.current;
-    if (!svg || !imageLayer || !size) return;
+    if (!enabled || !svg || !imageLayer || !size) return;
     let frame: number | null = null;
+    let layout: { centerX: number; centerY: number; width: number; height: number } | null = null;
     const update = () => {
       const css = getComputedStyle(imageLayer).transform;
       const matrix = css && css !== 'none' ? new DOMMatrixReadOnly(css) : { a: 1, b: 0, c: 0, d: 1 };
       const rect = imageLayer.getBoundingClientRect();
-      const next = imageProjection(matrix, { left: rect.left, top: rect.top, width: imageLayer.clientWidth || size.width, height: imageLayer.clientHeight || size.height }, svg.getBoundingClientRect(), size);
+      const viewport = svg.getBoundingClientRect();
+      const width = imageLayer.clientWidth || size.width, height = imageLayer.clientHeight || size.height;
+      // El centro sin trasladar no cambia al mover o ampliar: se mide solo al preparar la vista.
+      layout = { centerX: rect.left + rect.width / 2 - ('e' in matrix ? Number(matrix.e) || 0 : 0) - viewport.left, centerY: rect.top + rect.height / 2 - ('f' in matrix ? Number(matrix.f) || 0 : 0) - viewport.top, width, height };
+      const next = imageProjection(matrix, { left: rect.left, top: rect.top, width, height }, viewport, size);
       // Actualizar antes del mismo repintado, sin esperar otro render de React.
       const scene = sceneRef.current;
       if (scene && scene.getAttribute('transform') !== next) scene.setAttribute('transform', next);
@@ -36,9 +48,11 @@ export function useWhiteboardProjection(svgRef: RefObject<SVGSVGElement>, sceneR
       update(); frame = requestAnimationFrame(tick);
     };
     animate();
-    const directUpdate = () => {
+    const directUpdate = (event: Event) => {
       if (frame !== null) cancelAnimationFrame(frame);
-      frame = null; update();
+      frame = null;
+      const view = (event as CustomEvent<DirectViewDetail>).detail;
+      if (layout && view) sceneRef.current?.setAttribute('transform', directImageProjection(view, layout, size));
     };
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
     observer?.observe(svg); observer?.observe(imageLayer);
@@ -50,5 +64,5 @@ export function useWhiteboardProjection(svgRef: RefObject<SVGSVGElement>, sceneR
       observer?.disconnect(); imageLayer.removeEventListener('transitionrun', animate); window.removeEventListener('resize', update);
       imageLayer.removeEventListener(DIRECT_VIEW_TRANSFORM_EVENT, directUpdate);
     };
-  }, [svgRef, sceneRef, imageLayer, size?.width, size?.height, zoom, viewTransform]);
+  }, [svgRef, sceneRef, imageLayer, size?.width, size?.height, zoom, viewTransform, enabled]);
 }

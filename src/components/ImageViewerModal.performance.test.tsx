@@ -51,10 +51,14 @@ describe('Respuesta del visor público', () => {
     expect(layer.style.transition).toBe('none');
     expect(screen.getByRole('button', { name: 'Zoom actual 200%. Clic para 100%' })).toHaveTextContent('200%');
     expect(screen.getByRole('region', { name: 'Minimapa de navegación interactivo' })).toBeVisible();
+    const miniViewport = surface.ownerDocument.querySelector<HTMLElement>('[data-viewer-minimap-viewport]')!;
+    const miniTransform = miniViewport.style.transform;
     expect(commits).not.toHaveBeenCalled();
     fireEvent.touchEnd(surface, { touches: [], changedTouches: [touch(1, 200), touch(2, 600)] });
     expect(commits).toHaveBeenCalled();
     expect(layer.style.transform).toContain('scale(2)');
+    expect(miniViewport.style.transform).toBe(miniTransform);
+    expect(miniViewport.style.left).toBe('0px');
     fireEvent.touchStart(surface, { touches: [touch(3, 400)] });
     commits.mockClear();
     fireEvent.touchMove(surface, { touches: [touch(3, 450, 330)] });
