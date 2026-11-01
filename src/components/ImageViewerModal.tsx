@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Pencil, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Shield, Eye, EyeOff } from 'lucide-react';
 import { appendLaserPoint, LASER_TRAIL_LIFETIME, prepareLaserStroke, splitLaserTrail, type LaserPoint } from './laserTrail';
 import ViewerWhiteboard, { type WhiteboardTool } from './ViewerWhiteboard';
+import { paintTouchView, type ViewerTransform } from './viewerTouchNavigation';
 import { renderBoldText } from './BoldField';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
@@ -852,6 +853,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const laserAnimFrameRef = useRef<number | null>(null);
   const laserWakeRef = useRef<(() => void) | null>(null);
   const minimapRef = useRef<HTMLDivElement | null>(null);
+  const zoomReadoutRef = useRef<HTMLButtonElement | null>(null);
   const isMinimapDraggingRef = useRef(false);
   const [activeMarkerIndex, setActiveMarkerIndexState] = useState<number | null>(() => {
     if (typeof initialActiveMarkerIndex === 'number') {
@@ -889,6 +891,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const pinchOpticsRef = useRef({ sharpen: 0, grain: 0 });
   const viewFrameRef = useRef<number | null>(null);
   const pendingViewRef = useRef<{ zoom: number; pos: { x: number; y: number } } | null>(null);
+  const directTouchViewRef = useRef(false);
+  const directViewPainterRef = useRef<((view: ViewerTransform) => void) | null>(null);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(() => ({ width: 1200, height: 800 }));
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(() => ({ width: 1200, height: 800 }));
   const [interactiveMapData, setInteractiveMapData] = useState<InteractiveMapData | null>(null);
@@ -1171,9 +1175,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     setUseZoomSource(false);
     setZoomSourceFailed(false);
     setIsZoomImageReady(false);
+    if (directTouchViewRef.current) directViewPainterRef.current?.({ zoom: 1, pos: { x: 0, y: 0 } });
     if (viewFrameRef.current !== null) cancelAnimationFrame(viewFrameRef.current);
     viewFrameRef.current = null;
     pendingViewRef.current = null;
+    directTouchViewRef.current = false;
     stateRef.current = { zoom: 1, pos: { x: 0, y: 0 } };
     setZoomLevel(1);
     setPosition({ x: 0, y: 0 });
@@ -1601,7 +1607,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     };
   };
 
-  const panToMinimapCoord = (clientX: number, clientY: number) => {
+  const panToMinimapCoord = (clientX: number, clientY: number, directTouch = false) => {
     const miniEl = minimapRef.current;
     const frame = containerRef.current;
     if (!miniEl || !imageSize || stateRef.current.zoom <= 1.02) return;
@@ -1623,7 +1629,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       : { width: 800, height: 600 };
 
     const clamped = clampPositionToViewport(targetPos, stateRef.current.zoom, imageSize, containerSize);
-    scheduleView(stateRef.current.zoom, clamped);
+    scheduleView(stateRef.current.zoom, clamped, directTouch);
   };
 
   const handleMinimapMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -1642,7 +1648,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     isMinimapDraggingRef.current = true;
     isDraggingRef.current = true;
     setIsDragging(true);
-    panToMinimapCoord(e.touches[0].clientX, e.touches[0].clientY);
+    panToMinimapCoord(e.touches[0].clientX, e.touches[0].clientY, true);
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1797,17 +1803,33 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     return { targetZoom, clampedPos };
   };
 
+  React.useLayoutEffect(() => {
+    directViewPainterRef.current = view => {
+      if (whiteboardImageLayer) paintTouchView(whiteboardImageLayer, view, rotation, { frame: containerRef.current, zoom: zoomReadoutRef.current, minimap: minimapRef.current, size: imageSize });
+    };
+  }, [whiteboardImageLayer, rotation, imageSize]);
+  const paintDirectView = (view: ViewerTransform) => directViewPainterRef.current?.(view);
   const flushView = () => {
     if (viewFrameRef.current !== null) cancelAnimationFrame(viewFrameRef.current);
     viewFrameRef.current = null;
     const next = pendingViewRef.current;
     pendingViewRef.current = null;
-    if (next) { setZoomLevel(next.zoom); setPosition(next.pos); }
+    if (next) {
+      if (directTouchViewRef.current) paintDirectView(next);
+      setZoomLevel(next.zoom); setPosition(next.pos);
+    }
+    directTouchViewRef.current = false;
   };
-  const scheduleView = (zoom: number, pos: { x: number; y: number }) => {
+  const scheduleView = (zoom: number, pos: { x: number; y: number }, directTouch = false) => {
+    if (directTouchViewRef.current && !directTouch) flushView();
     stateRef.current = { zoom, pos };
     pendingViewRef.current = { zoom, pos };
-    if (viewFrameRef.current === null) viewFrameRef.current = requestAnimationFrame(flushView);
+    directTouchViewRef.current = directTouch;
+    if (viewFrameRef.current === null) viewFrameRef.current = requestAnimationFrame(() => {
+      viewFrameRef.current = null;
+      if (directTouchViewRef.current && pendingViewRef.current) paintDirectView(pendingViewRef.current);
+      else flushView();
+    });
   };
   useEffect(() => () => { if (viewFrameRef.current !== null) cancelAnimationFrame(viewFrameRef.current); }, []);
 
@@ -1909,7 +1931,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           y: touch.clientY - dragStartRef.current.y,
         };
         const clampedPos = clampPositionToViewport(rawNextPos, stateRef.current.zoom, imageSize, containerSize);
-        scheduleView(stateRef.current.zoom, clampedPos);
+        scheduleView(stateRef.current.zoom, clampedPos, true);
       }
     } else if (e.touches.length >= 2 && laserPinchRef.current) {
       laserCurrentPosRef.current = null;
@@ -1926,7 +1948,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       );
 
       if (pinchResult) {
-        scheduleView(pinchResult.targetZoom, pinchResult.clampedPos);
+        scheduleView(pinchResult.targetZoom, pinchResult.clampedPos, true);
       }
     }
   };
@@ -2011,7 +2033,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     };
     const handleGlobalMinimapTouchMove = (e: TouchEvent) => {
       if (isMinimapDraggingRef.current && e.touches.length > 0) {
-        panToMinimapCoord(e.touches[0].clientX, e.touches[0].clientY);
+        panToMinimapCoord(e.touches[0].clientX, e.touches[0].clientY, true);
       }
     };
     const handleGlobalMinimapUp = () => {
@@ -2387,7 +2409,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         );
 
         if (pinchResult) {
-          scheduleView(pinchResult.targetZoom, pinchResult.clampedPos);
+          scheduleView(pinchResult.targetZoom, pinchResult.clampedPos, true);
         }
       } else if (e.touches.length === 1 && isDraggingRef.current && stateRef.current.zoom > 1) {
         const containerEl = containerRef.current;
@@ -2397,7 +2419,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           y: e.touches[0].clientY - dragStartRef.current.y,
         };
         const clampedPos = clampPositionToViewport(rawNextPos, stateRef.current.zoom, imageSize, containerSize);
-        scheduleView(stateRef.current.zoom, clampedPos);
+        scheduleView(stateRef.current.zoom, clampedPos, true);
       }
     };
 
@@ -2464,7 +2486,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const handleRotateCw = () => setRotation(r => (r + 90) % 360);
   const handleRotateCcw = () => setRotation(r => (r - 90 + 360) % 360);
   const handleResetViewport = () => {
+    const wasDirectTouch = directTouchViewRef.current;
     flushView();
+    if (wasDirectTouch) paintDirectView({ zoom: 1, pos: { x: 0, y: 0 } });
     stateRef.current.zoom = 1;
     stateRef.current.pos = { x: 0, y: 0 };
     setZoomLevel(1);
@@ -3546,7 +3570,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           </div>
         </div>
 
-        {zoomLevel > 1.05 && imageSize && (() => {
+        {imageSize && (() => {
           const frame = containerRef.current;
           const miniWidth = isDesktop ? 136 : 108;
           const miniHeight = Math.max(58, Math.min(108, (miniWidth * imageSize.height) / imageSize.width));
@@ -3560,12 +3584,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           return (
             <div
               ref={minimapRef}
+              aria-hidden={zoomLevel <= 1.05}
               role="region"
               aria-label="Minimapa de navegación interactivo"
               title="Clic o arrastra para moverte rápidamente por la placa"
               onMouseDown={handleMinimapMouseDown}
               onTouchStart={handleMinimapTouchStart}
               style={{
+                display: zoomLevel > 1.05 ? 'block' : 'none',
                 position: 'absolute',
                 left: '16px',
                 bottom: '18px',
@@ -3607,6 +3633,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 }}
               />
               <span
+                data-viewer-minimap-viewport
                 style={{
                   position: 'absolute',
                   left: `${(visibleLeft / imageSize.width) * miniWidth}px`,
@@ -3696,6 +3723,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
             {/* Indicador de porcentaje con clic para 100% */}
             <button
+              ref={zoomReadoutRef}
               type="button"
               onClick={handleResetViewport}
               title="Clic para volver al 100%"

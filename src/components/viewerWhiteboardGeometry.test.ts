@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { constrainedEnd, moveMark, strokePath, type BoardMark } from './viewerWhiteboardGeometry';
+import { constrainedEnd, createStrokePathBuilder, moveMark, strokePath, type BoardMark } from './viewerWhiteboardGeometry';
 
 describe('Geometría de la pizarra', () => {
+  it('la curva incremental conserva exactamente el trazo completo al crecer, redimensionar y empezar otro', () => {
+    const build = createStrokePathBuilder();
+    const points = [{ x: 0.1, y: 0.2 }];
+    for (let i = 1; i < 100; i++) {
+      points.push({ x: i / 100, y: Math.sin(i) / 4 + 0.5 });
+      expect(build(points, 800, 600)).toBe(strokePath(points, 800, 600));
+      expect(build(points, 800, 600)).toBe(strokePath(points, 800, 600));
+    }
+    expect(build(points, 400, 300)).toBe(strokePath(points, 400, 300));
+    const shorter = points.slice(0, 3);
+    expect(build(shorter, 400, 300)).toBe(strokePath(shorter, 400, 300));
+    const moved = shorter.map(point => ({ x: point.x + 0.1, y: point.y + 0.1 }));
+    expect(build(moved, 400, 300)).toBe(strokePath(moved, 400, 300));
+    expect(build([], 400, 300)).toBe('');
+    expect(build(moved, 400, 300)).toBe(strokePath(moved, 400, 300));
+  });
   it('conserva círculos y cuadrados físicos en una placa rectangular y cerca del borde', () => {
     for (const tool of ['ellipse', 'rectangle'] as const) {
       const start = { x: 0.9, y: 0.7 };

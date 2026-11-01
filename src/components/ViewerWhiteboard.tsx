@@ -5,6 +5,7 @@ import { isEditableTarget } from '../utils/editableTarget';
 import { constrainedEnd, isVisibleMark, markBounds, moveMark, type BoardMark as Mark, type BoardPoint as Point, type WhiteboardTool } from './viewerWhiteboardGeometry';
 import { textBounds } from './WhiteboardText';
 import WhiteboardMark from './WhiteboardMark';
+import WhiteboardDraft, { type WhiteboardDraftHandle } from './WhiteboardDraft';
 import { captureWhiteboardScene, createWhiteboardPNG, downloadWhiteboard, whiteboardFileName, type ExportArea, type WhiteboardExportContext } from './whiteboardExport';
 import { useWhiteboardProjection } from './useWhiteboardProjection';
 import './viewerWhiteboard.css';
@@ -30,12 +31,6 @@ const defaultStyle = (tool: WhiteboardTool): Style => ({ color: tool === 'pen' ?
 type History = { marks: Mark[]; past: Mark[][]; future: Mark[][] };
 type Gesture = { pointer: number; kind: 'draw' | 'move' | 'resize' | 'erase'; handle?: number; pointerType?: string; lastClient?: Point; bounds?: ReturnType<typeof markBounds>; start: Point; original: Mark[]; item: Mark | null; points?: Point[]; erased: Set<number>; moved: boolean };
 
-// El trazo activo se repinta sin reconciliar barras, paneles ni apuntes terminados.
-const WhiteboardDraft = React.forwardRef<{ update: (mark: Mark) => void }, { initial: Mark; renderMark: (mark: Mark) => React.ReactNode }>(function WhiteboardDraft({ initial, renderMark }, ref) {
-  const [mark, setMark] = useState(initial);
-  React.useImperativeHandle(ref, () => ({ update: setMark }), []);
-  return <>{renderMark(mark)}</>;
-});
 interface Props {
   active: boolean;
   tool: WhiteboardTool | null;
@@ -61,7 +56,7 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
   const { marks, past, future } = history;
   const [draft, setDraft] = useState<Mark | null>(null);
   const draftRef = useRef<Mark | null>(null);
-  const draftView = useRef<{ update: (mark: Mark) => void }>(null);
+  const draftView = useRef<WhiteboardDraftHandle>(null);
   const frame = useRef<number | null>(null);
   const [selectionBounds, setSelectionBounds] = useState<ReturnType<typeof markBounds> | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -87,6 +82,7 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
   const nextId = useRef(0);
   const svgRef = useRef<SVGSVGElement>(null);
   const sceneRef = useRef<SVGGElement>(null);
+  const pointMatrix = useRef<{ scene: SVGGElement; transform: string | null; inverse: DOMMatrix } | null>(null);
   useWhiteboardProjection(svgRef, sceneRef, imageLayer, size, zoom, viewTransform);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
@@ -112,7 +108,7 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
     if (frame.current === null) frame.current = requestAnimationFrame(() => {
       frame.current = null;
       const next = draftRef.current;
-      if (next && gesture.current?.kind === 'draw' && draftView.current) draftView.current.update({ ...next, points: [...next.points] });
+      if (next && gesture.current?.kind === 'draw' && draftView.current) draftView.current.update(next);
       else setDraft(next);
     });
   };
@@ -217,7 +213,22 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
     setTextStyle({ color: mark.color, width: mark.width * w * zoom, opacity: mark.opacity, fontSize: Math.round((mark.fontSize ?? mark.width * 6) * w * zoom), background: mark.background ?? false });
     setSettingsOpen(false); setShapesOpen(false);
   };
-  const point = (event: { clientX: number; clientY: number }, inverse = sceneRef.current?.getScreenCTM()?.inverse()): Point | null => {
+  const inverseForPoint = () => {
+    const scene = sceneRef.current;
+    if (!scene) return undefined;
+    const transform = scene.getAttribute('transform');
+    const cached = pointMatrix.current;
+    if (cached?.scene === scene && cached.transform === transform) return cached.inverse;
+    const inverse = scene.getScreenCTM()?.inverse();
+    pointMatrix.current = inverse ? { scene, transform, inverse } : null;
+    return inverse;
+  };
+  useEffect(() => {
+    const invalidate = () => { pointMatrix.current = null; };
+    window.addEventListener('resize', invalidate);
+    return () => window.removeEventListener('resize', invalidate);
+  }, []);
+  const point = (event: { clientX: number; clientY: number }, inverse = inverseForPoint()): Point | null => {
     if (!inverse) return null;
     const local = new DOMPoint(event.clientX, event.clientY).matrixTransform(inverse);
     return { x: Math.max(0, Math.min(1, local.x / w)), y: Math.max(0, Math.min(1, local.y / h)) };
@@ -240,7 +251,7 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
       for (let i = 1; i <= steps; i++) eraseAt(from.x + (event.clientX - from.x) * i / steps, from.y + (event.clientY - from.y) * i / steps);
       g.lastClient = { x: event.clientX, y: event.clientY }; return;
     }
-    const inverse = sceneRef.current?.getScreenCTM()?.inverse();
+    const inverse = inverseForPoint();
     if (!inverse) return;
     const p = point(event, inverse); if (!p || !g.item) return;
     if (Math.hypot((p.x - g.start.x) * w * zoom, (p.y - g.start.y) * h * zoom) > 2) g.moved = true;
@@ -458,7 +469,7 @@ export default function ViewerWhiteboard({ active, tool, onToggle, onTool, image
       <g ref={sceneRef} data-whiteboard-scene transform="matrix(1 0 0 1 0 0)" clipPath={`url(#${clipId})`}>
       <rect data-whiteboard-surface width={w} height={h} fill="transparent" style={{ pointerEvents: drawing ? 'all' : 'none' }} />
       {renderedMarks.filter(mark => !erased.has(mark.id) && mark.id !== draft?.id && mark.id !== editingId).map(mark => mark.node)}
-      {draft && (gesture.current?.kind === 'draw' ? <WhiteboardDraft key={draft.id} ref={draftView} initial={draft} renderMark={renderMark} /> : renderMark(draft))}{preview && renderMark(preview)}
+      {draft && (gesture.current?.kind === 'draw' ? <WhiteboardDraft key={draft.id} ref={draftView} initial={draft} w={w} h={h} renderMark={renderMark} /> : renderMark(draft))}{preview && renderMark(preview)}
       {bounds && !textAt && <rect className="viewer-whiteboard__selection" x={bounds.x - 5 / zoom} y={bounds.y - 5 / zoom} width={bounds.width + 10 / zoom} height={bounds.height + 10 / zoom} rx={4 / zoom} strokeWidth={1.5 / zoom} strokeDasharray={`${5 / zoom} ${3 / zoom}`} pointerEvents="none" />}
       {shownSelected && shapes.includes(shownSelected.tool) && !textAt && drawing && shownSelected.points.map((p, index) => <g key={index} data-whiteboard-handle={index} style={{ cursor: 'nwse-resize' }}>
         <circle cx={p.x * w} cy={p.y * h} r={11 / zoom} fill="transparent" pointerEvents="all" />

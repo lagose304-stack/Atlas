@@ -26,6 +26,25 @@ export function strokePath(points: BoardPoint[], width: number, height: number):
   return path;
 }
 
+/** Buffer del trazo en curso: solo añade las curvas nuevas, sin volver a recorrer su historia. */
+export function createStrokePathBuilder() {
+  let first: BoardPoint | undefined, last: BoardPoint | undefined;
+  let count = 0, w = 0, h = 0, prefix = '';
+  return (points: BoardPoint[], width: number, height: number) => {
+    if (!points.length) { first = last = undefined; count = 0; prefix = ''; return ''; }
+    const xy = (p: BoardPoint) => `${p.x * width},${p.y * height}`;
+    if (first !== points[0] || width !== w || height !== h || points.length < count || (count && points[count - 1] !== last)) {
+      prefix = `M${xy(points[0])}`; count = 1;
+    }
+    for (let i = Math.max(1, count - 1); i < points.length - 1; i++) {
+      const p = points[i], next = points[i + 1];
+      prefix += ` Q${xy(p)} ${xy({ x: (p.x + next.x) / 2, y: (p.y + next.y) / 2 })}`;
+    }
+    first = points[0]; last = points[points.length - 1]; count = points.length; w = width; h = height;
+    return prefix + (count > 1 ? ` L${xy(last)}` : '');
+  };
+}
+
 export function constrainedEnd(start: BoardPoint, end: BoardPoint, tool: WhiteboardTool, w: number, h: number): BoardPoint {
   const dx = (end.x - start.x) * w, dy = (end.y - start.y) * h;
   let x: number, y: number;

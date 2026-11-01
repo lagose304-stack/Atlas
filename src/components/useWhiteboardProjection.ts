@@ -1,4 +1,5 @@
 import { useLayoutEffect, type RefObject } from 'react';
+import { DIRECT_VIEW_TRANSFORM_EVENT } from './viewerTouchNavigation';
 
 /** Proyección en SVG nativo; el texto nunca se amplía como una textura CSS. */
 export function imageProjection(
@@ -35,13 +36,19 @@ export function useWhiteboardProjection(svgRef: RefObject<SVGSVGElement>, sceneR
       update(); frame = requestAnimationFrame(tick);
     };
     animate();
+    const directUpdate = () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null; update();
+    };
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
     observer?.observe(svg); observer?.observe(imageLayer);
     imageLayer.addEventListener('transitionrun', animate);
+    imageLayer.addEventListener(DIRECT_VIEW_TRANSFORM_EVENT, directUpdate);
     window.addEventListener('resize', update);
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);
       observer?.disconnect(); imageLayer.removeEventListener('transitionrun', animate); window.removeEventListener('resize', update);
+      imageLayer.removeEventListener(DIRECT_VIEW_TRANSFORM_EVENT, directUpdate);
     };
   }, [svgRef, sceneRef, imageLayer, size?.width, size?.height, zoom, viewTransform]);
 }

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useState } from 'react';
+import { Profiler, useState } from 'react';
 import ViewerWhiteboard, { type WhiteboardTool } from './ViewerWhiteboard';
 
 let layer: HTMLDivElement;
@@ -31,7 +31,7 @@ beforeEach(() => {
 afterEach(() => { layer.remove(); vi.unstubAllGlobals(); });
 
 describe('Pizarra temporal del visor', () => {
-  it('recoge las muestras agrupadas con una sola lectura de coordenadas y conserva el extremo al terminar', () => {
+  it('reutiliza las coordenadas mientras la proyección no cambia y conserva el extremo al terminar', () => {
     render(<Harness />);
     fireEvent.pointerDown(canvas(), { button: 0, pointerId: 1, clientX: 80, clientY: 60 });
     const matrix = vi.spyOn(SVGElement.prototype as SVGGraphicsElement, 'getScreenCTM');
@@ -39,14 +39,16 @@ describe('Pizarra temporal del visor', () => {
     const event = new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: 200, clientY: 120 });
     Object.defineProperty(event, 'getCoalescedEvents', { value: () => [{ clientX: 100, clientY: 70 }, { clientX: 140, clientY: 95 }] });
     fireEvent(canvas(), event);
-    expect(matrix).toHaveBeenCalledTimes(1);
+    expect(matrix).not.toHaveBeenCalled();
     // Terminar antes del siguiente fotograma también debe guardar todas las muestras.
     fireEvent.pointerUp(canvas(), { pointerId: 1 });
     const path = layer.querySelector('[data-whiteboard-mark] path')!.getAttribute('d');
     expect(path).toContain('Q100,70');
     expect(path).toContain('Q140,95');
     expect(path).toMatch(/L200,120$/);
+    layer.querySelector('[data-whiteboard-scene]')!.setAttribute('transform', 'matrix(2 0 0 2 0 0)');
     draw();
+    expect(matrix).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Deshacer apunte' }));
     expect(layer.querySelector('[data-whiteboard-mark] path')).toHaveAttribute('d', path);
     matrix.mockRestore();
@@ -55,8 +57,10 @@ describe('Pizarra temporal del visor', () => {
   it('repinta el trazo activo sin reinstalar los controles de la pizarra en cada fotograma', async () => {
     vi.useFakeTimers();
     try {
-      render(<Harness />);
+      const commits = vi.fn();
+      render(<Profiler id="whiteboard" onRender={commits}><Harness /></Profiler>);
       fireEvent.pointerDown(canvas(), { button: 0, clientX: 80, clientY: 60 });
+      commits.mockClear();
       const listeners = vi.spyOn(window, 'addEventListener');
       for (let i = 1; i <= 5; i++) {
         fireEvent.pointerMove(canvas(), { clientX: 80 + i * 10, clientY: 60 + i * 10 });
@@ -66,6 +70,7 @@ describe('Pizarra temporal del visor', () => {
       expect(end[0]).toBeCloseTo(130);
       expect(end[1]).toBeCloseTo(110);
       expect(listeners.mock.calls.filter(([name]) => name === 'keydown')).toHaveLength(0);
+      expect(commits).not.toHaveBeenCalled();
       listeners.mockRestore();
       fireEvent.pointerCancel(canvas());
       expect(count()).toBe(0);
