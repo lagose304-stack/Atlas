@@ -78,3 +78,60 @@ it('la función alternativa comparte el mismo contrato de lectura pública', asy
   const result = await context.exports.onRequest({ request: request(), env: { R2_PUBLIC_DOMAIN: domain } });
   expect(result.status).toBe(200);
 });
+
+describe('Lectura directa de R2 en el Worker desplegado', () => {
+  function workerHarness(get) {
+    const source = readFileSync('cloudflare/_worker.js', 'utf8').replace('export default', 'globalThis.worker =');
+    const fetch = vi.fn(() => { throw new Error('El acceso HTTP público falla en producción'); });
+    const context = { Request, Response, URL, Uint8Array, AbortController, setTimeout, clearTimeout, fetch };
+    vm.runInNewContext(source, context);
+    const env = { R2_PUBLIC_DOMAIN: `${domain}/media`, R2_BUCKET: { get: vi.fn(get) }, ASSETS: { fetch: vi.fn() } };
+    return { env, fetch, serve: url => context.worker.fetch(request(url), env) };
+  }
+  const object = () => ({ body: new Response(new Uint8Array([4, 5, 6])).body, size: 3, httpMetadata: { contentType: 'image/webp' } });
+
+  it('exporta aunque falle HTTP público y resuelve espacios, acentos, prefijo y versión de caché', async () => {
+    const h = workerHarness(object);
+    const result = await h.serve(`${domain}/media/placas/Am%C3%ADgdala%20palatina.webp?v=2`);
+    expect(result.status).toBe(200);
+    expect(new Uint8Array(await result.arrayBuffer())).toEqual(new Uint8Array([4, 5, 6]));
+    expect(result.headers.get('Content-Type')).toBe('image/webp');
+    expect(h.env.R2_BUCKET.get).toHaveBeenCalledWith('placas/Amígdala palatina.webp');
+    expect(h.fetch).not.toHaveBeenCalled();
+    expect(h.env.ASSETS.fetch).not.toHaveBeenCalled();
+  });
+
+  it('valida el destino antes de acceder al bucket', async () => {
+    const h = workerHarness(object);
+    for (const url of [`${domain}/other/a.webp`, 'https://other.invalid/a.webp', `${domain}/media/a.svg`, `${domain}/media/%ZZ.webp`]) {
+      expect((await h.serve(url)).status).toBe(400);
+    }
+    expect(h.env.R2_BUCKET.get).not.toHaveBeenCalled();
+    expect(h.fetch).not.toHaveBeenCalled();
+  });
+
+  it('conserva los errores de objeto ausente, formato inválido, tamaño excesivo y fallo de R2', async () => {
+    const cases = [
+      [() => null, 404],
+      [() => ({ ...object(), httpMetadata: { contentType: 'text/html' } }), 415],
+      [() => ({ ...object(), size: 33 * 1024 * 1024 }), 413],
+      [() => { throw new Error('R2 no disponible'); }, 502],
+    ];
+    for (const [get, status] of cases) {
+      const h = workerHarness(get);
+      expect((await h.serve(`${domain}/media/a.webp`)).status).toBe(status);
+      expect(h.fetch).not.toHaveBeenCalled();
+    }
+  });
+
+  it('interrumpe una lectura del binding que no responde en 20 segundos', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = workerHarness(() => new Promise(() => {}));
+      const pending = h.serve(`${domain}/media/a.webp`);
+      await vi.advanceTimersByTimeAsync(20000);
+      expect((await pending).status).toBe(502);
+      expect(h.fetch).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+});

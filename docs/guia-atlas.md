@@ -120,6 +120,8 @@ En pantallas táctiles, los eventos de la pizarra no se propagan al controlador 
 
 **Revisiones locales:** [herramientas y nitidez con zoom](revisiones/pizarra-publica-nitidez-2026-10-31.md) y [descarga de apuntes](revisiones/pizarra-exportacion-apuntes-2026-10-31.md).
 
+**Lectura para exportar en Pages (1 de noviembre de 2026):** se confirmó mediante GET público que una placa existente devuelve 200 en R2 y 502 a través de `/api/plate-image` en producción. El Worker local ahora utiliza `R2_BUCKET.get` cuando está disponible, después de validar la URL pública, y conserva los límites de formato, 32 MiB y tiempo de lectura. Decodifica la clave sin los parámetros de caché. Vite, Express y Functions conservan la lectura HTTP; el workflow despliega `cloudflare/_worker.js`. Las pruebas simulan el binding y el fallo HTTP, sin escribir datos remotos. Corrección local pendiente de despliegue y comprobación del PNG en línea; no se determinó la causa interna del fallo HTTP del Worker.
+
 ### Acceso y permisos
 
 1. `AuthContext.tsx` llama a `atlas_login`, `atlas_validate_session` y `atlas_logout` mediante RPC.
