@@ -7,11 +7,12 @@
   --slide-purple: #3b2a78;
   --slide-ink: #2a1d5c;
   --slide-pink: #e9a3c0;
+  --slide-accent-gradient: linear-gradient(90deg,#3b2a78,#7a5bc0 45%,#e9a3c0);
   isolation: isolate;
   border-radius: 4px !important;
   border: 1px solid rgba(255,255,255,.9) !important;
   background: linear-gradient(135deg,#e4eff0,#f4f7f9 55%,#dce9ec) !important;
-  box-shadow: 0 8px 0 -1px #5e9894, 0 28px 35px -20px rgba(0,0,0,.48), inset 0 0 0 3px rgba(140,205,200,.34), inset 0 2px 0 #fff !important;
+  box-shadow: 0 28px 35px -20px rgba(0,0,0,.48), inset 0 0 0 3px rgba(140,205,200,.34), inset 0 2px 0 #fff !important;
   margin-bottom: 14px;
   color: var(--slide-ink);
 }
@@ -21,7 +22,7 @@
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  background: linear-gradient(105deg,transparent 0%,rgba(255,255,255,.18) 11%,transparent 19%,transparent 58%,rgba(255,255,255,.12) 64%,transparent 71%);
+  background: var(--slide-accent-gradient) bottom / 100% 7px no-repeat, linear-gradient(105deg,transparent 0%,rgba(255,255,255,.18) 11%,transparent 19%,transparent 58%,rgba(255,255,255,.12) 64%,transparent 71%);
   box-shadow: inset 0 2px 0 rgba(255,255,255,.8), inset 0 -3px 6px rgba(70,120,125,.18);
 }
 .cb-weekly-lab .cb-weekly-lab-content {
@@ -34,7 +35,7 @@
   background-image: radial-gradient(ellipse at 0% 100%,rgba(233,163,192,.42),transparent 70%),radial-gradient(ellipse at 100% 0%,rgba(110,84,190,.16),transparent 70%),linear-gradient(rgba(59,42,120,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(59,42,120,.055) 1px,transparent 1px);
   background-size: auto,auto,24px 24px,24px 24px;
 }
-.cb-weekly-lab-content::before { content:''; position:absolute; inset:0 0 auto; height:7px; background:linear-gradient(90deg,#3b2a78,#7a5bc0 45%,#e9a3c0); box-shadow:0 1px 0 #fff; }
+.cb-weekly-lab-content::before { content:''; position:absolute; inset:0 0 auto; height:7px; background:var(--slide-accent-gradient); box-shadow:0 1px 0 #fff; }
 .cb-weekly-lab-content::after { content:''; position:absolute; inset:auto 0 0; height:12px; border-top:1px solid rgba(59,42,120,.35); background:repeating-linear-gradient(90deg,rgba(59,42,120,.6) 0 1px,transparent 1px 8px); pointer-events:none; }
 .cb-weekly-slide-imprint { position:absolute; top:20px; left:46px; right:30px; display:flex; justify-content:space-between; gap:12px; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:600; letter-spacing:.24em; text-transform:uppercase; color:#5a3f8f; }
 .cb-weekly-slide-registration { position:absolute; top:44px; bottom:34px; left:22px; width:14px; pointer-events:none; }
