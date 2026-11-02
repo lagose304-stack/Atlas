@@ -7,6 +7,7 @@ import SeoManager from './components/SeoManager';
 import MaintenanceGate from './components/MaintenanceGate';
 import { logClientError } from './services/adminControlCenter';
 import AtlasLoadingScreen from './components/AtlasLoadingScreen';
+import ViewerPageSuspension from './components/ViewerPageSuspension';
 
 // Pre-cargar la página de inicio en paralelo con la verificación de mantenimiento y auth
 const homePromise = import('./pages/Home');
@@ -152,6 +153,7 @@ const App: React.FC = () => {
     <AuthProvider>
       <Router>
         <MaintenanceGate>
+        <ViewerPageSuspension />
         <SeoManager />
         <GlobalNavigationStateRestorer />
         <SiteVisitTracker />

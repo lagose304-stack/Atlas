@@ -1,0 +1,33 @@
+import { act, render, screen } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import ViewerPageSuspension from './ViewerPageSuspension';
+import { IMAGE_VIEWER_VISIBILITY_EVENT } from '../constants/uiEvents';
+
+afterEach(() => { vi.unstubAllGlobals(); });
+it('suspende la página hasta cerrar el último visor y permite restaurar antes de quitar la espera', () => {
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.push(callback); return frames.length; });
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  const root = document.createElement('div'); root.id = 'root'; document.body.appendChild(root);
+  root.innerHTML = '<input value="conservado" />';
+  const { unmount } = render(<ViewerPageSuspension />);
+  const visibility = (delta: number) => act(() => { window.dispatchEvent(new CustomEvent(IMAGE_VIEWER_VISIBILITY_EVENT, { detail: { delta } })); });
+  visibility(1); visibility(1);
+  expect(root).toHaveAttribute('data-viewer-suspended');
+  expect(root).toHaveAttribute('inert');
+  visibility(-1);
+  expect(root).toHaveAttribute('data-viewer-suspended');
+  visibility(-1);
+  expect(root).not.toHaveAttribute('data-viewer-suspended');
+  expect(root).not.toHaveAttribute('inert');
+  expect(screen.getByText('Cargando sitio…')).toBeInTheDocument();
+  act(() => { frames.shift()!(0); });
+  expect(screen.getByText('Cargando sitio…')).toBeInTheDocument();
+  act(() => { frames.shift()!(16); });
+  expect(screen.queryByText('Cargando sitio…')).not.toBeInTheDocument();
+  expect(root.querySelector('input')?.value).toBe('conservado');
+  visibility(1); unmount();
+  expect(root).not.toHaveAttribute('inert');
+  expect(root).not.toHaveAttribute('data-viewer-suspended');
+  root.remove();
+});

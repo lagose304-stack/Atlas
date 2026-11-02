@@ -4,6 +4,16 @@
 body:has(> [data-public-viewer]) #root {
   visibility: hidden;
 }
+#root[data-viewer-suspended] {
+  content-visibility: hidden;
+  contain-intrinsic-size: auto var(--viewer-page-height, 100vh);
+  visibility: hidden;
+}
+#root[data-viewer-suspended] *,
+#root[data-viewer-suspended] *::before,
+#root[data-viewer-suspended] *::after {
+  animation-play-state: paused !important;
+}
 body:has(> [data-public-viewer]) #root *,
 body:has(> [data-public-viewer]) #root *::before,
 body:has(> [data-public-viewer]) #root *::after {
