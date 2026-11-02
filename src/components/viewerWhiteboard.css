@@ -1,5 +1,16 @@
 .viewer-whiteboard-controls { position: absolute; inset: 0; z-index: 21; pointer-events: none; font-family: 'Segoe UI', sans-serif; }
 .viewer-whiteboard[hidden] { display: none; }
+/* Ambas barras conservan su superficie al dibujar, con dedo, lápiz o ratón.
+   No dependen del fondo ni de los efectos que se suspenden durante un gesto. */
+[data-public-viewer] .viewer-visualization-toolbar,
+[data-public-viewer] .viewer-whiteboard {
+  background: #fff !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  isolation: isolate;
+  will-change: transform;
+  transition: none !important;
+}
 .viewer-whiteboard-launcher-divider { width: 26px; min-height: 1px; background: #bae6fd; margin: 2px 0; flex-shrink: 0; }
 .viewer-visualization-toolbar__controls { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 34px; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
 .viewer-visualization-toolbar__controls::-webkit-scrollbar { display: none; }

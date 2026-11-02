@@ -1,4 +1,14 @@
 /* La imagen original permanece a resolución completa; se restauran los efectos al soltar. */
+/* El visor se monta en body: conservar el layout de la página, sin pintar ni
+   animar su contenido detrás del portal (especialmente la portada semanal). */
+body:has(> [data-public-viewer]) #root {
+  visibility: hidden;
+}
+body:has(> [data-public-viewer]) #root *,
+body:has(> [data-public-viewer]) #root *::before,
+body:has(> [data-public-viewer]) #root *::after {
+  animation-play-state: paused !important;
+}
 [data-viewer-interacting] [data-viewer-photo] { filter: var(--viewer-motion-filter, none) !important; }
 [data-viewer-interacting] [data-viewer-grain] { visibility: hidden; }
 [data-viewer-interacting] .viewer-whiteboard__context,
