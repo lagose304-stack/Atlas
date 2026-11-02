@@ -359,7 +359,6 @@ const StandardSubtemas: React.FC = () => {
                                 }
                               }}
                             />
-                            <div className="subtema-card-scrim" />
                           </div>
                         ) : (
                           <div className="subtema-card-fallback-wrap">

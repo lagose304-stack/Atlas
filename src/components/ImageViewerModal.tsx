@@ -8,6 +8,7 @@ import { appendLaserPoint, LASER_TRAIL_LIFETIME, prepareLaserStroke, splitLaserT
 import ViewerWhiteboard, { type WhiteboardTool } from './ViewerWhiteboard';
 import { paintTouchView, type ViewerTransform } from './viewerTouchNavigation';
 import { useViewerInteraction } from './useViewerInteraction';
+import { usePlateWatermark } from './usePlateWatermark';
 import { renderBoldText } from './BoldField';
 import { IMAGE_VIEWER_VISIBILITY_EVENT, ImageViewerVisibilityDetail } from '../constants/uiEvents';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
@@ -15,6 +16,7 @@ import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { InteractiveMapViewerSection } from './InteractiveMapViewerModal';
 import laboratoryLogo from '../assets/logos/laboratorio.png';
+import laboratoryIcon from '../assets/icons/laboratorio.ico';
 import PlateEditorPanel, { MarkerLocation } from './PlateEditorPanel';
 import { replaceCloudinaryImage } from '../services/cloudinary';
 import { invalidateImageCache } from '../services/cloudinaryImages';
@@ -807,6 +809,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [annotationTool, setAnnotationTool] = useState<WhiteboardTool | null>(null);
   const [whiteboardLauncherLayer, setWhiteboardLauncherLayer] = useState<HTMLDivElement | null>(null);
   const [whiteboardImageLayer, setWhiteboardImageLayer] = useState<HTMLDivElement | null>(null);
+  const watermarkRef = usePlateWatermark(whiteboardImageLayer, !isPlateImageLoading, `${zoomLevel}:${position.x}:${position.y}:${rotation}`);
   const interactionRootRef = useViewerInteraction();
   useEffect(() => {
     setIsAnnotationMode(false);
@@ -3606,7 +3609,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 display: zoomLevel > 1.05 ? 'block' : 'none',
                 contain: 'layout paint',
                 position: 'absolute',
-                left: '16px',
+                right: 'max(16px, env(safe-area-inset-right))',
                 bottom: '18px',
                 width: `${miniWidth}px`,
                 height: `${miniHeight}px`,
@@ -3667,7 +3670,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         })()}
 
         {!isPlateImageLoading && (
-          <div className="atlas-plate-watermark" aria-hidden="true">
+          <div ref={watermarkRef} className="atlas-plate-watermark" aria-hidden="true" style={{ visibility: 'hidden' }}>
+            <img className="atlas-plate-watermark-icon" src={laboratoryIcon} alt="" draggable={false} />
             <span className="atlas-plate-watermark-name">Atlas Histolab</span>
             <span className="atlas-plate-watermark-domain">https://atlas-histolab.pages.dev</span>
           </div>

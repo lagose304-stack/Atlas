@@ -1,4 +1,9 @@
 type Border = { regionStrokeWidth?: number | null; regionDashLength?: number | null; regionDashGap?: number | null };
+export const REGION_BORDER_PRESETS = {
+  width: [{ label: 'Muy delgado', value: 1 }, { label: 'Delgado', value: 1.75 }, { label: 'Medio', value: 2.5 }, { label: 'Grueso', value: 4 }],
+  gap: [{ label: 'Corta', value: 3 }, { label: 'Media', value: 7 }, { label: 'Larga', value: 12 }],
+  dash: [{ label: 'Corto', value: 4 }, { label: 'Medio', value: 10 }, { label: 'Largo', value: 16 }],
+};
 const bounded = (value: number | null | undefined, fallback: number, min: number, max: number) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
 export function regionBorderStyle(border: Border) {
   return {

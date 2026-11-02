@@ -10,11 +10,20 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 });
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('ImageViewerModal: no captura la escritura del editor superpuesto', () => {
   it('ofrece la pizarra a la izquierda y conserva los controles de visualización al abrirla', () => {
     const { rerender } = render(<ImageViewerModal placaId={1} src="https://pub-isolated.r2.dev/placa.webp" onClose={() => {}} hasInteractiveMapHint={false} />);
+    // jsdom no calcula layout: la marca solo es visible cuando hay área de imagen.
+    const image = screen.getByRole('img', { name: 'Vista ampliada' });
+    const layer = image.parentElement!, frame = layer.parentElement!;
+    for (const element of [layer, frame]) {
+      Object.defineProperties(element, { clientWidth: { value: 800 }, clientHeight: { value: 600 } });
+      element.getBoundingClientRect = () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600 } as DOMRect);
+    }
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(240);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(50);
     fireEvent.load(screen.getByRole('img', { name: 'Vista ampliada' }));
     expect(screen.getByText('Atlas Histolab')).toBeVisible();
     const rightToolbar = screen.getByRole('toolbar', { name: 'Controles de zoom y visualización' });

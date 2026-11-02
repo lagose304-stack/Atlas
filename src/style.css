@@ -3419,20 +3419,6 @@ body {
   transform: scale(1.07);
 }
 
-/* Scrim sombreado sobre la imagen para contraste */
-.subtema-card-scrim {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.04) 0%, rgba(15, 23, 42, 0.45) 100%);
-  pointer-events: none;
-  transition: background 0.3s ease;
-  z-index: 2;
-}
-
-.subtema-public-card:hover .subtema-card-scrim {
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.04) 0%, rgba(15, 23, 42, 0.55) 100%);
-}
-
 /* Fila de distintivos flotantes en la imagen */
 .subtema-media-badges {
   position: absolute;

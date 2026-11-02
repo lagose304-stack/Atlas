@@ -1,7 +1,7 @@
 import { regionPolygonPath } from '../utils/regionPolygonPath';
 import { regionDashPath } from '../utils/regionDashPath';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { regionBorderStyle } from '../utils/regionBorderStyle';
+import { regionBorderStyle, REGION_BORDER_PRESETS } from '../utils/regionBorderStyle';
 import { createPortal } from 'react-dom';
 import {
   ZoomIn,
@@ -3330,12 +3330,15 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                         <line x1="8" y1="14" x2="192" y2="14" stroke={drawingPolygonColor} strokeWidth={borderGuideWidth} strokeDasharray={`${borderGuideDash} ${borderGuideGap + borderGuideWidth}`} strokeLinecap="round" />
                       </svg>
                       {[
-                        { label: 'Grosor de la línea', value: borderGuideWidth, min: 0.5, max: 8, step: 0.5, set: (value: number) => changeBorderStyle('regionStrokeWidth', value) },
-                        { label: 'Separación entre segmentos', value: borderGuideGap, min: 1, max: 24, step: 1, set: (value: number) => changeBorderStyle('regionDashGap', value) },
-                        { label: 'Longitud de los segmentos', value: borderGuideDash, min: 1, max: 32, step: 1, set: (value: number) => changeBorderStyle('regionDashLength', value) },
+                        { label: 'Grosor de la línea', value: borderGuideWidth, options: REGION_BORDER_PRESETS.width, set: (value: number) => changeBorderStyle('regionStrokeWidth', value) },
+                        { label: 'Separación entre segmentos', value: borderGuideGap, options: REGION_BORDER_PRESETS.gap, set: (value: number) => changeBorderStyle('regionDashGap', value) },
+                        { label: 'Longitud de los segmentos', value: borderGuideDash, options: REGION_BORDER_PRESETS.dash, set: (value: number) => changeBorderStyle('regionDashLength', value) },
                       ].map(control => <label key={control.label} style={{ display: 'block', fontSize: '0.76em', color: '#475569', marginTop: '8px' }}>
-                        {control.label}: {control.value} px
-                        <input aria-label={control.label} type="range" min={control.min} max={control.max} step={control.step} value={control.value} onChange={event => control.set(Number(event.target.value))} style={{ display: 'block', width: '100%' }} />
+                        {control.label}
+                        <select aria-label={control.label} value={control.value} onChange={event => control.set(Number(event.target.value))} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '7px', background: '#fff', color: '#334155', font: 'inherit' }}>
+                          {!control.options.some(option => option.value === control.value) && <option value={control.value} disabled>Valor guardado</option>}
+                          {control.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
                       </label>)}
                       <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.76em', marginTop: '8px' }}>
                         <input type="checkbox" checked={borderSmooth} onChange={event => {

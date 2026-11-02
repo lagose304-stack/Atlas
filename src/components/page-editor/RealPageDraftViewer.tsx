@@ -430,7 +430,6 @@ const RealPageDraftViewer: React.FC<RealPageDraftViewerProps> = ({
                               className="subtema-card-img"
                               loading="lazy"
                             />
-                            <div className="subtema-card-scrim" />
                           </div>
                         ) : (
                           <div className="subtema-card-fallback-wrap">
