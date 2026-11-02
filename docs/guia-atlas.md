@@ -283,3 +283,7 @@ Los scripts `audit-images.mjs`, `audit-integrity.mjs` y `audit-all-urls.mjs` com
 - Se confirmó parte del esquema remoto mediante metadatos; el detalle está en [el inventario de Supabase](supabase-inventario.md). La lista de migraciones registrada resultó vacía y no permite reconstruir qué scripts se aplicaron. Se documentaron respaldos específicos de las correcciones multimedia y la presencia de variables/binding en producción; esto no confirma un respaldo general, los valores cifrados ni qué commit está desplegado. Verificar cada punto cuando sea relevante para la tarea.
 
 Al cambiar arquitectura, persistencia, endpoints, comandos o reglas operativas, actualiza esta guía en el mismo trabajo. Documenta el comportamiento final y su fuente; no conviertas suposiciones o comentarios antiguos en hechos comprobados.
+
+### Composición táctil estable del visor
+
+Celular y tablet usan los mismos filtros de color ligeros durante toda la sesión cuando el dispositivo tiene un puntero táctil (any-pointer: coarse), también si se escribe con lápiz. En estos dispositivos se omiten enfoque, grano y desenfoques de fondo para evitar reconstruir la composición de la foto en cada trazo. La tinta provisional usa Canvas sincronizado y un presupuesto de dos millones de píxeles con densidad máxima 2; los apuntes definitivos y la exportación conservan su representación vectorial y resolución. El movimiento sigue agrupándose por requestAnimationFrame. Cambio local: las pruebas automatizadas no demuestran 30 fps ni ausencia de parpadeo en una tablet física.

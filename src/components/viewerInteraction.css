@@ -5,3 +5,13 @@
 [data-viewer-interacting] [data-viewer-backdrop],
 [data-viewer-interacting] .atlas-plate-watermark { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 [data-viewer-interacting] [data-viewer-backdrop] { transition: none !important; }
+
+/* Celular y tablet comparten una composición estable, también con lápiz.
+   No reconstruir filtros/texturas de la foto al empezar y terminar cada trazo. */
+@media (any-pointer: coarse) {
+  [data-public-viewer] [data-viewer-photo] { filter: var(--viewer-motion-filter, none) !important; }
+  [data-public-viewer] [data-viewer-grain] { visibility: hidden; }
+  [data-public-viewer] .viewer-whiteboard__context,
+  [data-public-viewer] [data-viewer-backdrop],
+  [data-public-viewer] .atlas-plate-watermark { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+}

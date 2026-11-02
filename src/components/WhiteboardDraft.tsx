@@ -39,13 +39,15 @@ export default forwardRef<WhiteboardDraftHandle, {
     if (!freehand || !svg?.parentElement || typeof CanvasRenderingContext2D === 'undefined' || typeof Path2D === 'undefined') return;
     const canvas = document.createElement('canvas');
     let context: CanvasRenderingContext2D | null;
-    try { context = canvas.getContext('2d', { alpha: true, desynchronized: true }); } catch { return; }
+    // Componer la tinta junto con la foto evita superficies negras en GPU móviles.
+    try { context = canvas.getContext('2d', { alpha: true }); } catch { return; }
     if (!context) return;
     canvas.setAttribute('data-whiteboard-live-stroke', ''); canvas.setAttribute('aria-hidden', 'true');
     Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none', zIndex: '9' });
     const preview = { canvas, context, paint: createLiveStrokePainter(), dpr: window.devicePixelRatio || 1 };
     const resize = () => {
-      preview.dpr = window.devicePixelRatio || 1;
+      // Solo la tinta provisional tiene presupuesto; el apunte final sigue siendo vectorial.
+      preview.dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(2_000_000 / Math.max(1, svg.clientWidth * svg.clientHeight)));
       const width = Math.round(svg.clientWidth * preview.dpr), height = Math.round(svg.clientHeight * preview.dpr);
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width; canvas.height = height;

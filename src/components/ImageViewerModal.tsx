@@ -2694,7 +2694,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const availableViewerModeCount = (groupedSenaladosItems.length > 0 ? 2 : 0) + (interactiveMapData || loadingInteractiveMap ? 1 : 0);
 
   return createPortal(
-    <div ref={interactionRootRef}
+    <div ref={interactionRootRef} data-public-viewer
       onContextMenu={(e) => { if (!isEditableTarget(e.target)) e.preventDefault(); }}
       onDragStart={(e) => e.preventDefault()}
       style={{
