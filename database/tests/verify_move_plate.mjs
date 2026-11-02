@@ -1,4 +1,4 @@
-// Ejecutar solo con PGlite aislado: node database/tests/move_plate.test.mjs <ruta a pglite/dist/index.js>
+// Ejecutar solo con PGlite aislado: node database/tests/verify_move_plate.mjs <ruta a pglite/dist/index.js>
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';

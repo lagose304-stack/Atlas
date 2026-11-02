@@ -21,7 +21,7 @@ El movimiento conserva ID de placa, URL, señalados y coordenadas, aumento, tinc
 Pruebas locales:
 
 - `npm test -- src/services/movePlate.test.ts src/pages/TrasladarPlaca.test.tsx`: siete casos de selección, confirmación, errores, contrato de la llamada e invalidación de caché.
-- `database/tests/move_plate.test.mjs`: PostgreSQL aislado con PGlite, datos ficticios y rol `anon`; comprueba rechazo sin permiso, destino incompatible, origen cambiado, destino idéntico, conservación de datos, colisión de mapas, cambio dentro del tema, placa sin mapa y rollback ante fallo después de actualizar el mapa. Recibe como argumento la ruta local a `@electric-sql/pglite/dist/index.js`; no utiliza Supabase ni carga `.env`.
+- `database/tests/verify_move_plate.mjs`: PostgreSQL aislado con PGlite, datos ficticios y rol `anon`; comprueba rechazo sin permiso, destino incompatible, origen cambiado, destino idéntico, conservación de datos, colisión de mapas, cambio dentro del tema, placa sin mapa y rollback ante fallo después de actualizar el mapa. Recibe como argumento la ruta local a `@electric-sql/pglite/dist/index.js`; no utiliza Supabase ni carga `.env`.
 - Navegador local a 1440 y 390 px con datos/servicios simulados y red externa bloqueada: selección, confirmación, éxito y ausencia de desbordamiento. No valida permisos ni persistencia reales.
 - Tipos y compilación del frontend.
 
