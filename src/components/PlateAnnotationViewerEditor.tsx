@@ -1,4 +1,7 @@
+import { regionPolygonPath } from '../utils/regionPolygonPath';
+import { regionDashPath } from '../utils/regionDashPath';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { regionBorderStyle } from '../utils/regionBorderStyle';
 import { createPortal } from 'react-dom';
 import {
   ZoomIn,
@@ -45,6 +48,10 @@ export interface MarkerLocation {
   regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
+  regionStrokeWidth?: number | null;
+  regionDashLength?: number | null;
+  regionDashGap?: number | null;
+  regionSmooth?: boolean | null;
 }
 
 export interface PlateAnnotationViewerEditorProps {
@@ -279,39 +286,7 @@ const pointInPolygon = (x: number, y: number, flatPoints: number[]): boolean => 
 };
 
 // Genera el path SVG ('d') con regla evenodd para soportar polígonos complejos con zonas de exclusión (huecos/donas)
-const getPolygonPathD = (
-  outerPoints: number[],
-  holes: number[][] | null | undefined,
-  width: number,
-  height: number
-): string => {
-  if (outerPoints.length < 6) return '';
-  let d = '';
-
-  // Anillo exterior
-  for (let i = 0; i < outerPoints.length; i += 2) {
-    const x = outerPoints[i] * width;
-    const y = outerPoints[i + 1] * height;
-    d += (i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
-  }
-  d += ' Z';
-
-  // Anillos interiores (zonas de exclusión / huecos)
-  if (holes && holes.length > 0) {
-    for (const hole of holes) {
-      if (hole.length >= 6) {
-        for (let i = 0; i < hole.length; i += 2) {
-          const x = hole[i] * width;
-          const y = hole[i + 1] * height;
-          d += (i === 0 ? ` M ${x} ${y}` : ` L ${x} ${y}`);
-        }
-        d += ' Z';
-      }
-    }
-  }
-
-  return d;
-};
+const getPolygonPathD = regionPolygonPath;
 
 // Calcula el área neta de un polígono/señalado (restando zonas de exclusión/huecos).
 const getMarkerArea = (marker: { regionPoints?: number[] | null; regionHoles?: number[][] | null }): number => {
@@ -362,6 +337,10 @@ interface InternalMarkerItem {
   regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
+  regionStrokeWidth?: number | null;
+  regionDashLength?: number | null;
+  regionDashGap?: number | null;
+  regionSmooth?: boolean | null;
 }
 
 const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = ({
@@ -428,6 +407,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           regionHoles: initialLocation.regionHoles ?? null,
           regionColor: initialLocation.regionColor ?? '#22c55e',
           regionOpacity: initialLocation.regionOpacity ?? 0.28,
+          regionStrokeWidth: initialLocation.regionStrokeWidth,
+          regionDashLength: initialLocation.regionDashLength,
+          regionDashGap: initialLocation.regionDashGap,
+          regionSmooth: initialLocation.regionSmooth,
         }];
       }
       return [{
@@ -456,6 +439,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         regionHoles: loc.regionHoles ?? null,
         regionColor: loc.regionColor ?? '#22c55e',
         regionOpacity: loc.regionOpacity ?? 0.28,
+        regionStrokeWidth: loc.regionStrokeWidth,
+        regionDashLength: loc.regionDashLength,
+        regionDashGap: loc.regionDashGap,
+        regionSmooth: loc.regionSmooth,
       }));
     }
 
@@ -473,6 +460,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           regionHoles: pos?.regionHoles ?? null,
           regionColor: pos?.regionColor ?? '#22c55e',
           regionOpacity: pos?.regionOpacity ?? 0.28,
+          regionStrokeWidth: pos?.regionStrokeWidth,
+          regionDashLength: pos?.regionDashLength,
+          regionDashGap: pos?.regionDashGap,
+          regionSmooth: pos?.regionSmooth,
         };
       });
     }
@@ -510,6 +501,28 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   const drawingPolygonPointsRef = useRef<number[]>([]);
   const [drawingPolygonColor, setDrawingPolygonColor] = useState('#22c55e');
   const [drawingPolygonOpacity, setDrawingPolygonOpacity] = useState(0.28);
+  const [borderGuideWidth, setBorderGuideWidth] = useState(2.5);
+  const [borderGuideDash, setBorderGuideDash] = useState(10);
+  const [borderGuideGap, setBorderGuideGap] = useState(7);
+  const [borderSmooth, setBorderSmooth] = useState(true);
+  const borderGuidePattern = `${borderGuideDash} ${borderGuideGap + borderGuideWidth}`;
+  useEffect(() => {
+    const marker = markers.find(item => item.id === selectedMarkerId);
+    if (!marker?.regionPoints?.length) return;
+    const style = regionBorderStyle(marker);
+    setBorderGuideWidth(style.width); setBorderGuideDash(style.dash); setBorderGuideGap(style.gap);
+    setBorderSmooth(marker.regionSmooth ?? false);
+  }, [selectedMarkerId]);
+  const changeBorderStyle = (field: 'regionStrokeWidth' | 'regionDashLength' | 'regionDashGap', value: number) => {
+    if (field === 'regionStrokeWidth') setBorderGuideWidth(value);
+    if (field === 'regionDashLength') setBorderGuideDash(value);
+    if (field === 'regionDashGap') setBorderGuideGap(value);
+    const ids = sessionMarkerIds.length ? sessionMarkerIds : selectedMarkerId ? [selectedMarkerId] : [];
+    if (ids.length) {
+      setMarkers(previous => previous.map(marker => ids.includes(marker.id) && marker.regionPoints?.length ? { ...marker, [field]: value } : marker));
+      setHasUnsavedModifications(true);
+    }
+  };
   const [cursorImagePos, setCursorImagePos] = useState<{ x: number; y: number } | null>(null);
 
   // Selected polygon vertex (on outer contour or inside an exclusion zone hole)
@@ -1093,6 +1106,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         regionHoles: markers[0]?.regionHoles ?? null,
         regionColor: drawingPolygonColor,
         regionOpacity: drawingPolygonOpacity,
+        regionStrokeWidth: borderGuideWidth,
+        regionDashLength: borderGuideDash,
+        regionDashGap: borderGuideGap,
+        regionSmooth: borderSmooth,
       };
       setMarkers([updated]);
       setSelectedMarkerId(updated.id);
@@ -1114,6 +1131,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           regionHoles: null,
           regionColor: drawingPolygonColor,
           regionOpacity: drawingPolygonOpacity,
+          regionStrokeWidth: borderGuideWidth,
+          regionDashLength: borderGuideDash,
+          regionDashGap: borderGuideGap,
+          regionSmooth: borderSmooth,
         } : m));
         setSelectedMarkerId(existingId);
       } else {
@@ -1126,6 +1147,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           regionHoles: null,
           regionColor: drawingPolygonColor,
           regionOpacity: drawingPolygonOpacity,
+          regionStrokeWidth: borderGuideWidth,
+          regionDashLength: borderGuideDash,
+          regionDashGap: borderGuideGap,
+          regionSmooth: borderSmooth,
         };
         setMarkers(prev => [...prev, newMarker]);
         setSessionMarkerIds([newMarker.id]);
@@ -1146,6 +1171,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         regionHoles: null,
         regionColor: drawingPolygonColor,
         regionOpacity: drawingPolygonOpacity,
+        regionStrokeWidth: borderGuideWidth,
+        regionDashLength: borderGuideDash,
+        regionDashGap: borderGuideGap,
+        regionSmooth: borderSmooth,
       };
       setMarkers(prev => [...prev, newMarker]);
       setSessionMarkerIds(prev => [...prev, newMarker.id]);
@@ -1154,7 +1183,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       setHasUnsavedModifications(true);
       return;
     }
-  }, [activeTool, currentCreationLabel, drawingPolygonColor, drawingPolygonOpacity, markers, pushHistory, selectedMarkerId, sessionMarkerIds, singlePickerMode, targetLabel]);
+  }, [activeTool, currentCreationLabel, drawingPolygonColor, drawingPolygonOpacity, borderGuideWidth, borderGuideDash, borderGuideGap, borderSmooth, markers, pushHistory, selectedMarkerId, sessionMarkerIds, singlePickerMode, targetLabel]);
 
   // Unified Pointer Down for Canvas (Handles Freehand Drawing, Exclusion Holes, and Panning)
   const handleCanvasPointerDown = (e: React.PointerEvent | React.MouseEvent) => {
@@ -1723,6 +1752,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           regionHoles: placedMarker.regionHoles ?? null,
           regionColor: placedMarker.regionColor ?? '#22c55e',
           regionOpacity: placedMarker.regionOpacity ?? 0.28,
+          regionStrokeWidth: placedMarker.regionStrokeWidth,
+          regionDashLength: placedMarker.regionDashLength,
+          regionDashGap: placedMarker.regionDashGap,
+          regionSmooth: placedMarker.regionSmooth,
         }, placedMarker.label);
       } else {
         onSaveSingle?.(null, placedMarker?.label);
@@ -1740,6 +1773,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           regionHoles: m.regionHoles ?? null,
           regionColor: m.regionColor ?? '#22c55e',
           regionOpacity: m.regionOpacity ?? 0.28,
+          regionStrokeWidth: m.regionStrokeWidth,
+          regionDashLength: m.regionDashLength,
+          regionDashGap: m.regionDashGap,
+          regionSmooth: m.regionSmooth,
         }));
       onSaveBatch?.(validLocations, currentCreationLabel || targetLabel || markersToSave[0]?.label);
     } else {
@@ -1760,6 +1797,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
             regionHoles: m.regionHoles ?? null,
             regionColor: m.regionColor ?? '#22c55e',
             regionOpacity: m.regionOpacity ?? 0.28,
+            regionStrokeWidth: m.regionStrokeWidth,
+            regionDashLength: m.regionDashLength,
+            regionDashGap: m.regionDashGap,
+            regionSmooth: m.regionSmooth,
           });
         } else {
           finalPositions.push(null);
@@ -2376,7 +2417,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                     x: marker.regionPoints![i * 2] * imageSize.width,
                     y: marker.regionPoints![i * 2 + 1] * imageSize.height,
                   }));
-                  const pathD = getPolygonPathD(marker.regionPoints, marker.regionHoles, imageSize.width, imageSize.height);
+                  const pathD = getPolygonPathD(marker.regionPoints, marker.regionHoles, imageSize.width, imageSize.height, marker.regionSmooth ?? false);
+                  const cleanDashes = marker.regionStrokeWidth != null || marker.regionDashLength != null || marker.regionDashGap != null;
 
                   return (
                     <g key={marker.id}>
@@ -2385,9 +2427,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                         fill={marker.regionColor ?? '#22c55e'}
                         fillOpacity={marker.regionOpacity ?? 0.28}
                         fillRule="evenodd"
-                        stroke={marker.regionColor ?? '#22c55e'}
-                        strokeWidth={isSelected ? 3.5 : 2.5}
-                        strokeDasharray={isSelected ? '8 4' : undefined}
+                        stroke={cleanDashes ? 'none' : marker.regionColor ?? '#22c55e'}
+                        strokeWidth={regionBorderStyle(marker).width}
+                        strokeDasharray={isSelected || marker.regionDashLength != null || marker.regionDashGap != null ? `${regionBorderStyle(marker).dash} ${regionBorderStyle(marker).gap}` : undefined}
                         strokeLinejoin="round"
                         strokeLinecap="round"
                         vectorEffect="non-scaling-stroke"
@@ -2398,6 +2440,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                           setSelectedMarkerId(marker.id);
                         }}
                       />
+                      {cleanDashes && <path data-region-clean-dashes d={regionDashPath(marker.regionPoints, marker.regionHoles, imageSize.width, imageSize.height, zoomLevel, marker)} fill="none" stroke={marker.regionColor ?? '#22c55e'} strokeWidth={regionBorderStyle(marker).width} strokeLinecap="round" vectorEffect="non-scaling-stroke" pointerEvents="none" />}
 
                       {/* Interactive Vertex Handles on Outer Polygon when selected */}
                       {isSelected && pts.map((pt, vIdx) => {
@@ -2874,8 +2917,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                           fill={previewFill}
                           fillOpacity={previewOpacity}
                           stroke={previewColor}
-                          strokeWidth={2.5 / zoomLevel}
-                          strokeDasharray={isExclusionDrawing ? '6 3' : undefined}
+                          strokeWidth={borderGuideWidth}
+                          strokeDasharray={borderGuidePattern}
+                          vectorEffect="non-scaling-stroke"
                           strokeLinejoin="round"
                           strokeLinecap="round"
                         />
@@ -2883,7 +2927,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                           points={strokePointsStr}
                           fill="none"
                           stroke={previewColor}
-                          strokeWidth={3 / zoomLevel}
+                          strokeWidth={borderGuideWidth}
+                          strokeDasharray={borderGuidePattern}
+                          vectorEffect="non-scaling-stroke"
                           strokeLinejoin="round"
                           strokeLinecap="round"
                         />
@@ -3278,6 +3324,32 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 {/* Polygon specifics (Palette & Opacity) */}
                 {(activeTool === 'border' || activeTool === 'batch-border') && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <fieldset style={{ margin: 0, padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', minWidth: 0 }}>
+                      <legend style={{ fontSize: '0.78em', fontWeight: 800, color: '#475569' }}>Estilo del borde</legend>
+                      <svg aria-label="Vista previa de la guía del borde" role="img" viewBox="0 0 200 28" style={{ width: '100%', height: '28px', background: '#f8fafc', borderRadius: '4px' }}>
+                        <line x1="8" y1="14" x2="192" y2="14" stroke={drawingPolygonColor} strokeWidth={borderGuideWidth} strokeDasharray={`${borderGuideDash} ${borderGuideGap + borderGuideWidth}`} strokeLinecap="round" />
+                      </svg>
+                      {[
+                        { label: 'Grosor de la línea', value: borderGuideWidth, min: 0.5, max: 8, step: 0.5, set: (value: number) => changeBorderStyle('regionStrokeWidth', value) },
+                        { label: 'Separación entre segmentos', value: borderGuideGap, min: 1, max: 24, step: 1, set: (value: number) => changeBorderStyle('regionDashGap', value) },
+                        { label: 'Longitud de los segmentos', value: borderGuideDash, min: 1, max: 32, step: 1, set: (value: number) => changeBorderStyle('regionDashLength', value) },
+                      ].map(control => <label key={control.label} style={{ display: 'block', fontSize: '0.76em', color: '#475569', marginTop: '8px' }}>
+                        {control.label}: {control.value} px
+                        <input aria-label={control.label} type="range" min={control.min} max={control.max} step={control.step} value={control.value} onChange={event => control.set(Number(event.target.value))} style={{ display: 'block', width: '100%' }} />
+                      </label>)}
+                      <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.76em', marginTop: '8px' }}>
+                        <input type="checkbox" checked={borderSmooth} onChange={event => {
+                          const value = event.target.checked;
+                          setBorderSmooth(value);
+                          const ids = sessionMarkerIds.length ? sessionMarkerIds : selectedMarkerId ? [selectedMarkerId] : [];
+                          if (ids.length) {
+                            setMarkers(previous => previous.map(marker => ids.includes(marker.id) ? { ...marker, regionSmooth: value } : marker));
+                            setHasUnsavedModifications(true);
+                          }
+                        }} />Suavizado leve del trazo
+                      </label>
+                      <small style={{ color: '#64748b', fontSize: '0.72em' }}>Se aplica al borde seleccionado o al grupo actual y se conserva al guardar. El suavizado reduce pequeñas irregularidades sin reemplazar los puntos originales.</small>
+                    </fieldset>
                     <div>
                       <span style={{ fontSize: '0.78em', fontWeight: 800, color: '#475569' }}>Color de región:</span>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
@@ -4317,6 +4389,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
             regionHoles: m.regionHoles ?? null,
             regionColor: m.regionColor ?? '#22c55e',
             regionOpacity: m.regionOpacity ?? 0.28,
+            regionStrokeWidth: m.regionStrokeWidth,
+            regionDashLength: m.regionDashLength,
+            regionDashGap: m.regionDashGap,
+            regionSmooth: m.regionSmooth,
           } : null))}
           onClose={() => setShowMoveAllModal(false)}
           onSave={(updatedPos) => {
@@ -4334,6 +4410,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 regionHoles: u.regionHoles ?? null,
                 regionColor: u.regionColor ?? m.regionColor,
                 regionOpacity: u.regionOpacity ?? m.regionOpacity,
+                regionStrokeWidth: u.regionStrokeWidth ?? m.regionStrokeWidth,
+                regionDashLength: u.regionDashLength ?? m.regionDashLength,
+                regionDashGap: u.regionDashGap ?? m.regionDashGap,
+                regionSmooth: u.regionSmooth ?? m.regionSmooth,
               };
             }));
             setShowMoveAllModal(false);

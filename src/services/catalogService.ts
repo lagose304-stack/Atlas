@@ -34,6 +34,10 @@ export interface CatalogPlaca {
     regionPoints?: number[] | null;
     regionColor?: string | null;
     regionOpacity?: number | null;
+    regionStrokeWidth?: number | null;
+    regionDashLength?: number | null;
+    regionDashGap?: number | null;
+    regionSmooth?: boolean | null;
   }> | null;
   comentario?: string | null;
   tincion?: string | null;

@@ -89,3 +89,7 @@ Quedan fuera de esta revisión:
 - Entornos de pruebas, bindings, secretos de Cloudflare y commit desplegado.
 
 Consultar solo lo que requiera la tarea. Para cambios de datos o esquema, seguir el procedimiento de [la guía de Atlas](guia-atlas.md) y [AGENTS.md](../AGENTS.md).
+
+## Actualización: movimiento de placas — 2 de noviembre de 2026
+
+Instalada con autorización atlas_move_plate(integer,integer,integer,integer,integer) mediante add_atlas_move_plate. SECURITY INVOKER, search_path public, EXECUTE para anon/authenticated y revocado a PUBLIC. Se verificó rechazo sin sesión Atlas sin mover registros reales. Ver [activación y recuperación](revisiones/mover-placa-activacion-2026-11-02.md). No se revalidó el inventario completo ni un respaldo general de producción.

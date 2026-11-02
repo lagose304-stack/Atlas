@@ -51,6 +51,10 @@ interface MarkerLocation {
   regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
+  regionStrokeWidth?: number | null;
+  regionDashLength?: number | null;
+  regionDashGap?: number | null;
+  regionSmooth?: boolean | null;
 }
 
 interface SenaladoMetaItem {
@@ -63,6 +67,10 @@ interface SenaladoMetaItem {
   regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
+  regionStrokeWidth?: number | null;
+  regionDashLength?: number | null;
+  regionDashGap?: number | null;
+  regionSmooth?: boolean | null;
 }
 
 const buildSenaladosPayload = (
@@ -110,6 +118,10 @@ const buildSenaladosPayload = (
       regionHoles: location?.regionHoles ?? null,
       regionColor: location?.regionColor ?? null,
       regionOpacity: location?.regionOpacity ?? null,
+      regionStrokeWidth: location?.regionStrokeWidth,
+      regionDashLength: location?.regionDashLength,
+      regionDashGap: location?.regionDashGap,
+      regionSmooth: location?.regionSmooth,
     });
   }
 

@@ -66,6 +66,10 @@ interface MarkerLocation {
   regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
+  regionStrokeWidth?: number | null;
+  regionDashLength?: number | null;
+  regionDashGap?: number | null;
+  regionSmooth?: boolean | null;
 }
 
 interface SenaladoMetaItem {
@@ -78,6 +82,10 @@ interface SenaladoMetaItem {
   regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
+  regionStrokeWidth?: number | null;
+  regionDashLength?: number | null;
+  regionDashGap?: number | null;
+  regionSmooth?: boolean | null;
 }
 
 type ParcialKey = 'primer' | 'segundo' | 'tercer';
@@ -118,6 +126,10 @@ const normalizeLocations = (values: Array<MarkerLocation | null>): Array<MarkerL
       regionHoles: Array.isArray(value.regionHoles) ? value.regionHoles : null,
       regionColor: value.regionColor ?? null,
       regionOpacity: value.regionOpacity ?? null,
+      regionStrokeWidth: value.regionStrokeWidth,
+      regionDashLength: value.regionDashLength,
+      regionDashGap: value.regionDashGap,
+      regionSmooth: value.regionSmooth,
     };
   });
 };
@@ -169,6 +181,10 @@ const buildSenaladosPayload = (
       regionHoles: location?.regionHoles ?? null,
       regionColor: location?.regionColor ?? null,
       regionOpacity: location?.regionOpacity ?? null,
+      regionStrokeWidth: location?.regionStrokeWidth,
+      regionDashLength: location?.regionDashLength,
+      regionDashGap: location?.regionDashGap,
+      regionSmooth: location?.regionSmooth,
     });
   }
 
@@ -191,6 +207,10 @@ const deriveLocations = (
       regionHoles: item.regionHoles ?? null,
       regionColor: item.regionColor ?? null,
       regionOpacity: item.regionOpacity ?? null,
+      regionStrokeWidth: item.regionStrokeWidth,
+      regionDashLength: item.regionDashLength,
+      regionDashGap: item.regionDashGap,
+      regionSmooth: item.regionSmooth,
     };
   });
 };

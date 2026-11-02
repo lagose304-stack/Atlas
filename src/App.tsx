@@ -25,6 +25,7 @@ const EditarPlacas = lazy(() => import('./pages/EditarPlacas'));
 const EditorPaginas = lazy(() => import('./pages/EditorPaginas'));
 const EliminarPlacas = lazy(() => import('./pages/EliminarPlacas'));
 const MoverPlaca = lazy(() => import('./pages/MoverPlaca'));
+const TrasladarPlaca = lazy(() => import('./pages/TrasladarPlaca'));
 const ListaEspera = lazy(() => import('./pages/ListaEspera'));
 const ReencontrarPlaca = lazy(() => import('./pages/ReencontrarPlaca'));
 const GestionTinciones = lazy(() => import('./pages/GestionTinciones'));
@@ -250,6 +251,7 @@ const App: React.FC = () => {
               </PrivateRoute>
             }
           />
+          <Route path="/trasladar-placa" element={<PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}><TrasladarPlaca /></PrivateRoute>} />
           <Route
             path="/lista-espera"
             element={

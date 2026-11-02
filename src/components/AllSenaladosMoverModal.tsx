@@ -12,6 +12,10 @@ export interface MarkerLocation {
   regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
+  regionStrokeWidth?: number | null;
+  regionDashLength?: number | null;
+  regionDashGap?: number | null;
+  regionSmooth?: boolean | null;
 }
 
 const getPolygonPathD = (

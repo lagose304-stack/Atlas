@@ -39,6 +39,10 @@ interface MarkerLocation {
   regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
+  regionStrokeWidth?: number | null;
+  regionDashLength?: number | null;
+  regionDashGap?: number | null;
+  regionSmooth?: boolean | null;
 }
 
 interface SenaladoMetaItem {
@@ -51,6 +55,10 @@ interface SenaladoMetaItem {
   regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
+  regionStrokeWidth?: number | null;
+  regionDashLength?: number | null;
+  regionDashGap?: number | null;
+  regionSmooth?: boolean | null;
 }
 
 const buildSenaladosPayload = (
@@ -98,6 +106,10 @@ const buildSenaladosPayload = (
       regionHoles: location?.regionHoles ?? null,
       regionColor: location?.regionColor ?? null,
       regionOpacity: location?.regionOpacity ?? null,
+      regionStrokeWidth: location?.regionStrokeWidth,
+      regionDashLength: location?.regionDashLength,
+      regionDashGap: location?.regionDashGap,
+      regionSmooth: location?.regionSmooth,
     });
   }
 
@@ -1105,6 +1117,9 @@ const Placas: React.FC = () => {
                 onMouseLeave={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.color = '#6366f1'; e.currentTarget.style.borderColor = '#c7d2fe'; }}
               >
                 📂 Editar placas
+              </button>
+              <button type="button" style={{ ...p.actionBtn, color: '#6366f1', background: '#f5f3ff', borderColor: '#c7d2fe' }} onClick={() => navigate('/trasladar-placa')}>
+                Mover placa
               </button>
               <button
                 style={{ ...p.actionBtn, color: '#6366f1', background: '#f5f3ff', borderColor: '#c7d2fe' }}

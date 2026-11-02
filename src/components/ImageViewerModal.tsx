@@ -1,4 +1,7 @@
+import { regionPolygonPath } from '../utils/regionPolygonPath';
+import { regionDashPath } from '../utils/regionDashPath';
 import React, { useId, useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { regionBorderStyle } from '../utils/regionBorderStyle';
 import { createPortal } from 'react-dom';
 import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Pencil, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Shield, Eye, EyeOff } from 'lucide-react';
 import { appendLaserPoint, LASER_TRAIL_LIFETIME, prepareLaserStroke, splitLaserTrail, type LaserPoint } from './laserTrail';
@@ -32,6 +35,10 @@ interface SenaladoMetaItem {
   regionHoles?: number[][] | null;
   regionColor?: string | null;
   regionOpacity?: number | null;
+  regionStrokeWidth?: number | null;
+  regionDashLength?: number | null;
+  regionDashGap?: number | null;
+  regionSmooth?: boolean | null;
 }
 
 interface ImageViewerModalProps {
@@ -245,39 +252,7 @@ const polygonPoints = (points: ReadonlyArray<{ x: number; y: number }>) => (
   points.map(point => `${point.x},${point.y}`).join(' ')
 );
 
-const getPolygonPathD = (
-  outerPoints: number[],
-  holes: number[][] | null | undefined,
-  width: number,
-  height: number
-): string => {
-  if (outerPoints.length < 6) return '';
-  let d = '';
-
-  // Anillo exterior
-  for (let i = 0; i < outerPoints.length; i += 2) {
-    const x = outerPoints[i] * width;
-    const y = outerPoints[i + 1] * height;
-    d += (i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
-  }
-  d += ' Z';
-
-  // Anillos interiores (zonas de exclusión / huecos)
-  if (holes && holes.length > 0) {
-    for (const hole of holes) {
-      if (hole.length >= 6) {
-        for (let i = 0; i < hole.length; i += 2) {
-          const x = hole[i] * width;
-          const y = hole[i + 1] * height;
-          d += (i === 0 ? ` M ${x} ${y}` : ` L ${x} ${y}`);
-        }
-        d += ' Z';
-      }
-    }
-  }
-
-  return d;
-};
+const getPolygonPathD = regionPolygonPath;
 
 const getMarkerArea = (marker: { regionPoints?: number[] | null; regionHoles?: number[][] | null }): number => {
   if (marker.regionPoints && marker.regionPoints.length >= 6) {
@@ -522,6 +497,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         regionHoles: item.regionHoles ?? null,
         regionColor: item.regionColor ?? null,
         regionOpacity: item.regionOpacity ?? null,
+        regionStrokeWidth: item.regionStrokeWidth,
+        regionDashLength: item.regionDashLength,
+        regionDashGap: item.regionDashGap,
+        regionSmooth: item.regionSmooth,
       };
     });
 
@@ -573,6 +552,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         regionHoles: pos?.regionHoles ?? null,
         regionColor: pos?.regionColor ?? null,
         regionOpacity: pos?.regionOpacity ?? null,
+        regionStrokeWidth: pos?.regionStrokeWidth,
+        regionDashLength: pos?.regionDashLength,
+        regionDashGap: pos?.regionDashGap,
+        regionSmooth: pos?.regionSmooth,
       });
     }
 
@@ -754,6 +737,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         regionHoles: Array.isArray(item.regionHoles) ? item.regionHoles : null,
         regionColor: item.regionColor ?? null,
         regionOpacity: item.regionOpacity ?? null,
+        regionStrokeWidth: item.regionStrokeWidth,
+        regionDashLength: item.regionDashLength,
+        regionDashGap: item.regionDashGap,
+        regionSmooth: item.regionSmooth,
       }));
     }
 
@@ -3474,18 +3461,21 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                       return (
                         <g key={markerIndex}>
                           {marker.regionPoints && marker.regionPoints.length >= 6 && (
+                            <>
                             <path
-                              d={getPolygonPathD(marker.regionPoints, marker.regionHoles, imageSize.width, imageSize.height)}
+                              d={getPolygonPathD(marker.regionPoints, marker.regionHoles, imageSize.width, imageSize.height, marker.regionSmooth ?? false)}
                               fill={marker.regionColor ?? '#22c55e'}
                               fillOpacity={marker.regionOpacity ?? 0.28}
                               fillRule="evenodd"
-                              stroke={marker.regionColor ?? '#22c55e'}
-                              strokeWidth={2.5}
-                              strokeDasharray="10 7"
+                              stroke={marker.regionStrokeWidth != null || marker.regionDashLength != null || marker.regionDashGap != null ? 'none' : marker.regionColor ?? '#22c55e'}
+                              strokeWidth={regionBorderStyle(marker).width}
+                              strokeDasharray={`${regionBorderStyle(marker).dash} ${regionBorderStyle(marker).gap}`}
                               strokeLinejoin="round"
                               vectorEffect="non-scaling-stroke"
                               style={{ transition: prefersReducedMotion ? 'none' : 'opacity 220ms ease' }}
                             />
+                            {(marker.regionStrokeWidth != null || marker.regionDashLength != null || marker.regionDashGap != null) && <path data-region-clean-dashes d={regionDashPath(marker.regionPoints, marker.regionHoles, imageSize.width, imageSize.height, zoomLevel, marker)} fill="none" stroke={marker.regionColor ?? '#22c55e'} strokeWidth={regionBorderStyle(marker).width} strokeLinecap="round" vectorEffect="non-scaling-stroke" pointerEvents="none" />}
+                            </>
                           )}
                           {regionPixelPoints.length < 3 && (markerVisualMode === 'arrow' ? (
                             <>

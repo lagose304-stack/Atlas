@@ -43,6 +43,10 @@ export interface ComparadorPlacaItem {
     regionPoints?: number[] | null;
     regionColor?: string | null;
     regionOpacity?: number | null;
+    regionStrokeWidth?: number | null;
+    regionDashLength?: number | null;
+    regionDashGap?: number | null;
+    regionSmooth?: boolean | null;
   }> | null;
   subtema_id: number;
   subtema_nombre: string;
@@ -102,6 +106,10 @@ interface PlacaRow {
     regionPoints?: number[] | null;
     regionColor?: string | null;
     regionOpacity?: number | null;
+    regionStrokeWidth?: number | null;
+    regionDashLength?: number | null;
+    regionDashGap?: number | null;
+    regionSmooth?: boolean | null;
   }> | null;
 }
 
