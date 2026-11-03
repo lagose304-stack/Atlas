@@ -1,5 +1,5 @@
 import { fireEvent, render as renderComponent, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PlateAnnotationViewerEditor from './PlateAnnotationViewerEditor';
 
 // Los casos de edición parten de un original ya cargado. Los errores de carga
@@ -48,14 +48,15 @@ describe('PlateAnnotationViewerEditor', () => {
     );
 
     // Tools in toolbar
-    expect(screen.getByRole('button', { name: /Individual/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Individual$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Múltiples$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Borde$/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Bordes Múlt/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Bordes Múltiples$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Mano/i })).toBeInTheDocument();
 
     // Initial markers rendered in sidebar / inspector
     expect(screen.getAllByText('Núcleo celular').length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar borde' }));
     expect(screen.getByText('Citoplasma')).toBeInTheDocument();
 
     // Click Guardar señalados
@@ -86,13 +87,13 @@ describe('PlateAnnotationViewerEditor', () => {
     fireEvent.click(borderToolBtn);
 
     // Inspector card updates to show border instructions
-    expect(screen.getByText(/✍️ Nuevo Borde Individual/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nuevo borde individual/i)).toBeInTheDocument();
     expect(screen.getByText(/Color de región:/i)).toBeInTheDocument();
     expect(screen.getByText(/Opacidad de relleno:/i)).toBeInTheDocument();
 
-    const batchBorderToolBtn = screen.getByRole('button', { name: /Bordes Múlt/i });
+    const batchBorderToolBtn = screen.getByRole('button', { name: /^Bordes Múltiples$/i });
     fireEvent.click(batchBorderToolBtn);
-    expect(screen.getByText(/✍️✍️ Nuevos Bordes Múltiples/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nuevos bordes múltiples/i)).toBeInTheDocument();
   });
 
   it('permite guardar correctamente en singlePickerMode y muestra Cancelar / Salir', () => {
@@ -115,7 +116,7 @@ describe('PlateAnnotationViewerEditor', () => {
     expect(cancelBtn).toBeInTheDocument();
 
     // Select pointer tool
-    const pointerBtn = screen.getByRole('button', { name: /Individual/i });
+    const pointerBtn = screen.getByRole('button', { name: /^Individual$/i });
     fireEvent.click(pointerBtn);
 
     // Save button triggers handleSaveSingle
@@ -140,7 +141,7 @@ describe('PlateAnnotationViewerEditor', () => {
     fireEvent.click(batchBtn);
 
     // Formulario visible con título correcto
-    expect(screen.getByText(/📍📍 Nuevos Señalados Múltiples/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nuevos puntos múltiples/i)).toBeInTheDocument();
 
     // El campo contenteditable del formulario existe
     const editableDiv = container.ownerDocument.querySelector('div[contenteditable="true"]') as HTMLDivElement;
@@ -152,17 +153,17 @@ describe('PlateAnnotationViewerEditor', () => {
     fireEvent.input(editableDiv);
 
     // 2. Dar click a "Guardar grupo y pasar a Mano"
-    const saveGroupBtn = screen.getByRole('button', { name: /Guardar grupo y pasar a Mano/i });
+    const saveGroupBtn = screen.getByRole('button', { name: /^Añadir señalado$/i });
     fireEvent.click(saveGroupBtn);
 
     // El formulario de creación se oculta al volver a Mano
-    expect(screen.queryByText(/📍📍 Nuevos Señalados Múltiples/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nuevos puntos múltiples/i)).not.toBeInTheDocument();
 
     // 3. Al dar clic a otra herramienta (ej. Individual), el formulario aparece limpio y vacío
-    const pointerBtn = screen.getByRole('button', { name: /Individual/i });
+    const pointerBtn = screen.getByRole('button', { name: /^Individual$/i });
     fireEvent.click(pointerBtn);
 
-    expect(screen.getByText(/📍 Nuevo Señalado Individual/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nuevo punto individual/i)).toBeInTheDocument();
     const freshEditableDiv = container.ownerDocument.querySelector('div[contenteditable="true"]') as HTMLDivElement;
     expect(freshEditableDiv.textContent).toBe('');
   });
@@ -393,7 +394,7 @@ describe('PlateAnnotationViewerEditor', () => {
     expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('permite dibujar inmediatamente una zona de exclusión al seleccionar una región sin cambiar de herramienta', () => {
+  it('crea una exclusión solo después de activar su modo explícito', () => {
     render(
       <PlateAnnotationViewerEditor
         imageSrc="https://res.cloudinary.com/demo/image/upload/sample.jpg"
@@ -425,11 +426,12 @@ describe('PlateAnnotationViewerEditor', () => {
     // Seleccionar la región
     const regionPath = document.querySelector('path[fill-rule="evenodd"]');
     fireEvent.click(regionPath!);
-    expect(screen.getByText(/Detalle del Señalado/i)).toBeInTheDocument();
+    expect(screen.getByText(/Propiedades del señalado/i)).toBeInTheDocument();
 
     // No hay zonas de exclusión inicialmente
     expect(screen.queryByText(/Hueco interior/i)).toBeNull();
 
+    fireEvent.click(screen.getByRole('button', { name: 'Crear exclusión' }));
     // Dibujar directamente una zona de exclusión dentro de la región seleccionada (mouseDown, mouseMove, mouseUp)
     const container = img.parentElement!.parentElement!;
     fireEvent.mouseDown(container, { clientX: 400, clientY: 400, button: 0 });
@@ -516,7 +518,7 @@ describe('PlateAnnotationViewerEditor', () => {
     );
 
     // Activar herramienta Individual
-    const pointerBtn = screen.getByRole('button', { name: /Individual/i });
+    const pointerBtn = screen.getByRole('button', { name: /^Individual$/i });
     fireEvent.click(pointerBtn);
 
     const editableDiv = container.ownerDocument.querySelector('div[contenteditable="true"]') as HTMLDivElement;
@@ -622,6 +624,8 @@ describe('PlateAnnotationViewerEditor', () => {
     // 4. Levantar el dedo (touchend en dispositivos táctiles)
     fireEvent.touchEnd(canvas, { touches: [] });
 
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar borde' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar cierre' }));
     // 5. Guardar señalados
     const saveButton = screen.getByRole('button', { name: /Guardar señalados/i });
     fireEvent.click(saveButton);
@@ -664,7 +668,7 @@ describe('PlateAnnotationViewerEditor', () => {
     // Seleccionar la región existente
     const regionPath = document.querySelector('path[fill-rule="evenodd"]');
     fireEvent.click(regionPath!);
-    expect(screen.getByText(/Detalle del Señalado/i)).toBeInTheDocument();
+    expect(screen.getByText(/Propiedades del señalado/i)).toBeInTheDocument();
 
     // Activar Bordes Múltiples para dibujar otra estructura
     const batchBorderBtn = screen.getByRole('button', { name: /^Bordes Múltiples$/i });
@@ -756,6 +760,9 @@ describe('PlateAnnotationViewerEditor', () => {
     fireEvent.mouseMove(canvas, { clientX: 200, clientY: 250 });
     fireEvent.mouseUp(canvas, { clientX: 200, clientY: 200 });
 
+    expect(screen.queryByText(/1 colocado/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar borde' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar cierre' }));
     // El contador debe marcar 1 colocado
     expect(screen.getByText(/1 colocado/i)).toBeInTheDocument();
 
@@ -768,3 +775,7 @@ describe('PlateAnnotationViewerEditor', () => {
     expect(screen.getByText(/1 colocado/i)).toBeInTheDocument();
   });
 });
+
+// jsdom no implementa las matrices SVG usadas por la proyección nativa.
+beforeEach(() => { vi.stubGlobal('DOMMatrixReadOnly', class { a = 1; b = 0; c = 0; d = 1; }); });
+afterEach(() => { vi.unstubAllGlobals(); });

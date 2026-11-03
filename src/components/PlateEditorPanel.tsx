@@ -2,7 +2,6 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Sparkles, Camera, RotateCcw } from 'lucide-react';
 import BoldField from './BoldField';
 import TincionAccordionSelector from './TincionAccordionSelector';
-import AllSenaladosMoverModal from './AllSenaladosMoverModal';
 import PlateAnnotationViewerEditor from './PlateAnnotationViewerEditor';
 import ResilientPlacaThumb from './ResilientPlacaThumb';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
@@ -250,7 +249,6 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
     ...styles,
   };
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const [showMoveAllModal, setShowMoveAllModal] = useState(false);
   const [showFullVisualEditor, setShowFullVisualEditor] = useState(false);
 
   useEffect(() => {
@@ -262,7 +260,7 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
 
   const handleRequestClose = () => {
     if (!onRequestClose) return;
-    if (showFullVisualEditor || showMoveAllModal) return;
+    if (showFullVisualEditor) return;
     if (hasChanges) {
       setShowCloseConfirm(true);
     } else {
@@ -304,7 +302,7 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
         padding: 'clamp(10px, 2vw, 24px)',
       }}
       onClick={(e) => {
-        if (e.target === e.currentTarget && !showCloseConfirm && !showFullVisualEditor && !showMoveAllModal) {
+        if (e.target === e.currentTarget && !showCloseConfirm && !showFullVisualEditor) {
           handleRequestClose();
         }
       }}
@@ -771,21 +769,6 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
           </div>
         </div>
       </div>
-
-      {displayImageSrc && showMoveAllModal && (
-        <AllSenaladosMoverModal
-          isOpen={showMoveAllModal}
-          imageSrc={displayImageSrc}
-          imageAlt={imageAlt}
-          senalados={senalados}
-          senaladosPos={senaladosPos}
-          onClose={() => setShowMoveAllModal(false)}
-          onSave={(updatedPos) => {
-            onSenaladosPosChange?.(updatedPos);
-            setShowMoveAllModal(false);
-          }}
-        />
-      )}
 
       {displayImageSrc && showFullVisualEditor && (
         <PlateAnnotationViewerEditor

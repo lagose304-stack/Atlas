@@ -17,3 +17,11 @@ it('compensa los extremos redondos para conservar el espacio y adapta el paso al
   expect(regionDashPath(points, null, 100, 100, 1, style)).toContain('M 18 0 L 26 0');
   expect(regionDashPath(points, null, 100, 100, 2, style)).toContain('M 9 0 L 13 0');
 });
+it('mantiene la misma longitud visible en regiones pequeñas/grandes a distintos zooms', () => {
+  for (const size of [0.04, 0.2, 0.8]) for (const zoom of [0.5, 1, 2, 5]) {
+    const path = regionDashPath([0,0, size,0, size,size, 0,size], null, 1000, 800, zoom, { regionDashLength: 10 });
+    for (const match of path.matchAll(/M (\S+) (\S+) L (\S+) (\S+)/g)) {
+      expect(Math.hypot(Number(match[3]) - Number(match[1]), Number(match[4]) - Number(match[2])) * zoom).toBeCloseTo(10);
+    }
+  }
+});

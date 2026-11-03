@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import './viewerInteraction.css';
 
-/** Evitar efectos de pintura costosos solo mientras se manipula la placa o se escribe. */
+/** Reducir efectos de la interfaz durante el gesto sin alterar los filtros de la placa. */
 export function useViewerInteraction() {
   const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {

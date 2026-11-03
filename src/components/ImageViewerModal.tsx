@@ -1,5 +1,5 @@
 import { regionPolygonPath } from '../utils/regionPolygonPath';
-import { regionDashPath } from '../utils/regionDashPath';
+import RegionBordersOverlay from './RegionBordersOverlay';
 import React, { useId, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { regionBorderStyle } from '../utils/regionBorderStyle';
 import { createPortal } from 'react-dom';
@@ -3470,14 +3470,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                               fill={marker.regionColor ?? '#22c55e'}
                               fillOpacity={marker.regionOpacity ?? 0.28}
                               fillRule="evenodd"
-                              stroke={marker.regionStrokeWidth != null || marker.regionDashLength != null || marker.regionDashGap != null ? 'none' : marker.regionColor ?? '#22c55e'}
+                              stroke="none"
                               strokeWidth={regionBorderStyle(marker).width}
                               strokeDasharray={`${regionBorderStyle(marker).dash} ${regionBorderStyle(marker).gap}`}
                               strokeLinejoin="round"
                               vectorEffect="non-scaling-stroke"
                               style={{ transition: prefersReducedMotion ? 'none' : 'opacity 220ms ease' }}
                             />
-                            {(marker.regionStrokeWidth != null || marker.regionDashLength != null || marker.regionDashGap != null) && <path data-region-clean-dashes d={regionDashPath(marker.regionPoints, marker.regionHoles, imageSize.width, imageSize.height, zoomLevel, marker)} fill="none" stroke={marker.regionColor ?? '#22c55e'} strokeWidth={regionBorderStyle(marker).width} strokeLinecap="round" vectorEffect="non-scaling-stroke" pointerEvents="none" />}
+
                             </>
                           )}
                           {regionPixelPoints.length < 3 && (markerVisualMode === 'arrow' ? (
@@ -3668,6 +3668,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             </div>
           );
         })()}
+
+        <RegionBordersOverlay layer={whiteboardImageLayer} size={imageSize} regions={isPlateImageLoading ? [] : activeMarkerIndices.map(index => ({ index, marker: senaladosItems[index] }))} zoom={zoomLevel} viewKey={`${position.x}:${position.y}:${rotation}`} />
 
         {!isPlateImageLoading && (
           <div ref={watermarkRef} className="atlas-plate-watermark" aria-hidden="true" style={{ visibility: 'hidden' }}>

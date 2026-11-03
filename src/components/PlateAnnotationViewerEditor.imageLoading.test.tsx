@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import PlateAnnotationViewerEditor from './PlateAnnotationViewerEditor';
 
 const src = 'https://r2.atlas-tests.invalid/placas/test.webp';
@@ -70,3 +70,7 @@ describe('Carga de imagen en el editor de señalados', () => {
     expect(screen.getByAltText('Placa histológica de alta calidad')).toHaveAttribute('src', 'https://r2.atlas-tests.invalid/placas/other.webp');
   });
 });
+
+// jsdom no implementa las matrices SVG usadas por la proyección nativa.
+beforeEach(() => { vi.stubGlobal('DOMMatrixReadOnly', class { a = 1; b = 0; c = 0; d = 1; }); });
+afterEach(() => { vi.unstubAllGlobals(); });

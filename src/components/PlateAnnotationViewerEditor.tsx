@@ -1,7 +1,12 @@
+import { borderTraceHasArea, closeBorderTrace, joinBorderTrace } from '../utils/borderTrace';
+import { validRegionExclusion } from '../utils/regionExclusion';
 import { regionPolygonPath } from '../utils/regionPolygonPath';
-import { regionDashPath } from '../utils/regionDashPath';
+import RegionBordersOverlay from './RegionBordersOverlay';
+import AnnotationToolIcon from './AnnotationToolIcon';
+import { AnnotationColorPicker, AnnotationDirectionPicker } from './AnnotationOptionControls';
+import './plateAnnotationInspector.css';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { regionBorderStyle, REGION_BORDER_PRESETS } from '../utils/regionBorderStyle';
+import { REGION_BORDER_PRESETS, regionBorderStyle } from '../utils/regionBorderStyle';
 import { createPortal } from 'react-dom';
 import {
   ZoomIn,
@@ -9,7 +14,6 @@ import {
   RotateCw,
   PanelRightClose,
   PanelRightOpen,
-  Move,
   Hand,
   Trash2,
   Check,
@@ -18,13 +22,7 @@ import {
   Undo,
   MousePointer,
   Layers,
-  Sparkles,
   Target,
-  ArrowUp,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  RefreshCw,
   PenTool,
   Loader2,
   CheckCircle2,
@@ -35,7 +33,6 @@ import {
 import BoldField, { renderBoldText } from './BoldField';
 import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
 import { getImageCandidateUrls } from '../services/cloudinaryImages';
-import AllSenaladosMoverModal from './AllSenaladosMoverModal';
 import { isEditableTarget } from '../utils/editableTarget';
 export { isEditableTarget } from '../utils/editableTarget';
 
@@ -505,7 +502,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   const [borderGuideDash, setBorderGuideDash] = useState(10);
   const [borderGuideGap, setBorderGuideGap] = useState(7);
   const [borderSmooth, setBorderSmooth] = useState(true);
-  const borderGuidePattern = `${borderGuideDash} ${borderGuideGap + borderGuideWidth}`;
+  const drawingBorderStyle = { regionStrokeWidth: borderGuideWidth, regionDashLength: borderGuideDash, regionDashGap: borderGuideGap, regionSmooth: borderSmooth };
   useEffect(() => {
     const marker = markers.find(item => item.id === selectedMarkerId);
     if (!marker?.regionPoints?.length) return;
@@ -524,6 +521,25 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     }
   };
   const [cursorImagePos, setCursorImagePos] = useState<{ x: number; y: number } | null>(null);
+
+  const [regionMode, setRegionMode] = useState<'create' | 'edit' | 'exclude'>('create');
+  const [regionError, setRegionError] = useState('');
+  const [borderNavigate, setBorderNavigate] = useState(false);
+  const [borderClosing, setBorderClosing] = useState(false);
+  const [markerListFilter, setMarkerListFilter] = useState<Exclude<EditorTool, 'pan'> | null>(null);
+  const [markerListOpen, setMarkerListOpen] = useState(true);
+  const gestureBaseRef = useRef<number[]>([]);
+  const gestureStrokeRef = useRef<number[]>([]);
+  const segmentHistoryRef = useRef<number[][]>([]);
+  const stagedBorder = regionMode === 'create' && (activeTool === 'border' || activeTool === 'batch-border');
+  const setBorderDraft = (points: number[]) => { drawingPolygonPointsRef.current = points; setDrawingPolygonPoints(points); };
+  const pauseBorderStroke = () => {
+    if (isDrawingFreehandRef.current && gestureStrokeRef.current.length >= 4) segmentHistoryRef.current.push([...gestureBaseRef.current]);
+    gestureBaseRef.current = [...drawingPolygonPointsRef.current];
+    gestureStrokeRef.current = [];
+    isDrawingFreehandRef.current = false; setIsDrawingFreehand(false);
+  };
+
 
   // Selected polygon vertex (on outer contour or inside an exclusion zone hole)
   const [selectedVertex, setSelectedVertex] = useState<{
@@ -546,8 +562,20 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   // IDs of markers placed during the currently active tool session
   const [sessionMarkerIds, setSessionMarkerIds] = useState<string[]>([]);
 
+  useEffect(() => {
+    if (drawingPolygonPointsRef.current.length) return;
+    if (selectedMarkerId && !sessionMarkerIds.includes(selectedMarkerId)) setRegionMode('edit');
+    setRegionError('');
+  }, [selectedMarkerId]);
+
+  useEffect(() => {
+    setBorderDraft([]); segmentHistoryRef.current = []; gestureBaseRef.current = []; gestureStrokeRef.current = [];
+    isDrawingFreehandRef.current = false; setIsDrawingFreehand(false); setBorderClosing(false); setBorderNavigate(false);
+  }, [imageSrc]);
+
   // Tool switcher with clean session reset
   const handleSelectTool = useCallback((newTool: EditorTool) => {
+    if (drawingPolygonPointsRef.current.length && newTool !== activeTool) { setRegionError('Cierra o cancela el contorno antes de cambiar de herramienta. Para navegar usa Mover placa.'); return; }
     // Si se hace clic en la misma herramienta que ya está activa, mantener sesión y selección intactas
     if (newTool === activeTool) {
       setSidebarOpen(true);
@@ -560,6 +588,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       setMarkers(prev => prev.map(m => sessionMarkerIds.includes(m.id) ? { ...m, label: trimmed } : m));
     }
 
+    segmentHistoryRef.current = []; setBorderDraft([]); setBorderClosing(false); setBorderNavigate(false);
+    setRegionMode('create');
+    setRegionError('');
+    isDrawingFreehandRef.current = false;
     setReassigningTipMarkerId(null);
     setDrawingPolygonPoints([]);
     setIsDrawingFreehand(false);
@@ -584,6 +616,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   const [zoomLevel, setZoomLevel] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [rotation, setRotation] = useState(0);
+  const [borderImageLayer, setBorderImageLayer] = useState<HTMLDivElement | null>(null);
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
 
   const handleImageError = useCallback(() => {
@@ -607,7 +640,6 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Modal / Confirmations
   const [showExitConfirm, setShowExitConfirm] = useState(false);
-  const [showMoveAllModal, setShowMoveAllModal] = useState(false);
   const [hasUnsavedModifications, setHasUnsavedModifications] = useState(false);
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<Record<string, boolean>>({});
 
@@ -666,6 +698,11 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   const handleUndo = useCallback(() => {
     // Si hay un trazo a mano alzada en curso, cancelarlo limpiamente sin afectar historial
+    if (stagedBorder && drawingPolygonPointsRef.current.length) {
+      const previous = isDrawingFreehandRef.current ? gestureBaseRef.current : segmentHistoryRef.current.pop() ?? [];
+      setBorderDraft([...previous]); setBorderClosing(false);
+      isDrawingFreehandRef.current = false; setIsDrawingFreehand(false); return;
+    }
     if (drawingPolygonPoints.length > 0 || isDrawingFreehandRef.current) {
       isDrawingFreehandRef.current = false;
       setIsDrawingFreehand(false);
@@ -687,7 +724,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     });
     setSelectedVertex(null);
     setSelectedHoleIndex(null);
-  }, [drawingPolygonPoints.length, historyStack]);
+  }, [drawingPolygonPoints.length, historyStack, stagedBorder]);
 
   // Lock body scroll
   useEffect(() => {
@@ -732,7 +769,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   // Keyboard navigation & shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (showMoveAllModal || e.defaultPrevented || e.isComposing || isEditableTarget(e.target)) {
+      if (e.defaultPrevented || e.isComposing || isEditableTarget(e.target)) {
         return;
       }
       if (e.code === 'Space' && !e.repeat) {
@@ -756,7 +793,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
               const nextHole = [...hole];
               nextHole.splice(selectedVertex.vertexIndex * 2, 2);
               const newHoles = m.regionHoles.map((h, i) => i === hIdx ? nextHole : h);
-              return { ...m, regionHoles: newHoles };
+              if (!m.regionPoints || !validRegionExclusion(m.regionPoints, newHoles.filter((_, index) => index !== hIdx), newHoles[hIdx])) return m;
+            return { ...m, regionHoles: newHoles };
             }
 
             if (!m.regionPoints || m.regionPoints.length <= 6) return m;
@@ -783,7 +821,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         if (reassigningTipMarkerId) {
           setReassigningTipMarkerId(null);
         } else if (drawingPolygonPoints.length > 0) {
-          setDrawingPolygonPoints([]);
+          setBorderDraft([]); segmentHistoryRef.current = []; setBorderClosing(false); isDrawingFreehandRef.current = false;
           setIsDrawingFreehand(false);
         } else if (selectedVertex !== null) {
           setSelectedVertex(null);
@@ -820,7 +858,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [drawingPolygonPoints.length, handleDeleteHole, handleUndo, markers, pushHistory, reassigningTipMarkerId, required, selectedHoleIndex, selectedMarkerId, selectedVertex, showMoveAllModal]);
+  }, [drawingPolygonPoints.length, handleDeleteHole, handleUndo, markers, pushHistory, reassigningTipMarkerId, required, selectedHoleIndex, selectedMarkerId, selectedVertex]);
 
   // Update image size
   const updateImageDimensions = useCallback(() => {
@@ -869,6 +907,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Wheel zoom around cursor
   const handleWheel = (event: React.WheelEvent) => {
+    if (stagedBorder && isDrawingFreehandRef.current) pauseBorderStroke();
     event.preventDefault();
     const container = containerRef.current;
     if (!container || !imageSize) return;
@@ -963,7 +1002,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
     markers.forEach((marker, index) => {
       const rawLabel = marker.label.trim();
-      const key = rawLabel.toLowerCase() || `__unnamed_${index}`;
+      const key = `${marker.regionPoints ? 'border' : 'point'}:${rawLabel.toLowerCase() || `__unnamed_${index}`}`;
 
       let group = labelMap.get(key);
       if (!group) {
@@ -978,11 +1017,26 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       group.items.push({ marker, originalIndex: index });
     });
 
-    return groups;
+    return groups.map(group => ({ ...group, tool: (group.items[0].marker.regionPoints
+      ? (group.items.length > 1 ? 'batch-border' : 'border')
+      : (group.items.length > 1 ? 'batch' : 'pointer')) as Exclude<EditorTool, 'pan'> }));
   }, [markers]);
+
+  const effectiveListFilter = markerListFilter ?? markerGroups[0]?.tool ?? 'pointer';
+  const filteredMarkerGroups = markerGroups.filter(group => group.tool === effectiveListFilter);
+  const filteredMarkerIds = new Set(filteredMarkerGroups.flatMap(group => group.items.map(item => item.marker.id)));
+  const selectedInFilteredList = !!selectedMarkerId && filteredMarkerIds.has(selectedMarkerId);
+  const filteredActiveGroupMarkers = activeGroupMarkers.filter(marker => filteredMarkerIds.has(marker.id));
+  const filteredMarkerCount = filteredMarkerGroups.reduce((count, group) => count + group.items.length, 0);
+  useEffect(() => {
+    if (!selectedMarkerId) return;
+    const group = markerGroups.find(group => group.items.some(item => item.marker.id === selectedMarkerId));
+    if (group) setMarkerListFilter(group.tool);
+  }, [selectedMarkerId]);
 
   // Center/focus on marker
   const focusOnMarker = useCallback((marker: InternalMarkerItem) => {
+    if (drawingPolygonPointsRef.current.length) { setRegionError('Cierra o cancela el contorno antes de seleccionar otra región.'); return; }
     setSelectedMarkerId(marker.id);
     if (!imageSize || marker.x == null || marker.y == null) return;
     const targetX = (0.5 - marker.x) * imageSize.width * zoomLevel;
@@ -1047,7 +1101,6 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     const simplified = simplifyPoints(rawPoints, 0.0015);
     const finalPoints = simplified.length >= 6 ? simplified : rawPoints;
 
-    pushHistory(markers);
     const count = finalPoints.length / 2;
     let sumX = 0;
     let sumY = 0;
@@ -1058,39 +1111,20 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     const centroidX = sumX / count;
     const centroidY = sumY / count;
 
-    // 1. ZONA DE EXCLUSIÓN / HUECO INTERIOR (DONA):
-    // Si hay un marcador con región actualmente SELECCIONADO para edición o si se dibujó dentro de un marcador existente
-    const targetSelectedMarker = selectedMarkerId ? markers.find(m => m.id === selectedMarkerId) : null;
-    const isTargetWithRegion = Boolean(targetSelectedMarker && targetSelectedMarker.regionPoints && targetSelectedMarker.regionPoints.length >= 6);
-
-    const fallbackMarker = !isTargetWithRegion
-      ? markers.find(m => m.regionPoints && m.regionPoints.length >= 6 && pointInPolygon(centroidX, centroidY, m.regionPoints))
-      : null;
-
-    const candidateMarker = isTargetWithRegion ? targetSelectedMarker : fallbackMarker;
-
-    const isDrawnInsideCandidate = Boolean(
-      candidateMarker &&
-      candidateMarker.regionPoints &&
-      candidateMarker.regionPoints.length >= 6 &&
-      pointInPolygon(centroidX, centroidY, candidateMarker.regionPoints) &&
-      pointInPolygon(finalPoints[0], finalPoints[1], candidateMarker.regionPoints)
-    );
-
-    if (isDrawnInsideCandidate && candidateMarker) {
-      const existingHoles = candidateMarker.regionHoles || [];
-      const updatedHoles = [...existingHoles, finalPoints];
-
-      setMarkers(prev => prev.map(m => m.id === candidateMarker.id ? {
-        ...m,
-        regionHoles: updatedHoles,
-      } : m));
-
-      setSelectedMarkerId(candidateMarker.id);
-      setDrawingPolygonPoints([]);
+    if (regionMode === 'exclude') {
+      const candidate = markers.find(marker => marker.id === selectedMarkerId);
+      if (!candidate?.regionPoints || !validRegionExclusion(candidate.regionPoints, candidate.regionHoles ?? [], finalPoints)) {
+        setRegionError('Dibuja la exclusión completamente dentro del borde seleccionado, sin cruzarlo ni tocar otros huecos.');
+        return;
+      }
+      pushHistory(markers);
+      setMarkers(previous => previous.map(marker => marker.id === candidate.id ? { ...marker, regionHoles: [...(marker.regionHoles ?? []), finalPoints] } : marker));
+      setRegionError('');
       setHasUnsavedModifications(true);
       return;
     }
+    if (regionMode !== 'create') return;
+    pushHistory(markers);
 
     const labelToUse = currentCreationLabel.trim() || (activeTool === 'batch-border' ? 'Estructura múltiple' : (singlePickerMode && targetLabel ? targetLabel : `Región ${markers.length + 1}`));
 
@@ -1183,7 +1217,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       setHasUnsavedModifications(true);
       return;
     }
-  }, [activeTool, currentCreationLabel, drawingPolygonColor, drawingPolygonOpacity, borderGuideWidth, borderGuideDash, borderGuideGap, borderSmooth, markers, pushHistory, selectedMarkerId, sessionMarkerIds, singlePickerMode, targetLabel]);
+  }, [activeTool, regionMode, currentCreationLabel, drawingPolygonColor, drawingPolygonOpacity, borderGuideWidth, borderGuideDash, borderGuideGap, borderSmooth, markers, pushHistory, selectedMarkerId, sessionMarkerIds, singlePickerMode, targetLabel]);
 
   // Unified Pointer Down for Canvas (Handles Freehand Drawing, Exclusion Holes, and Panning)
   const handleCanvasPointerDown = (e: React.PointerEvent | React.MouseEvent) => {
@@ -1198,7 +1232,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       return;
     }
 
-    if (e.button === 1 || isSpacePressed) {
+    if (e.target instanceof Element && e.target.closest('[data-region-edit-handle]')) return;
+
+    if (e.button === 1 || isSpacePressed || (stagedBorder && borderNavigate)) {
       e.preventDefault();
       setIsDraggingCanvas(true);
       setDragStartMouse({ x: e.clientX, y: e.clientY });
@@ -1220,25 +1256,33 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       e.clientY <= rect.bottom
     );
 
-    if ((activeTool === 'border' || activeTool === 'batch-border' || hasSelectedPolygon) && !reassigningTipMarkerId && e.button === 0) {
+    if (((regionMode === 'create' && (activeTool === 'border' || activeTool === 'batch-border')) || (regionMode === 'exclude' && hasSelectedPolygon)) && !reassigningTipMarkerId && e.button === 0) {
       if (!isInsideImage) {
         // Clic fuera de la placa: no iniciar trazo a mano alzada ni selección accidental
         return;
       }
       const coords = clientToImageCoords(e.clientX, e.clientY);
       if (!coords) return;
+      if (stagedBorder) {
+        if (borderClosing) return;
+        const base = drawingPolygonPointsRef.current;
+        if (base.length && !joinBorderTrace(base, [coords.x, coords.y], rect!.width, rect!.height)) {
+          setRegionError('Acércate al extremo resaltado para continuar el contorno.'); return;
+        }
+        gestureBaseRef.current = [...base]; gestureStrokeRef.current = [coords.x, coords.y];
+        setRegionError('');
+      }
       const pointerId = 'pointerId' in e ? (e as React.PointerEvent).pointerId : undefined;
       if (pointerId != null) {
         (e.target as Element).setPointerCapture?.(pointerId);
       }
       isDrawingFreehandRef.current = true;
       setIsDrawingFreehand(true);
-      drawingPolygonPointsRef.current = [coords.x, coords.y];
-      setDrawingPolygonPoints([coords.x, coords.y]);
+      if (!stagedBorder || !gestureBaseRef.current.length) setBorderDraft([coords.x, coords.y]);
       return;
     }
 
-    if (activeTool === 'pan' && !reassigningTipMarkerId) {
+    if ((activeTool === 'pan' || (stagedBorder && borderNavigate)) && !reassigningTipMarkerId) {
       e.preventDefault();
       setIsDraggingCanvas(true);
       setDragStartMouse({ x: e.clientX, y: e.clientY });
@@ -1255,10 +1299,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       activeTouchesCountRef.current >= 2
     ) {
       if (isDrawingFreehandRef.current) {
-        isDrawingFreehandRef.current = false;
-        setIsDrawingFreehand(false);
-        drawingPolygonPointsRef.current = [];
-        setDrawingPolygonPoints([]);
+        if (stagedBorder) pauseBorderStroke();
+        else { isDrawingFreehandRef.current = false; setIsDrawingFreehand(false); drawingPolygonPointsRef.current = []; setDrawingPolygonPoints([]); }
       }
       return;
     }
@@ -1267,6 +1309,16 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     if (coords) setCursorImagePos(coords);
 
     if (isDrawingFreehandRef.current && coords) {
+      if (stagedBorder) {
+        const rect = imageRef.current!.getBoundingClientRect();
+        const raw = gestureStrokeRef.current;
+        if (Math.hypot((coords.x - raw[raw.length - 2]) * rect.width, (coords.y - raw[raw.length - 1]) * rect.height) >= 0.75) {
+          const next = [...raw, coords.x, coords.y]; gestureStrokeRef.current = next;
+          const joined = joinBorderTrace(gestureBaseRef.current, next, rect.width, rect.height);
+          if (joined) setBorderDraft(joined);
+        }
+        return;
+      }
       const prev = drawingPolygonPointsRef.current;
       if (prev.length < 2) {
         drawingPolygonPointsRef.current = [coords.x, coords.y];
@@ -1303,6 +1355,14 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       } catch {
         // ignore if not captured
       }
+    }
+
+    if (stagedBorder && isDrawingFreehandRef.current) {
+      if (e?.type === 'pointercancel' || gestureStrokeRef.current.length < 4) setBorderDraft([...gestureBaseRef.current]);
+      else segmentHistoryRef.current.push([...gestureBaseRef.current]);
+      isDrawingFreehandRef.current = false; setIsDrawingFreehand(false);
+      justDrawnRef.current = true; setTimeout(() => { justDrawnRef.current = false; }, 300);
+      setIsDraggingCanvas(false); setDragStartMouse(null); return;
     }
 
     // Si había un trazo a mano alzada activo, finalizarlo con prioridad absoluta
@@ -1498,6 +1558,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
               nextHole[vIdx * 2 + 1] = coords.y;
               return nextHole;
             });
+            if (!m.regionPoints || !validRegionExclusion(m.regionPoints, newHoles.filter((_, index) => index !== hIdx), newHoles[hIdx])) return m;
             return { ...m, regionHoles: newHoles };
           }
 
@@ -1506,6 +1567,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           nextPts[vIdx * 2] = coords.x;
           nextPts[vIdx * 2 + 1] = coords.y;
 
+          if ((m.regionHoles ?? []).some((hole, index, holes) => !validRegionExclusion(nextPts, holes.filter((_, i) => i !== index), hole))) return m;
           const count = nextPts.length / 2;
           let sumX = 0;
           let sumY = 0;
@@ -1555,7 +1617,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           nextHole.splice((segmentIndex + 1) * 2, 0, coords.x, coords.y);
           return nextHole;
         });
-        return { ...m, regionHoles: newHoles };
+        if (!m.regionPoints || !validRegionExclusion(m.regionPoints, newHoles.filter((_, index) => index !== holeIndex), newHoles[holeIndex])) return m;
+            return { ...m, regionHoles: newHoles };
       }
 
       if (!m.regionPoints) return m;
@@ -1576,11 +1639,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       justPinchedRef.current = true;
       if (pinchCooldownTimeoutRef.current) clearTimeout(pinchCooldownTimeoutRef.current);
 
-      // Cancel any in-progress drawing immediately so multi-touch never leaves stray markers
-      isDrawingFreehandRef.current = false;
-      setIsDrawingFreehand(false);
-      drawingPolygonPointsRef.current = [];
-      setDrawingPolygonPoints([]);
+      // Conservar el contorno por tramos al navegar con dos dedos.
+      if (stagedBorder) pauseBorderStroke();
+      else { isDrawingFreehandRef.current = false; setIsDrawingFreehand(false); drawingPolygonPointsRef.current = []; setDrawingPolygonPoints([]); }
 
       setIsDraggingCanvas(false);
       setDragStartMouse(null);
@@ -1604,10 +1665,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     if (e.touches.length >= 2) {
       // Ensure drawing is completely blocked during multi-finger gestures
       if (isDrawingFreehandRef.current) {
-        isDrawingFreehandRef.current = false;
-        setIsDrawingFreehand(false);
-        drawingPolygonPointsRef.current = [];
-        setDrawingPolygonPoints([]);
+        if (stagedBorder) pauseBorderStroke();
+        else { isDrawingFreehandRef.current = false; setIsDrawingFreehand(false); drawingPolygonPointsRef.current = []; setDrawingPolygonPoints([]); }
       }
 
       if (pinchRef.current) {
@@ -1643,6 +1702,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     // Muestreo de trazo continuo en dispositivos táctiles (1 dedo)
     if (e.touches.length === 1 && isDrawingFreehandRef.current) {
       const touch = e.touches[0];
+      if (stagedBorder) { handleCanvasPointerMove({ clientX: touch.clientX, clientY: touch.clientY } as React.MouseEvent); return; }
       const coords = clientToImageCoords(touch.clientX, touch.clientY);
       if (coords) {
         setCursorImagePos(coords);
@@ -1688,7 +1748,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Save / Exit Handlers
   const handleRequestClose = () => {
-    if (hasUnsavedModifications) {
+    if (hasUnsavedModifications || drawingPolygonPointsRef.current.length) {
       setShowExitConfirm(true);
     } else {
       onCancel();
@@ -1697,6 +1757,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Finaliza y guarda la sesión de la herramienta activa, asigna el nombre a todos los creados y pasa a Mano
   const handleSaveCurrentToolSession = useCallback(() => {
+    if (drawingPolygonPointsRef.current.length) { setRegionError('Cierra o cancela el contorno antes de guardar el señalado.'); return; }
     const finalLabel = currentCreationLabel.trim();
 
     if (sessionMarkerIds.length > 0) {
@@ -1715,6 +1776,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   }, [activeTool, currentCreationLabel, markers.length, sessionMarkerIds]);
 
   const handleConfirmSave = () => {
+    if (drawingPolygonPointsRef.current.length) { setRegionError('Cierra o cancela el contorno antes de guardar.'); return; }
     if (imageStatus !== 'ready') return;
     setIsSavingLocally(true);
     setHasUnsavedModifications(false);
@@ -1820,6 +1882,12 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       }, 2800);
     }, 350);
   };
+
+  const borderPreviewRect = borderClosing ? imageRef.current?.getBoundingClientRect() : null;
+  const borderPreviewPoints = borderPreviewRect
+    ? closeBorderTrace(drawingPolygonPoints, borderPreviewRect.width, borderPreviewRect.height)
+    : drawingPolygonPoints;
+  const traceButtonStyle: React.CSSProperties = { padding: '8px 10px', borderRadius: '7px', border: '1px solid #8bcbbd', background: '#fff', color: '#116455', cursor: 'pointer', fontSize: '0.76em', fontWeight: 600 };
 
   return createPortal(
     <div
@@ -1940,15 +2008,32 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           </div>
         )}
 
+        <div className="annotation-editor-actions" role="group" aria-label="Acciones generales del editor"
+          onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()}
+          onMouseDown={event => event.stopPropagation()} onMouseUp={event => event.stopPropagation()}
+          onTouchStart={event => event.stopPropagation()} onTouchMove={event => event.stopPropagation()} onTouchEnd={event => event.stopPropagation()}
+          onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}
+          onWheel={event => event.stopPropagation()} onKeyDown={event => { if (event.code === 'Space') event.stopPropagation(); }}>
+          <div className="annotation-editor-actions__buttons">
+            <button type="button" onClick={handleConfirmSave} disabled={isSavingLocally || imageStatus !== 'ready'}>
+              {isSavingLocally ? <Loader2 size={16} className="annotation-editor-actions__spinner" /> : <Check size={16} />}
+              {isSavingLocally ? 'Guardando...' : 'Guardar señalados'}
+            </button>
+            <button type="button" onClick={handleRequestClose}><X size={15} /> Cancelar / Salir</button>
+          </div>
+          <div className="annotation-inspector__save-state" role="status"><span data-pending={hasUnsavedModifications || drawingPolygonPoints.length > 0} />{drawingPolygonPoints.length ? 'Contorno pendiente de cierre' : hasUnsavedModifications ? 'Cambios pendientes de guardar' : 'Todo listo para editar'}</div>
+        </div>
+
         {/* Top Center Toast Notification (Guardando / Guardado con éxito) */}
         {(isSavingLocally || saveSuccessNotification) && (
           <div
+            className="annotation-editor-save-toast"
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             style={{
               position: 'absolute',
-              top: 18,
+              top: 105,
               left: '50%',
               transform: 'translateX(-50%)',
               zIndex: 60,
@@ -2016,8 +2101,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           </div>
         )}
 
-        {/* VERTICAL STUDIO TOOLBAR (Lado Izquierdo, responsivo y autocontenido sin desbordamiento) */}
-        <div
+        {/* Navegación del lienzo; creación y apariencia en el inspector. */}
+        <div className="annotation-navigation" role="toolbar" aria-label="Navegación de la placa"
           onPointerDown={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           onPointerUp={(e) => e.stopPropagation()}
@@ -2054,11 +2139,14 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
               type="button"
               aria-label="Mano"
               title="Mano / Paneo (mover la placa libremente)"
-              onClick={() => handleSelectTool('pan')}
+              onClick={() => {
+                if (stagedBorder && drawingPolygonPointsRef.current.length) { pauseBorderStroke(); setBorderNavigate(true); setBorderClosing(false); }
+                else handleSelectTool('pan');
+              }}
               style={{
                 border: 'none',
-                background: activeTool === 'pan' && !reassigningTipMarkerId ? 'linear-gradient(135deg, #0284c7, #2563eb)' : 'transparent',
-                color: activeTool === 'pan' && !reassigningTipMarkerId ? '#fff' : '#475569',
+                background: (activeTool === 'pan' || (stagedBorder && borderNavigate)) && !reassigningTipMarkerId ? 'linear-gradient(135deg, #0284c7, #2563eb)' : 'transparent',
+                color: (activeTool === 'pan' || (stagedBorder && borderNavigate)) && !reassigningTipMarkerId ? '#fff' : '#475569',
                 borderRadius: '8px',
                 width: '40px',
                 height: '34px',
@@ -2072,143 +2160,25 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
               <Hand size={17} />
             </button>
 
-            <button
-              type="button"
-              aria-label="Individual"
-              title="Señalado Individual (1 clic para ubicar señal)"
-              onClick={() => handleSelectTool('pointer')}
-              style={{
-                border: 'none',
-                background: activeTool === 'pointer' ? 'linear-gradient(135deg, #0ea5e9, #6366f1)' : 'transparent',
-                color: activeTool === 'pointer' ? '#fff' : '#475569',
-                borderRadius: '8px',
-                width: '40px',
-                height: '34px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <MousePointer size={17} />
-            </button>
-
-            <button
-              type="button"
-              aria-label="Múltiples"
-              title="Punteros Múltiples (clics sucesivos para la misma estructura)"
-              onClick={() => handleSelectTool('batch')}
-              style={{
-                border: 'none',
-                background: activeTool === 'batch' ? 'linear-gradient(135deg, #0ea5e9, #6366f1)' : 'transparent',
-                color: activeTool === 'batch' ? '#fff' : '#475569',
-                borderRadius: '8px',
-                width: '40px',
-                height: '34px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <Layers size={17} />
-            </button>
-
-            <button
-              type="button"
-              aria-label="Borde"
-              title="Borde Individual (1 región a mano alzada)"
-              onClick={() => handleSelectTool('border')}
-              style={{
-                border: 'none',
-                background: activeTool === 'border' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
-                color: activeTool === 'border' ? '#fff' : '#475569',
-                borderRadius: '8px',
-                width: '40px',
-                height: '34px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <PenTool size={17} />
-            </button>
-
-            <button
-              type="button"
-              aria-label="Bordes Múltiples"
-              title="Bordes Múltiples (dibuja varias regiones para la misma estructura)"
-              onClick={() => handleSelectTool('batch-border')}
-              style={{
-                border: 'none',
-                background: activeTool === 'batch-border' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
-                color: activeTool === 'batch-border' ? '#fff' : '#475569',
-                borderRadius: '8px',
-                width: '40px',
-                height: '34px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <Layers size={17} style={{ color: activeTool === 'batch-border' ? '#fff' : '#059669' }} />
-            </button>
           </div>
 
           <div style={{ width: '28px', height: '1px', background: '#cbd5e1', margin: '1px 0' }} />
 
-          {/* Middle Section: Visual Style & Colors */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-            <button
-              type="button"
-              title={markerVisualMode === 'pointer' ? 'Estilo: Aguja (Clic para Flecha)' : 'Estilo: Flecha (Clic para Aguja)'}
-              onClick={() => setMarkerVisualMode(m => m === 'pointer' ? 'arrow' : 'pointer')}
-              style={{
-                border: '1px solid #cbd5e1',
-                background: '#f8fafc',
-                borderRadius: '8px',
-                width: '38px',
-                height: '28px',
-                fontSize: '0.95em',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {markerVisualMode === 'pointer' ? '📍' : '🏹'}
-            </button>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 17px)', gap: '4px', justifyContent: 'center', marginTop: '2px' }}>
-              {MARKER_COLOR_OPTIONS.map((c, idx) => (
-                <button
-                  key={c.key}
-                  type="button"
-                  title={`Color: ${c.label}`}
-                  onClick={() => setMarkerColorKey(c.key)}
-                  style={{
-                    gridColumn: idx === MARKER_COLOR_OPTIONS.length - 1 && MARKER_COLOR_OPTIONS.length % 2 === 1 ? '1 / -1' : undefined,
-                    justifySelf: 'center',
-                    width: '17px',
-                    height: '17px',
-                    borderRadius: '999px',
-                    background: c.fill,
-                    border: markerColorKey === c.key ? '2.5px solid #0ea5e9' : `1.5px solid #94a3b8`,
-                    cursor: 'pointer',
-                    transform: markerColorKey === c.key ? 'scale(1.2)' : 'scale(1)',
-                    boxShadow: markerColorKey === c.key ? '0 0 6px rgba(14, 165, 233, 0.4)' : 'none',
-                  }}
-                />
-              ))}
+          <details className="annotation-navigation-appearance" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
+            <summary title="Apariencia del puntero" aria-label="Apariencia del puntero"><MousePointer size={18} /></summary>
+            <div>
+              <div className="annotation-navigation-appearance__title"><strong>Apariencia del puntero</strong><button type="button" aria-label="Cerrar apariencia del puntero" onClick={event => { event.currentTarget.closest('details')!.open = false; }}><X size={14} /></button></div>
+              <span>Estilo</span>
+              <div className="annotation-inspector__pointer-style">
+                <button type="button" aria-pressed={markerVisualMode === 'pointer'} onClick={() => setMarkerVisualMode('pointer')}><Target size={15} /> Aguja</button>
+                <button type="button" aria-pressed={markerVisualMode === 'arrow'} onClick={() => setMarkerVisualMode('arrow')}><MousePointer size={15} /> Flecha</button>
+              </div>
+              <span>Color</span>
+              <div className="annotation-inspector__pointer-colors">
+                {MARKER_COLOR_OPTIONS.map(color => <button key={color.key} type="button" title={`Color: ${color.label}`} aria-label={`Color: ${color.label}`} aria-pressed={markerColorKey === color.key} onClick={() => setMarkerColorKey(color.key)} style={{ background: color.fill }} />)}
+              </div>
             </div>
-          </div>
-
+          </details>
           <div style={{ width: '28px', height: '1px', background: '#cbd5e1', margin: '1px 0' }} />
 
           {/* Zoom Section */}
@@ -2313,26 +2283,6 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
             <button
               type="button"
-              title="Mover todos los señalados a la vez"
-              onClick={() => setShowMoveAllModal(true)}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: '#4f46e5',
-                width: '36px',
-                height: '26px',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Move size={16} />
-            </button>
-
-            <button
-              type="button"
               title="Deshacer (Ctrl+Z)"
               disabled={historyStack.length === 0 && drawingPolygonPoints.length === 0}
               onPointerDown={(e) => e.stopPropagation()}
@@ -2359,8 +2309,13 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           </div>
         </div>
 
+        <RegionBordersOverlay layer={borderImageLayer} size={imageSize} zoom={zoomLevel} viewKey={`${position.x}:${position.y}:${rotation}`} regions={showAllMarkers ? [
+          ...sortedMarkersForRendering.map((marker, index) => ({ index, marker })),
+          ...(drawingPolygonPoints.length >= 4 ? [{ index: -1, marker: { ...drawingBorderStyle, regionPoints: borderPreviewPoints, regionColor: regionMode === 'exclude' ? '#ef4444' : drawingPolygonColor, regionOpen: stagedBorder && !borderClosing } }] : []),
+        ] : []} />
+
         {/* Interactive Image & SVG Stage (Crisp High-Res Render) */}
-        <div
+        <div ref={setBorderImageLayer}
           style={{
             position: 'absolute',
             transform: `translate(${position.x}px, ${position.y}px) scale(${zoomLevel}) rotate(${rotation}deg)`,
@@ -2418,7 +2373,6 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                     y: marker.regionPoints![i * 2 + 1] * imageSize.height,
                   }));
                   const pathD = getPolygonPathD(marker.regionPoints, marker.regionHoles, imageSize.width, imageSize.height, marker.regionSmooth ?? false);
-                  const cleanDashes = marker.regionStrokeWidth != null || marker.regionDashLength != null || marker.regionDashGap != null;
 
                   return (
                     <g key={marker.id}>
@@ -2427,7 +2381,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                         fill={marker.regionColor ?? '#22c55e'}
                         fillOpacity={marker.regionOpacity ?? 0.28}
                         fillRule="evenodd"
-                        stroke={cleanDashes ? 'none' : marker.regionColor ?? '#22c55e'}
+                        stroke="none"
                         strokeWidth={regionBorderStyle(marker).width}
                         strokeDasharray={isSelected || marker.regionDashLength != null || marker.regionDashGap != null ? `${regionBorderStyle(marker).dash} ${regionBorderStyle(marker).gap}` : undefined}
                         strokeLinejoin="round"
@@ -2436,17 +2390,18 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                         style={{ cursor: isSelected ? 'crosshair' : 'pointer', pointerEvents: isSelected ? 'none' : 'auto' }}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (drawingPolygonPointsRef.current.length || regionMode === 'exclude' || justDrawnRef.current) return;
                           if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                           setSelectedMarkerId(marker.id);
                         }}
                       />
-                      {cleanDashes && <path data-region-clean-dashes d={regionDashPath(marker.regionPoints, marker.regionHoles, imageSize.width, imageSize.height, zoomLevel, marker)} fill="none" stroke={marker.regionColor ?? '#22c55e'} strokeWidth={regionBorderStyle(marker).width} strokeLinecap="round" vectorEffect="non-scaling-stroke" pointerEvents="none" />}
+
 
                       {/* Interactive Vertex Handles on Outer Polygon when selected */}
-                      {isSelected && pts.map((pt, vIdx) => {
+                      {isSelected && regionMode === 'edit' && pts.map((pt, vIdx) => {
                         const isVertexSelected = selectedVertex?.holeIndex == null && selectedVertex?.vertexIndex === vIdx;
                         return (
-                          <g key={`outer-v-${vIdx}`}>
+                          <g key={`outer-v-${vIdx}`} data-region-edit-handle>
                             <circle
                               cx={pt.x}
                               cy={pt.y}
@@ -2459,6 +2414,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                                 e.stopPropagation();
                                 if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                                 (e.target as Element).setPointerCapture?.(e.pointerId);
+                                pushHistory(markers);
                                 setSelectedVertex({ vertexIndex: vIdx });
                                 setDraggingHandle({ markerId: marker.id, type: 'vertex', vertexIndex: vIdx });
                               }}
@@ -2472,6 +2428,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                               return (
                                 <g
                                   key={`mid-${vIdx}`}
+                                  onPointerDown={event => event.stopPropagation()}
                                   style={{ cursor: 'copy' }}
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -2498,7 +2455,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                       })}
 
                       {/* Interactive Vertex Handles & Controls on Exclusion Zones (Holes) when selected */}
-                      {isSelected && marker.regionHoles && marker.regionHoles.map((hole, hIdx) => {
+                      {isSelected && regionMode === 'edit' && marker.regionHoles && marker.regionHoles.map((hole, hIdx) => {
                         if (hole.length < 6) return null;
                         const holePts = Array.from({ length: hole.length / 2 }, (_, i) => ({
                           x: hole[i * 2] * imageSize.width,
@@ -2514,7 +2471,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                         const holeCentroidY = holeSumY / holePts.length;
 
                         return (
-                          <g key={`hole-group-${hIdx}`}>
+                          <g key={`hole-group-${hIdx}`} data-region-edit-handle>
                             {/* Interactive Hole Selection Outline & Hit Area */}
                             <polygon
                               points={holePointsStr}
@@ -2572,7 +2529,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                             )}
 
                             {/* Vertex Handles for this hole */}
-                            {holePts.map((hPt, vIdx) => {
+                            {isHoleSelected && holePts.map((hPt, vIdx) => {
                               const isVertexSelected = selectedVertex?.holeIndex === hIdx && selectedVertex?.vertexIndex === vIdx;
                               const nextPt = holePts[(vIdx + 1) % holePts.length];
                               const midX = (hPt.x + nextPt.x) / 2;
@@ -2592,6 +2549,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                                       e.stopPropagation();
                                       if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                                       (e.target as Element).setPointerCapture?.(e.pointerId);
+                                      pushHistory(markers);
                                       setSelectedVertex({ vertexIndex: vIdx, holeIndex: hIdx });
                                       setSelectedHoleIndex(hIdx);
                                       setDraggingHandle({ markerId: marker.id, type: 'vertex', vertexIndex: vIdx, holeIndex: hIdx });
@@ -2602,7 +2560,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
                                   {/* Midpoint '+' handle on hole edge */}
                                   <g
-                                    style={{ cursor: 'copy' }}
+                                    onPointerDown={event => event.stopPropagation()}
+                                  style={{ cursor: 'copy' }}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
@@ -2697,6 +2656,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                       key={marker.id}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (drawingPolygonPointsRef.current.length) return;
                         if (isPinching || isPinchingRef.current || justPinchedRef.current || activeTouchesCountRef.current >= 2) return;
                         setSelectedMarkerId(marker.id);
                       }}
@@ -2893,14 +2853,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
               {/* Live Freehand Polygon / Exclusion Zone Drawing In-Progress */}
               {drawingPolygonPoints.length >= 2 && (() => {
-                const isExclusionDrawing = Boolean(
-                  activeSelectedMarker &&
-                  activeSelectedMarker.regionPoints &&
-                  activeSelectedMarker.regionPoints.length >= 6 &&
-                  pointInPolygon(drawingPolygonPoints[0], drawingPolygonPoints[1], activeSelectedMarker.regionPoints)
-                );
+                const isExclusionDrawing = regionMode === 'exclude';
                 const strokePointsStr = Array.from({ length: drawingPolygonPoints.length / 2 }, (_, i) =>
-                  `${drawingPolygonPoints[i * 2] * imageSize.width},${drawingPolygonPoints[i * 2 + 1] * imageSize.height}`
+                  `${borderPreviewPoints[i * 2] * imageSize.width},${borderPreviewPoints[i * 2 + 1] * imageSize.height}`
                 ).join(' ');
 
                 const previewColor = isExclusionDrawing ? '#ef4444' : drawingPolygonColor;
@@ -2909,33 +2864,24 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
                 return (
                   <g pointerEvents="none">
-                    {/* Live stroke path or polygon */}
-                    {drawingPolygonPoints.length >= 4 && (
-                      <>
-                        <polygon
-                          points={strokePointsStr}
-                          fill={previewFill}
-                          fillOpacity={previewOpacity}
-                          stroke={previewColor}
-                          strokeWidth={borderGuideWidth}
-                          strokeDasharray={borderGuidePattern}
-                          vectorEffect="non-scaling-stroke"
-                          strokeLinejoin="round"
-                          strokeLinecap="round"
-                        />
-                        <polyline
-                          points={strokePointsStr}
-                          fill="none"
-                          stroke={previewColor}
-                          strokeWidth={borderGuideWidth}
-                          strokeDasharray={borderGuidePattern}
-                          vectorEffect="non-scaling-stroke"
-                          strokeLinejoin="round"
-                          strokeLinecap="round"
-                        />
-                      </>
-                    )}
+                    {/* Mismo trazado y escala que el borde confirmado, sin duplicar la línea. */}
+                    {drawingPolygonPoints.length >= 4 && <>
+                      <polygon points={strokePointsStr} fill={stagedBorder && !borderClosing ? 'none' : previewFill} fillOpacity={previewOpacity} stroke="none" />
 
+                    </>}
+
+                    {stagedBorder && drawingPolygonPoints.length >= 2 && <g pointerEvents="none" data-border-continuation>
+                      <circle cx={drawingPolygonPoints[0] * imageSize.width} cy={drawingPolygonPoints[1] * imageSize.height} r={5 / zoomLevel} fill="#fff" stroke="#087f6c" strokeWidth={2 / zoomLevel} />
+                      <circle cx={drawingPolygonPoints[drawingPolygonPoints.length - 2] * imageSize.width} cy={drawingPolygonPoints[drawingPolygonPoints.length - 1] * imageSize.height} r={12 / zoomLevel} fill="#14b8a633" stroke="#087f6c" strokeWidth={2 / zoomLevel} />
+                      <circle cx={drawingPolygonPoints[drawingPolygonPoints.length - 2] * imageSize.width} cy={drawingPolygonPoints[drawingPolygonPoints.length - 1] * imageSize.height} r={4 / zoomLevel} fill="#087f6c" />
+                      {!isDrawingFreehand && !borderNavigate && !borderClosing && cursorImagePos && (() => {
+                        const rect = imageRef.current?.getBoundingClientRect();
+                        if (!rect) return null;
+                        const joined = joinBorderTrace(drawingPolygonPoints, [cursorImagePos.x, cursorImagePos.y], rect.width, rect.height);
+                        if (!joined) return null;
+                        return <line data-border-snap-guide x1={joined[joined.length - 2] * imageSize.width} y1={joined[joined.length - 1] * imageSize.height} x2={cursorImagePos.x * imageSize.width} y2={cursorImagePos.y * imageSize.height} stroke="#087f6c" strokeWidth={2 / zoomLevel} strokeDasharray={`${3 / zoomLevel} ${3 / zoomLevel}`} />;
+                      })()}
+                    </g>}
                     {/* Pulsing brush tip at current pointer position */}
                     {cursorImagePos && (
                       <g transform={`translate(${cursorImagePos.x * imageSize.width}, ${cursorImagePos.y * imageSize.height})`}>
@@ -3061,13 +3007,13 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
             <span>📍📍 Haz clics sucesivos para colocar múltiples puntos con el mismo nombre.</span>
           )}
           {!reassigningTipMarkerId && activeTool === 'border' && (
-            <span>✍️ <strong>Mantén presionado y arrastra</strong> para dibujar el contorno. Al soltar, se cerrará y guardará automáticamente.</span>
+            <span>{regionMode === 'exclude' ? '✂️ Dibuja el hueco dentro del borde seleccionado y suelta para crearlo.' : regionMode === 'edit' ? 'Arrastra los puntos para ajustar el borde seleccionado.' : '✍️ Dibuja por tramos y continúa cerca del extremo resaltado. Usa Cerrar borde cuando termines.'}</span>
           )}
           {!reassigningTipMarkerId && activeTool === 'batch-border' && (
-            <span>✍️✍️ <strong>Dibuja múltiples bordes</strong> seguidos para la misma estructura. Mantén presionado y suelta para cada región.</span>
+            <span>{regionMode === 'exclude' ? '✂️ Dibuja el hueco dentro del borde seleccionado y suelta para crearlo.' : regionMode === 'edit' ? 'Arrastra los puntos para ajustar el borde seleccionado.' : '✍️✍️ Completa cada contorno por tramos y confirma su cierre antes de empezar el siguiente.'}</span>
           )}
           {!reassigningTipMarkerId && activeTool === 'pan' && (
-            <span>✋ Toca cualquier señalado para editar su punta o borde de origen. Arrastra para explorar.</span>
+            <span>{activeSelectedMarker?.regionPoints ? (regionMode === 'exclude' ? '✂️ Dibuja el hueco dentro del borde seleccionado. Cambia a Editar borde para ajustar puntos.' : 'Arrastra los puntos para ajustar el borde. Usa Crear exclusión para recortar un hueco.') : '✋ Toca cualquier señalado para editar su punta o borde de origen. Arrastra para explorar.'}</span>
           )}
         </div>
       </div>
@@ -3075,6 +3021,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       {/* Right Inspector & Marker List Drawer (MODO CLARO) */}
       {sidebarOpen && (
         <aside
+          className="annotation-inspector"
+          aria-label="Panel del editor de señalados"
           style={{
             width: isDesktop ? '310px' : '280px',
             background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
@@ -3089,6 +3037,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         >
           {/* Drawer Header */}
           <div
+            className="annotation-inspector__header"
             style={{
               padding: '12px 14px',
               borderBottom: '1px solid #e2e8f0',
@@ -3099,14 +3048,15 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
               gap: '8px',
             }}
           >
-            <div>
+            <div className="annotation-inspector__brand">
+              <span className="annotation-inspector__eyebrow">ATLAS HISTOLAB <span> / </span> ANOTACIONES</span>
               <div style={{ fontSize: '0.98em', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Sparkles size={16} color="#0284c7" /> Editor de Señalados
+                <span className="annotation-inspector__brand-icon"><PenTool size={17} /></span> Editor de Señalados
               </div>
               <div style={{ fontSize: '0.78em', color: '#64748b', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span>{markers.length} {markers.length === 1 ? 'señalado' : 'señalados'}</span>
-                {aumento && <span>• 🔬 {aumento}</span>}
-                {tincion && <span>• 🧪 {tincion}</span>}
+                {aumento && <span>{aumento}</span>}
+                {tincion && <span>{tincion}</span>}
               </div>
             </div>
 
@@ -3128,10 +3078,39 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           </div>
 
           {/* Drawer Scrollable Content */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div className="annotation-inspector__body" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <section className="annotation-inspector__tools" aria-label="Herramientas de creación">
+              <div className="annotation-inspector__section-heading"><span>Herramientas</span><span>Selecciona un modo</span></div>
+              <div className="annotation-inspector__tool-grid">
+                {([
+                  { id: 'pointer', label: 'Punto', aria: 'Individual', description: 'Colocar un señalado con aguja o flecha' },
+                  { id: 'batch', label: 'Puntos', aria: 'Múltiples', description: 'Colocar varios señalados de la misma estructura' },
+                  { id: 'border', label: 'Borde', aria: 'Borde', description: 'Dibujar el contorno de una región' },
+                  { id: 'batch-border', label: 'Bordes', aria: 'Bordes Múltiples', description: 'Dibujar varias regiones de la misma estructura' },
+                ] as const).map(tool => <button key={tool.id} type="button" title={tool.description} aria-label={tool.aria} aria-pressed={activeTool === tool.id} onClick={() => handleSelectTool(tool.id)}>
+                  <AnnotationToolIcon tool={tool.id} /><span>{tool.label}</span>
+                </button>)}
+              </div>
+            </section>
+            {activeSelectedMarker?.regionPoints && activeSelectedMarker.regionPoints.length >= 6 && <section className="annotation-inspector__region-mode" aria-label="Modo de edición de región" style={{ padding: '12px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '12px', display: 'grid', gap: '9px' }}>
+              <span className="annotation-inspector__section-heading">Editar geometría</span>
+              <strong style={{ fontSize: '0.82em', color: '#075985' }}>Borde seleccionado: {activeSelectedMarker.label}</strong>
+              <div className="annotation-inspector__mode-switch" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {([{ id: 'edit', label: 'Editar borde' }, { id: 'exclude', label: 'Crear exclusión' }, ...((activeTool === 'border' || activeTool === 'batch-border') ? [{ id: 'create', label: 'Dibujar región' }] : [])] as { id: 'edit' | 'exclude' | 'create'; label: string }[]).map(mode => <button type="button" key={mode.id} disabled={drawingPolygonPoints.length > 0} aria-pressed={regionMode === mode.id} onClick={() => {
+                  isDrawingFreehandRef.current = false; setIsDrawingFreehand(false);
+                  drawingPolygonPointsRef.current = []; setDrawingPolygonPoints([]);
+                  setDraggingHandle(null); setSelectedVertex(null); setSelectedHoleIndex(null);
+                  setReassigningTipMarkerId(null); setRegionError(''); setRegionMode(mode.id);
+                }} style={{ padding: '9px 11px', borderRadius: '8px', border: '1px solid #7dd3fc', background: regionMode === mode.id ? '#0369a1' : '#fff', color: regionMode === mode.id ? '#fff' : '#075985', cursor: 'pointer', fontSize: '0.76em', fontWeight: 700 }}>{mode.label}</button>)}
+              </div>
+              <p className="annotation-inspector__mode-hint">{regionMode === 'edit' ? 'Arrastra los puntos para ajustar el contorno.' : regionMode === 'exclude' ? 'Dibuja dentro del borde para recortar un hueco.' : 'Dibuja una nueva región sin alterar las existentes.'}</p>
+              <details className="annotation-inspector__help"><summary>Guía de edición</summary><p>Los puntos pequeños entre vértices permiten añadir uno nuevo. Selecciona un hueco para editar sus puntos. La tecla Supr elimina el punto o hueco seleccionado. Cambia a Crear exclusión para dibujar un recorte interior.</p></details>
+              {regionError && <p role="alert" style={{ margin: 0, fontSize: '0.76em', color: '#b91c1c' }}>{regionError}</p>}
+            </section>}
             {/* Active Tool Creation Form Card (solo se muestra cuando hay una herramienta activa distinta de Mano) */}
             {activeTool !== 'pan' && (
               <div
+                className="annotation-inspector__card annotation-inspector__creation"
                 style={{
                   borderRadius: '14px',
                   border: '1.5px solid #dbeafe',
@@ -3143,19 +3122,17 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                   boxShadow: '0 2px 8px rgba(14, 165, 233, 0.08)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-                  <div style={{ fontSize: '0.82em', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    {activeTool === 'pointer' ? '📍 Nuevo Señalado Individual' : activeTool === 'batch' ? '📍📍 Nuevos Señalados Múltiples' : activeTool === 'border' ? '✍️ Nuevo Borde Individual' : '✍️✍️ Nuevos Bordes Múltiples'}
+                <div className="annotation-option-title">
+                  <span><AnnotationToolIcon tool={activeTool} /></span>
+                  <div><strong>{activeTool === 'pointer' ? 'Nuevo punto individual' : activeTool === 'batch' ? 'Nuevos puntos múltiples' : activeTool === 'border' ? 'Nuevo borde individual' : 'Nuevos bordes múltiples'}</strong>
+                    <p>{activeTool === 'batch' || activeTool === 'batch-border' ? 'Varias marcas · Una misma estructura' : 'Una marca · Una estructura'}</p>
                   </div>
-                  {sessionMarkerIds.length > 0 && (
-                    <span style={{ fontSize: '0.74em', fontWeight: 800, color: '#0284c7', background: '#e0f2fe', padding: '2px 8px', borderRadius: '999px', flexShrink: 0 }}>
-                      {sessionMarkerIds.length} {sessionMarkerIds.length === 1 ? 'colocado' : 'colocados'}
-                    </span>
-                  )}
+                  {sessionMarkerIds.length > 0 && <span className="annotation-option-count">{sessionMarkerIds.length} {sessionMarkerIds.length === 1 ? 'colocado' : 'colocados'}</span>}
                 </div>
 
                 {/* Name input */}
-                <div>
+                <div className="annotation-option-identity">
+                  <span className="annotation-option-kicker">Identificación</span>
                   <label style={{ fontSize: '0.8em', fontWeight: 800, color: '#475569', display: 'block', marginBottom: '4px' }}>
                     Nombre / Estructura del señalado:
                   </label>
@@ -3185,162 +3162,55 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                   />
                 </div>
 
-                {/* Pointer / Batch Edge Settings */}
+            {stagedBorder && <section className="annotation-inspector__trace" aria-label="Contorno por tramos" style={{ padding: '12px', border: '1px solid #99d9cd', borderRadius: '12px', background: '#effcf8', display: 'grid', gap: '9px' }}>
+              <strong style={{ fontSize: '0.83em', color: '#116455' }}><PenTool size={15} /> Contorno por tramos <span className="annotation-inspector__live-state">{borderClosing ? 'Revisar cierre' : drawingPolygonPoints.length ? 'En curso' : 'Listo para dibujar'}</span></strong>
+              <p style={{ margin: 0, fontSize: '0.76em', lineHeight: 1.5, color: '#43665e' }}>{borderClosing ? 'Revisa la unión entre el final y el inicio antes de confirmar.' : borderNavigate ? 'Mueve o amplía la placa. El contorno pendiente se conserva.' : 'Dibuja, suelta y continúa cerca del extremo resaltado. Puedes repasar un poco el último tramo: la unión se ajusta automáticamente.'}</p>
+              <div className="annotation-inspector__trace-actions" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <button type="button" aria-pressed={!borderNavigate} onClick={() => { pauseBorderStroke(); setBorderNavigate(false); setBorderClosing(false); }} style={{ padding: '8px', borderRadius: '7px', border: '1px solid #8bcbbd', background: !borderNavigate ? '#087f6c' : '#fff', color: !borderNavigate ? '#fff' : '#116455', cursor: 'pointer' }}>Continuar trazado</button>
+                <button type="button" aria-pressed={borderNavigate} onClick={() => { pauseBorderStroke(); setBorderNavigate(true); setBorderClosing(false); }} style={{ padding: '8px', borderRadius: '7px', border: '1px solid #8bcbbd', background: borderNavigate ? '#087f6c' : '#fff', color: borderNavigate ? '#fff' : '#116455', cursor: 'pointer' }}>Mover placa</button>
+                <button type="button" style={traceButtonStyle} disabled={!drawingPolygonPoints.length} onClick={handleUndo}>Deshacer tramo</button>
+                <button className="annotation-inspector__close-border" type="button" style={traceButtonStyle} disabled={!borderTraceHasArea(drawingPolygonPoints) || isDrawingFreehand} onClick={() => {
+                  if (!borderClosing) { setBorderClosing(true); setBorderNavigate(false); return; }
+                  const rect = imageRef.current!.getBoundingClientRect();
+                  const points = closeBorderTrace(drawingPolygonPointsRef.current, rect.width, rect.height);
+                  finalizeFreehandPolygon(points);
+                  setBorderDraft([]); segmentHistoryRef.current = []; gestureBaseRef.current = []; gestureStrokeRef.current = [];
+                  setBorderClosing(false); setRegionError('');
+                }}>{borderClosing ? 'Confirmar cierre' : 'Cerrar borde'}</button>
+                {borderClosing && <button type="button" style={traceButtonStyle} onClick={() => setBorderClosing(false)}>Seguir dibujando</button>}
+                <button type="button" style={traceButtonStyle} disabled={!drawingPolygonPoints.length} onClick={() => { isDrawingFreehandRef.current = false; setIsDrawingFreehand(false); setBorderDraft([]); segmentHistoryRef.current = []; gestureBaseRef.current = []; gestureStrokeRef.current = []; setBorderClosing(false); setRegionError(''); }}>Cancelar contorno</button>
+              </div>
+              <small style={{ color: '#57776e' }}>Espacio + arrastrar para navegar · Dos dedos para mover y ampliar</small>
+              {regionError && <p role="alert" style={{ color: '#b91c1c', margin: 0, fontSize: '0.76em' }}>{regionError}</p>}
+            </section>}
+
+                {(activeTool === 'pointer' || activeTool === 'batch') && <div className="annotation-option-instruction"><MousePointer size={18} /><p>{activeTool === 'batch' ? 'Haz clic en cada punto de la misma estructura. Todos compartirán el nombre que elijas.' : 'Haz clic sobre la estructura para colocar el punto. Puedes ajustar su origen después.'}</p></div>}
                 {(activeTool === 'pointer' || activeTool === 'batch') && activeSelectedMarker && activeSelectedMarker.x != null && !activeSelectedMarker.regionPoints && (
-                  <div
-                    style={{
-                      borderRadius: '10px',
-                      border: '1px solid #bfdbfe',
-                      background: '#ffffff',
-                      padding: '10px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px',
-                    }}
-                  >
-                    <div style={{ fontSize: '0.78em', fontWeight: 800, color: '#1e40af', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Target size={13} color="#0284c7" /> Borde de salida de la flecha / aguja
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px' }}>
-                      <button
-                        type="button"
-                        title="Borde Izquierdo"
-                        onClick={() => setMarkerOriginEdge(activeSelectedMarker.id, 'left')}
-                        style={{
-                          padding: '5px 2px',
-                          borderRadius: '6px',
-                          border: currentActiveMarkerEdge === 'left' ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                          background: currentActiveMarkerEdge === 'left' ? '#e0f2fe' : '#f8fafc',
-                          color: currentActiveMarkerEdge === 'left' ? '#0369a1' : '#475569',
-                          fontWeight: 800,
-                          fontSize: '0.7em',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          gap: '2px',
-                        }}
-                      >
-                        <ArrowLeft size={12} />
-                        <span>Izq</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        title="Borde Superior"
-                        onClick={() => setMarkerOriginEdge(activeSelectedMarker.id, 'top')}
-                        style={{
-                          padding: '5px 2px',
-                          borderRadius: '6px',
-                          border: currentActiveMarkerEdge === 'top' ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                          background: currentActiveMarkerEdge === 'top' ? '#e0f2fe' : '#f8fafc',
-                          color: currentActiveMarkerEdge === 'top' ? '#0369a1' : '#475569',
-                          fontWeight: 800,
-                          fontSize: '0.7em',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          gap: '2px',
-                        }}
-                      >
-                        <ArrowUp size={12} />
-                        <span>Arriba</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        title="Borde Derecho"
-                        onClick={() => setMarkerOriginEdge(activeSelectedMarker.id, 'right')}
-                        style={{
-                          padding: '5px 2px',
-                          borderRadius: '6px',
-                          border: currentActiveMarkerEdge === 'right' ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                          background: currentActiveMarkerEdge === 'right' ? '#e0f2fe' : '#f8fafc',
-                          color: currentActiveMarkerEdge === 'right' ? '#0369a1' : '#475569',
-                          fontWeight: 800,
-                          fontSize: '0.7em',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          gap: '2px',
-                        }}
-                      >
-                        <ArrowRight size={12} />
-                        <span>Der</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        title="Borde Inferior"
-                        onClick={() => setMarkerOriginEdge(activeSelectedMarker.id, 'bottom')}
-                        style={{
-                          padding: '5px 2px',
-                          borderRadius: '6px',
-                          border: currentActiveMarkerEdge === 'bottom' ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                          background: currentActiveMarkerEdge === 'bottom' ? '#e0f2fe' : '#f8fafc',
-                          color: currentActiveMarkerEdge === 'bottom' ? '#0369a1' : '#475569',
-                          fontWeight: 800,
-                          fontSize: '0.7em',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          gap: '2px',
-                        }}
-                      >
-                        <ArrowDown size={12} />
-                        <span>Abajo</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        title="Borde Automático (más cercano)"
-                        onClick={() => setMarkerOriginEdge(activeSelectedMarker.id, 'auto')}
-                        style={{
-                          padding: '5px 2px',
-                          borderRadius: '6px',
-                          border: currentActiveMarkerEdge === 'auto' ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                          background: currentActiveMarkerEdge === 'auto' ? '#e0f2fe' : '#f8fafc',
-                          color: currentActiveMarkerEdge === 'auto' ? '#0369a1' : '#475569',
-                          fontWeight: 800,
-                          fontSize: '0.7em',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          gap: '2px',
-                        }}
-                      >
-                        <RefreshCw size={12} />
-                        <span>Auto</span>
-                      </button>
-                    </div>
-                  </div>
+                  <AnnotationDirectionPicker value={currentActiveMarkerEdge} onChange={edge => setMarkerOriginEdge(activeSelectedMarker.id, edge)} />
                 )}
 
                 {/* Polygon specifics (Palette & Opacity) */}
                 {(activeTool === 'border' || activeTool === 'batch-border') && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <fieldset style={{ margin: 0, padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', minWidth: 0 }}>
-                      <legend style={{ fontSize: '0.78em', fontWeight: 800, color: '#475569' }}>Estilo del borde</legend>
-                      <svg aria-label="Vista previa de la guía del borde" role="img" viewBox="0 0 200 28" style={{ width: '100%', height: '28px', background: '#f8fafc', borderRadius: '4px' }}>
-                        <line x1="8" y1="14" x2="192" y2="14" stroke={drawingPolygonColor} strokeWidth={borderGuideWidth} strokeDasharray={`${borderGuideDash} ${borderGuideGap + borderGuideWidth}`} strokeLinecap="round" />
+                  <div className="annotation-option-appearance">
+                    <details className="annotation-option-border-settings" open>
+                      <summary><span>Estilo del borde</span><ChevronDown size={14} /></summary>
+                      <div className="annotation-option-border-settings__body">
+                      <span className="annotation-option-kicker">Vista previa de la línea</span>
+                      <svg aria-label="Vista previa de la guía del borde" role="img" style={{ width: '100%', height: '28px', background: '#f8fafc', borderRadius: '4px' }}>
+                        <line x1="8" y1="14" x2="96%" y2="14" stroke={drawingPolygonColor} strokeWidth={borderGuideWidth} strokeDasharray={`${borderGuideDash} ${borderGuideGap + borderGuideWidth}`} strokeLinecap="round" />
                       </svg>
                       {[
-                        { label: 'Grosor de la línea', value: borderGuideWidth, options: REGION_BORDER_PRESETS.width, set: (value: number) => changeBorderStyle('regionStrokeWidth', value) },
-                        { label: 'Separación entre segmentos', value: borderGuideGap, options: REGION_BORDER_PRESETS.gap, set: (value: number) => changeBorderStyle('regionDashGap', value) },
-                        { label: 'Longitud de los segmentos', value: borderGuideDash, options: REGION_BORDER_PRESETS.dash, set: (value: number) => changeBorderStyle('regionDashLength', value) },
-                      ].map(control => <label key={control.label} style={{ display: 'block', fontSize: '0.76em', color: '#475569', marginTop: '8px' }}>
-                        {control.label}
+                        { label: 'Grosor de la línea', help: 'Qué tan marcada se ve la línea', value: borderGuideWidth, options: REGION_BORDER_PRESETS.width, set: (value: number) => changeBorderStyle('regionStrokeWidth', value) },
+                        { label: 'Separación entre segmentos', help: 'Espacio entre cada raya', value: borderGuideGap, options: REGION_BORDER_PRESETS.gap, set: (value: number) => changeBorderStyle('regionDashGap', value) },
+                        { label: 'Longitud de los segmentos', help: 'Largo de cada raya', value: borderGuideDash, options: REGION_BORDER_PRESETS.dash, set: (value: number) => changeBorderStyle('regionDashLength', value) },
+                      ].map(control => <label className="annotation-option-preset" key={control.label}>
+                        <span><span>{control.label}</span><small>{control.help}</small></span>
                         <select aria-label={control.label} value={control.value} onChange={event => control.set(Number(event.target.value))} style={{ display: 'block', width: '100%', marginTop: '4px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '7px', background: '#fff', color: '#334155', font: 'inherit' }}>
                           {!control.options.some(option => option.value === control.value) && <option value={control.value} disabled>Valor guardado</option>}
                           {control.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                         </select>
                       </label>)}
-                      <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.76em', marginTop: '8px' }}>
+                      <label className="annotation-option-smooth">
                         <input type="checkbox" checked={borderSmooth} onChange={event => {
                           const value = event.target.checked;
                           setBorderSmooth(value);
@@ -3352,42 +3222,26 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                         }} />Suavizado leve del trazo
                       </label>
                       <small style={{ color: '#64748b', fontSize: '0.72em' }}>Se aplica al borde seleccionado o al grupo actual y se conserva al guardar. El suavizado reduce pequeñas irregularidades sin reemplazar los puntos originales.</small>
-                    </fieldset>
-                    <div>
-                      <span style={{ fontSize: '0.78em', fontWeight: 800, color: '#475569' }}>Color de región:</span>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
-                        {REGION_PALETTE_COLORS.map(c => (
-                          <button
-                            key={c.hex}
-                            type="button"
-                            title={c.name}
-                            onClick={() => {
-                              setDrawingPolygonColor(c.hex);
-                              if (sessionMarkerIds.length > 0) {
-                                setMarkers(prev => prev.map(m => sessionMarkerIds.includes(m.id) ? { ...m, regionColor: c.hex } : m));
-                                setHasUnsavedModifications(true);
-                              }
-                            }}
-                            style={{
-                              width: '22px',
-                              height: '22px',
-                              borderRadius: '999px',
-                              background: c.hex,
-                              border: drawingPolygonColor === c.hex ? '2.5px solid #0f172a' : '1.5px solid rgba(0,0,0,0.15)',
-                              cursor: 'pointer',
-                            }}
-                          />
-                        ))}
                       </div>
-                    </div>
+                    </details>
+                    <section className="annotation-option-fill">
+                    <div className="annotation-option-heading">Color y relleno</div>
+                    <AnnotationColorPicker colors={REGION_PALETTE_COLORS} value={drawingPolygonColor} onChange={color => {
+                      setDrawingPolygonColor(color);
+                      if (sessionMarkerIds.length > 0) {
+                        setMarkers(previous => previous.map(marker => sessionMarkerIds.includes(marker.id) ? { ...marker, regionColor: color } : marker));
+                        setHasUnsavedModifications(true);
+                      }
+                    }} />
 
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78em', fontWeight: 800, color: '#475569' }}>
+                    <div className="annotation-option-opacity">
+                      <div>
                         <span>Opacidad de relleno:</span>
                         <span>{Math.round(drawingPolygonOpacity * 100)}%</span>
                       </div>
                       <input
                         type="range"
+                        aria-label="Opacidad de relleno"
                         min="0.10"
                         max="0.80"
                         step="0.05"
@@ -3404,13 +3258,13 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                       />
                     </div>
 
-                    <div style={{ padding: '7px 9px', borderRadius: '8px', background: '#ecfdf5', border: '1px solid #a7f3d0', fontSize: '0.76em', color: '#065f46', lineHeight: 1.4 }}>
-                      ✍️ <strong>{activeTool === 'batch-border' ? 'Bordes Múltiples:' : 'Borde a Mano Alzada:'}</strong> Mantén presionado y dibuja alrededor de la estructura. Al soltar se cerrará la región.
-                    </div>
+                    <div className="annotation-option-fill-preview" style={{ borderColor: drawingPolygonColor }}><span style={{ background: drawingPolygonColor, opacity: drawingPolygonOpacity }} /><span>Vista del relleno</span></div>
+                    <p className="annotation-inspector__mode-hint">Un relleno más transparente permite ver mejor el tejido.</p>
+                    </section>
                   </div>
                 )}
 
-                {/* Guardar señalado / grupo y pasar a herramienta mano */}
+                {/* Añadir señalado / grupo y pasar a herramienta mano */}
                 <button
                   type="button"
                   onClick={handleSaveCurrentToolSession}
@@ -3434,17 +3288,18 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 >
                   <Check size={16} strokeWidth={2.5} />
                   <span>
-                    {activeTool === 'batch' || activeTool === 'batch-border'
-                      ? 'Guardar grupo y pasar a Mano'
-                      : 'Guardar señalado y pasar a Mano'}
+                    Añadir señalado
                   </span>
                 </button>
+                <p className="annotation-inspector__mode-hint">Añade al conjunto actual. Usa «Guardar señalados» para aplicar los cambios.</p>
               </div>
             )}
 
             {/* Selected Marker Edit Card when in Hand Mode (Paneo) */}
+
             {activeTool === 'pan' && activeSelectedMarker && (
               <div
+                className="annotation-inspector__card annotation-inspector__selection"
                 style={{
                   borderRadius: '14px',
                   border: '1.5px solid #bfdbfe',
@@ -3458,7 +3313,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ fontSize: '0.82em', fontWeight: 800, color: '#1e40af', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Sparkles size={14} color="#0284c7" /> Detalle del Señalado
+                    <MousePointer size={15} /> Propiedades del señalado
                   </div>
                   <button
                     type="button"
@@ -3539,153 +3394,17 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                       {reassigningTipMarkerId === activeSelectedMarker.id ? '🎯 Haz clic en la placa para reubicar punta' : '🎯 Cambiar punta con un clic'}
                     </button>
 
-                    <div>
-                      <span style={{ fontSize: '0.74em', fontWeight: 800, color: '#475569', display: 'block', marginBottom: '4px' }}>
-                        Borde de salida:
-                      </span>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px' }}>
-                        <button
-                          type="button"
-                          title="Borde Izquierdo"
-                          onClick={() => setMarkerOriginEdge(activeSelectedMarker.id, 'left')}
-                          style={{
-                            padding: '4px',
-                            borderRadius: '6px',
-                            border: currentActiveMarkerEdge === 'left' ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                            background: currentActiveMarkerEdge === 'left' ? '#e0f2fe' : '#ffffff',
-                            color: currentActiveMarkerEdge === 'left' ? '#0369a1' : '#475569',
-                            fontWeight: 800,
-                            fontSize: '0.7em',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '2px',
-                          }}
-                        >
-                          <ArrowLeft size={12} />
-                          <span>Izq</span>
-                        </button>
-                        <button
-                          type="button"
-                          title="Borde Superior"
-                          onClick={() => setMarkerOriginEdge(activeSelectedMarker.id, 'top')}
-                          style={{
-                            padding: '4px',
-                            borderRadius: '6px',
-                            border: currentActiveMarkerEdge === 'top' ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                            background: currentActiveMarkerEdge === 'top' ? '#e0f2fe' : '#ffffff',
-                            color: currentActiveMarkerEdge === 'top' ? '#0369a1' : '#475569',
-                            fontWeight: 800,
-                            fontSize: '0.7em',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '2px',
-                          }}
-                        >
-                          <ArrowUp size={12} />
-                          <span>Arriba</span>
-                        </button>
-                        <button
-                          type="button"
-                          title="Borde Derecho"
-                          onClick={() => setMarkerOriginEdge(activeSelectedMarker.id, 'right')}
-                          style={{
-                            padding: '4px',
-                            borderRadius: '6px',
-                            border: currentActiveMarkerEdge === 'right' ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                            background: currentActiveMarkerEdge === 'right' ? '#e0f2fe' : '#ffffff',
-                            color: currentActiveMarkerEdge === 'right' ? '#0369a1' : '#475569',
-                            fontWeight: 800,
-                            fontSize: '0.7em',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '2px',
-                          }}
-                        >
-                          <ArrowRight size={12} />
-                          <span>Der</span>
-                        </button>
-                        <button
-                          type="button"
-                          title="Borde Inferior"
-                          onClick={() => setMarkerOriginEdge(activeSelectedMarker.id, 'bottom')}
-                          style={{
-                            padding: '4px',
-                            borderRadius: '6px',
-                            border: currentActiveMarkerEdge === 'bottom' ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                            background: currentActiveMarkerEdge === 'bottom' ? '#e0f2fe' : '#ffffff',
-                            color: currentActiveMarkerEdge === 'bottom' ? '#0369a1' : '#475569',
-                            fontWeight: 800,
-                            fontSize: '0.7em',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '2px',
-                          }}
-                        >
-                          <ArrowDown size={12} />
-                          <span>Abajo</span>
-                        </button>
-                        <button
-                          type="button"
-                          title="Borde Automático"
-                          onClick={() => setMarkerOriginEdge(activeSelectedMarker.id, 'auto')}
-                          style={{
-                            padding: '4px',
-                            borderRadius: '6px',
-                            border: currentActiveMarkerEdge === 'auto' ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                            background: currentActiveMarkerEdge === 'auto' ? '#e0f2fe' : '#ffffff',
-                            color: currentActiveMarkerEdge === 'auto' ? '#0369a1' : '#475569',
-                            fontWeight: 800,
-                            fontSize: '0.7em',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '2px',
-                          }}
-                        >
-                          <RefreshCw size={12} />
-                          <span>Auto</span>
-                        </button>
-                      </div>
-                    </div>
+                    <AnnotationDirectionPicker value={currentActiveMarkerEdge} onChange={edge => setMarkerOriginEdge(activeSelectedMarker.id, edge)} />
                   </div>
                 )}
 
                 {/* If polygon region */}
                 {activeSelectedMarker.regionPoints && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div>
-                      <span style={{ fontSize: '0.74em', fontWeight: 800, color: '#475569' }}>Color de región:</span>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '4px' }}>
-                        {REGION_PALETTE_COLORS.map(c => (
-                          <button
-                            key={c.hex}
-                            type="button"
-                            title={c.name}
-                            onClick={() => {
-                              setMarkers(prev => prev.map(m => m.id === activeSelectedMarker.id ? { ...m, regionColor: c.hex } : m));
-                              setHasUnsavedModifications(true);
-                            }}
-                            style={{
-                              width: '20px',
-                              height: '20px',
-                              borderRadius: '999px',
-                              background: c.hex,
-                              border: activeSelectedMarker.regionColor === c.hex ? '2.5px solid #0f172a' : '1px solid rgba(0,0,0,0.15)',
-                              cursor: 'pointer',
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
+                    <AnnotationColorPicker colors={REGION_PALETTE_COLORS} value={activeSelectedMarker.regionColor ?? '#22c55e'} onChange={color => {
+                      setMarkers(previous => previous.map(marker => marker.id === activeSelectedMarker.id ? { ...marker, regionColor: color } : marker));
+                      setHasUnsavedModifications(true);
+                    }} />
 
                     {/* Zonas de exclusión / Huecos interiores */}
                     {activeSelectedMarker.regionHoles && activeSelectedMarker.regionHoles.length > 0 && (
@@ -3791,27 +3510,37 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                       </div>
                     )}
 
-                    <div style={{ padding: '6px 8px', borderRadius: '8px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.73em', color: '#166534', lineHeight: 1.35 }}>
-                      💡 <strong>Zona de exclusión / Dona:</strong> Con este borde seleccionado, activa la herramienta <em>Borde</em> y dibuja dentro para recortar el centro (crear un hueco). Haz clic sobre un hueco para seleccionarlo y eliminarlo con <kbd>Supr</kbd> o el botón de papelera.
-                    </div>
                   </div>
                 )}
               </div>
             )}
 
             {/* List of All Placed Markers (Accordion para Múltiples & Aislamiento al Seleccionar) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                <span style={{ fontSize: '0.85em', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  {selectedMarkerId && markers.length > 1
-                    ? (activeGroupMarkers.length > 1
-                        ? `Grupo Seleccionado (${activeGroupMarkers.length} de ${markers.length})`
+            <div className="annotation-inspector__list" hidden={activeTool !== 'pan'} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button className="annotation-inspector__list-toggle" type="button" aria-expanded={markerListOpen} aria-controls="annotation-marker-list" onClick={() => setMarkerListOpen(open => !open)}><Layers size={14} /><span>Señalados <span>({markers.length})</span></span><span>{markerListOpen ? 'Ocultar lista' : 'Mostrar lista'}</span>{markerListOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button>
+              <div id="annotation-marker-list" className="annotation-inspector__list-content" hidden={!markerListOpen}>
+              <div className="annotation-inspector__list-filters" role="group" aria-label="Filtrar señalados por herramienta">
+                {([
+                  { id: 'pointer', label: 'Punto' }, { id: 'batch', label: 'Puntos' },
+                  { id: 'border', label: 'Borde' }, { id: 'batch-border', label: 'Bordes' },
+                ] as const).map(filter => {
+                  const count = markerGroups.filter(group => group.tool === filter.id).reduce((total, group) => total + group.items.length, 0);
+                  return <button key={filter.id} type="button" aria-label={`Mostrar ${filter.label.toLowerCase()}`} aria-pressed={effectiveListFilter === filter.id} onClick={() => setMarkerListFilter(filter.id)}>
+                    <span>{filter.label}</span><span>{count}</span>
+                  </button>;
+                })}
+              </div>
+              <div className="annotation-inspector__list-heading" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                <span className="annotation-inspector__list-title" style={{ fontSize: '0.85em', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {selectedInFilteredList && markers.length > 1
+                    ? (filteredActiveGroupMarkers.length > 1
+                        ? `Grupo Seleccionado (${filteredActiveGroupMarkers.length} de ${markers.length})`
                         : `Señalado Seleccionado (1 de ${markers.length})`)
-                    : `Lista de Señalados (${markers.length})`}
+                    : `Lista de Señalados (${filteredMarkerCount})`}
                 </span>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {selectedMarkerId && markers.length > 1 && (
+                  {selectedInFilteredList && markers.length > 1 && (
                     <button
                       type="button"
                       title="Mostrar todos los señalados en la imagen y en la lista"
@@ -3837,6 +3566,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 </div>
               </div>
 
+              {filteredMarkerCount === 0 && markers.length > 0 && <p className="annotation-inspector__empty">No hay señalados de esta herramienta.</p>}
+
               {markers.length === 0 ? (
                 <div
                   style={{
@@ -3852,9 +3583,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                   No hay señalados creados aún.<br />
                   Haz clic sobre la placa para agregar el primero.
                 </div>
-              ) : selectedMarkerId ? (
+              ) : selectedInFilteredList ? (
                 // 1. Single active marker or multiple group members focus mode
-                activeGroupMarkers.map((marker) => {
+                filteredActiveGroupMarkers.map((marker) => {
                   const originalIndex = markers.findIndex(m => m.id === marker.id);
                   const isPolygon = Boolean(marker.regionPoints && marker.regionPoints.length >= 6);
                   const isThisMarkerSelected = marker.id === selectedMarkerId;
@@ -3862,7 +3593,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                   return (
                     <div
                       key={marker.id}
+                      className="annotation-inspector__marker-card"
+                      data-selected={isThisMarkerSelected}
                       onClick={() => {
+                        if (drawingPolygonPointsRef.current.length) { setRegionError('Cierra o cancela el contorno antes de seleccionar otra región.'); return; }
                         setSelectedMarkerId(marker.id);
                         focusOnMarker(marker);
                       }}
@@ -3905,7 +3639,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                             {renderBoldText(marker.label || `Señalado ${originalIndex + 1}`)}
                           </span>
 
-                          {isThisMarkerSelected && activeGroupMarkers.length > 1 && (
+                          {isThisMarkerSelected && filteredActiveGroupMarkers.length > 1 && (
                             <span style={{ fontSize: '0.68em', fontWeight: 800, color: '#0284c7', background: '#e0f2fe', padding: '2px 6px', borderRadius: '4px' }}>
                               Activo
                             </span>
@@ -3959,7 +3693,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 })
               ) : (
                 // 2. Full Marker Groups with Accordion for Multiples
-                markerGroups.map((group) => {
+                filteredMarkerGroups.map((group) => {
                   const isMultiple = group.items.length > 1;
                   const isExpanded = expandedGroupKeys[group.key] ?? false;
 
@@ -3972,6 +3706,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                     return (
                       <div
                         key={marker.id}
+                      className="annotation-inspector__marker-card"
                         onClick={() => focusOnMarker(marker)}
                         style={{
                           padding: '10px 12px',
@@ -4141,6 +3876,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                             return (
                               <div
                                 key={marker.id}
+                      className="annotation-inspector__marker-card"
                                 onClick={() => focusOnMarker(marker)}
                                 style={{
                                   padding: '8px 10px',
@@ -4216,6 +3952,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                   );
                 })
               )}
+              </div>
             </div>
 
             {/* Comment hint if present */}
@@ -4237,68 +3974,6 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
             )}
           </div>
 
-          {/* Drawer Footer Actions */}
-          <div
-            style={{
-              padding: '12px 14px',
-              borderTop: '1px solid #e2e8f0',
-              background: '#ffffff',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-            }}
-          >
-            <button
-              type="button"
-              disabled={isSavingLocally || imageStatus !== 'ready'}
-              onClick={handleConfirmSave}
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                borderRadius: '12px',
-                border: 'none',
-                background: isSavingLocally || imageStatus !== 'ready' ? '#94a3b8' : 'linear-gradient(135deg, #16a34a 0%, #0ea5e9 100%)',
-                color: '#ffffff',
-                fontSize: '0.95em',
-                fontWeight: 900,
-                cursor: isSavingLocally || imageStatus !== 'ready' ? 'not-allowed' : 'pointer',
-                boxShadow: '0 8px 24px rgba(14, 165, 233, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              {isSavingLocally ? (
-                <>
-                  <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Guardando...
-                </>
-              ) : (
-                <>
-                  <Check size={18} strokeWidth={2.5} /> Guardar señalados
-                </>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleRequestClose}
-              style={{
-                width: '100%',
-                padding: '10px 14px',
-                borderRadius: '12px',
-                border: '1.5px solid #cbd5e1',
-                background: '#f8fafc',
-                color: '#475569',
-                fontSize: '0.9em',
-                fontWeight: 800,
-                cursor: 'pointer',
-              }}
-            >
-              Cancelar / Salir
-            </button>
-          </div>
         </aside>
       )}
 
@@ -4376,53 +4051,6 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         </div>
       )}
 
-      {/* All Markers Mover Sub-modal */}
-      {showMoveAllModal && resolvedImageSrc && (
-        <AllSenaladosMoverModal
-          isOpen={showMoveAllModal}
-          imageSrc={resolvedImageSrc}
-          imageAlt={imageAlt}
-          senalados={markers.map(m => m.label)}
-          senaladosPos={markers.map(m => (m.x != null && m.y != null ? {
-            x: m.x,
-            y: m.y,
-            startX: m.startX ?? null,
-            startY: m.startY ?? null,
-            regionPoints: m.regionPoints ?? null,
-            regionHoles: m.regionHoles ?? null,
-            regionColor: m.regionColor ?? '#22c55e',
-            regionOpacity: m.regionOpacity ?? 0.28,
-            regionStrokeWidth: m.regionStrokeWidth,
-            regionDashLength: m.regionDashLength,
-            regionDashGap: m.regionDashGap,
-            regionSmooth: m.regionSmooth,
-          } : null))}
-          onClose={() => setShowMoveAllModal(false)}
-          onSave={(updatedPos) => {
-            pushHistory(markers);
-            setMarkers(prev => prev.map((m, i) => {
-              const u = updatedPos[i];
-              if (!u) return m;
-              return {
-                ...m,
-                x: u.x,
-                y: u.y,
-                startX: u.startX ?? null,
-                startY: u.startY ?? null,
-                regionPoints: u.regionPoints ?? null,
-                regionHoles: u.regionHoles ?? null,
-                regionColor: u.regionColor ?? m.regionColor,
-                regionOpacity: u.regionOpacity ?? m.regionOpacity,
-                regionStrokeWidth: u.regionStrokeWidth ?? m.regionStrokeWidth,
-                regionDashLength: u.regionDashLength ?? m.regionDashLength,
-                regionDashGap: u.regionDashGap ?? m.regionDashGap,
-                regionSmooth: u.regionSmooth ?? m.regionSmooth,
-              };
-            }));
-            setShowMoveAllModal(false);
-          }}
-        />
-      )}
     </div>,
     document.body
   );

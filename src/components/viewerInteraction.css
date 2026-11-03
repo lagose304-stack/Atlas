@@ -1,4 +1,4 @@
-/* La imagen original permanece a resolución completa; se restauran los efectos al soltar. */
+/* La imagen conserva sus filtros y grano durante el arrastre y la escritura. */
 /* El visor se monta en body: conservar el layout de la página, sin pintar ni
    animar su contenido detrás del portal (especialmente la portada semanal). */
 body:has(> [data-public-viewer]) #root {
@@ -19,8 +19,6 @@ body:has(> [data-public-viewer]) #root *::before,
 body:has(> [data-public-viewer]) #root *::after {
   animation-play-state: paused !important;
 }
-[data-viewer-interacting] [data-viewer-photo] { filter: var(--viewer-motion-filter, none) !important; }
-[data-viewer-interacting] [data-viewer-grain] { visibility: hidden; }
 [data-viewer-interacting] .viewer-whiteboard__context,
 [data-viewer-interacting] [data-viewer-backdrop],
 [data-viewer-interacting] .atlas-plate-watermark { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }

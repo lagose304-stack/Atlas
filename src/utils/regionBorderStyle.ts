@@ -12,3 +12,10 @@ export function regionBorderStyle(border: Border) {
     gap: bounded(border.regionDashGap, 7, 1, 24),
   };
 }
+
+/** Unidades de la imagen necesarias para obtener medidas constantes en pantalla. */
+export function regionStrokeMetrics(border: Border, zoom: number) {
+  const style = regionBorderStyle(border);
+  const scale = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  return { width: style.width / scale, dash: style.dash / scale, gap: (style.gap + style.width) / scale };
+}
