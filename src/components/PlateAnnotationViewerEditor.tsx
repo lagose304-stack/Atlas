@@ -531,7 +531,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   const gestureBaseRef = useRef<number[]>([]);
   const gestureStrokeRef = useRef<number[]>([]);
   const segmentHistoryRef = useRef<number[][]>([]);
-  const stagedBorder = regionMode === 'create' && (activeTool === 'border' || activeTool === 'batch-border');
+  const stagedBorder = regionMode === 'exclude' || (regionMode === 'create' && (activeTool === 'border' || activeTool === 'batch-border'));
   const setBorderDraft = (points: number[]) => { drawingPolygonPointsRef.current = points; setDrawingPolygonPoints(points); };
   const pauseBorderStroke = () => {
     if (isDrawingFreehandRef.current && gestureStrokeRef.current.length >= 4) segmentHistoryRef.current.push([...gestureBaseRef.current]);
@@ -1115,7 +1115,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       const candidate = markers.find(marker => marker.id === selectedMarkerId);
       if (!candidate?.regionPoints || !validRegionExclusion(candidate.regionPoints, candidate.regionHoles ?? [], finalPoints)) {
         setRegionError('Dibuja la exclusión completamente dentro del borde seleccionado, sin cruzarlo ni tocar otros huecos.');
-        return;
+        return false;
       }
       pushHistory(markers);
       setMarkers(previous => previous.map(marker => marker.id === candidate.id ? { ...marker, regionHoles: [...(marker.regionHoles ?? []), finalPoints] } : marker));
@@ -1889,6 +1889,28 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     : drawingPolygonPoints;
   const traceButtonStyle: React.CSSProperties = { padding: '8px 10px', borderRadius: '7px', border: '1px solid #8bcbbd', background: '#fff', color: '#116455', cursor: 'pointer', fontSize: '0.76em', fontWeight: 600 };
 
+  const traceControls = stagedBorder && <section className="annotation-inspector__trace" aria-label="Contorno por tramos" style={{ padding: '12px', border: '1px solid #99d9cd', borderRadius: '12px', background: '#effcf8', display: 'grid', gap: '9px' }}>
+    <strong style={{ fontSize: '0.83em', color: '#116455' }}><PenTool size={15} /> {regionMode === 'exclude' ? 'Exclusión por tramos' : 'Contorno por tramos'} <span className="annotation-inspector__live-state">{borderClosing ? 'Revisar cierre' : drawingPolygonPoints.length ? 'En curso' : 'Listo para dibujar'}</span></strong>
+    <p style={{ margin: 0, fontSize: '0.76em', lineHeight: 1.5, color: '#43665e' }}>{borderClosing ? 'Revisa la unión entre el final y el inicio antes de confirmar.' : borderNavigate ? 'Mueve o amplía la placa. El contorno pendiente se conserva.' : 'Dibuja, suelta y continúa cerca del extremo resaltado. Puedes repasar un poco el último tramo: la unión se ajusta automáticamente.'}</p>
+    <div className="annotation-inspector__trace-actions" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+      <button type="button" aria-pressed={!borderNavigate} onClick={() => { pauseBorderStroke(); setBorderNavigate(false); setBorderClosing(false); }} style={{ padding: '8px', borderRadius: '7px', border: '1px solid #8bcbbd', background: !borderNavigate ? '#087f6c' : '#fff', color: !borderNavigate ? '#fff' : '#116455', cursor: 'pointer' }}>Continuar trazado</button>
+      <button type="button" aria-pressed={borderNavigate} onClick={() => { pauseBorderStroke(); setBorderNavigate(true); setBorderClosing(false); }} style={{ padding: '8px', borderRadius: '7px', border: '1px solid #8bcbbd', background: borderNavigate ? '#087f6c' : '#fff', color: borderNavigate ? '#fff' : '#116455', cursor: 'pointer' }}>Mover placa</button>
+      <button type="button" style={traceButtonStyle} disabled={!drawingPolygonPoints.length} onClick={handleUndo}>Deshacer tramo</button>
+      <button className="annotation-inspector__close-border" type="button" style={traceButtonStyle} disabled={!borderTraceHasArea(drawingPolygonPoints) || isDrawingFreehand} onClick={() => {
+        if (!borderClosing) { setBorderClosing(true); setBorderNavigate(false); return; }
+        const rect = imageRef.current!.getBoundingClientRect();
+        const points = closeBorderTrace(drawingPolygonPointsRef.current, rect.width, rect.height);
+        if (finalizeFreehandPolygon(points) === false) return;
+        setBorderDraft([]); segmentHistoryRef.current = []; gestureBaseRef.current = []; gestureStrokeRef.current = [];
+        setBorderClosing(false); setRegionError('');
+      }}>{borderClosing ? 'Confirmar cierre' : regionMode === 'exclude' ? 'Cerrar exclusión' : 'Cerrar borde'}</button>
+      {borderClosing && <button type="button" style={traceButtonStyle} onClick={() => setBorderClosing(false)}>Seguir dibujando</button>}
+      <button type="button" style={traceButtonStyle} disabled={!drawingPolygonPoints.length} onClick={() => { isDrawingFreehandRef.current = false; setIsDrawingFreehand(false); setBorderDraft([]); segmentHistoryRef.current = []; gestureBaseRef.current = []; gestureStrokeRef.current = []; setBorderClosing(false); setRegionError(''); }}>Cancelar contorno</button>
+    </div>
+    <small style={{ color: '#57776e' }}>Espacio + arrastrar para navegar · Dos dedos para mover y ampliar</small>
+    {regionError && <p role="alert" style={{ color: '#b91c1c', margin: 0, fontSize: '0.76em' }}>{regionError}</p>}
+  </section>;
+
   return createPortal(
     <div
       onContextMenu={e => { if (!isEditableTarget(e.target)) e.preventDefault(); }}
@@ -2311,7 +2333,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
         <RegionBordersOverlay layer={borderImageLayer} size={imageSize} zoom={zoomLevel} viewKey={`${position.x}:${position.y}:${rotation}`} regions={showAllMarkers ? [
           ...sortedMarkersForRendering.map((marker, index) => ({ index, marker })),
-          ...(drawingPolygonPoints.length >= 4 ? [{ index: -1, marker: { ...drawingBorderStyle, regionPoints: borderPreviewPoints, regionColor: regionMode === 'exclude' ? '#ef4444' : drawingPolygonColor, regionOpen: stagedBorder && !borderClosing } }] : []),
+          ...(drawingPolygonPoints.length >= 4 ? [{ index: -1, marker: { ...(regionMode === 'exclude' ? activeSelectedMarker : drawingBorderStyle), regionPoints: borderPreviewPoints, regionHoles: null, regionColor: regionMode === 'exclude' ? '#ef4444' : drawingPolygonColor, regionOpen: stagedBorder && !borderClosing } }] : []),
         ] : []} />
 
         {/* Interactive Image & SVG Stage (Crisp High-Res Render) */}
@@ -3007,10 +3029,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
             <span>📍📍 Haz clics sucesivos para colocar múltiples puntos con el mismo nombre.</span>
           )}
           {!reassigningTipMarkerId && activeTool === 'border' && (
-            <span>{regionMode === 'exclude' ? '✂️ Dibuja el hueco dentro del borde seleccionado y suelta para crearlo.' : regionMode === 'edit' ? 'Arrastra los puntos para ajustar el borde seleccionado.' : '✍️ Dibuja por tramos y continúa cerca del extremo resaltado. Usa Cerrar borde cuando termines.'}</span>
+            <span>{regionMode === 'exclude' ? '✂️ Dibuja el hueco dentro del borde seleccionado por tramos y confirma el cierre.' : regionMode === 'edit' ? 'Arrastra los puntos para ajustar el borde seleccionado.' : '✍️ Dibuja por tramos y continúa cerca del extremo resaltado. Usa Cerrar borde cuando termines.'}</span>
           )}
           {!reassigningTipMarkerId && activeTool === 'batch-border' && (
-            <span>{regionMode === 'exclude' ? '✂️ Dibuja el hueco dentro del borde seleccionado y suelta para crearlo.' : regionMode === 'edit' ? 'Arrastra los puntos para ajustar el borde seleccionado.' : '✍️✍️ Completa cada contorno por tramos y confirma su cierre antes de empezar el siguiente.'}</span>
+            <span>{regionMode === 'exclude' ? '✂️ Dibuja el hueco dentro del borde seleccionado por tramos y confirma el cierre.' : regionMode === 'edit' ? 'Arrastra los puntos para ajustar el borde seleccionado.' : '✍️✍️ Completa cada contorno por tramos y confirma su cierre antes de empezar el siguiente.'}</span>
           )}
           {!reassigningTipMarkerId && activeTool === 'pan' && (
             <span>{activeSelectedMarker?.regionPoints ? (regionMode === 'exclude' ? '✂️ Dibuja el hueco dentro del borde seleccionado. Cambia a Editar borde para ajustar puntos.' : 'Arrastra los puntos para ajustar el borde. Usa Crear exclusión para recortar un hueco.') : '✋ Toca cualquier señalado para editar su punta o borde de origen. Arrastra para explorar.'}</span>
@@ -3100,12 +3122,12 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                   isDrawingFreehandRef.current = false; setIsDrawingFreehand(false);
                   drawingPolygonPointsRef.current = []; setDrawingPolygonPoints([]);
                   setDraggingHandle(null); setSelectedVertex(null); setSelectedHoleIndex(null);
-                  setReassigningTipMarkerId(null); setRegionError(''); setRegionMode(mode.id);
+                  setReassigningTipMarkerId(null); setRegionError(''); setBorderNavigate(false); setBorderClosing(false); setRegionMode(mode.id);
                 }} style={{ padding: '9px 11px', borderRadius: '8px', border: '1px solid #7dd3fc', background: regionMode === mode.id ? '#0369a1' : '#fff', color: regionMode === mode.id ? '#fff' : '#075985', cursor: 'pointer', fontSize: '0.76em', fontWeight: 700 }}>{mode.label}</button>)}
               </div>
               <p className="annotation-inspector__mode-hint">{regionMode === 'edit' ? 'Arrastra los puntos para ajustar el contorno.' : regionMode === 'exclude' ? 'Dibuja dentro del borde para recortar un hueco.' : 'Dibuja una nueva región sin alterar las existentes.'}</p>
               <details className="annotation-inspector__help"><summary>Guía de edición</summary><p>Los puntos pequeños entre vértices permiten añadir uno nuevo. Selecciona un hueco para editar sus puntos. La tecla Supr elimina el punto o hueco seleccionado. Cambia a Crear exclusión para dibujar un recorte interior.</p></details>
-              {regionError && <p role="alert" style={{ margin: 0, fontSize: '0.76em', color: '#b91c1c' }}>{regionError}</p>}
+              {regionMode === 'exclude' ? traceControls : regionError && <p role="alert" style={{ margin: 0, fontSize: '0.76em', color: '#b91c1c' }}>{regionError}</p>}
             </section>}
             {/* Active Tool Creation Form Card (solo se muestra cuando hay una herramienta activa distinta de Mano) */}
             {activeTool !== 'pan' && (
@@ -3162,27 +3184,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                   />
                 </div>
 
-            {stagedBorder && <section className="annotation-inspector__trace" aria-label="Contorno por tramos" style={{ padding: '12px', border: '1px solid #99d9cd', borderRadius: '12px', background: '#effcf8', display: 'grid', gap: '9px' }}>
-              <strong style={{ fontSize: '0.83em', color: '#116455' }}><PenTool size={15} /> Contorno por tramos <span className="annotation-inspector__live-state">{borderClosing ? 'Revisar cierre' : drawingPolygonPoints.length ? 'En curso' : 'Listo para dibujar'}</span></strong>
-              <p style={{ margin: 0, fontSize: '0.76em', lineHeight: 1.5, color: '#43665e' }}>{borderClosing ? 'Revisa la unión entre el final y el inicio antes de confirmar.' : borderNavigate ? 'Mueve o amplía la placa. El contorno pendiente se conserva.' : 'Dibuja, suelta y continúa cerca del extremo resaltado. Puedes repasar un poco el último tramo: la unión se ajusta automáticamente.'}</p>
-              <div className="annotation-inspector__trace-actions" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                <button type="button" aria-pressed={!borderNavigate} onClick={() => { pauseBorderStroke(); setBorderNavigate(false); setBorderClosing(false); }} style={{ padding: '8px', borderRadius: '7px', border: '1px solid #8bcbbd', background: !borderNavigate ? '#087f6c' : '#fff', color: !borderNavigate ? '#fff' : '#116455', cursor: 'pointer' }}>Continuar trazado</button>
-                <button type="button" aria-pressed={borderNavigate} onClick={() => { pauseBorderStroke(); setBorderNavigate(true); setBorderClosing(false); }} style={{ padding: '8px', borderRadius: '7px', border: '1px solid #8bcbbd', background: borderNavigate ? '#087f6c' : '#fff', color: borderNavigate ? '#fff' : '#116455', cursor: 'pointer' }}>Mover placa</button>
-                <button type="button" style={traceButtonStyle} disabled={!drawingPolygonPoints.length} onClick={handleUndo}>Deshacer tramo</button>
-                <button className="annotation-inspector__close-border" type="button" style={traceButtonStyle} disabled={!borderTraceHasArea(drawingPolygonPoints) || isDrawingFreehand} onClick={() => {
-                  if (!borderClosing) { setBorderClosing(true); setBorderNavigate(false); return; }
-                  const rect = imageRef.current!.getBoundingClientRect();
-                  const points = closeBorderTrace(drawingPolygonPointsRef.current, rect.width, rect.height);
-                  finalizeFreehandPolygon(points);
-                  setBorderDraft([]); segmentHistoryRef.current = []; gestureBaseRef.current = []; gestureStrokeRef.current = [];
-                  setBorderClosing(false); setRegionError('');
-                }}>{borderClosing ? 'Confirmar cierre' : 'Cerrar borde'}</button>
-                {borderClosing && <button type="button" style={traceButtonStyle} onClick={() => setBorderClosing(false)}>Seguir dibujando</button>}
-                <button type="button" style={traceButtonStyle} disabled={!drawingPolygonPoints.length} onClick={() => { isDrawingFreehandRef.current = false; setIsDrawingFreehand(false); setBorderDraft([]); segmentHistoryRef.current = []; gestureBaseRef.current = []; gestureStrokeRef.current = []; setBorderClosing(false); setRegionError(''); }}>Cancelar contorno</button>
-              </div>
-              <small style={{ color: '#57776e' }}>Espacio + arrastrar para navegar · Dos dedos para mover y ampliar</small>
-              {regionError && <p role="alert" style={{ color: '#b91c1c', margin: 0, fontSize: '0.76em' }}>{regionError}</p>}
-            </section>}
+                {regionMode === 'create' && traceControls}
 
                 {(activeTool === 'pointer' || activeTool === 'batch') && <div className="annotation-option-instruction"><MousePointer size={18} /><p>{activeTool === 'batch' ? 'Haz clic en cada punto de la misma estructura. Todos compartirán el nombre que elijas.' : 'Haz clic sobre la estructura para colocar el punto. Puedes ajustar su origen después.'}</p></div>}
                 {(activeTool === 'pointer' || activeTool === 'batch') && activeSelectedMarker && activeSelectedMarker.x != null && !activeSelectedMarker.regionPoints && (
@@ -3319,6 +3321,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                     type="button"
                     onClick={() => setSelectedMarkerId(null)}
                     title="Cerrar detalle"
+                    disabled={drawingPolygonPoints.length > 0}
                     style={{
                       border: 'none',
                       background: 'transparent',
@@ -3516,7 +3519,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
             )}
 
             {/* List of All Placed Markers (Accordion para Múltiples & Aislamiento al Seleccionar) */}
-            <div className="annotation-inspector__list" hidden={activeTool !== 'pan'} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div className="annotation-inspector__list" hidden={activeTool !== 'pan' || (regionMode === 'exclude' && drawingPolygonPoints.length > 0)} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button className="annotation-inspector__list-toggle" type="button" aria-expanded={markerListOpen} aria-controls="annotation-marker-list" onClick={() => setMarkerListOpen(open => !open)}><Layers size={14} /><span>Señalados <span>({markers.length})</span></span><span>{markerListOpen ? 'Ocultar lista' : 'Mostrar lista'}</span>{markerListOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button>
               <div id="annotation-marker-list" className="annotation-inspector__list-content" hidden={!markerListOpen}>
               <div className="annotation-inspector__list-filters" role="group" aria-label="Filtrar señalados por herramienta">

@@ -25,7 +25,7 @@ export default function RegionBordersOverlay({ layer, size, regions, zoom, viewK
         const style = regionBorderStyle(marker);
         const custom = marker.regionStrokeWidth != null || marker.regionDashLength != null || marker.regionDashGap != null;
         return <path key={index} data-region-clean-dashes={custom ? '' : undefined} data-region-index={index}
-          d={custom ? regionDashPath(marker.regionPoints, marker.regionHoles, size.width, size.height, 1, marker, !marker.regionOpen) : regionPolygonPath(marker.regionPoints, marker.regionHoles, size.width, size.height, marker.regionSmooth ?? false)}
+          d={custom ? regionDashPath(marker.regionPoints, marker.regionHoles, size.width, size.height, 1, marker, !marker.regionOpen) : regionPolygonPath(marker.regionPoints, marker.regionHoles, size.width, size.height, marker.regionSmooth ?? false, !marker.regionOpen)}
           fill="none" stroke={marker.regionColor ?? '#22c55e'} strokeWidth={style.width}
           strokeDasharray={custom ? undefined : `${style.dash} ${style.gap}`} strokeLinecap={custom ? 'round' : 'butt'} strokeLinejoin="round" />;
       })}

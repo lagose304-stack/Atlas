@@ -12,10 +12,11 @@ export function smoothRegionPoints(points: number[], width: number, height: numb
   });
 }
 
-export function regionPolygonPath(outer: number[], holes: number[][] | null | undefined, width: number, height: number, smooth = false): string {
-  if (outer.length < 6 || width <= 0 || height <= 0) return '';
-  return [outer, ...(holes ?? [])].filter(ring => ring.length >= 6).map(original => {
-    if (!smooth) return original.reduce((path, value, index) => index % 2 ? `${path}${index === 1 ? 'M' : ' L'} ${original[index - 1] * width} ${value * height}` : path, '') + ' Z';
+export function regionPolygonPath(outer: number[], holes: number[][] | null | undefined, width: number, height: number, smooth = false, closed = true): string {
+  const minimumCoordinates = closed ? 6 : 4;
+  if (outer.length < minimumCoordinates || width <= 0 || height <= 0) return '';
+  return [outer, ...(holes ?? [])].filter(ring => ring.length >= minimumCoordinates).map(original => {
+    if (!smooth || !closed) return original.reduce((path, value, index) => index % 2 ? `${path}${index === 1 ? 'M' : ' L'} ${original[index - 1] * width} ${value * height}` : path, '') + (closed ? ' Z' : '');
     const ring = smoothRegionPoints(original, width, height);
     const count = ring.length / 2, radius = Math.min(width, height) * 0.0005;
     const corners = Array.from({ length: count }, (_, i) => {

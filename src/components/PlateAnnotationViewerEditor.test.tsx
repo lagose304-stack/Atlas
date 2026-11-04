@@ -444,7 +444,9 @@ describe('PlateAnnotationViewerEditor', () => {
     fireEvent.mouseMove(container, { clientX: 400, clientY: 450 });
     fireEvent.mouseUp(container, { clientX: 400, clientY: 400 });
 
-    // La zona de exclusión debe crearse inmediatamente al soltar el trazo
+    expect(screen.queryByText(/Hueco interior #1/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar exclusión' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar cierre' }));
     expect(screen.getByText(/Hueco interior #1/i)).toBeInTheDocument();
   });
 

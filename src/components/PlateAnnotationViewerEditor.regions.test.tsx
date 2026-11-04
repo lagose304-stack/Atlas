@@ -137,7 +137,15 @@ it('editar no recorta; excluir afecta solo al borde elegido aunque haya otro deb
   expect(screen.queryByText(/Hueco interior #1/)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Crear exclusión'}));
   expect(document.querySelector('[data-region-edit-handle]')).toBeNull();
-  draw(surface);
+  draw(surface, [[400,400],[450,400],[450,450]]);
+  expect(screen.queryByText(/Hueco interior #1/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Mover placa'}));
+  draw(surface, [[500,500],[520,520]]);
+  fireEvent.click(screen.getByRole('button',{name:'Continuar trazado'}));
+  draw(surface, [[452,451],[400,450]]);
+  fireEvent.click(screen.getByRole('button',{name:'Cerrar exclusión'}));
+  expect(screen.queryByText(/Hueco interior #1/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Confirmar cierre'}));
   fireEvent.click(screen.getByRole('button',{name:'Guardar señalados'}));
   const positions = save.mock.calls[0][1];
   expect(positions[0].regionHoles).toHaveLength(1);
@@ -161,7 +169,10 @@ it('rechaza exclusiones fuera del contorno sin modificar la región', () => {
   const { save, surface } = setup();
   fireEvent.click(screen.getByRole('button',{name:'Crear exclusión'}));
   draw(surface,[[50,50],[400,50],[400,400],[50,400]]);
+  fireEvent.click(screen.getByRole('button',{name:'Cerrar exclusión'}));
+  fireEvent.click(screen.getByRole('button',{name:'Confirmar cierre'}));
   expect(screen.getByRole('alert')).toHaveTextContent('completamente dentro');
+  fireEvent.click(screen.getByRole('button',{name:'Cancelar contorno'}));
   fireEvent.click(screen.getByRole('button',{name:'Guardar señalados'}));
   expect(save.mock.calls[0][1][0].regionHoles).toBeNull();
 });
