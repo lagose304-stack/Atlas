@@ -59,7 +59,7 @@ interface PlatePickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectPlate: (plate: ComparadorPlacaItem) => void;
-  targetLetter: 'A' | 'B';
+  targetLetter: 'A' | 'B' | 'C' | 'D';
   initialParcial?: 'primer' | 'segundo' | 'tercer';
 }
 

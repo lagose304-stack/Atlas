@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeftRight,
-  Columns2,
   Eye,
   EyeOff,
   Link2,
@@ -9,7 +8,7 @@ import {
   Maximize2,
   Minimize2,
   RotateCcw,
-  Rows2,
+  Repeat2,
 } from 'lucide-react';
 import DualPlateViewport from '../components/comparador/DualPlateViewport';
 import PlatePickerModal, { type ComparadorPlacaItem } from '../components/comparador/PlatePickerModal';
@@ -20,65 +19,70 @@ import { getPreservedSearchParam, syncUrlSearchParam } from '../services/navigat
 import laboratoryLogo from '../assets/logos/laboratorio.png';
 import '../styles/comparador.css';
 
+const LETTERS = ['A', 'B', 'C', 'D'] as const;
+type PlateCount = 2 | 3 | 4;
+type MultiLayout = 'columns' | 'featured' | 'grid';
+type Layout = MultiLayout | 'horizontal' | 'vertical';
+interface PlateSlot {
+  plate: ComparadorPlacaItem | null;
+  zoom: number;
+  pan: { x: number; y: number };
+  showSignalings: boolean;
+}
+const createSlot = (): PlateSlot => ({ plate: null, zoom: 1, pan: { x: 0, y: 0 }, showSignalings: false });
+
 const ComparadorPlacas: React.FC = () => {
   const goBack = useSmartBackNavigation('/herramientas');
-  const [plateA, setPlateA] = useState<ComparadorPlacaItem | null>(null);
-  const [plateB, setPlateB] = useState<ComparadorPlacaItem | null>(null);
-
-  // Transform states
-  const [zoomA, setZoomA] = useState(1);
-  const [panA, setPanA] = useState({ x: 0, y: 0 });
-  const [zoomB, setZoomB] = useState(1);
-  const [panB, setPanB] = useState({ x: 0, y: 0 });
-
-  // Sync state
+  const [initialParams] = useState(() => ({
+    ids: LETTERS.map(letter => Number(getPreservedSearchParam(`placa${letter}`)) || null),
+    count: getPreservedSearchParam('modo'),
+    layout: getPreservedSearchParam('distribucion'),
+  }));
+  const [plateCount, setPlateCount] = useState<PlateCount>(() =>
+    initialParams.count === '2' ? 2 : initialParams.count === '3' ? 3 : initialParams.count === '4' ? 4 :
+      initialParams.ids[3] ? 4 : initialParams.ids[2] ? 3 : 2);
+  const [slots, setSlots] = useState<PlateSlot[]>(() => LETTERS.map(createSlot));
+  const [restored, setRestored] = useState(false);
   const [isSynced, setIsSynced] = useState(false);
-
-  // Signalings visibility (off by default)
-  const [showSignalingsA, setShowSignalingsA] = useState(false);
-  const [showSignalingsB, setShowSignalingsB] = useState(false);
-
-  // Layout orientation
   const [layoutOrientation, setLayoutOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
-
-  // Fullscreen OS API state
+  const [multiLayouts, setMultiLayouts] = useState<Record<3 | 4, MultiLayout>>(() => ({
+    3: initialParams.layout === 'featured' ? 'featured' : 'columns',
+    4: initialParams.layout === 'columns' || initialParams.layout === 'featured' ? initialParams.layout : 'grid',
+  }));
+  const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const [isOsFullscreen, setIsOsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Picker Modal
+  const layoutControlRef = useRef<HTMLDivElement>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerTarget, setPickerTarget] = useState<'A' | 'B'>('A');
+  const [pickerTarget, setPickerTarget] = useState(0);
+  const activeSlots = slots.slice(0, plateCount);
+  const plateIds = slots.map(slot => slot.plate?.id ?? '').join(',');
+  const activeLayout = plateCount === 2 ? layoutOrientation : multiLayouts[plateCount];
 
-  // Lock document scroll while comparator is mounted
   useEffect(() => {
     acquireAtlasScrollLock();
-    return () => {
-      releaseAtlasScrollLock();
-    };
+    return () => releaseAtlasScrollLock();
   }, []);
 
-  // Restaurar placas comparadas desde parámetros preservados al recargar
+  // Mantener la restauración de enlaces antiguos A/B y ampliar a C/D.
   useEffect(() => {
-    const idARaw = getPreservedSearchParam('placaA');
-    const idBRaw = getPreservedSearchParam('placaB');
-    const idA = idARaw ? Number(idARaw) : null;
-    const idB = idBRaw ? Number(idBRaw) : null;
-    const idsToFetch = [idA, idB].filter((id): id is number => Number.isFinite(id) && (id as number) > 0);
-
-    if (idsToFetch.length === 0) return;
-
+    let cancelled = false;
+    const idsToFetch = initialParams.ids.filter((id): id is number => id !== null && Number.isFinite(id) && id > 0);
+    if (!idsToFetch.length) {
+      setRestored(true);
+      return;
+    }
     void (async () => {
       try {
         const { data, error } = await supabase
           .from('placas')
           .select('id, photo_url, aumento, tincion, comentario, senalados, senalados_meta, subtema_id, subtemas(id, nombre, tema_id, temas(id, nombre, parcial))')
           .in('id', idsToFetch);
-
-        if (!error && data) {
-          data.forEach((row: any) => {
+        if (!cancelled && !error && data) {
+          const items = data.map((row: any): ComparadorPlacaItem => {
             const subtema = Array.isArray(row.subtemas) ? row.subtemas[0] : row.subtemas;
             const tema = subtema ? (Array.isArray(subtema.temas) ? subtema.temas[0] : subtema.temas) : null;
-            const item: ComparadorPlacaItem = {
+            return {
               id: row.id,
               photo_url: row.photo_url,
               aumento: row.aumento,
@@ -92,95 +96,58 @@ const ComparadorPlacas: React.FC = () => {
               tema_nombre: tema?.nombre ?? '',
               parcial_key: tema?.parcial ?? '',
             };
-            if (idA && row.id === idA) setPlateA(item);
-            if (idB && row.id === idB) setPlateB(item);
           });
+          setSlots(prev => prev.map((slot, index) => ({
+            ...slot, plate: slot.plate ?? items.find(item => item.id === initialParams.ids[index]) ?? null,
+          })));
         }
       } catch (err) {
         console.warn('Error al restaurar placas comparadas:', err);
+      } finally {
+        if (!cancelled) setRestored(true);
       }
     })();
-  }, []);
-
-  // Sincronizar placas comparadas en la URL
-  useEffect(() => {
-    syncUrlSearchParam('placaA', plateA?.id ?? null);
-  }, [plateA]);
+    return () => { cancelled = true; };
+  }, [initialParams]);
 
   useEffect(() => {
-    syncUrlSearchParam('placaB', plateB?.id ?? null);
-  }, [plateB]);
+    if (!restored) return;
+    const ids = plateIds.split(',');
+    LETTERS.forEach((letter, index) => syncUrlSearchParam(`placa${letter}`, ids[index] || null));
+    syncUrlSearchParam('modo', plateCount);
+    syncUrlSearchParam('distribucion', plateCount === 2 ? null : multiLayouts[plateCount]);
+  }, [plateIds, plateCount, multiLayouts, restored]);
 
-  // Open picker for A or B
-  const handleOpenPicker = (target: 'A' | 'B') => {
+  useEffect(() => {
+    if (!layoutMenuOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!layoutControlRef.current?.contains(event.target as Node)) setLayoutMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    return () => document.removeEventListener('pointerdown', closeOutside);
+  }, [layoutMenuOpen]);
+
+  const handleOpenPicker = (target: number) => {
     setPickerTarget(target);
     setPickerOpen(true);
   };
-
-  // Select Plate handler
   const handleSelectPlate = (plate: ComparadorPlacaItem) => {
-    if (pickerTarget === 'A') {
-      setPlateA(plate);
-      setShowSignalingsA(false);
-      setZoomA(1);
-      setPanA({ x: 0, y: 0 });
-    } else {
-      setPlateB(plate);
-      setShowSignalingsB(false);
-      setZoomB(1);
-      setPanB({ x: 0, y: 0 });
-    }
+    setSlots(prev => prev.map((slot, index) => index === pickerTarget ? { ...createSlot(), plate } : slot));
   };
-
-  // Swap plates A and B
-  const handleSwapPlates = () => {
-    setPlateA(plateB);
-    setPlateB(plateA);
-    const tempZoom = zoomA;
-    const tempPan = panA;
-    setZoomA(zoomB);
-    setPanA(panB);
-    setZoomB(tempZoom);
-    setPanB(tempPan);
-  };
-
-  // Reset both viewports
-  const handleResetBoth = () => {
-    setZoomA(1);
-    setPanA({ x: 0, y: 0 });
-    setZoomB(1);
-    setPanB({ x: 0, y: 0 });
-  };
-
-  // Toggle Global Signalings
-  const areAllSignalingsOn = showSignalingsA && showSignalingsB;
+  const handleSwapPlates = useCallback(() => {
+    setSlots(prev => [...prev.slice(1, plateCount), prev[0], ...prev.slice(plateCount)]);
+  }, [plateCount]);
+  const handleResetViews = useCallback(() => {
+    setSlots(prev => prev.map((slot, index) => index < plateCount ? { ...slot, zoom: 1, pan: { x: 0, y: 0 } } : slot));
+  }, [plateCount]);
+  const areAllSignalingsOn = activeSlots.every(slot => slot.showSignalings);
   const handleToggleAllSignalings = () => {
-    const next = !areAllSignalingsOn;
-    setShowSignalingsA(next);
-    setShowSignalingsB(next);
+    setSlots(prev => prev.map((slot, index) => index < plateCount ? { ...slot, showSignalings: !areAllSignalingsOn } : slot));
   };
-
-  // Sync Pan & Zoom changes from Plate A
-  const handlePanZoomChangeA = useCallback((newZoom: number, newPan: { x: number; y: number }) => {
-    setZoomA(newZoom);
-    setPanA(newPan);
-
-    if (isSynced) {
-      setZoomB(newZoom);
-      setPanB(newPan);
-    }
-  }, [isSynced]);
-
-  // Sync Pan & Zoom changes from Plate B
-  const handlePanZoomChangeB = useCallback((newZoom: number, newPan: { x: number; y: number }) => {
-    setZoomB(newZoom);
-    setPanB(newPan);
-
-    if (isSynced) {
-      setZoomA(newZoom);
-      setPanA(newPan);
-    }
-  }, [isSynced]);
+  const handlePanZoomChange = (target: number, zoom: number, pan: { x: number; y: number }) => {
+    setSlots(prev => prev.map((slot, index) => index === target || (isSynced && index < plateCount)
+      ? { ...slot, zoom, pan } : slot));
+  };
 
   // Toggle OS Fullscreen
   const handleToggleOsFullscreen = () => {
@@ -210,7 +177,9 @@ const ComparadorPlacas: React.FC = () => {
       }
 
       if (e.key === 'Escape') {
-        if (pickerOpen) {
+        if (layoutMenuOpen) {
+          setLayoutMenuOpen(false);
+        } else if (pickerOpen) {
           setPickerOpen(false);
         } else if (!document.fullscreenElement) {
           goBack();
@@ -220,7 +189,7 @@ const ComparadorPlacas: React.FC = () => {
       } else if (e.key === 'x' || e.key === 'X') {
         handleSwapPlates();
       } else if (e.key === 'r' || e.key === 'R') {
-        handleResetBoth();
+        handleResetViews();
       }
     };
 
@@ -228,7 +197,7 @@ const ComparadorPlacas: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [goBack, pickerOpen, zoomA, zoomB, panA, panB, plateA, plateB]);
+  }, [goBack, pickerOpen, layoutMenuOpen, handleSwapPlates, handleResetViews]);
 
   return (
     <div ref={containerRef} className="comparador-fullscreen-app">
@@ -262,12 +231,27 @@ const ComparadorPlacas: React.FC = () => {
         </div>
 
         <div className="comparador-appbar-actions">
+          <label className="comparador-mode-control">
+            <span className="comparador-sr-only">Número de placas</span>
+            <select
+              className="comparador-btn comparador-mode-select"
+              value={plateCount}
+              onChange={event => {
+                setPlateCount(Number(event.target.value) as PlateCount);
+                setLayoutMenuOpen(false);
+              }}
+            >
+              <option value={2}>2 placas</option>
+              <option value={3}>3 placas</option>
+              <option value={4}>4 placas</option>
+            </select>
+          </label>
           {/* Sync Toggle */}
           <button
             type="button"
             className={`comparador-btn comparador-btn-sync ${isSynced ? 'is-active' : ''}`}
             onClick={() => setIsSynced(prev => !prev)}
-            title="Sincronizar zoom y desplazamiento entre ambas placas (Atajo: S)"
+            title="Sincronizar zoom y desplazamiento entre las placas visibles (Atajo: S)"
           >
             {isSynced ? <Link2 size={15} /> : <Link2Off size={15} />}
             <span>{isSynced ? 'Sincronizado' : 'Sincronizar'}</span>
@@ -278,8 +262,8 @@ const ComparadorPlacas: React.FC = () => {
             type="button"
             className="comparador-btn"
             onClick={handleSwapPlates}
-            disabled={!plateA && !plateB}
-            title="Intercambiar Placa A y Placa B (Atajo: X)"
+            disabled={!activeSlots.some(slot => slot.plate)}
+            title={plateCount === 2 ? 'Intercambiar Placa A y Placa B (Atajo: X)' : 'Rotar las placas entre las posiciones visibles (Atajo: X)'}
           >
             <ArrowLeftRight size={14} />
             <span>Intercambiar</span>
@@ -290,32 +274,21 @@ const ComparadorPlacas: React.FC = () => {
             type="button"
             className="comparador-btn"
             onClick={handleToggleAllSignalings}
-            title="Mostrar u ocultar señalados en ambas placas"
+            title="Mostrar u ocultar señalados en las placas visibles"
           >
             {areAllSignalingsOn ? <Eye size={14} /> : <EyeOff size={14} />}
             <span>Señalados</span>
           </button>
 
-          {/* Reset Both Views */}
+          {/* Reset Visible Views */}
           <button
             type="button"
             className="comparador-btn comparador-btn-icon-only"
-            onClick={handleResetBoth}
+            onClick={handleResetViews}
             title="Restablecer posición y zoom (Atajo: R)"
             aria-label="Restablecer vistas"
           >
             <RotateCcw size={15} />
-          </button>
-
-          {/* Layout Orientation */}
-          <button
-            type="button"
-            className="comparador-btn comparador-btn-icon-only"
-            onClick={() => setLayoutOrientation(prev => prev === 'horizontal' ? 'vertical' : 'horizontal')}
-            title={`Cambiar a vista ${layoutOrientation === 'horizontal' ? 'vertical (apilada)' : 'horizontal (lado a lado)'}`}
-            aria-label="Cambiar orientación"
-          >
-            {layoutOrientation === 'horizontal' ? <Columns2 size={15} /> : <Rows2 size={15} />}
           </button>
 
           {/* OS Fullscreen */}
@@ -331,42 +304,90 @@ const ComparadorPlacas: React.FC = () => {
         </div>
       </header>
 
-      {/* Edge-to-Edge Dual Viewport Workspace */}
       <section
-        className={`comparador-viewport-workspace layout-${layoutOrientation}`}
+        className={`comparador-viewport-workspace count-${plateCount} layout-${activeLayout}`}
         aria-label="Área de comparación"
       >
-        {/* Plate A Viewport */}
-        <DualPlateViewport
-          letter="A"
-          plate={plateA}
-          onOpenPicker={() => handleOpenPicker('A')}
-          zoom={zoomA}
-          pan={panA}
-          onPanZoomChange={handlePanZoomChangeA}
-          showSignalings={showSignalingsA}
-          onToggleSignalings={() => setShowSignalingsA(prev => !prev)}
-        />
-
-        {/* Plate B Viewport */}
-        <DualPlateViewport
-          letter="B"
-          plate={plateB}
-          onOpenPicker={() => handleOpenPicker('B')}
-          zoom={zoomB}
-          pan={panB}
-          onPanZoomChange={handlePanZoomChangeB}
-          showSignalings={showSignalingsB}
-          onToggleSignalings={() => setShowSignalingsB(prev => !prev)}
-        />
+        {activeSlots.map((slot, index) => (
+          <DualPlateViewport
+            key={LETTERS[index]}
+            letter={LETTERS[index]}
+            plate={slot.plate}
+            onOpenPicker={() => handleOpenPicker(index)}
+            zoom={slot.zoom}
+            pan={slot.pan}
+            onPanZoomChange={(zoom, pan) => handlePanZoomChange(index, zoom, pan)}
+            showSignalings={slot.showSignalings}
+            onToggleSignalings={() => setSlots(prev => prev.map((entry, i) => i === index
+              ? { ...entry, showSignalings: !entry.showSignalings } : entry))}
+          />
+        ))}
       </section>
+
+      <footer className="comparador-layout-bar">
+        <div className="comparador-layout-control" ref={layoutControlRef}>
+          <button
+            type="button"
+            className="comparador-btn"
+            aria-expanded={layoutMenuOpen}
+            aria-controls="comparador-layout-options"
+            onClick={() => setLayoutMenuOpen(prev => !prev)}
+          >
+            <span
+              className={`comparador-layout-preview comparador-layout-icon count-${plateCount} layout-${activeLayout}`}
+              aria-hidden="true"
+            >
+              {activeSlots.map((_, index) => <span key={index} />)}
+            </span>
+            <span>Distribución</span>
+          </button>
+          {layoutMenuOpen && (
+            <div id="comparador-layout-options" className="comparador-layout-options" role="group" aria-label="Distribución de placas">
+              {(plateCount === 2 ? ['horizontal', 'vertical'] : ['columns', 'featured', ...(plateCount === 4 ? ['grid'] : [])] as Layout[]).map(layout => (
+                <button
+                  key={layout}
+                  type="button"
+                  aria-pressed={activeLayout === layout}
+                  onClick={() => {
+                    if (plateCount === 2) setLayoutOrientation(layout as 'horizontal' | 'vertical');
+                    else setMultiLayouts(prev => ({ ...prev, [plateCount]: layout as MultiLayout }));
+                    setLayoutMenuOpen(false);
+                  }}
+                >
+                  <span className={`comparador-layout-preview count-${plateCount} layout-${layout}`} aria-hidden="true">
+                    {activeSlots.map((_, index) => <span key={index}>{LETTERS[index]}</span>)}
+                  </span>
+                  <span>{layout === 'columns' || layout === 'horizontal' ? 'Una al lado de otra' : layout === 'vertical'
+                    ? 'Una arriba de otra' : layout === 'featured'
+                    ? `Una mitad + ${plateCount - 1} apiladas` : '2 × 2'}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {plateCount !== 2 && activeLayout === 'featured' && (
+          <button
+            type="button"
+            className="comparador-btn"
+            onClick={() => {
+              setLayoutMenuOpen(false);
+              handleSwapPlates();
+            }}
+            disabled={!activeSlots.some(slot => slot.plate)}
+            title="Pasar la primera placa pequeña a la vista grande y enviar la grande al final"
+          >
+            <Repeat2 size={16} />
+            <span>Alternar destacada</span>
+          </button>
+        )}
+      </footer>
 
       {/* Stepped Plate Picker Modal */}
       <PlatePickerModal
         isOpen={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onSelectPlate={handleSelectPlate}
-        targetLetter={pickerTarget}
+        targetLetter={LETTERS[pickerTarget]}
       />
     </div>
   );

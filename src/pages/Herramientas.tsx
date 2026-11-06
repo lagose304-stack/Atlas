@@ -49,7 +49,7 @@ const Herramientas: React.FC = () => {
                 <Columns2 size={26} />
               </div>
               <div style={s.badgesGroup}>
-                <span style={s.toolBadgeNew}>Modo Dual</span>
+                <span style={s.toolBadgeNew}>2, 3 o 4 placas</span>
                 <span style={s.toolBadgeAvailable}>Disponible</span>
               </div>
             </div>
@@ -57,7 +57,7 @@ const Herramientas: React.FC = () => {
             <div style={s.cardHeaderContent}>
               <h2 style={s.toolTitle}>Versus de Placas</h2>
               <p style={s.toolDescription}>
-                Compara dos placas histológicas frente a frente en tiempo real.
+                Compara hasta cuatro placas histológicas en tiempo real y elige cómo distribuirlas en pantalla.
               </p>
             </div>
 

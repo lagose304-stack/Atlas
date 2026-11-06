@@ -220,9 +220,8 @@
    -------------------------------------------------------------------------- */
 .comparador-viewport-workspace {
   flex: 1;
+  min-height: 0;
   width: 100%;
-  height: calc(100vh - 59.5px);
-  height: calc(100dvh - 59.5px);
   display: grid;
   gap: 4px;
   background: #cbd5e1;
@@ -251,6 +250,9 @@
    -------------------------------------------------------------------------- */
 .comparador-pane {
   position: relative;
+  min-width: 0;
+  min-height: 0;
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   background: linear-gradient(145deg, #f4fafd 0%, #e5f1f7 50%, #dbebf5 100%);
@@ -275,55 +277,46 @@
   pointer-events: auto;
 }
 
-/* Floating Badges Group (Atlas Glossy Light Pill) */
+/* Identidad discreta de la placa. */
 .comparador-plate-badge-group {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(240, 249, 255, 0.94));
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: 6px 12px;
-  border-radius: 14px;
+  gap: 9px;
+  min-width: 0;
+  max-width: calc(100% - 230px);
+  padding: 7px 11px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ffffff, #f0f9ff);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid #bae6fd;
-  color: #0f172a;
-  box-shadow: 0 4px 18px rgba(15, 75, 105, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.95);
-  max-width: calc(100% - 110px);
+  box-shadow: 0 4px 12px rgba(15, 75, 105, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  box-sizing: border-box;
 }
-
 .comparador-plate-letter {
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  font-size: 0.74rem;
-  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 11px;
+  padding-right: 9px;
+  border-right: 1px solid #bae6fd;
+  color: #0369a1;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 18px;
   flex-shrink: 0;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
 }
-
-.comparador-plate-letter-a {
-  background: linear-gradient(135deg, #0284c7, #2563eb);
-  color: #ffffff;
-  border: 1px solid #7dd3fc;
-}
-
-.comparador-plate-letter-b {
-  background: linear-gradient(135deg, #7c3aed, #6366f1);
-  color: #ffffff;
-  border: 1px solid #c4b5fd;
-}
-
 .comparador-plate-name {
-  font-size: 0.86rem;
+  display: block;
+  min-width: 0;
+  font-size: 0.76rem;
   font-weight: 800;
+  font-family: inherit;
+  line-height: normal;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 220px;
-  color: #0f172a;
+  color: #0369a1;
 }
 
 .comparador-tag {
@@ -349,6 +342,7 @@
 }
 
 .comparador-pane-actions {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1071,4 +1065,184 @@
   transform: translateY(-4px) !important;
   border-color: #818cf8 !important;
   box-shadow: 0 24px 56px rgba(99, 102, 241, 0.12), 0 4px 12px rgba(12, 56, 82, 0.05) !important;
+}
+
+/* Comparación de tres y cuatro placas. Las áreas no cambian el orden de los visores. */
+.comparador-viewport-workspace.count-3.layout-columns,
+.comparador-layout-preview.count-3.layout-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+}
+.comparador-viewport-workspace.count-4.layout-columns,
+.comparador-layout-preview.count-4.layout-columns {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+}
+.comparador-viewport-workspace.layout-featured,
+.comparador-layout-preview.layout-featured {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+.comparador-viewport-workspace.count-4.layout-featured,
+.comparador-layout-preview.count-4.layout-featured {
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+}
+.comparador-viewport-workspace.layout-featured > :first-child,
+.comparador-layout-preview.layout-featured > :first-child {
+  grid-row: 1 / -1;
+}
+.comparador-viewport-workspace.layout-grid,
+.comparador-layout-preview.layout-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+.comparador-viewport-workspace.count-2.layout-horizontal {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+}
+.comparador-viewport-workspace.count-2.layout-vertical {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+.comparador-mode-control {
+  display: flex;
+  align-items: center;
+}
+.comparador-mode-select {
+  height: 30px;
+  box-sizing: border-box;
+  color-scheme: dark;
+}
+.comparador-mode-select option { background: #12516f; color: #fff; }
+.comparador-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.comparador-layout-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 7px 12px max(7px, env(safe-area-inset-bottom));
+  background: #0c3852;
+  border-top: 1px solid #bae6fd;
+  z-index: 31;
+}
+.comparador-layout-control { position: relative; width: fit-content; }
+.comparador-layout-options {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 12px);
+  width: 260px;
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid #bae6fd;
+  border-radius: 14px;
+  box-shadow: 0 8px 30px #0c385240;
+}
+.comparador-layout-options > button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: #fff;
+  color: #0c3852;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: left;
+  padding: 8px;
+  cursor: pointer;
+}
+.comparador-layout-options > button:hover { background: #f0f9ff; }
+.comparador-layout-options > button[aria-pressed="true"] { background: #e0f2fe; border-color: #0284c7; }
+.comparador-layout-preview { display: grid; gap: 2px; width: 58px; height: 38px; flex-shrink: 0; }
+.comparador-layout-preview > span {
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  background: #0284c7;
+  color: #fff;
+  font-size: 9px;
+}
+.comparador-appbar { flex-shrink: 0; }
+.comparador-appbar-left { flex-shrink: 0; }
+.comparador-appbar-actions { min-width: 0; }
+.comparador-appbar-actions > * { flex-shrink: 0; }
+.comparador-stage { min-height: 0; container-type: size; }
+.comparador-empty-pane { min-height: 0; overflow: auto; box-sizing: border-box; }
+.comparador-btn:focus-visible,
+.comparador-layout-options button:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
+
+@container (max-width: 540px) {
+  .comparador-pane-header { flex-wrap: wrap; top: 6px; left: 6px; right: 6px; gap: 4px; }
+  .comparador-plate-badge-group { max-width: 100%; padding: 4px 9px; gap: 8px; }
+  .comparador-pane-actions { gap: 3px; flex-wrap: wrap; }
+  .comparador-pane-btn { width: 28px; height: 28px; }
+  .comparador-empty-pane { padding: 12px 6px; }
+  .comparador-empty-icon-card { width: 40px; height: 40px; border-radius: 12px; margin-bottom: 8px; flex-shrink: 0; }
+  .comparador-empty-icon-card svg { width: 24px; height: 24px; }
+  .comparador-empty-title { font-size: 0.9rem; }
+  .comparador-empty-desc { font-size: 0.72rem; margin-bottom: 10px; }
+  .comparador-empty-pane .comparador-btn { padding: 8px !important; font-size: 0.72rem !important; }
+  .comparador-zoom-controls { right: 5px; bottom: 5px; gap: 0; padding: 3px; }
+  .comparador-zoom-btn { width: 25px; height: 26px; }
+}
+@container (max-width: 210px) {
+  .comparador-empty-icon-card, .comparador-empty-desc { display: none; }
+  .comparador-empty-title { font-size: 0.75rem; }
+  .comparador-plate-badge-group { width: 100%; gap: 6px; padding: 4px 6px; }
+  .comparador-plate-letter { padding-right: 6px; font-size: 0.65rem; }
+  .comparador-plate-name { min-width: 0; font-size: 0.65rem; }
+  .comparador-pane-actions .comparador-btn { font-size: 0.65rem !important; padding: 4px !important; }
+  .comparador-zoom-controls { max-width: calc(100% - 4px); right: 2px; }
+  .comparador-zoom-btn { width: 20px; }
+  .comparador-zoom-level { min-width: 24px; font-size: 0.65rem; padding: 0 2px; }
+}
+@media (max-width: 1150px) {
+  .comparador-appbar-brand { display: none; }
+  .comparador-appbar-divider { display: none; }
+}
+@media (max-width: 800px) {
+  .comparador-viewport-workspace.count-2.layout-horizontal {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+  .comparador-appbar { height: auto; min-height: 56px; padding: 8px; gap: 8px; flex-wrap: wrap; }
+  .comparador-appbar-actions { overflow-x: auto; padding: 2px; flex: 1; }
+  .comparador-appbar-actions .comparador-btn { white-space: nowrap; }
+}
+@media (max-width: 540px) {
+  .comparador-appbar-actions { flex-basis: 100%; }
+  .comparador-appbar-left .comparador-appbar-brand { display: flex; }
+  .comparador-appbar-title { font-size: 0.85rem; }
+}
+
+.comparador-layout-preview.count-2.layout-horizontal {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+}
+.comparador-layout-preview.count-2.layout-vertical {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+/* El icono del botón reproduce la distribución activa y la cantidad de placas. */
+.comparador-layout-preview.comparador-layout-icon {
+  width: 22px;
+  height: 16px;
+  gap: 2px;
+}
+.comparador-layout-icon > span {
+  background: currentColor;
+  border-radius: 2px;
 }

@@ -5,7 +5,7 @@ import { getCloudinaryImageUrl } from '../../services/cloudinaryImages';
 import { renderBoldText } from '../BoldField';
 
 interface DualPlateViewportProps {
-  letter: 'A' | 'B';
+  letter: 'A' | 'B' | 'C' | 'D';
   plate: ComparadorPlacaItem | null;
   onOpenPicker: () => void;
   zoom: number;
@@ -652,25 +652,13 @@ export const DualPlateViewport: React.FC<DualPlateViewportProps> = ({
       {/* Pane Floating Header */}
       <div className="comparador-pane-header">
         <div className="comparador-plate-badge-group">
-          <span
-            className={`comparador-plate-letter ${
-              letter === 'A' ? 'comparador-plate-letter-a' : 'comparador-plate-letter-b'
-            }`}
-          >
-            {letter}
-          </span>
+          <span className="comparador-plate-letter">{letter}</span>
           <span
             className="comparador-plate-name"
             title={`${plate.tema_nombre} - ${plate.subtema_nombre}`}
           >
             {plate.subtema_nombre}
           </span>
-          {plate.aumento && (
-            <span className="comparador-tag comparador-tag-aumento">{plate.aumento}</span>
-          )}
-          {plate.tincion && (
-            <span className="comparador-tag comparador-tag-tincion">{plate.tincion}</span>
-          )}
         </div>
 
         <div className="comparador-pane-actions">
@@ -782,8 +770,8 @@ export const DualPlateViewport: React.FC<DualPlateViewportProps> = ({
             draggable={false}
             onLoad={updateImageSize}
             style={{
-              maxWidth: '100%',
-              maxHeight: '100%',
+              maxWidth: '100cqw',
+              maxHeight: '100cqh',
               objectFit: 'contain',
               objectPosition: 'center center',
               userSelect: 'none',
