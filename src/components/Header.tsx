@@ -22,7 +22,7 @@ const MENU_ITEMS = [
   { key: 'temario', label: 'Temario', icon: BookOpen, path: '/temario' },
   { key: 'evaluaciones', label: 'Evaluaciones', icon: ClipboardList, path: '/evaluaciones' },
   { key: 'herramientas', label: 'Herramientas', icon: Wrench, path: '/herramientas' },
-  { key: 'registro', label: 'Registro', icon: GraduationCap, path: 'https://registro-histolab.7w7.workers.dev/' },
+  { key: 'registro', label: 'Registro', icon: GraduationCap, path: 'https://registrohistolab.pages.dev/' },
   { key: 'creditos', label: 'Créditos', icon: BadgeInfo, path: '/creditos' },
 ] as const;
 
