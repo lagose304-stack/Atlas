@@ -26,6 +26,7 @@ import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks } from '../services/contentPublication';
 import bombillaIcon from '../assets/icons/bombilla.ico';
 import ChristmasCountdown from '../components/ChristmasCountdown';
+import WeeklyHistologyFacts from '../components/WeeklyHistologyFacts';
 import '../styles/home.css';
 
 const Home: React.FC = () => {
@@ -156,6 +157,8 @@ const Home: React.FC = () => {
             <ContentBlockRenderer blocks={featuredPublication} />
           </section>
         )}
+
+        <WeeklyHistologyFacts />
 
         <ChristmasCountdown />
 
