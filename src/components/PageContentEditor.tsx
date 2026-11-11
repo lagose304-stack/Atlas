@@ -300,7 +300,8 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
   autoSave = true,
 }, ref) => {
   const [blocks, setBlocks] = useState<EditorBlock[]>([]);
-  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const savedIdsRef = useRef<Set<string>>(new Set());
+  const saveTaskRef = useRef<Promise<boolean> | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -634,7 +635,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
         historyFingerprintRef.current = getBlocksFingerprint(loaded);
         setHistoryRevision(value => value + 1);
         setBlocks(loaded);
-        setSavedIds(new Set(loaded.map(b => b.id)));
+        savedIdsRef.current = new Set(loaded.map(b => b.id));
         setSelectedBlockIds(new Set());
         setCollapsedBlockIds(new Set(loaded.map(b => b.id)));
         setPublicationStatus(activeVersion.is_published ? 'published' : 'draft');
@@ -668,7 +669,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       historyFingerprintRef.current = getBlocksFingerprint(loaded);
       setHistoryRevision(value => value + 1);
       setBlocks(loaded);
-      setSavedIds(new Set(loaded.map(b => b.id)));
+      savedIdsRef.current = new Set(loaded.map(b => b.id));
       setSelectedBlockIds(new Set());
       setCollapsedBlockIds(new Set(loaded.map(b => b.id)));
       setPublicationStatus(publication?.status === 'published' ? 'published' : 'draft');
@@ -1330,8 +1331,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
   };
 
   // ── Guardar ──────────────────────────────────────────────────────────────
-  const handleSave = async (): Promise<boolean> => {
-    if (isSaving) return false;
+  const performSave = async (): Promise<boolean> => {
     const blocksToSave = blocksRef.current;
     if (!hasPendingChangesFor(blocksToSave)) {
       setHasChanges(false);
@@ -1346,7 +1346,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     try {
       // 1. Eliminar bloques que ya no existen en la lista local
       const currentIds = new Set(blocksToSave.map(b => b.id));
-      const idsToDelete = [...savedIds].filter(id => !currentIds.has(id));
+      const idsToDelete = [...savedIdsRef.current].filter(id => !currentIds.has(id));
       if (idsToDelete.length > 0) {
         const { error } = await supabase
           .from('content_blocks')
@@ -1387,13 +1387,13 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       }
 
       persistedBlocksFingerprintRef.current = getBlocksFingerprint(persistedBlocks);
-      setSavedIds(new Set(persistedBlocks.map(b => b.id)));
+      savedIdsRef.current = new Set(persistedBlocks.map(b => b.id));
       if (blocksRef.current === blocksToSave) {
         blocksRef.current = persistedBlocks;
         setBlocks(persistedBlocks);
         setHasChanges(false);
       }
-      if (activeVersion) onVersionSaved?.();
+      if (activeVersion && blocksRef.current === persistedBlocks) onVersionSaved?.();
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
@@ -1407,7 +1407,14 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     }
   };
 
-  // Exponer el guardado del render actual: necesita savedIds, versión e isSaving vigentes.
+  const handleSave = (): Promise<boolean> => {
+    if (saveTaskRef.current) return saveTaskRef.current;
+    const task = performSave();
+    saveTaskRef.current = task;
+    void task.finally(() => { if (saveTaskRef.current === task) saveTaskRef.current = null; });
+    return task;
+  };
+  // Compartir el guardado en curso y completar los cambios que hayan llegado después.
   React.useImperativeHandle(ref, () => ({
     updateBlock: updateBlockContent,
     duplicateBlock,
@@ -1417,6 +1424,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     redo: redoBlocks,
     saveChanges: async () => {
       const ok = await handleSave();
+      if (ok && hasPendingChangesFor(blocksRef.current)) return handleSave();
       return ok;
     },
   }));

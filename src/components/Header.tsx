@@ -228,6 +228,7 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false, onBeforeNa
       '/placas',
       '/editar-temario',
       '/editar-subtemas',
+      '/editor-paginas',
       '/editar-placas',
       '/eliminar-placas',
       '/mover-placa',

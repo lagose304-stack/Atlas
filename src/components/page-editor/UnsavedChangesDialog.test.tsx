@@ -3,6 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 import UnsavedChangesDialog from './UnsavedChangesDialog';
 
 describe('Salida con cambios sin guardar', () => {
+  it('ofrece confirmación también cuando el guardado automático ya terminó', () => {
+    render(<UnsavedChangesDialog hasUnsavedChanges={false} onCancel={vi.fn()} onSave={vi.fn()} />);
+    expect(screen.getByRole('heading', { name: '¿Salir del editor de la versión?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Guardar y salir' })).toBeEnabled();
+  });
   it('permite cancelar sin abandonar la edición', () => {
     const onCancel = vi.fn();
     const onSave = vi.fn();

@@ -74,6 +74,29 @@ describe('Conservación de archivos al guardar páginas', () => {
     expect(mocks.setDraft).toHaveBeenCalledWith('home_page', 0);
   });
 
+  it('espera el guardado en curso y guarda las ediciones nuevas antes de completar la salida', async () => {
+    const ref = await mountEditor();
+    let finish!: (result: { error: null }) => void;
+    mocks.upsert.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    act(() => ref.current!.updateBlock(block.id, { url: newUrl }));
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    await act(async () => {
+      first = ref.current!.saveChanges();
+      second = ref.current!.saveChanges();
+    });
+    expect(mocks.upsert).toHaveBeenCalledTimes(1);
+    const latestUrl = 'https://r2.atlas-tests.invalid/atlas-content/ultima-imagen.webp';
+    act(() => ref.current!.updateBlock(block.id, { url: latestUrl }));
+    await act(async () => {
+      finish({ error: null });
+      expect(await first).toBe(true);
+      expect(await second).toBe(true);
+    });
+    expect(mocks.upsert).toHaveBeenCalledTimes(2);
+    expect(mocks.upsert).toHaveBeenLastCalledWith([expect.objectContaining({ content: expect.objectContaining({ url: latestUrl }) })]);
+  });
+
   it('elimina el bloque del borrador conservando su archivo para versiones anteriores', async () => {
     const ref = await mountEditor();
     act(() => ref.current!.requestDeleteBlock(block.id));

@@ -139,16 +139,20 @@ const EditorPaginas: React.FC = () => {
   const [isPageNavigatorOpen, setIsPageNavigatorOpen] = useState(false);
   const editorRef = useRef<PageContentEditorHandle>(null);
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
+  const allowNavigationRef = useRef(false);
+  useEffect(() => { allowNavigationRef.current = false; }, [viewMode, activeVersion?.id]);
   const requestNavigation = useCallback((proceed: () => void) => {
     if (pendingNavigation) return;
-    if (isDirty) setPendingNavigation(() => proceed);
+    if (isDirty || (viewMode === 'editor' && activeVersion)) setPendingNavigation(() => proceed);
     else proceed();
-  }, [isDirty, pendingNavigation]);
+  }, [isDirty, pendingNavigation, viewMode, activeVersion]);
 
   const leaveEditor = () => {
+    allowNavigationRef.current = true;
     setIsDirty(false);
     setPendingNavigation(null);
     pendingNavigation?.();
+    window.setTimeout(() => { allowNavigationRef.current = false; }, 0);
   };
 
   const saveAndLeaveEditor = async () => {
@@ -285,7 +289,7 @@ const EditorPaginas: React.FC = () => {
   // Protección contra pérdida de datos al cerrar pestaña
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isDirty) return;
+      if (!isDirty || allowNavigationRef.current) return;
       event.preventDefault();
       event.returnValue = '';
     };
@@ -459,7 +463,7 @@ const EditorPaginas: React.FC = () => {
 
   return (
     <>
-      {pendingNavigation && <UnsavedChangesDialog onCancel={() => setPendingNavigation(null)} onSave={saveAndLeaveEditor} />}
+      {pendingNavigation && <UnsavedChangesDialog hasUnsavedChanges={isDirty} onCancel={() => setPendingNavigation(null)} onSave={saveAndLeaveEditor} />}
       {/* ─── VISTA PREVIA EN VIVO REAL (sin desmontar el editor de contenido) ─── */}
       {selection && viewMode === 'editor' && mode === 'preview' && (
         <RealPageDraftViewer

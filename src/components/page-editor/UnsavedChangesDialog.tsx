@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-export default function UnsavedChangesDialog({ onCancel, onSave }: {
+export default function UnsavedChangesDialog({ onCancel, onSave, hasUnsavedChanges = true }: {
   onCancel: () => void;
   onSave: () => Promise<boolean>;
+  hasUnsavedChanges?: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const savingRef = useRef(false);
@@ -47,8 +48,8 @@ export default function UnsavedChangesDialog({ onCancel, onSave }: {
           else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
         }
       }}>
-        <h2 id="page-editor-unsaved-title">Hay cambios sin guardar</h2>
-        <p id="page-editor-unsaved-description">¿Quieres guardar los cambios de esta versión antes de salir?</p>
+        <h2 id="page-editor-unsaved-title">{hasUnsavedChanges ? 'Hay cambios sin guardar' : '¿Salir del editor de la versión?'}</h2>
+        <p id="page-editor-unsaved-description">{hasUnsavedChanges ? '¿Quieres guardar los cambios de esta versión antes de salir?' : 'Los cambios están guardados. Puedes continuar editando o guardar y salir al destino elegido.'}</p>
         {error && <p role="alert">{error}</p>}
         <div className="page-editor-unsaved-actions">
           <button type="button" disabled={saving} onClick={onCancel}>Cancelar</button>
