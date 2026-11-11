@@ -1,3 +1,4 @@
+import UnsavedChangesDialog from '../components/page-editor/UnsavedChangesDialog';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
@@ -137,6 +138,25 @@ const EditorPaginas: React.FC = () => {
   const [isDirty, setIsDirty] = useState(false);
   const [isPageNavigatorOpen, setIsPageNavigatorOpen] = useState(false);
   const editorRef = useRef<PageContentEditorHandle>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
+  const requestNavigation = useCallback((proceed: () => void) => {
+    if (pendingNavigation) return;
+    if (isDirty) setPendingNavigation(() => proceed);
+    else proceed();
+  }, [isDirty, pendingNavigation]);
+
+  const leaveEditor = () => {
+    setIsDirty(false);
+    setPendingNavigation(null);
+    pendingNavigation?.();
+  };
+
+  const saveAndLeaveEditor = async () => {
+    const saved = await editorRef.current?.saveChanges();
+    if (!saved) return false;
+    leaveEditor();
+    return true;
+  };
 
   // Notificación flotante de guardado
   const [saveToast, setSaveToast] = useState<{
@@ -283,19 +303,20 @@ const EditorPaginas: React.FC = () => {
       setIsPageNavigatorOpen(false);
       return;
     }
-    if (isDirty && !window.confirm('Hay cambios sin guardar en esta versión. ¿Deseas cambiar de página y descartarlos?')) return;
-    pendingVersionRestoreRef.current = null;
-    setDraftBlocks([]);
-    setIsDirty(false);
-    setSelection(nextSelection);
-    setViewMode('versions_hub');
-    setActiveVersion(null);
-    syncUrlSearchParam('tipo', nextSelection.kind);
-    syncUrlSearchParam('id', 'id' in nextSelection ? nextSelection.id : null);
-    syncUrlSearchParam('version', null);
-    setMode('edit');
-    setIsPageNavigatorOpen(false);
-  }, [isDirty, selection]);
+    requestNavigation(() => {
+      pendingVersionRestoreRef.current = null;
+      setDraftBlocks([]);
+      setIsDirty(false);
+      setSelection(nextSelection);
+      setViewMode('versions_hub');
+      setActiveVersion(null);
+      syncUrlSearchParam('tipo', nextSelection.kind);
+      syncUrlSearchParam('id', 'id' in nextSelection ? nextSelection.id : null);
+      syncUrlSearchParam('version', null);
+      setMode('edit');
+      setIsPageNavigatorOpen(false);
+    });
+  }, [requestNavigation, selection]);
 
   // Acción: Editar una versión específica
   const handleEditVersion = (version: PageVersionRow) => {
@@ -354,20 +375,14 @@ const EditorPaginas: React.FC = () => {
         return;
       }
 
-      // 1. Guardar los cambios de la versión automáticamente
-      if (isDirty && editorRef.current?.saveChanges) {
-        try {
-          await editorRef.current.saveChanges();
-        } catch (err) {
-          console.warn('Error al autoguardar antes de regresar:', err);
-        }
-      }
-      setIsDirty(false);
-      pendingVersionRestoreRef.current = null;
-      setViewMode('versions_hub');
-      setActiveVersion(null);
-      syncUrlSearchParam('version', null);
-      void loadVersions();
+      requestNavigation(() => {
+        setIsDirty(false);
+        pendingVersionRestoreRef.current = null;
+        setViewMode('versions_hub');
+        setActiveVersion(null);
+        syncUrlSearchParam('version', null);
+        void loadVersions();
+      });
       return;
     }
 
@@ -444,6 +459,7 @@ const EditorPaginas: React.FC = () => {
 
   return (
     <>
+      {pendingNavigation && <UnsavedChangesDialog onCancel={() => setPendingNavigation(null)} onSave={saveAndLeaveEditor} />}
       {/* ─── VISTA PREVIA EN VIVO REAL (sin desmontar el editor de contenido) ─── */}
       {selection && viewMode === 'editor' && mode === 'preview' && (
         <RealPageDraftViewer
@@ -452,6 +468,7 @@ const EditorPaginas: React.FC = () => {
           versionName={activeVersion?.version_name}
           isPublished={activeVersion?.is_published}
           onBackToEditor={() => setMode('edit')}
+          onBeforeNavigate={requestNavigation}
         />
       )}
 
@@ -459,7 +476,7 @@ const EditorPaginas: React.FC = () => {
         className="page-editor-page"
         style={{ display: mode === 'preview' ? 'none' : 'block' }}
       >
-        <Header />
+        <Header onBeforeNavigate={requestNavigation} />
         <main className="page-editor-page-main">
           <BackButton onClick={handleSmartBack} />
 

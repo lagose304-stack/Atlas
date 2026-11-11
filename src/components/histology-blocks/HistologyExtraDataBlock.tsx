@@ -1,3 +1,4 @@
+import BlockPhotoFrame from '../blocks/BlockPhotoFrame';
 import React from 'react';
 import { renderBoldText } from '../BoldField';
 import { getCloudinaryImageUrl } from '../../services/cloudinaryImages';
@@ -8,6 +9,7 @@ export interface HistologyExtraDataProps {
   text?: string;
   imageUrl?: string;
   imageCaption?: string;
+  onOpenImageViewer?: (url: string) => void;
   barColor?: string;
   titleColor?: string;
   bgColor?: string;
@@ -19,6 +21,7 @@ export const HistologyExtraDataBlock: React.FC<HistologyExtraDataProps> = ({
   text,
   imageUrl,
   imageCaption,
+  onOpenImageViewer,
   barColor,
   titleColor,
   bgColor,
@@ -139,12 +142,14 @@ export const HistologyExtraDataBlock: React.FC<HistologyExtraDataProps> = ({
               background: '#ffffff',
             }}
           >
-            <img
-              src={getCloudinaryImageUrl(safeImage, 'view')}
-              alt={imageCaption || safeTitle || 'Ilustración'}
-              style={{ width: '100%', height: 'auto', maxHeight: '200px', objectFit: 'cover', display: 'block' }}
-              loading="lazy"
-            />
+            <BlockPhotoFrame onOpen={onOpenImageViewer ? () => onOpenImageViewer(safeImage) : undefined}>
+              <img
+                src={getCloudinaryImageUrl(safeImage, 'view')}
+                alt={imageCaption || safeTitle || 'Ilustración'}
+                style={{ width: '100%', height: 'auto', maxHeight: '200px', objectFit: 'cover', display: 'block' }}
+                loading="lazy"
+              />
+            </BlockPhotoFrame>
             {imageCaption && imageCaption.trim() !== '' && (
               <div
                 style={{

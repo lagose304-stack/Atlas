@@ -48,6 +48,7 @@ interface SearchSuggestion {
 
 interface HeaderProps {
   disableInteractions?: boolean;
+  onBeforeNavigate?: (proceed: () => void) => void;
 }
 
 const stripDiacritics = (value: string): string =>
@@ -187,7 +188,7 @@ const buildSearchSuggestions = (
     .slice(0, limit);
 };
 
-const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
+const Header: React.FC<HeaderProps> = ({ disableInteractions = false, onBeforeNavigate }) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { user, isAuthenticated } = useAuth();
@@ -244,18 +245,18 @@ const Header: React.FC<HeaderProps> = ({ disableInteractions = false }) => {
       return;
     }
 
-    if (/^https?:\/\//i.test(targetPath)) {
-      window.open(targetPath, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    if (isInAdminEditingFlow) {
-      window.location.replace(targetPath);
-      return;
-    }
-
-    navigate(targetPath);
-  }, [isHeaderLocked, isInAdminEditingFlow, navigate]);
+    const proceed = () => {
+      if (/^https?:\/\//i.test(targetPath)) {
+        window.open(targetPath, '_blank', 'noopener,noreferrer');
+      } else if (isInAdminEditingFlow) {
+        window.location.replace(targetPath);
+      } else {
+        navigate(targetPath);
+      }
+    };
+    if (onBeforeNavigate) onBeforeNavigate(proceed);
+    else proceed();
+  }, [isHeaderLocked, isInAdminEditingFlow, navigate, onBeforeNavigate]);
 
   React.useEffect(() => {
     let rafId: number | null = null;

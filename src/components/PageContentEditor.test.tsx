@@ -93,6 +93,7 @@ describe('Conservación de archivos al guardar páginas', () => {
       await act(async () => { expect(await ref.current!.saveChanges()).toBe(false); });
       expect(mocks.deleteImage).not.toHaveBeenCalled();
       expect(mocks.setDraft).not.toHaveBeenCalled();
+
     } finally { log.mockRestore(); }
   });
 
@@ -112,6 +113,12 @@ describe('Conservación de archivos al guardar páginas', () => {
       expect(mocks.saveVersion).toHaveBeenCalledWith(12, [expect.objectContaining({ content: expect.objectContaining({ url: newUrl }) })]);
       expect(mocks.deleteImage).not.toHaveBeenCalled();
       expect(mocks.setDraft).not.toHaveBeenCalled();
+      if (fails) {
+        expect(version.blocks[0].content.url).toBe(oldUrl);
+        await act(async () => { expect(await ref.current!.saveChanges()).toBe(true); });
+        expect(mocks.saveVersion).toHaveBeenCalledTimes(2);
+        expect(version.blocks[0].content.url).toBe(newUrl);
+      }
     } finally { log.mockRestore(); }
   });
 });

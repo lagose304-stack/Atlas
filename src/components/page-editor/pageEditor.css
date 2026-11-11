@@ -314,3 +314,31 @@
   .page-editor-preview-body.has-properties { display: block; }
   .visual-properties-panel { max-height: none; border-top: 1px solid #dbe5ef; }
 }
+
+.page-editor-unsaved-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .65);
+  backdrop-filter: blur(4px);
+}
+.page-editor-unsaved-dialog {
+  width: min(520px, 100%);
+  box-sizing: border-box;
+  padding: 24px;
+  border: 1px solid #dbeafe;
+  border-radius: 18px;
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 24px 70px #0f172a55;
+}
+.page-editor-unsaved-dialog h2 { margin: 0 0 12px; font-size: 1.25rem; }
+.page-editor-unsaved-dialog p { line-height: 1.6; color: #475569; }
+.page-editor-unsaved-dialog [role='alert'] { color: #b91c1c; }
+.page-editor-unsaved-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.page-editor-unsaved-actions button { padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #334155; font: inherit; cursor: pointer; }
+.page-editor-unsaved-actions button:last-child { background: #0369a1; border-color: #0369a1; color: #fff; }
+.page-editor-unsaved-actions button:disabled { opacity: .6; cursor: wait; }

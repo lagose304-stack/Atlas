@@ -1,3 +1,4 @@
+import ImageExpansionControl from './page-editor/ImageExpansionControl';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, X, Layers, ChevronDown, ChevronUp, Pencil, Check, Eye, Copy, Trash2, ArrowUp, ArrowDown, Scissors, ClipboardPaste } from 'lucide-react';
 import { Extension, type Editor } from '@tiptap/core';
@@ -1374,22 +1375,25 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
 
       // 3. Actualizar estado local
       const persistedBlocks = blocksToSave.map((b, i) => ({ ...b, sort_order: i, _isNew: false }));
-      persistedBlocksFingerprintRef.current = getBlocksFingerprint(persistedBlocks);
-      blocksRef.current = persistedBlocks;
-      setSavedIds(new Set(persistedBlocks.map(b => b.id)));
-      setBlocks(persistedBlocks);
-      setHasChanges(false);
 
       if (activeVersion) {
-        activeVersion.blocks = persistedBlocks;
         await savePageVersionBlocks(activeVersion.id, persistedBlocks);
-        onVersionSaved?.();
+        activeVersion.blocks = persistedBlocks;
       } else {
         // Asegura que incluso una pagina nueva tenga una fila de publicacion vacia.
         // Asi el borrador recien guardado nunca se usa como contenido publico.
         await setPublicationDraft(entityType, entityId);
         setPublicationStatus('draft');
       }
+
+      persistedBlocksFingerprintRef.current = getBlocksFingerprint(persistedBlocks);
+      setSavedIds(new Set(persistedBlocks.map(b => b.id)));
+      if (blocksRef.current === blocksToSave) {
+        blocksRef.current = persistedBlocks;
+        setBlocks(persistedBlocks);
+        setHasChanges(false);
+      }
+      if (activeVersion) onVersionSaved?.();
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
@@ -2437,6 +2441,7 @@ const MemoBlockContentEditor = React.memo(({
 
   return (
     <div style={{ ...es.blockContent, ...editorSurfaceVars }} className={!showStyleEditor ? 'block-editor-content-only' : undefined}>
+      <ImageExpansionControl block={block} onChange={updates => onUpdateBlockContent(block.id, updates)} />
       {showStyleEditor && <BlockStyleEditor
         bgColor={block.content.style_bg ?? ''}
         textColor={block.content.style_text ?? ''}

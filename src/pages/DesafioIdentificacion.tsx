@@ -1,7 +1,11 @@
+import { annotationQuestion, eligibleAnnotationPlates, generateAnnotationMatch, type IdentificationAnnotation } from '../utils/identificationAnnotations';
+import IdentificationRoundImage from '../components/IdentificationRoundImage';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   ArrowLeft,
   Check,
+  BookOpen,
+  ChevronDown,
   Flame,
   Heart,
   Lock,
@@ -43,7 +47,11 @@ interface PlacaGameItem {
   subtema_nombre: string;
   tema_id: number;
   tema_nombre: string;
+  tema_sort_order?: number | null;
   parcial: string;
+  senalados?: string[] | null;
+  senalados_meta?: unknown;
+  challengeAnnotation?: IdentificationAnnotation;
 }
 
 interface GameOption {
@@ -52,7 +60,7 @@ interface GameOption {
   isCorrect: boolean;
 }
 
-type ParcialKey = 'todos' | 'primer' | 'segundo' | 'tercer';
+type ParcialKey = 'primer' | 'segundo' | 'tercer';
 
 const MAX_QUESTIONS_PER_MATCH = 30;
 const TOTAL_ROUND_SECONDS = 15.0;
@@ -60,17 +68,16 @@ const MAX_LIVES = 4.0;
 const ARCADE_SESSION_HISTORY_KEY = 'atlas_arcade_used_plate_ids';
 
 const PARCIALES_INFO: { key: ParcialKey; num: string; name: string; desc: string }[] = [
-  { key: 'todos', num: '★', name: 'Todos los Parciales', desc: 'Desafío global de 30 placas con todo el atlas' },
-  { key: 'primer', num: '1', name: 'Primer Parcial', desc: 'Epitelial, conectivo, adiposo y generalidades' },
-  { key: 'segundo', num: '2', name: 'Segundo Parcial', desc: 'Cartílago, hueso, sangre, músculo y anexos' },
-  { key: 'tercer', num: '3', name: 'Tercer Parcial', desc: 'Nervioso, cardiovascular, linfoide y sistemas' },
+  { key: 'primer', num: '1', name: 'Primer Parcial', desc: 'Repasa todos los temas disponibles del primer parcial' },
+  { key: 'segundo', num: '2', name: 'Segundo Parcial', desc: 'Repasa todos los temas disponibles del segundo parcial' },
+  { key: 'tercer', num: '3', name: 'Tercer Parcial', desc: 'Repasa todos los temas disponibles del tercer parcial' },
 ];
 
 /**
  * Algoritmo de barajado estratificado e intercalado (Interleaved Diversity).
  * Evita repeticiones consecutivas de un mismo tema o subtema para que la experiencia sea variada.
  */
-function generateDiverseMatchPlates(pool: PlacaGameItem[], count: number = MAX_QUESTIONS_PER_MATCH): PlacaGameItem[] {
+export function generateDiverseMatchPlates(pool: PlacaGameItem[], count: number = MAX_QUESTIONS_PER_MATCH): PlacaGameItem[] {
   if (pool.length === 0) return [];
   const targetCount = Math.min(count, pool.length);
 
@@ -298,7 +305,12 @@ const DesafioIdentificacion: React.FC = () => {
   const [gameState, setGameState] = useState<'lobby' | 'preparing' | 'countdown' | 'playing' | 'gameover'>('lobby');
   const [countdownVal, setCountdownVal] = useState<number>(5);
   const [isVictory, setIsVictory] = useState<boolean>(false);
-  const [selectedParcial, setSelectedParcial] = useState<ParcialKey>('todos');
+  const [selectedParcial, setSelectedParcial] = useState<ParcialKey>('primer');
+  const [practiceScope, setPracticeScope] = useState<'parcial' | 'tema' | 'senalados'>('parcial');
+  const [selectedTema, setSelectedTema] = useState('');
+  const roundTokenRef = useRef(0);
+  const startedRoundRef = useRef<number | null>(null);
+  const [roundToken, setRoundToken] = useState(0);
   const [loading, setLoading] = useState(true);
   const [allPlates, setAllPlates] = useState<PlacaGameItem[]>([]);
 
@@ -314,6 +326,7 @@ const DesafioIdentificacion: React.FC = () => {
   const [totalAttempted, setTotalAttempted] = useState<number>(0);
 
   // Ronda actual
+  const [roundAnnotation, setRoundAnnotation] = useState<IdentificationAnnotation | null>(null);
   const [options, setOptions] = useState<GameOption[]>([]);
   const [selectedIncorrectOptions, setSelectedIncorrectOptions] = useState<Set<string>>(new Set());
   const [roundStatus, setRoundStatus] = useState<'active' | 'correct' | 'timeout'>('active');
@@ -560,8 +573,8 @@ const DesafioIdentificacion: React.FC = () => {
   const preloadedUrls = useRef<Set<string>>(new Set());
   const preloadImage = useCallback((url: string) => {
     if (!url || preloadedUrls.current.has(url)) return;
-    preloadedUrls.current.add(url);
     const img = new Image();
+    img.onload = () => preloadedUrls.current.add(url);
     img.src = getCloudinaryImageUrl(url);
   }, []);
 
@@ -603,6 +616,8 @@ const DesafioIdentificacion: React.FC = () => {
             tincion,
             comentario,
             subtema_id,
+            senalados,
+            senalados_meta,
             subtemas!inner (
               id,
               nombre,
@@ -610,7 +625,8 @@ const DesafioIdentificacion: React.FC = () => {
               temas!inner (
                 id,
                 nombre,
-                parcial
+                parcial,
+                sort_order
               )
             )
           `);
@@ -627,10 +643,13 @@ const DesafioIdentificacion: React.FC = () => {
                 aumento: row.aumento ?? null,
                 tincion: row.tincion ?? null,
                 comentario: row.comentario ?? null,
+                senalados: row.senalados,
+                senalados_meta: row.senalados_meta,
                 subtema_id: Number(subtema.id),
                 subtema_nombre: String(subtema.nombre).trim(),
                 tema_id: Number(tema.id),
                 tema_nombre: String(tema.nombre).trim(),
+                tema_sort_order: typeof tema.sort_order === 'number' ? tema.sort_order : null,
                 parcial: String(tema.parcial || 'primer').toLowerCase(),
               });
             }
@@ -690,41 +709,46 @@ const DesafioIdentificacion: React.FC = () => {
     });
   }, [allPlates, canBypass, maintenanceStatus]);
 
-  // Placas filtradas por parcial seleccionado (después de aplicar filtro de mantenimiento)
-  const availablePlatesForParcial = useMemo(() => {
-    if (selectedParcial === 'todos') return activeCatalogPlates;
-    return activeCatalogPlates.filter((p) => p.parcial === selectedParcial);
-  }, [activeCatalogPlates, selectedParcial]);
+  const practicePlates = useMemo(() => practiceScope === 'senalados' ? eligibleAnnotationPlates(activeCatalogPlates) : activeCatalogPlates, [practiceScope, activeCatalogPlates]);
+  const parcialPlates = useMemo(() => practicePlates.filter(p => p.parcial === selectedParcial), [practicePlates, selectedParcial]);
+  const availableTemas = useMemo(() => {
+    const temas = new Map<number, { id: number; name: string; count: number; order: number | null }>();
+    for (const plate of parcialPlates) {
+      const tema = temas.get(plate.tema_id) || { id: plate.tema_id, name: plate.tema_nombre, count: 0, order: plate.tema_sort_order ?? null };
+      tema.count++;
+      temas.set(tema.id, tema);
+    }
+    return [...temas.values()].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
+  }, [parcialPlates]);
 
+  useEffect(() => {
+    if (!availableTemas.some(tema => String(tema.id) === selectedTema)) setSelectedTema('');
+  }, [availableTemas, selectedTema]);
+
+  const availableMatchPlates = useMemo(() => {
+    if (practiceScope === 'parcial') return parcialPlates;
+    return parcialPlates.filter(plate => String(plate.tema_id) === selectedTema);
+  }, [parcialPlates, practiceScope, selectedTema]);
   // Total de preguntas de la partida (máximo 30)
   const totalQuestionsInGame = useMemo(() => {
-    return Math.min(MAX_QUESTIONS_PER_MATCH, availablePlatesForParcial.length);
-  }, [availablePlatesForParcial]);
+    return practiceScope === 'senalados' ? generateAnnotationMatch(availableMatchPlates, activeCatalogPlates).length : Math.min(MAX_QUESTIONS_PER_MATCH, availableMatchPlates.length);
+  }, [practiceScope, activeCatalogPlates, availableMatchPlates]);
 
   // Conteo de placas por parcial
   const countsByParcial = useMemo(() => {
     const counts: Record<ParcialKey, number> = {
-      todos: activeCatalogPlates.length,
-      primer: activeCatalogPlates.filter((p) => p.parcial === 'primer').length,
-      segundo: activeCatalogPlates.filter((p) => p.parcial === 'segundo').length,
-      tercer: activeCatalogPlates.filter((p) => p.parcial === 'tercer').length,
+      primer: practicePlates.filter((p) => p.parcial === 'primer').length,
+      segundo: practicePlates.filter((p) => p.parcial === 'segundo').length,
+      tercer: practicePlates.filter((p) => p.parcial === 'tercer').length,
     };
     return counts;
-  }, [activeCatalogPlates]);
+  }, [practicePlates]);
 
   // Verificar si un parcial está deshabilitado por mantenimiento
   const checkParcialDisabled = useCallback(
     (key: ParcialKey): boolean => {
       if (canBypass || !maintenanceStatus) return false;
       const disabledFeatures = maintenanceStatus.disabledFeatures || [];
-      if (key === 'todos') {
-        // 'todos' solo está deshabilitado si todos los parciales individuales están deshabilitados
-        return (
-          isParcialDisabled('primer', disabledFeatures) &&
-          isParcialDisabled('segundo', disabledFeatures) &&
-          isParcialDisabled('tercer', disabledFeatures)
-        );
-      }
       return isParcialDisabled(key, disabledFeatures);
     },
     [canBypass, maintenanceStatus]
@@ -733,7 +757,7 @@ const DesafioIdentificacion: React.FC = () => {
   // Si el parcial seleccionado actualmente queda deshabilitado, cambiar automáticamente
   useEffect(() => {
     if (checkParcialDisabled(selectedParcial)) {
-      const firstAvailable: ParcialKey | undefined = (['todos', 'primer', 'segundo', 'tercer'] as ParcialKey[]).find(
+      const firstAvailable: ParcialKey | undefined = (['primer', 'segundo', 'tercer'] as ParcialKey[]).find(
         (key) => !checkParcialDisabled(key)
       );
       if (firstAvailable) {
@@ -809,7 +833,7 @@ const DesafioIdentificacion: React.FC = () => {
 
   // Iniciar partida con preparación previa y cuenta regresiva 5-4-3-2-1-¡YA! (máx 30 placas)
   const handleStartGame = async () => {
-    if (availablePlatesForParcial.length === 0) return;
+    if (availableMatchPlates.length === 0) return;
 
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current);
@@ -827,17 +851,19 @@ const DesafioIdentificacion: React.FC = () => {
     // Priorizar placas no vistas en esta sesión; cuando el catálogo se agota, reutilizar las menos recientes.
     const sessionHistory = getSessionPlateHistory();
     const seenInSession = new Set(sessionHistory);
-    const unseenPlates = availablePlatesForParcial.filter((plate) => !seenInSession.has(plate.id));
-    const matchSize = Math.min(MAX_QUESTIONS_PER_MATCH, availablePlatesForParcial.length);
-    const candidatePlates = unseenPlates.length >= matchSize
+    const unseenPlates = availableMatchPlates.filter((plate) => !seenInSession.has(plate.id));
+    const matchSize = Math.min(MAX_QUESTIONS_PER_MATCH, availableMatchPlates.length);
+    const candidatePlates = practiceScope !== 'parcial' && availableMatchPlates.length <= MAX_QUESTIONS_PER_MATCH
+      ? availableMatchPlates
+      : unseenPlates.length >= matchSize
       ? unseenPlates
       : [
           ...unseenPlates,
           ...sessionHistory
-            .map((id) => availablePlatesForParcial.find((plate) => plate.id === id))
+            .map((id) => availableMatchPlates.find((plate) => plate.id === id))
             .filter((plate): plate is PlacaGameItem => Boolean(plate)),
         ];
-    const diversePlates = generateDiverseMatchPlates(candidatePlates, matchSize);
+    const diversePlates = practiceScope === 'senalados' ? generateAnnotationMatch(availableMatchPlates, activeCatalogPlates) : generateDiverseMatchPlates(candidatePlates, matchSize);
 
     setGamePlates(diversePlates);
     setCurrentIndex(0);
@@ -865,7 +891,7 @@ const DesafioIdentificacion: React.FC = () => {
     // Pre-cargar en segundo plano las siguientes
     diversePlates.slice(3, 10).forEach((p) => preloadImage(p.photo_url));
 
-    // 3. Con las imágenes ya cargadas, arrancar la cuenta regresiva 5..4..3..2..1..¡YA!
+    // 3. Iniciar la cuenta previa; cada ronda espera la imagen visible para arrancar la cuenta regresiva 5..4..3..2..1..¡YA!
     setGameState('countdown');
     setCountdownVal(5);
     playAudioFx('countdown_tick', 5);
@@ -898,13 +924,21 @@ const DesafioIdentificacion: React.FC = () => {
     }
 
     const currentPlate = platesList[index];
-    // Solo cuenta como usada cuando realmente se muestra al jugador, no al preparar la partida.
-    rememberSessionPlates(getSessionPlateHistory(), [currentPlate.id]);
-    const generated = generateOptionsForPlate(currentPlate, availablePlatesForParcial);
+    const question = practiceScope === 'senalados' ? annotationQuestion(currentPlate, activeCatalogPlates, currentPlate.challengeAnnotation) : null;
+    if (practiceScope === 'senalados' && !question) {
+      setCurrentIndex(index + 1);
+      setupRound(index + 1, platesList);
+      return;
+    }
+    setRoundAnnotation(question?.marker || null);
+    const generated = question?.options || generateOptionsForPlate(currentPlate, availableMatchPlates);
     setOptions(generated);
     setSelectedIncorrectOptions(new Set());
     setRoundStatus('active');
     roundResolvedRef.current = false;
+    roundTokenRef.current += 1;
+    startedRoundRef.current = null;
+    setRoundToken(roundTokenRef.current);
     setIsImageLoaded(false);
     setTimeLeft(TOTAL_ROUND_SECONDS);
 
@@ -919,7 +953,10 @@ const DesafioIdentificacion: React.FC = () => {
   };
 
   // Iniciar cronómetro de 15s cuando la imagen esté cargada y lista
-  const startTimerOnImageReady = () => {
+  const startTimerOnImageReady = (token: number) => {
+    if (token !== roundTokenRef.current || startedRoundRef.current === token || roundResolvedRef.current) return;
+    startedRoundRef.current = token;
+    rememberSessionPlates(getSessionPlateHistory(), [gamePlates[currentIndex].id]);
     setIsImageLoaded(true);
 
     if (timerRef.current) clearInterval(timerRef.current);
@@ -928,7 +965,7 @@ const DesafioIdentificacion: React.FC = () => {
     let lastTickSecond = Math.ceil(TOTAL_ROUND_SECONDS);
 
     timerRef.current = setInterval(() => {
-      if (roundResolvedRef.current) {
+      if (roundResolvedRef.current || token !== roundTokenRef.current) {
         if (timerRef.current) clearInterval(timerRef.current);
         return;
       }
@@ -948,7 +985,7 @@ const DesafioIdentificacion: React.FC = () => {
         if (timerRef.current) clearInterval(timerRef.current);
         // Pequeño margen de gracia para registrar clics en el último milisegundo
         setTimeout(() => {
-          if (!roundResolvedRef.current) {
+          if (!roundResolvedRef.current && token === roundTokenRef.current) {
             handleTimeOut();
           }
         }, 120);
@@ -1089,7 +1126,7 @@ const DesafioIdentificacion: React.FC = () => {
         }
 
         // Si ya seleccionó 3 respuestas incorrectas, solo queda la correcta -> Placa no identificada
-        if (nextIncorrect.size >= 3) {
+        if (nextIncorrect.size >= (practiceScope === 'senalados' ? options.filter(item => !item.isCorrect).length : 3)) {
           handlePlateNotIdentified('three_mistakes');
         }
 
@@ -1140,7 +1177,7 @@ const DesafioIdentificacion: React.FC = () => {
   const currentPlate = gamePlates[currentIndex];
   const arcadeRank = getArcadeRank(correctAnswersCount, gamePlates.length, lives);
   const timerState = timeLeft <= 3.5 ? 'critical' : timeLeft <= 6 ? 'warning' : 'safe';
-  const timerStatusLabel = timerState === 'critical' ? '¡Últimos segundos!' : timerState === 'warning' ? 'Acelera' : 'En curso';
+  const timerStatusLabel = !isImageLoaded ? 'Tiempo detenido' : timerState === 'critical' ? '¡Últimos segundos!' : timerState === 'warning' ? 'Acelera' : 'En curso';
   const timerProgress = Math.max(0, Math.min(100, (timeLeft / TOTAL_ROUND_SECONDS) * 100));
 
   return (
@@ -1161,7 +1198,7 @@ const DesafioIdentificacion: React.FC = () => {
             <div className="desafio-hud">
               {/* Progreso Placa X / 30 */}
               <div className="desafio-progress-pill">
-                <span>Placa</span>
+                <span>{practiceScope === 'senalados' ? 'Pregunta' : 'Placa'}</span>
                 <strong>
                   {currentIndex + 1}/{gamePlates.length}
                 </strong>
@@ -1259,7 +1296,7 @@ const DesafioIdentificacion: React.FC = () => {
             </div>
             <h1 className="desafio-lobby-title">Desafío de Identificación</h1>
             <p className="desafio-lobby-desc">
-              Pon a prueba tus reflejos histológicos en un sprint de <strong>30 placas variadas</strong>. El tiempo de 15 segundos
+              Pon a prueba tus reflejos histológicos en una partida de <strong>hasta 30 placas</strong>. El tiempo de 15 segundos
               comienza cuando la placa está lista en pantalla. ¡Encadena rachas para curarte!
             </p>
 
@@ -1280,7 +1317,7 @@ const DesafioIdentificacion: React.FC = () => {
               <div className="desafio-rule-pill">
                 <ShieldAlert size={14} color="#15803d" />
                 <span>
-                  <strong>2 Oportunidades:</strong> Tiempo agotado / 3 fallos
+                  <strong>2 Oportunidades:</strong> {practiceScope === 'senalados' ? 'Tiempo agotado / todas las opciones incorrectas' : 'Tiempo agotado / 3 fallos'}
                 </span>
               </div>
               <div className="desafio-rule-pill">
@@ -1297,6 +1334,28 @@ const DesafioIdentificacion: React.FC = () => {
               </div>
             </div>
 
+            <section className="desafio-practice-scope" aria-labelledby="desafio-scope-title">
+              <div className="desafio-setup-heading">
+                <span>01 · Modalidad de práctica</span>
+                <h2 id="desafio-scope-title">¿Qué quieres repasar?</h2>
+                <p>Repasa un parcial, practica un tema o identifica sus estructuras señaladas.</p>
+              </div>
+              <div className="desafio-scope-options" role="group" aria-label="Modalidad de práctica">
+                <button type="button" aria-pressed={practiceScope === 'parcial'} onClick={() => setPracticeScope('parcial')}>
+                  <strong>Parcial completo</strong><span>Placas de todos los temas disponibles del parcial.</span>
+                </button>
+                <button type="button" aria-pressed={practiceScope === 'tema'} onClick={() => setPracticeScope('tema')}>
+                  <strong>Tema específico</strong><span>Elige un parcial y después el tema que quieres practicar.</span>
+                </button>
+                <button type="button" aria-pressed={practiceScope === 'senalados'} onClick={() => setPracticeScope('senalados')}>
+                  <strong>Modo señalados</strong><span>Elige parcial y tema e identifica una estructura señalada en cada placa.</span>
+                </button>
+              </div>
+            </section>
+            <div className="desafio-setup-heading">
+              <span>02 · Selecciona el parcial</span>
+              <h2>{practiceScope !== 'parcial' ? '¿En qué parcial está tu tema?' : 'Elige tu parcial'}</h2>
+            </div>
             {/* Grid Selector de Parciales */}
             <div className="desafio-parciales-grid">
               {PARCIALES_INFO.map((parcial) => {
@@ -1308,6 +1367,7 @@ const DesafioIdentificacion: React.FC = () => {
                   <button
                     key={parcial.key}
                     type="button"
+                    aria-pressed={isSelected}
                     disabled={isDisabled}
                     onClick={() => {
                       if (!isDisabled) setSelectedParcial(parcial.key);
@@ -1322,7 +1382,7 @@ const DesafioIdentificacion: React.FC = () => {
                           <span>Desactivado</span>
                         </span>
                       ) : (
-                        <span className="desafio-parcial-count">{count} placas</span>
+                        <span className="desafio-parcial-count">{count} {count === 1 ? 'placa' : 'placas'}</span>
                       )}
                     </div>
                     <div className="desafio-parcial-name">{parcial.name}</div>
@@ -1334,19 +1394,48 @@ const DesafioIdentificacion: React.FC = () => {
               })}
             </div>
 
+            {practiceScope !== 'parcial' && <section className="desafio-theme-picker" aria-labelledby="desafio-theme-title">
+              <div className="desafio-setup-heading">
+                <span>03 · Selecciona el tema</span>
+                <h2 id="desafio-theme-title">{practiceScope === "senalados" ? "Elige un tema con señalados" : "Solo verás placas del tema elegido"}</h2>
+              </div>
+              <details key={selectedParcial} className="desafio-theme-accordion">
+                <summary>
+                  <BookOpen size={22} aria-hidden="true" />
+                  <span><small>{PARCIALES_INFO.find(parcial => parcial.key === selectedParcial)?.name}</small><strong>{availableTemas.find(tema => String(tema.id) === selectedTema)?.name || 'Elige un tema'}</strong></span>
+                  <ChevronDown size={20} className="desafio-theme-chevron" aria-hidden="true" />
+                </summary>
+                <div className="desafio-theme-list" role="group" aria-label="Temas disponibles">
+                  {availableTemas.map((tema, index) => <button type="button" key={tema.id} aria-pressed={selectedTema === String(tema.id)} onClick={event => {
+                    setSelectedTema(String(tema.id));
+                    const accordion = event.currentTarget.closest('details');
+                    accordion?.removeAttribute('open');
+                    accordion?.querySelector('summary')?.focus();
+                  }}>
+                    <span className="desafio-theme-number">{String(index + 1).padStart(2, '0')}</span>
+                    <span className="desafio-theme-name">{tema.name}<small>{practiceScope === "senalados" ? tema.count : Math.min(30, tema.count)} {practiceScope === "senalados" ? (tema.count === 1 ? "placa con señalados" : "placas con señalados") : (tema.count === 1 ? "placa en la partida" : "placas en la partida")}</small></span>
+                    {selectedTema === String(tema.id) && <Check size={18} aria-hidden="true" />}
+                  </button>)}
+                  {loading && <p>Cargando temas…</p>}
+                </div>
+              </details>
+              {!loading && availableTemas.length === 0 && <p>No hay temas con placas disponibles para esta modalidad en este parcial.</p>}
+            </section>}
             {/* Botón de Inicio */}
             <button
               onClick={handleStartGame}
-              disabled={loading || availablePlatesForParcial.length === 0}
+              disabled={loading || availableMatchPlates.length === 0}
               className="desafio-start-btn"
             >
               <Play size={20} fill="currentColor" />
               <span>
                 {loading
                   ? 'Cargando placas...'
-                  : availablePlatesForParcial.length === 0
+                  : practiceScope !== 'parcial' && !selectedTema
+                  ? 'Selecciona un tema'
+                  : availableMatchPlates.length === 0
                   ? 'Sin placas disponibles'
-                  : `¡Comenzar Desafío (${totalQuestionsInGame} Placas)!`}
+                  : `¡Comenzar Desafío (${totalQuestionsInGame} ${practiceScope === 'senalados' ? (totalQuestionsInGame === 1 ? 'pregunta' : 'preguntas') : (totalQuestionsInGame === 1 ? 'placa' : 'placas')})!`}
               </span>
             </button>
           </main>
@@ -1381,7 +1470,7 @@ const DesafioIdentificacion: React.FC = () => {
               </h2>
               <p className="desafio-countdown-subtitle">
                 {countdownVal === 0
-                  ? '¡Identifica con rapidez y precisión!'
+                  ? (practiceScope === "senalados" ? "¿Qué estructura está señalada?" : '¡Identifica con rapidez y precisión!')
                   : 'Identifica la placa antes de que se agote el tiempo'}
               </p>
             </div>
@@ -1465,21 +1554,7 @@ const DesafioIdentificacion: React.FC = () => {
 
             {/* Visor de Placa Histológica (Completamente despejado, sin superposiciones sobre la imagen) */}
             <div className="desafio-plate-box">
-              {/* Spinner de carga si la imagen aún se está descargando */}
-              {!isImageLoaded && (
-                <div className="desafio-plate-loading-overlay">
-                  <div className="desafio-plate-spinner" />
-                  <span>Preparando placa histológica...</span>
-                </div>
-              )}
-
-              <img
-                src={getCloudinaryImageUrl(currentPlate.photo_url)}
-                alt="Placa histológica a identificar"
-                className="desafio-plate-img"
-                style={{ opacity: isImageLoaded ? 1 : 0 }}
-                onLoad={startTimerOnImageReady}
-              />
+              <IdentificationRoundImage key={roundToken} src={getCloudinaryImageUrl(currentPlate.photo_url)} onReady={() => startTimerOnImageReady(roundToken)} annotation={roundAnnotation} />
 
               {/* Tags flotantes de metadatos y zoom */}
               {isImageLoaded && (
@@ -1517,7 +1592,8 @@ const DesafioIdentificacion: React.FC = () => {
               )}
             </div>
 
-            {/* Grid de 4 Opciones de Respuesta */}
+            <h2 className="desafio-question-title">{practiceScope === "senalados" ? "¿Qué estructura está señalada?" : "¿A qué subtema pertenece esta placa?"}</h2>
+            {/* Opciones de respuesta */}
             <div className="desafio-options-grid">
               {!isImageLoaded ? (
                 /* Skeletons limpios mientras carga la placa: NO se muestran nombres para no romper la estética */
@@ -1581,8 +1657,8 @@ const DesafioIdentificacion: React.FC = () => {
 
               <p className="desafio-results-subtitle">
                 {isVictory
-                  ? `¡Excelente dominio! Has completado con éxito el bloque de ${gamePlates.length} placas con ${lives.toFixed(1)} vidas intactas.`
-                  : `Llegaste hasta la placa ${reachedQuestions} de ${gamePlates.length}, acertando ${correctAnswersCount} ${correctAnswersCount === 1 ? 'placa' : 'placas'}. ¡Sigue practicando para superar las ${gamePlates.length}!`}
+                  ? `¡Excelente dominio! Has completado con éxito el bloque de ${gamePlates.length} ${practiceScope === 'senalados' ? 'preguntas' : 'placas'} con ${lives.toFixed(1)} vidas intactas.`
+                  : `Llegaste hasta la ${practiceScope === 'senalados' ? 'pregunta' : 'placa'} ${reachedQuestions} de ${gamePlates.length}, con ${correctAnswersCount} respuestas correctas. ¡Sigue practicando!`}
               </p>
 
               {/* Estadísticas de la partida */}
@@ -1595,13 +1671,13 @@ const DesafioIdentificacion: React.FC = () => {
                   <span className="desafio-stat-value">
                     {correctAnswersCount}/{isVictory ? gamePlates.length : reachedQuestions}
                   </span>
-                  <span className="desafio-stat-label">Placas Acertadas</span>
+                  <span className="desafio-stat-label">{practiceScope === 'senalados' ? 'Señalados Acertados' : 'Placas Acertadas'}</span>
                 </div>
                 <div className="desafio-stat-box">
                   <span className="desafio-stat-value">
                     {reachedQuestions}/{gamePlates.length}
                   </span>
-                  <span className="desafio-stat-label">Placas Alcanzadas</span>
+                  <span className="desafio-stat-label">{practiceScope === 'senalados' ? 'Preguntas Alcanzadas' : 'Placas Alcanzadas'}</span>
                 </div>
                 <div className="desafio-stat-box">
                   <span className="desafio-stat-value">{maxStreak}</span>
@@ -1631,11 +1707,7 @@ const DesafioIdentificacion: React.FC = () => {
       {lightboxOpen && currentPlate && (
         <div className="desafio-lightbox-backdrop" onClick={() => setLightboxOpen(false)}>
           <div className="desafio-lightbox-content" onClick={(e) => e.stopPropagation()}>
-            <img
-              src={getCloudinaryImageUrl(currentPlate.photo_url)}
-              alt="Placa histológica ampliada"
-              className="desafio-lightbox-img"
-            />
+<IdentificationRoundImage key={roundToken} src={getCloudinaryImageUrl(currentPlate.photo_url)} onReady={() => {}} annotation={roundAnnotation} imageClassName="desafio-lightbox-img" />
             <button
               type="button"
               onClick={() => setLightboxOpen(false)}

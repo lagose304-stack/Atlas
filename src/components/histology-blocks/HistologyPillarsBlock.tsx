@@ -1,3 +1,4 @@
+import BlockPhotoFrame from '../blocks/BlockPhotoFrame';
 import React from 'react';
 import {
   Zap,
@@ -42,6 +43,7 @@ export interface HistologyPillarsProps {
   mainFunctionIcon?: string;
   functionImageUrl?: string;
   functionImageCaption?: string;
+  onOpenImageViewer?: (url: string) => void;
   associatedFunctions?: AssociatedFunctionItem[];
 
   // Tarjeta 2: Criterios Morfológicos
@@ -67,6 +69,7 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
   mainFunctionIcon = 'exchange',
   functionImageUrl,
   functionImageCaption,
+  onOpenImageViewer,
   associatedFunctions = [],
 
   criteriaBadge: _criteriaBadge,
@@ -299,12 +302,14 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                 boxShadow: '0 3px 12px rgba(0, 0, 0, 0.05)',
               }}
             >
-              <img
-                src={singleImage.url}
-                alt={singleImage.caption || 'Imagen de referencia'}
-                style={{ width: '100%', height: 'auto', maxHeight: '300px', objectFit: 'cover', display: 'block' }}
-                loading="lazy"
-              />
+              <BlockPhotoFrame onOpen={onOpenImageViewer ? () => onOpenImageViewer(singleImage.url || '') : undefined}>
+                <img
+                  src={singleImage.url}
+                  alt={singleImage.caption || 'Imagen de referencia'}
+                  style={{ width: '100%', height: 'auto', maxHeight: '300px', objectFit: 'cover', display: 'block' }}
+                  loading="lazy"
+                />
+              </BlockPhotoFrame>
               {singleImage.caption && singleImage.caption.trim() !== '' && (
                 <div
                   style={{
@@ -462,20 +467,22 @@ export const HistologyPillarsBlock: React.FC<HistologyPillarsProps> = ({
                 boxShadow: '0 3px 10px rgba(16, 185, 129, 0.08)',
               }}
             >
-              <img
-                src={functionImageUrl}
-                alt={functionImageCaption || 'Esquema funcional'}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  display: 'block',
-                }}
-                loading="lazy"
-              />
+              <BlockPhotoFrame style={{ position: 'absolute', inset: 0 }} onOpen={onOpenImageViewer ? () => onOpenImageViewer(functionImageUrl) : undefined}>
+                <img
+                  src={functionImageUrl}
+                  alt={functionImageCaption || 'Esquema funcional'}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
+                  loading="lazy"
+                />
+              </BlockPhotoFrame>
               {functionImageCaption && functionImageCaption.trim() !== '' && (
                 <div
                   style={{

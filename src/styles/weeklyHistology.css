@@ -83,7 +83,7 @@
 .cb-weekly-publication.cb-weekly-lab .cb-weekly-topic strong { font-family:var(--weekly-display-font); font-size:var(--weekly-topic-size) !important; font-weight:var(--weekly-topic-weight) !important; color:var(--weekly-topic-color); line-height:1.25 !important; overflow-wrap:anywhere; }
 .cb-weekly-lab .cb-weekly-topic-arrow { width:34px !important; height:34px !important; border:1.5px solid var(--slide-purple) !important; color:var(--slide-purple) !important; background:#f6eef7 !important; font-size:1.5rem !important; }
 .cb-weekly-publication.cb-weekly-lab .cb-weekly-topic:hover { transform:translateX(6px); box-shadow:0 12px 24px -10px rgba(59,42,120,.5) !important; border-color:var(--slide-purple) !important; }
-.cb-weekly-topic:hover .cb-weekly-topic-thumb { transform:scale(1.15); filter:saturate(1.15); }
+.cb-weekly-topic:hover .cb-weekly-topic-thumb { transform:scale(1.03); }
 .cb-weekly-lab .cb-weekly-topic:hover .cb-weekly-topic-arrow { background:var(--slide-purple) !important; color:#fbf7f4 !important; }
 .cb-weekly-lab .cb-weekly-topic:focus-visible { outline:3px solid var(--slide-pink); outline-offset:3px; }
 .cb-weekly-publication.cb-weekly-lab .cb-weekly-date-badge { position:relative; margin-top:15.3px !important; padding:5.95px 16px; border:1px dashed #8e7db8; border-radius:2px; background:#fff; box-shadow:0 4px 8px -6px rgba(59,42,120,.4); color:var(--slide-ink); font-family:'IBM Plex Mono',monospace; font-size:13px; gap:10px; }

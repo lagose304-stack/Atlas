@@ -1,3 +1,4 @@
+import ImageExpansionControl from './ImageExpansionControl';
 import React, { useState } from 'react';
 import { AlignCenter, AlignLeft, AlignRight, Bold, Copy, ImagePlus, Italic, Link2, List, ListOrdered, Palette, RemoveFormatting, RotateCcw, SlidersHorizontal, Strikethrough, Trash2, Type, Underline, X } from 'lucide-react';
 import { getBlockMeta, normalizeWeeklyDates } from '../blocks/blockRegistry';
@@ -951,7 +952,6 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       <label className="wide"><span>Separación: {content.dc_gap || 22}px</span><input type="range" min="0" max="56" value={Number(content.dc_gap || 22)} onChange={event => onChange({ dc_gap: event.target.value })} /></label>
       <label className="wide"><span>Redondeo: {content.dc_radius ?? 18}px</span><input type="range" min="0" max="40" value={Number(content.dc_radius ?? 18)} onChange={event => onChange({ dc_radius: event.target.value })} /></label>
       <SelectField label="Sombra" value={content.dc_shadow || 'medium'} options={[{ value: 'none', label: 'Sin sombra' }, { value: 'soft', label: 'Suave' }, { value: 'medium', label: 'Editorial' }, { value: 'deep', label: 'Profunda' }]} onChange={dc_shadow => onChange({ dc_shadow })} />
-      <SelectField label="Ampliación" value={content.dc_zoom || 'true'} options={[{ value: 'true', label: 'Permitir ver en grande' }, { value: 'false', label: 'Imágenes estáticas' }]} onChange={dc_zoom => onChange({ dc_zoom })} />
       <SelectField label="Flechas" value={content.dc_arrows || 'true'} options={[{ value: 'true', label: 'Mostrar' }, { value: 'false', label: 'Ocultar' }]} onChange={dc_arrows => onChange({ dc_arrows })} />
       <SelectField label="Indicadores" value={content.dc_dots || 'true'} options={[{ value: 'true', label: 'Mostrar' }, { value: 'false', label: 'Ocultar' }]} onChange={dc_dots => onChange({ dc_dots })} />
       <SelectField label="Tratamiento de color" value={content.dc_filter || 'none'} options={[{ value: 'none', label: 'Color original' }, { value: 'vivid', label: 'Color intenso' }, { value: 'soft', label: 'Suave editorial' }, { value: 'warm', label: 'Tono cálido' }, { value: 'cool', label: 'Tono frío' }, { value: 'grayscale', label: 'Blanco y negro' }]} onChange={dc_filter => onChange({ dc_filter })} />
@@ -970,7 +970,6 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       <label className="wide"><span>Separación: {content.tc_gap || 28}px</span><input type="range" min="8" max="64" value={Number(content.tc_gap || 28)} onChange={event => onChange({ tc_gap: event.target.value })} /></label>
       <label className="wide"><span>Redondeo: {content.tc_radius ?? 20}px</span><input type="range" min="0" max="40" value={Number(content.tc_radius ?? 20)} onChange={event => onChange({ tc_radius: event.target.value })} /></label>
       <SelectField label="Sombra de galería" value={content.tc_shadow || 'medium'} options={[{ value: 'none', label: 'Sin sombra' }, { value: 'soft', label: 'Suave' }, { value: 'medium', label: 'Editorial' }]} onChange={tc_shadow => onChange({ tc_shadow })} />
-      <SelectField label="Ampliación" value={content.tc_zoom || 'true'} options={[{ value: 'true', label: 'Permitir ver en grande' }, { value: 'false', label: 'Imágenes estáticas' }]} onChange={tc_zoom => onChange({ tc_zoom })} />
       <SelectField label="Flechas" value={content.tc_arrows || 'true'} options={[{ value: 'true', label: 'Mostrar' }, { value: 'false', label: 'Ocultar' }]} onChange={tc_arrows => onChange({ tc_arrows })} />
       <SelectField label="Indicadores" value={content.tc_dots || 'true'} options={[{ value: 'true', label: 'Mostrar' }, { value: 'false', label: 'Ocultar' }]} onChange={tc_dots => onChange({ tc_dots })} />
       <SelectField label="Tratamiento de color" value={content.tc_filter || 'none'} options={[{ value: 'none', label: 'Color original' }, { value: 'vivid', label: 'Color intenso' }, { value: 'soft', label: 'Suave editorial' }, { value: 'warm', label: 'Tono cálido' }, { value: 'cool', label: 'Tono frío' }, { value: 'grayscale', label: 'Blanco y negro' }]} onChange={tc_filter => onChange({ tc_filter })} />
@@ -993,7 +992,6 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       {(content.carousel_fit || 'cover') === 'contain' && <ColorField label="Fondo de imagen" value={content.carousel_image_bg || ''} fallback="#f8fafc" onChange={carousel_image_bg => onChange({ carousel_image_bg })} />}
       <label className="wide"><span>Redondeo: {content.carousel_radius ?? 20}px</span><input type="range" min="0" max="40" value={Number(content.carousel_radius ?? 20)} onChange={event => onChange({ carousel_radius: event.target.value })} /></label>
       <SelectField label="Sombra" value={content.carousel_shadow || 'medium'} options={[{ value: 'none', label: 'Sin sombra' }, { value: 'soft', label: 'Suave' }, { value: 'medium', label: 'Editorial' }, { value: 'deep', label: 'Profunda' }]} onChange={carousel_shadow => onChange({ carousel_shadow })} />
-      <SelectField label="Ampliación" value={content.carousel_zoom || 'true'} options={[{ value: 'true', label: 'Permitir ver en grande' }, { value: 'false', label: 'Imágenes estáticas' }]} onChange={carousel_zoom => onChange({ carousel_zoom })} />
       <SelectField label="Flechas" value={content.carousel_arrows || 'true'} options={[{ value: 'true', label: 'Mostrar' }, { value: 'false', label: 'Ocultar' }]} onChange={carousel_arrows => onChange({ carousel_arrows })} />
       <SelectField label="Indicadores" value={content.carousel_dots || 'true'} options={[{ value: 'true', label: 'Mostrar puntos' }, { value: 'false', label: 'Ocultar' }]} onChange={carousel_dots => onChange({ carousel_dots })} />
       <SelectField label="Tratamiento de color" value={content.carousel_filter || 'none'} options={[{ value: 'none', label: 'Color original' }, { value: 'vivid', label: 'Color intenso' }, { value: 'soft', label: 'Suave editorial' }, { value: 'warm', label: 'Tono cálido' }, { value: 'cool', label: 'Tono frío' }, { value: 'grayscale', label: 'Blanco y negro' }]} onChange={carousel_filter => onChange({ carousel_filter })} />
@@ -1013,7 +1011,6 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       <label className="wide"><span>Separación: {content.three_gap || 18}px</span><input type="range" min="0" max="48" value={Number(content.three_gap || 18)} onChange={event => onChange({ three_gap: event.target.value })} /></label>
       <label className="wide"><span>Redondeo: {content.three_radius ?? 16}px</span><input type="range" min="0" max="40" value={Number(content.three_radius ?? 16)} onChange={event => onChange({ three_radius: event.target.value })} /></label>
       <SelectField label="Sombra" value={content.three_shadow || 'medium'} options={[{ value: 'none', label: 'Sin sombra' }, { value: 'soft', label: 'Suave' }, { value: 'medium', label: 'Editorial' }]} onChange={three_shadow => onChange({ three_shadow })} />
-      <SelectField label="Ampliación" value={content.three_zoom || 'true'} options={[{ value: 'true', label: 'Permitir ver en grande' }, { value: 'false', label: 'Imágenes estáticas' }]} onChange={three_zoom => onChange({ three_zoom })} />
       <SelectField label="Efecto al pasar el cursor" value={content.three_hover || 'lift'} options={[{ value: 'lift', label: 'Elevar suavemente' }, { value: 'none', label: 'Sin movimiento' }]} onChange={three_hover => onChange({ three_hover })} />
       <SelectField label="Tratamiento de color" value={content.three_filter || 'none'} options={[{ value: 'none', label: 'Color original' }, { value: 'vivid', label: 'Color intenso' }, { value: 'soft', label: 'Suave editorial' }, { value: 'warm', label: 'Tono cálido' }, { value: 'cool', label: 'Tono frío' }, { value: 'grayscale', label: 'Blanco y negro' }]} onChange={three_filter => onChange({ three_filter })} />
       <h4>Pies de imagen</h4>
@@ -1032,7 +1029,6 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       <label className="wide"><span>Separación: {content.two_gap || 20}px</span><input type="range" min="0" max="56" value={Number(content.two_gap || 20)} onChange={event => onChange({ two_gap: event.target.value })} /></label>
       <label className="wide"><span>Redondeo: {content.two_radius ?? 18}px</span><input type="range" min="0" max="40" value={Number(content.two_radius ?? 18)} onChange={event => onChange({ two_radius: event.target.value })} /></label>
       <SelectField label="Sombra" value={content.two_shadow || 'medium'} options={[{ value: 'none', label: 'Sin sombra' }, { value: 'soft', label: 'Suave' }, { value: 'medium', label: 'Editorial' }]} onChange={two_shadow => onChange({ two_shadow })} />
-      <SelectField label="Ampliación" value={content.two_zoom || 'true'} options={[{ value: 'true', label: 'Permitir ver en grande' }, { value: 'false', label: 'Imágenes estáticas' }]} onChange={two_zoom => onChange({ two_zoom })} />
       <SelectField label="Efecto al pasar el cursor" value={content.two_hover || 'lift'} options={[{ value: 'lift', label: 'Elevar suavemente' }, { value: 'none', label: 'Sin movimiento' }]} onChange={two_hover => onChange({ two_hover })} />
       <SelectField label="Tratamiento de color" value={content.two_filter || 'none'} options={[{ value: 'none', label: 'Color original' }, { value: 'vivid', label: 'Color intenso' }, { value: 'soft', label: 'Suave editorial' }, { value: 'warm', label: 'Tono cálido' }, { value: 'cool', label: 'Tono frío' }, { value: 'grayscale', label: 'Blanco y negro' }]} onChange={two_filter => onChange({ two_filter })} />
       <h4>Pies de imagen</h4>
@@ -1049,7 +1045,6 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       {content.ti_style === 'soft' && <ColorField label="Fondo del componente" value={content.ti_bg || ''} fallback="#f1f7fb" onChange={ti_bg => onChange({ ti_bg })} />}
       <label className="wide"><span>Redondeo: {content.ti_radius ?? 20}px</span><input type="range" min="0" max="36" value={Number(content.ti_radius ?? 20)} onChange={event => onChange({ ti_radius: event.target.value })} /></label>
       <label className="wide"><span>Separación: {content.ti_gap || 28}px</span><input type="range" min="8" max="64" value={Number(content.ti_gap || 28)} onChange={event => onChange({ ti_gap: event.target.value })} /></label>
-      <SelectField label="Ampliación" value={content.ti_zoom || 'true'} options={[{ value: 'true', label: 'Permitir ver en grande' }, { value: 'false', label: 'Imagen estática' }]} onChange={ti_zoom => onChange({ ti_zoom })} />
       <SelectField label="Efecto al pasar el cursor" value={content.ti_hover || 'lift'} options={[{ value: 'lift', label: 'Elevar suavemente' }, { value: 'none', label: 'Sin movimiento' }]} onChange={ti_hover => onChange({ ti_hover })} />
       <SelectField label="Sombra de imagen" value={content.ti_image_shadow || 'medium'} options={[{ value: 'none', label: 'Sin sombra' }, { value: 'medium', label: 'Sombra editorial' }]} onChange={ti_image_shadow => onChange({ ti_image_shadow })} />
       <SelectField label="Tratamiento de color" value={content.ti_filter || 'none'} options={[{ value: 'none', label: 'Color original' }, { value: 'vivid', label: 'Color intenso' }, { value: 'soft', label: 'Suave editorial' }, { value: 'warm', label: 'Tono cálido' }, { value: 'cool', label: 'Tono frío' }, { value: 'grayscale', label: 'Blanco y negro' }]} onChange={ti_filter => onChange({ ti_filter })} />
@@ -1074,7 +1069,6 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       {content.image_fit === 'contain' && <ColorField label="Fondo al mostrar completa" value={content.image_contain_bg || ''} fallback="#f8fafc" onChange={image_contain_bg => onChange({ image_contain_bg })} />}
       <label className="wide"><span>Redondeo: {content.image_radius ?? 18}px</span><input type="range" min="0" max="40" value={Number(content.image_radius ?? 18)} onChange={event => onChange({ image_radius: event.target.value })} /></label>
       <SelectField label="Sombra" value={content.image_shadow || 'medium'} options={[{ value: 'none', label: 'Sin sombra' }, { value: 'soft', label: 'Suave' }, { value: 'medium', label: 'Media' }, { value: 'dramatic', label: 'Profunda' }]} onChange={image_shadow => onChange({ image_shadow })} />
-      <SelectField label="Ampliación" value={content.image_zoom || 'true'} options={[{ value: 'true', label: 'Permitir ver en grande' }, { value: 'false', label: 'Imagen estática' }]} onChange={image_zoom => onChange({ image_zoom })} />
       <SelectField label="Efecto al pasar el cursor" value={content.image_hover || 'lift'} options={[{ value: 'lift', label: 'Elevar suavemente' }, { value: 'none', label: 'Sin movimiento' }]} onChange={image_hover => onChange({ image_hover })} />
       <SelectField label="Tratamiento de color" value={content.image_filter || 'none'} options={[{ value: 'none', label: 'Color original' }, { value: 'vivid', label: 'Color intenso' }, { value: 'soft', label: 'Suave editorial' }, { value: 'warm', label: 'Tono cálido' }, { value: 'cool', label: 'Tono frío' }, { value: 'grayscale', label: 'Blanco y negro' }]} onChange={image_filter => onChange({ image_filter })} />
       <h4>Pie de imagen</h4>
@@ -1254,6 +1248,7 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
       {activeTab === 'content' && <section>
           <h4>Texto, imágenes y contenido</h4>
           {renderContentFields()}
+          <ImageExpansionControl block={block} onChange={onChange} />
         </section>}
 
       {activeTab === 'appearance' && <section>

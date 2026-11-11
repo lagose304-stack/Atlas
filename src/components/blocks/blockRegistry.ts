@@ -1,3 +1,4 @@
+import { IMAGE_EXPANSION_FIELDS } from './imageExpansion';
 import type { BlockType } from '../../types/contentBlocks';
 
 export interface BlockMeta {
@@ -416,9 +417,11 @@ export const getBlockMeta = (type: BlockType): BlockMeta => BLOCK_REGISTRY[type]
 
 export const createDefaultBlockContent = (type: BlockType): Record<string, string> => {
   const def = BLOCK_REGISTRY[type];
+  const expansionField = IMAGE_EXPANSION_FIELDS[type];
   return {
     ...CTA_DEFAULT_CONTENT,
     ...def.defaultContent,
+    ...(expansionField ? { [expansionField]: 'true' } : {}),
     __schema_version: String(def.schemaVersion),
   };
 };

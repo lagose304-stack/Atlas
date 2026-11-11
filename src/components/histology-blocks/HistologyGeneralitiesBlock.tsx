@@ -306,7 +306,7 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                     )}
 
                     {/* Botón Flotante para Ampliar */}
-                    <div
+                    {onOpenImageViewer && <div
                       style={{
                         position: 'absolute',
                         bottom: '10px',
@@ -328,7 +328,7 @@ export const HistologyGeneralitiesBlock: React.FC<HistologyGeneralitiesProps> = 
                     >
                       <ZoomIn size={12} />
                       <span>Ampliar</span>
-                    </div>
+                    </div>}
                   </div>
                 )}
 

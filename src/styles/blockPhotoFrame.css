@@ -1,0 +1,75 @@
+.atlas-block-photo-frame {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.atlas-block-photo-frame[role='button'] { cursor: zoom-in; }
+.atlas-block-photo-frame:focus-visible { outline: 3px solid #0284c7; outline-offset: 3px; }
+.atlas-block-photo-frame > img { transition: transform .35s ease; }
+.atlas-block-photo-frame:hover > img { transform: scale(1.03); }
+
+.atlas-block-photo-corners {
+  position: absolute;
+  inset: 8px;
+  pointer-events: none;
+  z-index: 3;
+  color: rgba(255, 255, 255, .85);
+  background:
+    linear-gradient(currentColor, currentColor) left top / 13px 2.5px,
+    linear-gradient(currentColor, currentColor) left top / 2.5px 13px,
+    linear-gradient(currentColor, currentColor) right top / 13px 2.5px,
+    linear-gradient(currentColor, currentColor) right top / 2.5px 13px,
+    linear-gradient(currentColor, currentColor) left bottom / 13px 2.5px,
+    linear-gradient(currentColor, currentColor) left bottom / 2.5px 13px,
+    linear-gradient(currentColor, currentColor) right bottom / 13px 2.5px,
+    linear-gradient(currentColor, currentColor) right bottom / 2.5px 13px;
+  background-repeat: no-repeat;
+}
+
+.atlas-block-photo-zoom {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  color: #fff;
+  font-size: .70rem;
+  font-weight: 850;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, .35);
+  opacity: .92;
+  transition: opacity .2s ease;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.atlas-block-photo-frame:hover > .atlas-block-photo-zoom { opacity: 1; }
+
+/* Las muestras de tinciones conservan su tamaño de miniatura. */
+.histology-stains-block .atlas-block-photo-zoom {
+  bottom: 4px;
+  right: 4px;
+  padding: 3px 5px;
+  gap: 3px;
+  font-size: .6rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-block-photo-frame > img,
+  .atlas-block-photo-zoom { transition: none; }
+}
+/* Las fotos de los banners comparten el acercamiento de las micrografías. */
+.cb-weekly-lab .cb-weekly-plate-figure .cb-weekly-photo-frame img {
+  animation: none;
+  transition: transform .35s ease;
+}
+.cb-weekly-plate-figure:hover .cb-weekly-photo-frame img { transform: scale(1.03); }
+.cb-exam-week-block .atlas-block-photo-frame > .cb-exam-photo {
+  animation: none;
+  transition: transform .35s ease;
+}
+.cb-weekly-lab .cb-weekly-topic-thumb { transition: transform .35s ease; }

@@ -1,5 +1,6 @@
+import BlockPhotoFrame from '../blocks/BlockPhotoFrame';
 import React from 'react';
-import { Palette, ZoomIn, Sparkles, FlaskConical } from 'lucide-react';
+import { Palette, Sparkles, FlaskConical } from 'lucide-react';
 import { renderBoldText } from '../BoldField';
 import { MedicalIcon } from '../common/MedicalIcon';
 
@@ -265,33 +266,18 @@ export const HistologyStainsBlock: React.FC<HistologyStainsProps> = ({
                         }}
                         title="Ampliar micrografía con esta tinción"
                       >
-                        <img
-                          src={item.imageUrl}
-                          alt={item.name}
-                          draggable={false}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                          }}
-                        />
-                        <div
-                          style={{
-                            position: 'absolute',
-                            bottom: '3px',
-                            right: '3px',
-                            background: 'rgba(59, 7, 100, 0.82)',
-                            color: '#ffffff',
-                            borderRadius: '4px',
-                            padding: '2px 4px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backdropFilter: 'blur(2px)',
-                          }}
-                        >
-                          <ZoomIn size={10} />
-                        </div>
+                        <BlockPhotoFrame style={{ width: "100%", height: "100%" }} showZoom={Boolean(onOpenImageViewer)}>
+                          <img
+                            src={item.imageUrl}
+                            alt={item.name}
+                            draggable={false}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                            }}
+                          />
+                        </BlockPhotoFrame>
                       </div>
                     )}
                   </div>

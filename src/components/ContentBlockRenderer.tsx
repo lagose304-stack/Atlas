@@ -1,6 +1,7 @@
+import BlockPhotoFrame from './blocks/BlockPhotoFrame';
 import React, { useState, useEffect, useMemo } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
-import { CalendarDays, BookOpen, ArrowRight, Sparkles, Microscope, Maximize2 } from 'lucide-react';
+import { CalendarDays, BookOpen, ArrowRight, Sparkles, Microscope, Maximize2, ZoomIn } from 'lucide-react';
 import '../styles/weeklyHistology.css';
 import type { ContentBlock, BlockType } from '../types/contentBlocks';
 import ImageViewerModal from './ImageViewerModal';
@@ -25,6 +26,15 @@ import {
 } from './histology-blocks';
 import examenIllustration from '../assets/imagenes/examen.png';
 import ExamWeekTestsCarousel from './ExamWeekTestsCarousel';
+
+const ImageCornerMarks: React.FC = () => (
+  <div aria-hidden="true" style={{ position: 'absolute', inset: '8px', pointerEvents: 'none', zIndex: 3 }}>
+    <span style={{ position: 'absolute', top: 0, left: 0, width: '13px', height: '13px', borderTop: '2.5px solid rgba(255,255,255,0.85)', borderLeft: '2.5px solid rgba(255,255,255,0.85)', borderRadius: '2px 0 0 0' }} />
+    <span style={{ position: 'absolute', top: 0, right: 0, width: '13px', height: '13px', borderTop: '2.5px solid rgba(255,255,255,0.85)', borderRight: '2.5px solid rgba(255,255,255,0.85)', borderRadius: '0 2px 0 0' }} />
+    <span style={{ position: 'absolute', bottom: 0, left: 0, width: '13px', height: '13px', borderBottom: '2.5px solid rgba(255,255,255,0.85)', borderLeft: '2.5px solid rgba(255,255,255,0.85)', borderRadius: '0 0 0 2px' }} />
+    <span style={{ position: 'absolute', bottom: 0, right: 0, width: '13px', height: '13px', borderBottom: '2.5px solid rgba(255,255,255,0.85)', borderRight: '2.5px solid rgba(255,255,255,0.85)', borderRadius: '0 0 2px 0' }} />
+  </div>
+);
 
 const RichTextValue: React.FC<{ value: string; className?: string; style?: React.CSSProperties }> = ({ value, className, style }) => {
   if (!value) return null;
@@ -674,7 +684,7 @@ const WeeklyTopicCard: React.FC<{
           <Microscope size={24} strokeWidth={1.5} />
         </span>
       )}
-      <i className="cb-weekly-lens-reticle" />
+      {finalLogo && <ImageCornerMarks />}
       </span></span>
       <span className="cb-weekly-topic-copy" style={{ display: 'grid', gap: topicCount === 2 ? '2px' : '4px', minWidth: 0 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', width: 'fit-content', padding: topicCount === 1 ? '4px 10px' : topicCount === 2 ? '2px 7px' : '1px 5px', borderRadius: '4px', background: `${accent}14`, color: accent, fontSize: topicCount === 1 ? '0.92rem' : topicCount === 2 ? '0.78rem' : '.72em', fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase' }}>
@@ -957,7 +967,7 @@ const BlockItem: React.FC<{
             className={zoomEnabled ? 'cb-zoom-trigger' : undefined}
             role={zoomEnabled ? 'button' : undefined}
             tabIndex={zoomEnabled ? 0 : undefined}
-            style={{ ...rs.imgClickWrap, ...visualMap[visualStyle], width: `${widthPct}%`, margin: alignMarginMap[align] || alignMarginMap.center, borderRadius: `${radius}px`, boxShadow: shadowMap[c.image_shadow || (visualStyle === 'clean' ? 'none' : 'medium')], cursor: zoomEnabled ? 'zoom-in' : 'default', ...(imgHovered && c.image_hover !== 'none' ? rs.imgClickWrapHover : {}) }}
+            style={{ ...rs.imgClickWrap, ...visualMap[visualStyle], width: `${widthPct}%`, margin: alignMarginMap[align] || alignMarginMap.center, borderRadius: `${radius}px`, boxShadow: shadowMap[c.image_shadow || (visualStyle === 'clean' ? 'none' : 'medium')], cursor: zoomEnabled ? 'zoom-in' : 'default' }}
             onClick={zoomEnabled ? () => onZoom(c.url) : undefined}
             onKeyDown={zoomEnabled ? e => onZoomKeyDown(e, c.url) : undefined}
             onMouseEnter={() => setImgHovered(true)}
@@ -968,7 +978,7 @@ const BlockItem: React.FC<{
               src={getCloudinaryImageUrl(c.url, 'view')}
               alt={c.image_alt || c.caption || 'Imagen ilustrativa'}
               style={{
-                ...rs.image,
+                ...rs.image, transition: 'transform 0.35s ease', transform: imgHovered ? 'scale(1.03)' : 'scale(1)',
                 width: '100%',
                 maxWidth: '100%',
                 height: fixedHeight ?? rs.image.height,
@@ -982,7 +992,8 @@ const BlockItem: React.FC<{
               }}
               loading={c.image_loading === 'eager' ? 'eager' : 'lazy'}
             />
-            {zoomEnabled && <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>}
+            <ImageCornerMarks />
+            {zoomEnabled && <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0.92 }}><ZoomIn size={12} /><span>Ampliar</span></div>}
             {captionStyle === 'overlay' && c.caption && <figcaption style={{ ...captionTextStyle, position: 'absolute', inset: c.image_caption_position === 'top' ? '10px 10px auto' : 'auto 10px 10px', padding: '9px 12px', borderRadius: '10px', color: c.image_caption_color || userTextColor || '#ffffff', background: c.image_caption_bg || 'rgba(15,23,42,.68)', backdropFilter: 'blur(8px)', textAlign: (c.image_caption_align || 'center') as React.CSSProperties['textAlign'], fontSize: c.image_caption_size || userFontSize || '.86rem', lineHeight: captionTextStyle.lineHeight || 1.4, fontStyle: c.image_caption_italic === 'false' ? 'normal' : 'italic' }}><RichTextValue value={c.caption} /></figcaption>}
           </div>
           {captionStyle !== 'overlay' && c.caption && <figcaption style={{ ...rs.caption, ...captionTextStyle, width: `${widthPct}%`, boxSizing: 'border-box', margin: alignMarginMap[align] || alignMarginMap.center, color: c.image_caption_color || userTextColor || '#57708f', background: captionStyle === 'card' ? (c.image_caption_bg || '#f8fafc') : undefined, padding: captionStyle === 'card' ? '9px 12px' : undefined, borderRadius: captionStyle === 'card' ? '10px' : undefined, textAlign: (c.image_caption_align || 'center') as React.CSSProperties['textAlign'], fontStyle: c.image_caption_italic === 'false' ? 'normal' : 'italic', fontSize: c.image_caption_size || userFontSize || '.86rem' }}><RichTextValue value={c.caption} /></figcaption>}
@@ -1029,7 +1040,7 @@ const BlockItem: React.FC<{
                 className={tiZoom ? 'cb-zoom-trigger' : undefined}
                 role={tiZoom ? 'button' : undefined}
                 tabIndex={tiZoom ? 0 : undefined}
-                style={{ ...rs.imgClickWrap, borderRadius: `${Math.max(0, tiRadius - 6)}px`, cursor: tiZoom ? 'zoom-in' : 'default', boxShadow: c.ti_image_shadow === 'none' ? 'none' : '0 12px 30px rgba(15,23,42,.15)', ...(imgHovered && c.ti_hover !== 'none' ? rs.imgClickWrapHover : {}) }}
+                style={{ ...rs.imgClickWrap, borderRadius: `${Math.max(0, tiRadius - 6)}px`, cursor: tiZoom ? 'zoom-in' : 'default', boxShadow: c.ti_image_shadow === 'none' ? 'none' : '0 12px 30px rgba(15,23,42,.15)' }}
                 onClick={tiZoom ? () => onZoom(c.image_url) : undefined}
                 onKeyDown={tiZoom ? e => onZoomKeyDown(e, c.image_url) : undefined}
                 onMouseEnter={() => setImgHovered(true)}
@@ -1040,7 +1051,7 @@ const BlockItem: React.FC<{
                   src={getCloudinaryImageUrl(c.image_url, 'view')}
                   alt={c.ti_image_alt || c.image_caption || 'Imagen ilustrativa'}
                   style={{
-                    ...rs.tiImage,
+                    ...rs.tiImage, transition: 'transform 0.35s ease', transform: imgHovered ? 'scale(1.03)' : 'scale(1)',
                     height: fixedHeight ?? rs.tiImage.height,
                     objectFit: tiImageFit,
                     objectPosition: c.ti_object_position || 'center center',
@@ -1051,7 +1062,8 @@ const BlockItem: React.FC<{
                   }}
                   loading={c.ti_loading === 'eager' ? 'eager' : 'lazy'}
                 />
-                {tiZoom && <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0 }}>🔍</div>}
+                <ImageCornerMarks />
+                {tiZoom && <div style={{ ...rs.zoomOverlay, opacity: imgHovered ? 1 : 0.92 }}><ZoomIn size={12} /><span>Ampliar</span></div>}
               </div>
               {c.image_caption && (
                 <figcaption style={{ ...rs.caption, ...userTypographyStyle, color: c.ti_caption_color || userTextColor || '#57708f', textAlign: (c.ti_caption_align || 'center') as React.CSSProperties['textAlign'], fontStyle: c.ti_caption_italic === 'false' ? 'normal' : 'italic', fontSize: c.ti_caption_size || '.82rem', fontWeight: c.ti_caption_weight && c.ti_caption_weight !== 'default' ? Number(c.ti_caption_weight) : undefined }}><RichTextValue value={c.image_caption} /></figcaption>
@@ -1090,7 +1102,7 @@ const BlockItem: React.FC<{
                 className={twoZoom ? 'cb-zoom-trigger' : undefined}
                 role={twoZoom ? 'button' : undefined}
                 tabIndex={twoZoom ? 0 : undefined}
-                style={{ ...rs.twoImgWrap, aspectRatio: twoAspectMap[c.two_aspect || 'landscape'], borderRadius: `${Math.max(0, twoRadius - (twoStyle === 'cards' ? 7 : 0))}px`, cursor: twoZoom ? 'zoom-in' : 'default', boxShadow: 'none', ...(item.hovered && c.two_hover !== 'none' ? rs.twoImgWrapHover : {}) }}
+                style={{ ...rs.twoImgWrap, aspectRatio: twoAspectMap[c.two_aspect || 'landscape'], borderRadius: `${Math.max(0, twoRadius - (twoStyle === 'cards' ? 7 : 0))}px`, cursor: twoZoom ? 'zoom-in' : 'default', boxShadow: 'none' }}
                 onClick={twoZoom ? () => onZoom(item.url) : undefined}
                 onKeyDown={twoZoom ? e => onZoomKeyDown(e, item.url) : undefined}
                 onMouseEnter={() => item.setHovered(true)}
@@ -1100,10 +1112,11 @@ const BlockItem: React.FC<{
                 <BlockImg
                   src={getCloudinaryImageUrl(item.url, 'view')}
                   alt={item.alt || item.caption || `Imagen ${item.side === 'left' ? 'izquierda' : 'derecha'}`}
-                  style={{ ...rs.twoImgImage, objectFit: c.two_fit === 'contain' ? 'contain' : 'cover', objectPosition: item.position || 'center center', background: c.two_fit === 'contain' ? (c.two_image_bg || '#f8fafc') : undefined, filter: twoFilterMap[c.two_filter || 'none'] }}
+                  style={{ ...rs.twoImgImage, objectFit: c.two_fit === 'contain' ? 'contain' : 'cover', objectPosition: item.position || 'center center', background: c.two_fit === 'contain' ? (c.two_image_bg || '#f8fafc') : undefined, filter: twoFilterMap[c.two_filter || 'none'], transition: 'transform 0.35s ease', transform: item.hovered ? 'scale(1.03)' : 'scale(1)' }}
                   loading={c.two_loading === 'eager' ? 'eager' : 'lazy'}
                 />
-                {twoZoom && <div style={{ ...rs.zoomOverlay, opacity: item.hovered ? 1 : 0 }}>🔍</div>}
+                <ImageCornerMarks />
+                {twoZoom && <div style={{ ...rs.zoomOverlay, opacity: item.hovered ? 1 : 0.92 }}><ZoomIn size={12} /><span>Ampliar</span></div>}
               </div>
               {item.caption && (
                 <figcaption style={{ ...rs.caption, ...userTypographyStyle, color: c.two_caption_color || userTextColor || '#57708f', textAlign: (c.two_caption_align || 'center') as React.CSSProperties['textAlign'], fontStyle: c.two_caption_italic === 'false' ? 'normal' : 'italic', fontSize: c.two_caption_size || '.82rem', fontWeight: c.two_caption_weight && c.two_caption_weight !== 'default' ? Number(c.two_caption_weight) : undefined }}><RichTextValue value={item.caption} /></figcaption>
@@ -1144,7 +1157,7 @@ const BlockItem: React.FC<{
                 className={threeZoom ? 'cb-zoom-trigger' : undefined}
                 role={threeZoom ? 'button' : undefined}
                 tabIndex={threeZoom ? 0 : undefined}
-                style={{ ...rs.twoImgWrap, aspectRatio: threeAspectMap[c.three_aspect || 'landscape'], borderRadius: `${Math.max(0, threeRadius - (threeStyle === 'cards' ? 6 : 0))}px`, cursor: threeZoom ? 'zoom-in' : 'default', boxShadow: 'none', ...(imgHoveredIdx === idx && c.three_hover !== 'none' ? rs.twoImgWrapHover : {}) }}
+                style={{ ...rs.twoImgWrap, aspectRatio: threeAspectMap[c.three_aspect || 'landscape'], borderRadius: `${Math.max(0, threeRadius - (threeStyle === 'cards' ? 6 : 0))}px`, cursor: threeZoom ? 'zoom-in' : 'default', boxShadow: 'none' }}
                 onClick={threeZoom ? () => onZoom(item.url) : undefined}
                 onKeyDown={threeZoom ? e => onZoomKeyDown(e, item.url) : undefined}
                 onMouseEnter={() => setImgHoveredIdx(idx)}
@@ -1154,10 +1167,11 @@ const BlockItem: React.FC<{
                 <BlockImg
                   src={getCloudinaryImageUrl(item.url, 'view')}
                   alt={item.alt || item.cap || `Imagen ${idx + 1}`}
-                  style={{ ...rs.twoImgImage, objectFit: c.three_fit === 'contain' ? 'contain' : 'cover', objectPosition: item.position || 'center center', background: c.three_fit === 'contain' ? (c.three_image_bg || '#f8fafc') : undefined, filter: threeFilterMap[c.three_filter || 'none'] }}
+                  style={{ ...rs.twoImgImage, objectFit: c.three_fit === 'contain' ? 'contain' : 'cover', objectPosition: item.position || 'center center', background: c.three_fit === 'contain' ? (c.three_image_bg || '#f8fafc') : undefined, filter: threeFilterMap[c.three_filter || 'none'], transition: 'transform 0.35s ease', transform: imgHoveredIdx === idx ? 'scale(1.03)' : 'scale(1)' }}
                   loading={c.three_loading === 'eager' ? 'eager' : 'lazy'}
                 />
-                {threeZoom && <div style={{ ...rs.zoomOverlay, opacity: imgHoveredIdx === idx ? 1 : 0 }}>🔍</div>}
+                <ImageCornerMarks />
+                {threeZoom && <div style={{ ...rs.zoomOverlay, opacity: imgHoveredIdx === idx ? 1 : 0.92 }}><ZoomIn size={12} /><span>Ampliar</span></div>}
               </div>
               {item.cap && <figcaption style={{ ...rs.caption, ...userTypographyStyle, color: c.three_caption_color || userTextColor || '#57708f', textAlign: (c.three_caption_align || 'center') as React.CSSProperties['textAlign'], fontStyle: c.three_caption_italic === 'false' ? 'normal' : 'italic', fontSize: c.three_caption_size || '.8rem', fontWeight: c.three_caption_weight && c.three_caption_weight !== 'default' ? Number(c.three_caption_weight) : undefined }}><RichTextValue value={item.cap} /></figcaption>}
             </figure>
@@ -1340,13 +1354,13 @@ const BlockItem: React.FC<{
 
             {/* Figura / Placa con barra lateral vertical y foto limpia sin obstrucciones */}
             <figure
-              className={c.image_url ? 'cb-zoom-trigger cb-weekly-plate-figure' : 'cb-weekly-plate-figure'}
+              className={c.image_url && c.image_zoom !== 'false' ? 'cb-zoom-trigger cb-weekly-plate-figure' : 'cb-weekly-plate-figure'}
               data-image-fit={c.weekly_image_fit || 'cover'}
-              role={c.image_url ? 'button' : undefined}
-              tabIndex={c.image_url ? 0 : undefined}
-              onClick={c.image_url ? () => onZoom(c.image_url, c.weekly_placa_id || undefined) : undefined}
-              onKeyDown={c.image_url ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onZoom(c.image_url, c.weekly_placa_id || undefined); } } : undefined}
-              title={c.image_url ? 'Ver placa en grande' : undefined}
+              role={c.image_url && c.image_zoom !== 'false' ? 'button' : undefined}
+              tabIndex={c.image_url && c.image_zoom !== 'false' ? 0 : undefined}
+              onClick={c.image_url && c.image_zoom !== 'false' ? () => onZoom(c.image_url, c.weekly_placa_id || undefined) : undefined}
+              onKeyDown={c.image_url && c.image_zoom !== 'false' ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onZoom(c.image_url, c.weekly_placa_id || undefined); } } : undefined}
+              title={c.image_url && c.image_zoom !== 'false' ? 'Ver placa en grande' : undefined}
               style={{
                 order: imageRight ? 2 : 1,
                 position: 'relative',
@@ -1355,7 +1369,7 @@ const BlockItem: React.FC<{
                 height: '100%',
                 minHeight: 0,
                 overflow: 'hidden',
-                cursor: c.image_url ? 'zoom-in' : 'default',
+                cursor: c.image_url && c.image_zoom !== 'false' ? 'zoom-in' : 'default',
                 display: 'flex',
                 flexDirection: 'row',
                 alignItems: 'stretch',
@@ -1383,15 +1397,15 @@ const BlockItem: React.FC<{
                     </div>
                     <div className="cb-weekly-vertical-bottom">
                       <span className="cb-weekly-vertical-spark" aria-hidden="true">✧</span>
-                      <span className="cb-weekly-vertical-action" aria-hidden="true" title="Ampliar placa"><Maximize2 size={14} strokeWidth={1.6} /></span>
+                      {c.image_zoom !== "false" && <span className="cb-weekly-vertical-action" aria-hidden="true" title="Ampliar placa"><Maximize2 size={14} strokeWidth={1.6} /></span>}
                     </div>
                   </div>
                 );
               })()}
 
               {/* Contenedor de la placa histológica 100% visible sin obstrucciones */}
-              <div className="cb-weekly-plate-image-wrap" style={{ position: 'relative', flex: 1, height: '100%', minHeight: 0, overflow: 'hidden' }}>
-                <span className="cb-weekly-lab-focus" aria-hidden="true"><i /><i /><i /><i /></span>
+              <div className="cb-weekly-plate-image-wrap cb-weekly-photo-frame" style={{ position: 'relative', flex: 1, height: '100%', minHeight: 0, overflow: 'hidden' }}>
+                <ImageCornerMarks />
                 {c.image_url ? (
                   <img
                     src={getCloudinaryImageUrl(c.image_url, 'view')}
@@ -1533,11 +1547,13 @@ const BlockItem: React.FC<{
               {/* Contenedor de Snoopy con su sombra dinámica sincronizada */}
               <div className="cb-exam-snoopy-wrap">
                 {/* Ilustración de Snoopy con animación flotante continua */}
-                <img
-                  className="cb-exam-snoopy-img"
+                <BlockPhotoFrame style={{ width: "100%" }} onOpen={c.image_zoom !== "false" ? () => onZoom(c.image_url || examenIllustration) : undefined}>
+<img
+                  className="cb-exam-snoopy-img cb-exam-photo"
                   src={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : examenIllustration}
                   alt={c.image_caption || 'Ilustración semana de exámenes'}
                 />
+</BlockPhotoFrame>
 
                 {/* Sombra de levitación 3D bajo Snoopy (se reduce cuando Snoopy sube) */}
                 <div className="cb-exam-shadow" aria-hidden />
@@ -1876,7 +1892,7 @@ const BlockItem: React.FC<{
           imageUrl={c.image_url ? getCloudinaryImageUrl(c.image_url, 'view') : undefined}
           imageBadge={c.image_badge !== undefined ? c.image_badge : '🔬 Micrografía de Referencia'}
           keyIdea={c.key_idea || undefined}
-          onOpenImageViewer={() => onZoom(c.image_url, c.placa_id || c.weekly_placa_id)}
+          onOpenImageViewer={c.image_zoom !== 'false' ? () => onZoom(c.image_url, c.placa_id || c.weekly_placa_id) : undefined}
           titleColor={c.title_color}
           lineColor={c.line_color}
           badgeColor={c.badge_color}
@@ -1953,6 +1969,7 @@ const BlockItem: React.FC<{
           mainFunctionIcon={c.main_function_icon || 'exchange'}
           functionImageUrl={c.function_image_url ? getCloudinaryImageUrl(c.function_image_url, 'cardWideSmall') : undefined}
           functionImageCaption={c.function_image_caption || ''}
+          onOpenImageViewer={c.image_zoom !== 'false' ? (url) => onZoom(url) : undefined}
           associatedFunctions={associatedFunctions}
 
           criteriaBadge={c.criteria_badge || ''}
@@ -2010,7 +2027,7 @@ const BlockItem: React.FC<{
           introText={c.intro_text || ''}
           items={items.length > 0 ? items : undefined}
           colorKeyTip={c.color_tip || undefined}
-          onOpenImageViewer={(url) => onZoom(url)}
+          onOpenImageViewer={c.image_zoom !== 'false' ? (url) => onZoom(url) : undefined}
           titleColor={c.title_color}
           lineColor={c.line_color}
           badgeColor={c.badge_color}
@@ -2138,6 +2155,7 @@ const BlockItem: React.FC<{
           titleColor={c.title_color}
           bgColor={c.bg_color}
           displayMode={c.display_mode}
+        onOpenImageViewer={c.image_zoom !== 'false' ? (url) => onZoom(url) : undefined}
         />
       );
     }
@@ -2422,7 +2440,7 @@ const CarouselPlayer: React.FC<{
                 className={zoomEnabled ? 'cb-zoom-trigger' : undefined}
                 role={zoomEnabled ? 'button' : undefined}
                 tabIndex={zoomEnabled ? 0 : undefined}
-                style={{ ...rs.carouselSlide, aspectRatio: aspectMap[String(options.aspect || 'landscape')], cursor: zoomEnabled ? 'zoom-in' : 'default', ...(hoveredIdx === idx && zoomEnabled ? rs.imgClickWrapHover : {}) }}
+                style={{ ...rs.carouselSlide, aspectRatio: aspectMap[String(options.aspect || 'landscape')], cursor: zoomEnabled ? 'zoom-in' : 'default' }}
                 onClick={zoomEnabled ? () => onZoom?.(item.url) : undefined}
                 onKeyDown={zoomEnabled ? e => onZoomKeyDown(e, item.url) : undefined}
                 onMouseEnter={() => setHoveredIdx(idx)}
@@ -2438,7 +2456,7 @@ const CarouselPlayer: React.FC<{
                   <img
                     src={getCloudinaryImageUrl(item.url, 'view')}
                     alt={item.alt || item.caption || `Imagen ${idx + 1}`}
-                    style={{ ...rs.carouselImage, height: options.aspect === 'auto' ? 'auto' : '100%', objectFit: options.fit === 'contain' ? 'contain' : 'cover', objectPosition: String(options.position || 'center center'), background: options.fit === 'contain' ? String(options.imageBg || '#f8fafc') : undefined, filter: carouselFilterMap[String(options.filter || 'none')] }}
+                    style={{ ...rs.carouselImage, transition: 'transform 0.35s ease', transform: hoveredIdx === idx ? 'scale(1.03)' : 'scale(1)', height: options.aspect === 'auto' ? 'auto' : '100%', objectFit: options.fit === 'contain' ? 'contain' : 'cover', objectPosition: String(options.position || 'center center'), background: options.fit === 'contain' ? String(options.imageBg || '#f8fafc') : undefined, filter: carouselFilterMap[String(options.filter || 'none')] }}
                     loading={options.loading === 'eager' ? 'eager' : 'lazy'}
                     decoding="async"
                     sizes="(max-width: 560px) 100vw, (max-width: 900px) 90vw, 70vw"
@@ -2446,7 +2464,8 @@ const CarouselPlayer: React.FC<{
                     onError={() => setFailedSlides(prev => new Set([...prev, idx]))}
                   />
                 )}
-                {zoomEnabled && <div style={{ ...rs.zoomOverlay, opacity: hoveredIdx === idx ? 1 : 0 }}>🔍</div>}
+                <ImageCornerMarks />
+                {zoomEnabled && <div style={{ ...rs.zoomOverlay, opacity: hoveredIdx === idx ? 1 : 0.92 }}><ZoomIn size={12} /><span>Ampliar</span></div>}
               </div>
             </div>
           ))}
@@ -2612,23 +2631,24 @@ const rs: Record<string, React.CSSProperties> = {
     width: '100%',
     transition: 'transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease',
   },
-  imgClickWrapHover: {
-    transform: 'scale(1.02)',
-    boxShadow: '0 18px 34px rgba(14,165,233,0.22)',
-  },
   zoomOverlay: {
     position: 'absolute',
-    inset: 0,
-    background: 'rgba(15,23,42,0.4)',
+    bottom: '10px',
+    right: '10px',
+    padding: '5px 12px',
+    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+    color: '#ffffff',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '2.2em',
-    transition: 'opacity 0.28s ease',
-    borderRadius: 'inherit',
+    gap: '5px',
+    fontSize: '0.70rem',
+    fontWeight: 850,
+    boxShadow: '0 4px 12px rgba(2,132,199,0.35)',
+    transition: 'opacity 0.2s ease',
+    borderRadius: '8px',
     pointerEvents: 'none',
+    zIndex: 4,
   },
-
   // Bloque de imagen centrada
   figure: {
     margin: '0 auto',
@@ -2725,10 +2745,6 @@ const rs: Record<string, React.CSSProperties> = {
     position: 'relative',
     cursor: 'zoom-in',
     transition: 'transform 0.28s ease, box-shadow 0.28s ease',
-  },
-  twoImgWrapHover: {
-    transform: 'scale(1.02)',
-    boxShadow: '0 18px 34px rgba(14,165,233,0.22)',
   },
   twoImgImage: {
     width: '100%',

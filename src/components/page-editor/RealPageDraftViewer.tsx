@@ -22,6 +22,7 @@ interface RealPageDraftViewerProps {
   versionName?: string;
   isPublished?: boolean;
   onBackToEditor: () => void;
+  onBeforeNavigate?: (proceed: () => void) => void;
 }
 
 interface Placa {
@@ -89,6 +90,7 @@ const RealPageDraftViewer: React.FC<RealPageDraftViewerProps> = ({
   versionName = 'Borrador actual',
   isPublished = false,
   onBackToEditor,
+  onBeforeNavigate,
 }) => {
   const [placas, setPlacas] = useState<Placa[]>([]);
   const [placasConMapa, setPlacasConMapa] = useState<Set<number>>(new Set());
@@ -329,7 +331,7 @@ const RealPageDraftViewer: React.FC<RealPageDraftViewerProps> = ({
         </div>
       </div>
 
-      <Header />
+      <Header onBeforeNavigate={onBeforeNavigate} />
 
       <main style={styles.main}>
         <BackButton onClick={onBackToEditor} />
