@@ -13,5 +13,6 @@ export const IMAGE_EXPANSION_FIELDS: Partial<Record<BlockType, string>> = {
   histology_stains: 'image_zoom',
   histology_extra_data: 'image_zoom',
   weekly_publication: 'image_zoom',
+  weekly_histology_facts: 'image_zoom',
   exam_week: 'image_zoom',
 };

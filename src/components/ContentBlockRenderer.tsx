@@ -1,4 +1,6 @@
 import BlockPhotoFrame from './blocks/BlockPhotoFrame';
+import WeeklyHistologyFacts from './WeeklyHistologyFacts';
+import { readWeeklyFacts } from './blocks/weeklyHistologyFactsData';
 import React, { useState, useEffect, useMemo } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
 import { CalendarDays, BookOpen, ArrowRight, Sparkles, Microscope, Maximize2, ZoomIn } from 'lucide-react';
@@ -461,6 +463,7 @@ const ContentBlockRenderer: React.FC<ContentBlockRendererProps> = ({
 
 const BlockWithCtas: React.FC<{ block: ContentBlock; onZoom: (url: string, placaId?: string) => void; columnChildren?: ContentBlock[]; editorMode?: boolean }> = ({ block, onZoom, columnChildren, editorMode = false }) => {
   const c = normalizeBlockContent(block.block_type, block.content);
+  if (block.block_type === 'weekly_histology_facts' && c.facts_visible === 'false') return null;
   const ctaPosition = (c.cta_position as 'before' | 'after') ?? 'after';
   const renderInlineCtas = block.block_type === 'callout' || block.block_type === 'section';
   const ctas = <BlockCtas content={c} />;
@@ -1180,6 +1183,10 @@ const BlockItem: React.FC<{
       );
     }
 
+    case 'weekly_histology_facts': {
+      if (c.facts_visible === 'false') return null;
+      return <WeeklyHistologyFacts title={c.title} facts={readWeeklyFacts(c)} onOpenImageViewer={c.image_zoom !== 'false' ? url => onZoom(url) : undefined} />;
+    }
     case 'weekly_publication': {
       const accent = c.weekly_accent || '#0ea5e9';
       const bg = c.weekly_bg || '#eef8ff';

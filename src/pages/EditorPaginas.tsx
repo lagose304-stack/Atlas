@@ -801,6 +801,7 @@ const EditorPaginas: React.FC = () => {
                         }}
                         onManualSaveRequest={handleManualSaveVersion}
                         experienceMode="advanced"
+                        includeHomeDefaults
                         autoSave
                       />
                     </div>

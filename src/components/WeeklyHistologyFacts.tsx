@@ -4,31 +4,9 @@ import lightbulbIcon from '../assets/icons/bombilla.ico';
 import '../styles/weeklyHistology.css';
 import '../styles/weeklyHistologyFacts.css';
 
-export type WeeklyHistologyFact = {
-  topic: string;
-  title: string;
-  description: string;
-  clue: string;
-  illustration: 'liver' | 'henle';
-};
-
-const WEEKLY_FACTS: [WeeklyHistologyFact, WeeklyHistologyFact] = [
-  {
-    topic: 'Tema 03 · Tercer parcial',
-    title: 'Tres formas de ver el hígado',
-    description: 'El lobulillo clásico es hexagonal y muestra cómo la sangre converge en la vena central. El lobulillo portal es triangular y agrupa el tejido que drena bilis hacia un mismo conducto biliar. El acino hepático es romboidal y distingue tres zonas según la distancia al aporte de sangre.',
-    clue: 'En la placa, ubica una vena central y un espacio porta. La zona 1 del acino recibe primero la sangre y la zona 3 queda junto a la vena central.',
-    illustration: 'liver',
-  },
-  {
-    topic: 'Tema 04 · Tercer parcial',
-    title: 'Asas de Henle largas para ahorrar agua',
-    description: 'En el dromedario, muchas asas de Henle son largas y penetran profundamente en la médula renal. Ayudan a establecer un gradiente de concentración que permite recuperar agua en los conductos colectores y producir una orina más concentrada.',
-    clue: 'Sigue la rama descendente hacia la médula y luego la ascendente de vuelta hacia la corteza.',
-    illustration: 'henle',
-  },
-];
-
+import { WEEKLY_FACTS, type WeeklyHistologyFact } from './blocks/weeklyHistologyFactsData';
+import BlockPhotoFrame from './blocks/BlockPhotoFrame';
+import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 function TissueSketch({ kind }: { kind: WeeklyHistologyFact['illustration'] }) {
   const id = useId();
   if (kind === 'liver') {
@@ -151,17 +129,26 @@ function TissueSketch({ kind }: { kind: WeeklyHistologyFact['illustration'] }) {
   );
 }
 
-export default function WeeklyHistologyFacts({ facts = WEEKLY_FACTS }: { facts?: [WeeklyHistologyFact, WeeklyHistologyFact] }) {
-  return <section className="weekly-facts" aria-labelledby="weekly-facts-title">
+export default function WeeklyHistologyFacts({ facts = WEEKLY_FACTS, title = 'Datos histológicos de la semana', onOpenImageViewer }: {
+  facts?: WeeklyHistologyFact[];
+  title?: string;
+  onOpenImageViewer?: (url: string) => void;
+}) {
+  const titleId = useId();
+  return <section className="weekly-facts" aria-labelledby={titleId}>
     <header className="weekly-facts__header">
       <span className="weekly-facts__icon" aria-hidden="true"><img src={lightbulbIcon} alt="" /></span>
-      <h2 id="weekly-facts-title">Datos histológicos de la semana</h2>
+      <h2 id={titleId}>{title}</h2>
     </header>
-    <div className="weekly-facts__grid">{facts.map((fact, index) => <article key={index} className={`weekly-fact weekly-fact--${fact.illustration}`}>
-      <div className="weekly-fact__top"><span className="weekly-fact__topic">{fact.topic}</span></div>
-      <div className="weekly-fact__art"><TissueSketch kind={fact.illustration} /></div>
+    <div className={'weekly-facts__grid' + (facts.length === 1 ? ' weekly-facts__grid--single' : '')}>{facts.map((fact, index) => <article key={index} className={'weekly-fact weekly-fact--' + fact.illustration}>
+      {fact.topic && <div className="weekly-fact__top"><span className="weekly-fact__topic">{fact.topic}</span></div>}
+      {(fact.imageUrl || fact.illustration !== 'none') && <div className="weekly-fact__art">
+        {fact.imageUrl ? <BlockPhotoFrame onOpen={onOpenImageViewer ? () => onOpenImageViewer(fact.imageUrl!) : undefined}>
+          <img className="weekly-fact__reference-image" src={getCloudinaryImageUrl(fact.imageUrl, 'view')} alt={fact.imageAlt || fact.title} loading="lazy" style={{ objectFit: fact.imageFit || 'contain' }} />
+        </BlockPhotoFrame> : <TissueSketch kind={fact.illustration} />}
+      </div>}
       <div className="weekly-fact__body"><h3>{fact.title}</h3><p>{fact.description}</p></div>
-      <div className="weekly-fact__clue"><ScanEye size={19} aria-hidden="true" /><p>{fact.clue}</p></div>
+      {fact.clue && <div className="weekly-fact__clue"><ScanEye size={19} aria-hidden="true" /><p>{fact.clue}</p></div>}
     </article>)}</div>
   </section>;
 }

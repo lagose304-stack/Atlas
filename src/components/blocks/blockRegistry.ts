@@ -1,4 +1,5 @@
 import { IMAGE_EXPANSION_FIELDS } from './imageExpansion';
+import { WEEKLY_FACTS_CONTENT } from './weeklyHistologyFactsData';
 import type { BlockType } from '../../types/contentBlocks';
 
 export interface BlockMeta {
@@ -162,6 +163,11 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
     meta: { label: 'Caja destacada', icon: 'INFO', description: 'Resalta una idea importante o aviso.', color: '#f97316' },
     schemaVersion: 1,
     defaultContent: { text: '', variant: 'info', style_text: '#000000', callout_style: 'modern', callout_width: 'full', callout_show_icon: 'true' },
+  },
+  weekly_histology_facts: {
+    meta: { label: 'Datos histológicos de la semana', icon: 'DATOS', description: 'Dos datos con ilustraciones, imágenes o GIF editables.', color: '#5a3f8f' },
+    schemaVersion: 1,
+    defaultContent: WEEKLY_FACTS_CONTENT,
   },
   weekly_publication: {
     meta: { label: 'Publicación semanal', icon: 'SEM', description: 'Presenta los temas y la placa destacada de la semana.', color: '#2563eb' },
@@ -438,6 +444,16 @@ export const normalizeBlockContent = (
     acc[k] = typeof v === 'string' ? v : String(v);
     return acc;
   }, {});
+
+  if (type === 'weekly_histology_facts') {
+    const legacyTopics: Record<string, string> = {
+      'Tema 03 · Tercer parcial': WEEKLY_FACTS_CONTENT.fact_1_topic,
+      'Tema 04 · Tercer parcial': WEEKLY_FACTS_CONTENT.fact_2_topic,
+    };
+    for (const key of ['fact_1_topic', 'fact_2_topic']) {
+      if (legacyTopics[entries[key]]) entries[key] = legacyTopics[entries[key]];
+    }
+  }
 
   return {
     ...base,

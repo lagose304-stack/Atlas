@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PageContentEditor, { type PageContentEditorHandle } from './PageContentEditor';
 import type { ContentBlock } from '../types/contentBlocks';
 import type { PageVersionRow } from '../services/pageVersionsService';
+import { LEGACY_HOME_FACTS_ID } from './blocks/weeklyHistologyFactsData';
 
 const mocks = vi.hoisted(() => ({
   from: vi.fn(), upsert: vi.fn(), remove: vi.fn(),
@@ -29,6 +30,25 @@ const block: ContentBlock = {
 };
 
 describe('Conservación de archivos al guardar páginas', () => {
+  it('incorpora los datos actuales en una versión existente y conserva su ocultación al guardar', async () => {
+    const version: PageVersionRow = {
+      id: 22, entity_type: 'home_page', entity_id: 0, version_name: 'Inicio activo',
+      blocks: [structuredClone(block)], blocks_count: 1, description: null, is_published: true,
+      created_by: null, created_by_name: null, updated_by: null, updated_by_name: null,
+      published_at: null, created_at: '2026-11-12', updated_at: '2026-11-12',
+    };
+    const ref = createRef<PageContentEditorHandle>();
+    const onBlocksChange = vi.fn();
+    render(<PageContentEditor ref={ref} entityType="home_page" entityId={0} activeVersion={version} includeHomeDefaults autoSave={false} onBlocksChange={onBlocksChange} />);
+    await waitFor(() => expect(onBlocksChange).toHaveBeenLastCalledWith(expect.arrayContaining([expect.objectContaining({ id: LEGACY_HOME_FACTS_ID, block_type: 'weekly_histology_facts' })])));
+    await act(async () => { expect(await ref.current!.saveChanges()).toBe(true); });
+    expect(mocks.saveVersion).toHaveBeenCalledWith(22, expect.arrayContaining([expect.objectContaining({ block_type: 'weekly_histology_facts' })]));
+    act(() => ref.current!.requestDeleteBlock(LEGACY_HOME_FACTS_ID));
+    fireEvent.click(screen.getByRole('button', { name: 'Ocultar bloque' }));
+    await act(async () => { expect(await ref.current!.saveChanges()).toBe(true); });
+    expect(version.blocks.find(item => item.id === LEGACY_HOME_FACTS_ID)?.content.facts_visible).toBe('false');
+  });
+
   beforeEach(() => {
     vi.stubGlobal('localStorage', { getItem: () => null, setItem: vi.fn() });
     mocks.upsert.mockReset().mockResolvedValue({ error: null });

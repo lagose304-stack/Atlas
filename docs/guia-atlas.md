@@ -322,7 +322,7 @@ Celular y tablet usan los mismos filtros de color ligeros durante toda la sesió
 
 ### Inventario de bloques que admiten imágenes
 
-Revisión local del 10 de noviembre de 2026 del registro de bloques, sus editores y el renderizador compartido. Estos trece tipos ofrecen campos propios para seleccionar imágenes. El marco de referencia es el de Generalidades del Tejido, con cuatro esquinas blancas y acercamiento interior de 1.03 en 0.35 segundos. El indicador Ampliar acompaña las fotos que abren el visor.
+Revisión local del 10 de noviembre de 2026 del registro de bloques, sus editores y el renderizador compartido. Estos catorce tipos ofrecen campos propios para seleccionar imágenes. El marco de referencia es el de Generalidades del Tejido, con cuatro esquinas blancas y acercamiento interior de 1.03 en 0.35 segundos. El indicador Ampliar acompaña las fotos que abren el visor.
 
 | Componente del editor | Tipo | Imágenes admitidas y recorrido revisado |
 | --- | --- | --- |
@@ -333,6 +333,7 @@ Revisión local del 10 de noviembre de 2026 del registro de bloques, sus editore
 | Galería deslizante | carousel | Fotos por diapositiva; marco, acercamiento y visor. |
 | Texto + galería | text_carousel | Fotos del carrusel lateral; reutiliza el reproductor de galería. |
 | Doble galería | double_carousel | Fotos de ambos carruseles; reutiliza el reproductor de galería. |
+| Datos histológicos de la semana | weekly_histology_facts | Una o dos tarjetas; ilustración original o imagen/GIF de referencia por tarjeta, con ampliación opcional. |
 | Generalidades del Tejido | histology_generalities | Micrografía de referencia; diseño que sirve de referencia para los demás. |
 | Tríada. Función, Criterios y Ubicaciones | histology_pillars | Foto de función; cubiertas las variantes de una sola tarjeta y de varias tarjetas, con pie separado y visor. |
 | Tinciones Histológicas | histology_stains | Una muestra por tinción; esquinas, acercamiento e indicador compacto dentro de la miniatura. |
@@ -377,3 +378,11 @@ Los trece bloques con imágenes admiten GIF desde el selector compartido de Page
 Vite, Express y el Worker de Cloudflare ya guardan el cuerpo y el tipo MIME del original recibido; el Worker desplegable está en cloudflare/_worker.js. La reproducción pública carga el archivo directamente desde R2. Las pruebas de subida usan solicitudes simuladas y no escriben en producción.
 
 Comprobado localmente el 12 de noviembre de 2026 con 71 pruebas de subida, URLs y renderizado, TypeScript y compilación. En navegador se simuló la subida de un GIF de dos fotogramas, verificando sus bytes originales en la petición y fotogramas distintos sin interacción en la vista pública. El ejemplo incluyó los trece tipos de bloque y 21 instancias de imagen. Las solicitudes de escritura se interceptaron y no se subió contenido a R2 durante la comprobación.
+
+### Datos histológicos de la semana como bloque editable
+
+weekly_histology_facts está registrado en tipos, biblioteca, renderizador y editores visual y de formulario. Los valores iniciales viven en weeklyHistologyFactsData.ts y conservan los textos e ilustraciones del hígado y del asa de Henle. WeeklyHistologyFacts mantiene el diseño original de dos tarjetas. Sus opciones permiten editar título, etiqueta, descripción y pista, mostrar uno o dos datos, intercambiarlos, elegir imagen o GIF para cada uno, cambiar texto alternativo y ajuste, restaurar la ilustración y permitir o desactivar ampliación.
+
+Al abrir una versión del inicio en EditorPaginas, includeHomeDefaults incorpora el bloque heredado si falta, con un UUID estable y sin duplicarlo. Se incluye en el borrador y se persiste mediante el guardado normal de esa versión, incluido su guardado automático; su inserción cuenta como cambio pendiente. El bloque heredado puede ocultarse desde sus opciones o desde la acción de ocultación; se conserva su registro invisible para evitar que reaparezca el contenido fijo anterior. La vista pública Home usa los bloques de datos de la publicación y, mientras no haya ninguno en el snapshot publicado, conserva la sección heredada. Los cambios del borrador se hacen públicos al publicar. El bloque continúa encima de la cuenta regresiva en el inicio.
+
+Comprobación local con una versión y servicios simulados: se incorporó el bloque a una plantilla existente, se modificó su título, se subió un GIF de referencia mediante el selector compartido, se guardó y se verificó una única sección en el inicio simulado, a 1440 y 390 px. No se modificaron versiones ni publicaciones remotas durante las pruebas.

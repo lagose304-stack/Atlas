@@ -158,7 +158,9 @@ const Home: React.FC = () => {
           </section>
         )}
 
-        <WeeklyHistologyFacts />
+        {contentBlocks.some(block => block.block_type === 'weekly_histology_facts')
+          ? <ContentBlockRenderer blocks={contentBlocks.filter(block => block.block_type === 'weekly_histology_facts')} />
+          : <WeeklyHistologyFacts />}
 
         <ChristmasCountdown />
 

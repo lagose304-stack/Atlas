@@ -1,3 +1,5 @@
+import WeeklyHistologyFactsEditor from './page-editor/WeeklyHistologyFactsEditor';
+import { includeHomeWeeklyFacts, LEGACY_HOME_FACTS_ID } from './blocks/weeklyHistologyFactsData';
 import ImageExpansionControl from './page-editor/ImageExpansionControl';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, X, Layers, ChevronDown, ChevronUp, Pencil, Check, Eye, Copy, Trash2, ArrowUp, ArrowDown, Scissors, ClipboardPaste } from 'lucide-react';
@@ -206,6 +208,7 @@ interface PageContentEditorProps {
   onManualSaveRequest?: () => Promise<void> | void;
   experienceMode?: 'simple' | 'advanced';
   autoSave?: boolean;
+  includeHomeDefaults?: boolean;
 }
 
 export interface PageContentEditorHandle {
@@ -244,6 +247,7 @@ const BLOCK_TOOLBAR_GROUPS: Array<{ title: string; types: BlockType[] }> = [
       'histology_bullet_cards',
       'histology_horizontal_cards',
       'histology_extra_data',
+      'weekly_histology_facts',
     ],
   },
 ];
@@ -284,6 +288,7 @@ const BLOCK_TYPE_VISUAL_ICON: Record<BlockType, string> = {
   histology_bullet_cards: 'TVIN',
   histology_horizontal_cards: 'THOR',
   histology_extra_data: 'DATO',
+  weekly_histology_facts: 'DATOS',
   topic_divisions: 'DIV',
 };
 
@@ -298,6 +303,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
   onManualSaveRequest,
   experienceMode = 'advanced',
   autoSave = true,
+  includeHomeDefaults = false,
 }, ref) => {
   const [blocks, setBlocks] = useState<EditorBlock[]>([]);
   const savedIdsRef = useRef<Set<string>>(new Set());
@@ -622,12 +628,13 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       setSaveError(null);
 
       if (activeVersion) {
-        const loaded: EditorBlock[] = (activeVersion.blocks ?? []).map((b: ContentBlock) => ({
+        const original = activeVersion.blocks ?? [];
+        const loaded: EditorBlock[] = (includeHomeDefaults ? includeHomeWeeklyFacts(original, entityType, entityId) : original).map((b: ContentBlock) => ({
           ...b,
           content: normalizeBlockContent(b.block_type, b.content),
           _isNew: false,
         }));
-        persistedBlocksFingerprintRef.current = getBlocksFingerprint(loaded);
+        persistedBlocksFingerprintRef.current = getBlocksFingerprint(loaded.filter(block => original.some((saved: ContentBlock) => saved.id === block.id)));
         blocksRef.current = loaded;
         historyPastRef.current = [];
         historyFutureRef.current = [];
@@ -656,12 +663,13 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       if (reqId !== reqIdRef.current) return;
 
       if (error) console.error('Error al cargar bloques:', error);
-      const loaded: EditorBlock[] = (data ?? []).map((b: ContentBlock) => ({
+      const original = data ?? [];
+      const loaded: EditorBlock[] = (includeHomeDefaults ? includeHomeWeeklyFacts(original, entityType, entityId) : original).map((b: ContentBlock) => ({
         ...b,
         content: normalizeBlockContent(b.block_type, b.content),
         _isNew: false,
       }));
-      persistedBlocksFingerprintRef.current = getBlocksFingerprint(loaded);
+      persistedBlocksFingerprintRef.current = getBlocksFingerprint(loaded.filter(block => original.some((saved: ContentBlock) => saved.id === block.id)));
       blocksRef.current = loaded;
       historyPastRef.current = [];
       historyFutureRef.current = [];
@@ -677,7 +685,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     };
 
     load();
-  }, [entityType, entityId, activeVersion?.id]);
+  }, [entityType, entityId, activeVersion?.id, includeHomeDefaults]);
 
   useEffect(() => {
     blocksRef.current = blocks;
@@ -986,6 +994,9 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     if (cutBlockIds.includes(blockId)) setCutBlockIds(prev => prev.filter(id => id !== blockId));
     setBlocks(prev => {
       const toDelete = prev.find(b => b.id === blockId);
+      if (blockId === LEGACY_HOME_FACTS_ID) {
+        return prev.map(block => block.id === blockId ? { ...block, content: { ...block.content, facts_visible: 'false' } } : block);
+      }
       const deletingContainer = toDelete?.block_type === 'columns_2' || toDelete?.block_type === 'topic_divisions';
       let pairedSectionEndId = '';
       if (toDelete?.block_type === 'section') {
@@ -2331,11 +2342,11 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
         <div className="visual-editor-dialog-backdrop" role="presentation" onMouseDown={() => setDeleteTargetId(null)}>
           <div className="visual-editor-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-block-title" onMouseDown={event => event.stopPropagation()}>
             <span className="visual-editor-dialog-icon" aria-hidden="true">!</span>
-            <h3 id="delete-block-title">¿Eliminar este bloque?</h3>
-            <p>{blocks.find(block => block.id === deleteTargetId)?.block_type === 'columns_2' ? `También se eliminarán los ${blocks.filter(block => block.content.layout_parent_id === deleteTargetId).length} componentes que contiene. Puedes recuperarlos inmediatamente con “Deshacer”.` : 'El bloque desaparecerá del borrador. Puedes recuperarlo inmediatamente con “Deshacer”.'}</p>
+            <h3 id="delete-block-title">{deleteTargetId === LEGACY_HOME_FACTS_ID ? '¿Ocultar este bloque del inicio?' : '¿Eliminar este bloque?'}</h3>
+            <p>{deleteTargetId === LEGACY_HOME_FACTS_ID ? 'Este bloque forma parte del inicio actual. Se ocultará de la página pública y podrás volver a mostrarlo desde sus opciones.' : blocks.find(block => block.id === deleteTargetId)?.block_type === 'columns_2' ? `También se eliminarán los ${blocks.filter(block => block.content.layout_parent_id === deleteTargetId).length} componentes que contiene. Puedes recuperarlos inmediatamente con “Deshacer”.` : 'El bloque desaparecerá del borrador. Puedes recuperarlo inmediatamente con “Deshacer”.'}</p>
             <div className="visual-editor-dialog-actions">
               <button type="button" className="secondary" onClick={() => setDeleteTargetId(null)}>Cancelar</button>
-              <button type="button" className="danger" onClick={confirmDeleteBlock}>Eliminar bloque</button>
+              <button type="button" className="danger" onClick={confirmDeleteBlock}>{deleteTargetId === LEGACY_HOME_FACTS_ID ? 'Ocultar bloque' : 'Eliminar bloque'}</button>
             </div>
           </div>
         </div>
@@ -2911,6 +2922,7 @@ const MemoBlockContentEditor = React.memo(({
         />
       )}
 
+      {block.block_type === 'weekly_histology_facts' && <WeeklyHistologyFactsEditor content={block.content} onChange={changes => onUpdateBlockContent(block.id, changes)} onPickImage={field => onOpenImageModal(block.id, field)} />}
       {block.block_type === 'histology_pillars' && (
         <HistologyPillarsInlineEditor
           blockId={block.id}

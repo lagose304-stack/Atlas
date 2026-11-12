@@ -1,3 +1,4 @@
+import WeeklyHistologyFactsEditor from './WeeklyHistologyFactsEditor';
 import ImageExpansionControl from './ImageExpansionControl';
 import React, { useState } from 'react';
 import { AlignCenter, AlignLeft, AlignRight, Bold, Copy, ImagePlus, Italic, Link2, List, ListOrdered, Palette, RemoveFormatting, RotateCcw, SlidersHorizontal, Strikethrough, Trash2, Type, Underline, X } from 'lucide-react';
@@ -252,6 +253,7 @@ const VisualBlockProperties: React.FC<VisualBlockPropertiesProps> = ({
     if (block.block_type === 'list') {
       return <TextAreaField label="Elementos de la lista" value={content.items ?? ''} placeholder="Un elemento por línea" onChange={items => onChange({ items })} />;
     }
+    if (block.block_type === 'weekly_histology_facts') return <WeeklyHistologyFactsEditor content={content} onChange={onChange} onPickImage={onPickImage} />;
     if (block.block_type === 'weekly_publication') {
       return <>
         <TextAreaField

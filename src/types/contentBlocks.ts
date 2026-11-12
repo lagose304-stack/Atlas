@@ -8,6 +8,7 @@ export type BlockType =
   | 'three_images'
   | 'callout'
   | 'weekly_publication'
+  | 'weekly_histology_facts'
   | 'weekly_test'
   | 'exam_week'
   | 'list'

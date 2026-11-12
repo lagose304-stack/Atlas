@@ -25,7 +25,7 @@ function makeBlock(type: BlockType): ContentBlock {
   return {
     id: `expansion-${type}`, entity_type: 'home_page', entity_id: 0, sort_order: 0, block_type: type,
     content: {
-      url: photo, image_url: photo, image_url_left: photo, image_url_right: photo,
+      url: photo, image_url: photo, fact_1_image_url: photo, fact_2_image_url: photo, image_url_left: photo, image_url_right: photo,
       image_url_1: photo, image_url_2: photo, image_url_3: photo,
       image_1: photo, image_1_url: photo, left_image_url_1: photo, right_image_url_1: photo,
       function_image_url: photo, main_function_name: 'Función',
@@ -64,7 +64,7 @@ describe.each(types)('Ampliación en %s', (type) => {
   it('abre con contenido anterior sin el ajuste y deja de abrir al desactivarlo', async () => {
     const block = makeBlock(type);
     const { container, unmount } = render(<ContentBlockRenderer blocks={[block]} />);
-    const photoElement = container.querySelector('img');
+    const photoElement = container.querySelector('img[src*="example.com/expansion"]');
     expect(photoElement).not.toBeNull();
     fireEvent.click(photoElement!);
     await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
