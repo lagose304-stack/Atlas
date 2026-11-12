@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { getCloudinaryImageUrl, getImageCandidateUrls, invalidateImageCache } from './cloudinaryImages';
 
 describe('getCloudinaryImageUrl', () => {
+  it.each(['thumbSmall', 'thumb', 'cardWideSmall', 'cardWide', 'view', 'zoom'] as const)('conserva el GIF original animado en el perfil %s', profile => {
+    const source = 'https://r2.atlas-tests.invalid/atlas-content/animacion.GIF?v=4#foto';
+    expect(getCloudinaryImageUrl(source, profile)).toBe(source);
+    expect(getImageCandidateUrls(source, profile)).toEqual([source]);
+  });
   it('devuelve la URL con sufijo _thumb.webp cuando el perfil es thumb o thumbSmall', () => {
     const source = 'https://r2.atlas-tests.invalid/placas/epitelio/placa.webp';
     const result = getCloudinaryImageUrl(source, 'thumb');

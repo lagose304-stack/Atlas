@@ -1302,7 +1302,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     if (!file || !imageModal) return;
     setUploadingImage(true);
     try {
-      const result = await uploadToCloudinary(file, { folder: 'atlas-content', optimizeImage: true });
+      const result = await uploadToCloudinary(file, { folder: 'atlas-content', optimizeImage: true, preserveAnimation: true });
       updateBlockContent(imageModal.blockId, {
         [imageModal.fieldKey]: result.secure_url,
         ...(imageModal.fieldKey === 'image_url' && blocksRef.current.find(block => block.id === imageModal.blockId)?.block_type === 'weekly_publication'
@@ -2299,7 +2299,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*,.heic,.heif,.tif,.tiff,.bmp,.avif,.webp"
+        accept="image/*,.gif,.heic,.heif,.tif,.tiff,.bmp,.avif,.webp"
         style={{ display: 'none' }}
         onChange={handleFileUpload}
       />
@@ -4850,7 +4850,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
               >
                 <span style={es.dropZoneIcon}>📁</span>
                 <p style={es.dropZoneText}>Haz clic o arrastra una imagen aquí</p>
-                <p style={es.dropZoneHint}>PNG, JPG, WEBP — máximo 10 MB</p>
+                <p style={es.dropZoneHint}>PNG, JPG, WEBP o GIF animado — máximo 10 MB</p>
               </div>
             )}
           </div>

@@ -66,10 +66,13 @@ export const getCloudinaryImageUrl = (
   if (!location.storage || !location.key) return location.url;
 
   let key = location.key;
-  if (profile === 'thumb' || profile === 'thumbSmall') {
-    if (!key.endsWith('_thumb.webp')) key = key.replace(/\.[^/.]+$/, '') + '_thumb.webp';
-  } else {
-    key = key.replace(/_thumb\.webp$/i, '.webp');
+  // Los GIF conservan el original animado en todos los tamaños de componente.
+  if (!/\.gif$/i.test(key)) {
+    if (profile === 'thumb' || profile === 'thumbSmall') {
+      if (!key.endsWith('_thumb.webp')) key = key.replace(/\.[^/.]+$/, '') + '_thumb.webp';
+    } else {
+      key = key.replace(/_thumb\.webp$/i, '.webp');
+    }
   }
   const resolved = new URL(location.url);
   const result = new URL(`${R2_PUBLIC_DOMAIN}/${key}`);

@@ -4,8 +4,36 @@ import { replaceCloudinaryImage, uploadToCloudinary, convertAndOptimizeToWebP, g
 
 vi.mock('axios', () => ({ default: { post: vi.fn(), delete: vi.fn() } }));
 vi.mock('./supabase', () => ({ getAtlasSessionToken: () => 'isolated-test-session' }));
+const NativeFileReader = FileReader;
 
 describe('Reemplazo seguro de imágenes en R2', () => {
+  it('conserva los bytes del GIF del editor y genera únicamente una miniatura WebP', async () => {
+    const content = 'GIF89a-contenido-animado-de-prueba';
+    vi.mocked(axios.post).mockResolvedValueOnce({ data: { secure_url: 'https://r2.atlas-tests.invalid/atlas-content/animacion.gif' } });
+    await uploadToCloudinary(new File([content], 'animacion.GIF', { type: 'image/gif' }), { folder: 'atlas-content', preserveAnimation: true });
+    const form = vi.mocked(axios.post).mock.calls[0][1] as FormData;
+    const original = form.get('file') as File;
+    expect(original.name).toBe('animacion.gif');
+    expect(original.type).toBe('image/gif');
+    const uploadedBytes = await new Promise<string>(resolve => {
+      const reader = new NativeFileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.readAsText(original);
+    });
+    expect(uploadedBytes).toBe(content);
+    expect((form.get('thumb') as File).type).toBe('image/webp');
+    expect(HTMLCanvasElement.prototype.toBlob).toHaveBeenCalledTimes(1);
+    expect(form.get('folder')).toBe('atlas-content');
+  });
+
+  it('conserva la conversión habitual de GIF cuando no se solicita preservar la animación', async () => {
+    vi.mocked(axios.post).mockResolvedValueOnce({ data: { secure_url: 'https://r2.atlas-tests.invalid/imagen.webp' } });
+    await uploadToCloudinary(new File(['GIF89a'], 'imagen.gif', { type: 'image/gif' }));
+    const form = vi.mocked(axios.post).mock.calls[0][1] as FormData;
+    expect((form.get('file') as File).type).toBe('image/webp');
+    expect(HTMLCanvasElement.prototype.toBlob).toHaveBeenCalledTimes(2);
+  });
+
   beforeEach(() => {
     vi.stubGlobal('FileReader', class {
       result = 'data:image/webp;base64,dGVzdA==';

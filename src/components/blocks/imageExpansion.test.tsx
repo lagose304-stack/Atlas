@@ -35,6 +35,15 @@ function makeBlock(type: BlockType): ContentBlock {
 }
 
 describe.each(types)('Ampliación en %s', (type) => {
+  it('muestra el GIF original en la vista pública', () => {
+    const block = makeBlock(type);
+    block.content = Object.fromEntries(Object.entries(block.content).map(([key, value]) => [key, value.replace('.jpg', '.gif')]));
+    const { container } = render(<ContentBlockRenderer blocks={[block]} />);
+    const photos = [...container.querySelectorAll('img')].filter(image => image.src.includes('example.com/expansion'));
+    expect(photos.length).toBeGreaterThan(0);
+    expect(photos.every(image => image.src.endsWith('.gif'))).toBe(true);
+  });
+
   it('activa por defecto y conserva la preferencia desactivada al normalizar', () => {
     const field = IMAGE_EXPANSION_FIELDS[type]!;
     expect(createDefaultBlockContent(type)[field]).toBe('true');

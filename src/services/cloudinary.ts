@@ -39,6 +39,7 @@ const authHeaders = () => {
 };
 
 export type UploadOptions = {
+  preserveAnimation?: boolean;
   folder?: string;
   optimizeForPlaque?: boolean;
   optimizeImage?: boolean;
@@ -193,24 +194,26 @@ export const generateWebPThumbnail = async (
 };
 
 /**
- * Subida universal a Cloudflare R2: Convierte SIEMPRE y obligatoriamente a WebP
- * e incluye miniatura _thumb.webp para asegurar compatibilidad con todas las vistas.
+ * Subida a R2 con miniatura WebP. El editor puede conservar el original GIF animado.
  */
 export const uploadToCloudinary = async (file: File, options?: UploadOptions) => {
   const isPlaque = options?.optimizeForPlaque || (!options?.optimizeImage && file.size > 1.2 * 1024 * 1024);
   
-  // 1. Conversión universal y obligatoria a WebP de máxima calidad
-  const webpFile = await convertAndOptimizeToWebP(file, {
+  const preserveGif = options?.preserveAnimation && (file.type === 'image/gif' || /\.gif$/i.test(file.name));
+  const imageFile = preserveGif ? new File([file], `${file.name.replace(/\.[^.]+$/, '')}.gif`, {
+    type: 'image/gif',
+    lastModified: file.lastModified,
+  }) : await convertAndOptimizeToWebP(file, {
     isPlaque,
     customQuality: options?.quality,
     customMaxDimension: options?.maxDimension,
   });
 
   // 2. Generar miniatura WebP para que Cloudflare R2 disponga de _thumb.webp
-  const thumbFile = await generateWebPThumbnail(webpFile);
+  const thumbFile = await generateWebPThumbnail(imageFile);
 
   const formData = new FormData();
-  formData.append('file', webpFile);
+  formData.append('file', imageFile);
   formData.append('thumb', thumbFile);
   if (options?.folder) {
     formData.append('folder', options.folder);
