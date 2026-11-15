@@ -452,3 +452,6 @@ Comprobación local con una versión y servicios simulados: se incorporó el blo
 
 
 **Confirmacion de borrado de entregas (local):** `InstructorDeleteConfirmation` sustituye el confirm nativo al eliminar desde listado o detalle por un dialogo visible del sitio con nombre, cuenta, referencia y advertencia de perdida permanente. Cancelar recibe el foco inicial; Escape o fondo cancelan, Tab mantiene el foco dentro y al cerrar se restaura el boton de origen. No llama a la RPC hasta pulsar Eliminar definitivamente. Conserva revision local si falla. No requiere SQL nuevo.
+
+
+**Activacion de pantalla completa de instructores:** la solicitud nativa se hace desde el submit de iniciar/recuperar, antes de esperar la RPC para conservar el gesto del usuario. Si se rechaza o no existe API, un aviso ofrece reintento manual; el examen sigue fijo a todo el viewport. Durante el intento, `body[data-atlas-instructor-exam="active"]` oculta `#root` mientras el examen se monta en un portal al body, evitando que la interfaz general permanezca visible. Al entregar, salir o desmontar se restaura el atributo y el scroll; si falla el inicio se abandona el fullscreen solicitado, incluso si su promesa se resuelve despues. No altera cuentas, respuestas ni SQL. Verificado con pruebas de gesto previo a RPC, rechazo, reintento y limpieza, y navegador con API/datos aislados.

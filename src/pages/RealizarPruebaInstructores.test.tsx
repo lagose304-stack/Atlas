@@ -207,6 +207,7 @@ describe('Acceso público a prueba de instructores', () => {
     expect(document.querySelector('.instructor-taking-exam')).toBeInTheDocument();
     expect(screen.getByRole('button',{name:'Guardar y salir'})).toBeInTheDocument();
     expect(document.body.style.overflow).toBe('hidden');
+    expect(document.body).toHaveAttribute('data-atlas-instructor-exam','active');
     fireEvent.click(screen.getByLabelText('Epitelio'));
     fireEvent.click(screen.getByRole('button',{name:'Finalizar prueba'}));
     await screen.findByText('100%');
@@ -214,6 +215,60 @@ describe('Acceso público a prueba de instructores', () => {
     expect(screen.getByTestId('site-footer')).toBeInTheDocument();
     expect(document.querySelector('.instructor-taking-exam')).not.toBeInTheDocument();
     expect(document.body.style.overflow).not.toBe('hidden');
+    expect(document.body).not.toHaveAttribute('data-atlas-instructor-exam');
+  });
+
+  it('solicita pantalla completa antes de esperar el inicio y mantiene el examen si el navegador la rechaza',async()=>{
+    const request=vi.fn().mockRejectedValue(new Error('User activation required'));
+    Object.defineProperty(document.documentElement,'requestFullscreen',{configurable:true,value:request});
+    const backend=mocks.rpc.getMockImplementation();
+    let finish: ((value:unknown)=>void) | undefined;
+    mocks.rpc.mockImplementation((name:string,args?:Record<string,unknown>)=>{
+      if(name==='atlas_begin_instructor_test') {
+        expect(request).toHaveBeenCalledTimes(1);
+        return new Promise(resolve=>{finish=resolve;});
+      }
+      return backend?.(name,args);
+    });
+    try {
+      renderPage();await enter(false);
+      fireEvent.change(await screen.findByLabelText('Nombre completo'),{target:{value:'Ana'}});
+      fireEvent.change(screen.getByLabelText('Número de cuenta'),{target:{value:'001234567890'}});
+      fireEvent.click(screen.getByRole('button',{name:'Continuar a las preguntas'}));
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId('site-header')).toBeInTheDocument();
+      finish?.({data:{ok:true,participant_name:'Ana',account_number:'001234567890',answers:{},current_question_id:null,progress_revision:1},error:null});
+      await screen.findByLabelText('Epitelio');
+      expect(screen.queryByTestId('site-header')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('site-footer')).not.toBeInTheDocument();
+      expect(await screen.findByText(/El navegador no permitió la pantalla completa/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button',{name:'Ampliar a pantalla completa'}));
+      expect(request).toHaveBeenCalledTimes(2);
+    } finally { Reflect.deleteProperty(document.documentElement,'requestFullscreen'); }
+  });
+
+  it('sale de pantalla completa si el inicio falla y restaura la vista normal',async()=>{
+    const request=vi.fn().mockResolvedValue(undefined),exit=vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(document.documentElement,'requestFullscreen',{configurable:true,value:request});
+    Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>request.mock.calls.length?document.documentElement:null});
+    Object.defineProperty(document,'exitFullscreen',{configurable:true,value:exit});
+    const backend=mocks.rpc.getMockImplementation();
+    mocks.rpc.mockImplementation(async(name:string,args?:Record<string,unknown>)=>name==='atlas_begin_instructor_test'
+      ?{data:null,error:{code:'P0001',message:'Esta cuenta ya entrego esta prueba'}}:backend?.(name,args));
+    try {
+      renderPage();await enter(false);
+      fireEvent.change(await screen.findByLabelText('Nombre completo'),{target:{value:'Ana'}});
+      fireEvent.change(screen.getByLabelText('Número de cuenta'),{target:{value:'001234567890'}});
+      fireEvent.click(screen.getByRole('button',{name:'Continuar a las preguntas'}));
+      expect(await screen.findByRole('alert')).toHaveTextContent('ya entrego');
+      await waitFor(()=>expect(exit).toHaveBeenCalledTimes(1));
+      expect(screen.getByTestId('site-header')).toBeInTheDocument();
+      expect(document.body).not.toHaveAttribute('data-atlas-instructor-exam');
+    } finally {
+      Reflect.deleteProperty(document.documentElement,'requestFullscreen');
+      Reflect.deleteProperty(document,'fullscreenElement');
+      Reflect.deleteProperty(document,'exitFullscreen');
+    }
   });
 
 });

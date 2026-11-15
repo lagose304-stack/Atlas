@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Header from '../components/Header';
@@ -40,20 +40,41 @@ function InstructorRunner({ id }: { id: string }) {
   const availability = useInstructorAvailability(meta);
   const focusMode = !!access && started && !result;
   const fullscreenOwned = useRef(false);
+  const fullscreenWanted = useRef(false);
+  const [fullscreenNotice, setFullscreenNotice] = useState('');
+  const releaseScreen = useCallback(() => {
+    fullscreenWanted.current = false;
+    if (fullscreenOwned.current && document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
+    fullscreenOwned.current = false;
+  }, []);
   const expandScreen = () => {
-    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-      void document.documentElement.requestFullscreen().then(() => { fullscreenOwned.current = true; }).catch(() => {});
-    }
+    fullscreenWanted.current = true;
+    setFullscreenNotice('');
+    if (document.fullscreenElement) return;
+    const fallback = () => {
+      if (fullscreenWanted.current) setFullscreenNotice('El navegador no permitió la pantalla completa. Puedes reintentar con el botón Pantalla completa; la prueba sigue ocupando toda la ventana.');
+    };
+    if (!document.documentElement.requestFullscreen) { fallback(); return; }
+    try {
+      void document.documentElement.requestFullscreen().then(() => {
+        if (!fullscreenWanted.current) { void document.exitFullscreen?.().catch(() => {}); return; }
+        fullscreenOwned.current = true;
+      }).catch(fallback);
+    } catch { fallback(); }
   };
+  useEffect(() => releaseScreen, [releaseScreen]);
   useEffect(() => {
     if (!focusMode) return;
-    acquireAtlasScrollLock(); expandScreen();
+    const previous = document.body.getAttribute('data-atlas-instructor-exam');
+    document.body.setAttribute('data-atlas-instructor-exam', 'active');
+    acquireAtlasScrollLock();
     return () => {
+      if (previous === null) document.body.removeAttribute('data-atlas-instructor-exam');
+      else document.body.setAttribute('data-atlas-instructor-exam', previous);
       releaseAtlasScrollLock();
-      if (fullscreenOwned.current && document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
-      fullscreenOwned.current = false;
+      releaseScreen();
     };
-  }, [focusMode]);
+  }, [focusMode, releaseScreen]);
   useEffect(() => {
     if (availability !== 'open' && access && !started && !result) { setAccess(null); setName(''); setAccount(''); setCode(''); }
   }, [availability, access, started, result]);
@@ -149,15 +170,18 @@ function InstructorRunner({ id }: { id: string }) {
       </form>}
       {access && !started && !result && <form className="instructor-panel instructor-access-panel" onSubmit={async event => {
         event.preventDefault(); if (busy || !isInstructorAccount(account) || (!recovering && !name.trim())) return;
+        // Request during the submit gesture, before waiting for the network.
+        expandScreen();
+        let entered = false;
         setBusy(true); setError('');
         try {
           if (recovering) {
             const response = await resumeInstructorTest(id, access.token, account);
-            if (response.ok) adopt(response);
+            if (response.ok) { adopt(response); entered = true; }
             else setError(response.status === 'locked' ? 'Demasiados intentos. Espera 15 minutos antes de volver a recuperar una prueba.'
               : response.status === 'submitted' ? 'Esta cuenta ya entregó esta prueba. Puedes consultar sus resultados cuando termine la revisión.' : response.status === 'version_changed' ? 'Tu intento pertenece a una versión anterior. Contacta al responsable de la prueba; tu progreso sigue guardado.' : 'No encontramos una prueba iniciada para esta cuenta. Comprueba el número de cuenta.');
-          } else adopt(await startInstructorTest(id, access.token, name.trim(), account));
-        } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo preparar la prueba.'); } finally { setBusy(false); }
+          } else { adopt(await startInstructorTest(id, access.token, name.trim(), account)); entered = true; }
+        } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo preparar la prueba.'); } finally { if (!entered) releaseScreen(); setBusy(false); }
       }}>
         <p className="instructor-public-kicker">Paso 2 · Tu identificación</p><div className="instructor-public-tabs" role="group" aria-label="Comenzar o recuperar prueba">
           <button type="button" className="instructor-btn" aria-pressed={!recovering} disabled={busy} onClick={() => { setRecovering(false); setError(''); }}><UserRound size={16} />Nueva prueba</button>
@@ -172,6 +196,7 @@ function InstructorRunner({ id }: { id: string }) {
         <button type="submit" className="instructor-btn instructor-btn-primary" disabled={busy || !isInstructorAccount(account) || (!recovering && !name.trim())}><ArrowRight size={17} />{busy ? 'Preparando prueba…' : recovering ? 'Recuperar y continuar' : 'Continuar a las preguntas'}</button>
       </form>}
       {access && started && !result && <form onSubmit={event => { event.preventDefault(); void submit(); }}>
+        {fullscreenNotice && <p role="status" className="instructor-muted">{fullscreenNotice}</p>}
         <div className="instructor-participant-bar"><span><UserRound size={16} />Participante: <strong>{name}</strong></span><span><CloudCheck size={16} />Guardado automático</span></div>
         {availability !== 'open' ? <section className="instructor-error" role="alert"><h2>El horario de la prueba finalizó</h2><p>Ya no puedes modificar ni entregar respuestas. El último progreso guardado se conserva. Si el responsable amplía el horario de esta misma prueba, podrás recuperarlo con el código y tu cuenta.</p></section>
           : <p role="status" className={progress.status === 'error' ? 'instructor-error' : 'instructor-muted'}>{progress.status === 'saved' ? 'Progreso guardado' : progress.status === 'saving' ? 'Guardando progreso…' : progress.status === 'error' ? 'No se pudo guardar el progreso. Tus respuestas siguen en esta página.' : 'Cambios pendientes de guardar'}</p>}
