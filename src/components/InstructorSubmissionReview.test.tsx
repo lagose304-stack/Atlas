@@ -80,26 +80,44 @@ describe('Revisión manual de señalados', () => {
     render(<InstructorSubmissionReview testId="test" name="Prueba" onClose={vi.fn()}/>);
     fireEvent.click(await screen.findByRole('button',{name:/^Ana Prueba Entrega/}));
     await screen.findByText('1. Señala el núcleo');
-    vi.mocked(window.confirm).mockReturnValue(true);
     fireEvent.click(screen.getByRole('button',{name:'Eliminar esta entrega'}));
+    const confirmation=screen.getByRole('alertdialog',{name:'¿Eliminar esta entrega?'});
+    expect(confirmation).toHaveTextContent('001234567890');
+    expect(confirmation).toHaveTextContent('Esta acción no se puede deshacer');
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(within(confirmation).getByRole('button',{name:'Cancelar'})).toHaveFocus();
+    fireEvent.click(within(confirmation).getByRole('button',{name:'Eliminar definitivamente'}));
     await waitFor(()=>expect(mocks.remove).toHaveBeenCalledWith('test',expect.objectContaining({id:detail.id,revision:1})));
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('001234567890'));
     expect(await screen.findByRole('status')).toHaveTextContent('Entrega eliminada correctamente');
     expect(screen.queryByText('1. Señala el núcleo')).not.toBeInTheDocument();
     expect(screen.getByText('Todavía no hay pruebas enviadas.')).toBeInTheDocument();
   });
   it('cancelar no elimina y un fallo conserva la entrega y la revisión local',async()=>{
     render(<InstructorSubmissionReview testId="test" name="Prueba" onClose={vi.fn()}/>);
-    fireEvent.click(await screen.findByRole('button',{name:/Eliminar entrega de Ana Prueba/}));
+    const deleteButton=await screen.findByRole('button',{name:/Eliminar entrega de Ana Prueba/});
+    deleteButton.focus();
+    fireEvent.click(deleteButton);
     expect(mocks.remove).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button',{name:'Cancelar'}));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button',{name:/Eliminar entrega de Ana Prueba/})).toHaveFocus();
     fireEvent.click(screen.getByRole('button',{name:/^Ana Prueba Entrega/}));
     fireEvent.click(await screen.findByRole('button',{name:'Correcto'}));
     mocks.remove.mockRejectedValue(new Error('No autorizado'));
-    vi.mocked(window.confirm).mockReturnValue(true);
     fireEvent.click(screen.getByRole('button',{name:'Eliminar esta entrega'}));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('También se descartará la revisión');
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button',{name:'Eliminar definitivamente'}));
     expect(await screen.findByRole('alert')).toHaveTextContent('No autorizado');
     expect(screen.getByRole('button',{name:'Correcto'})).toHaveAttribute('aria-pressed','true');
     expect(screen.getByRole('button',{name:'Guardar revisión'})).toBeEnabled();
+  });
+
+  it('Escape cancela el borrado sin solicitar eliminacion',async()=>{
+    render(<InstructorSubmissionReview testId="test" name="Prueba" onClose={vi.fn()}/>);
+    fireEvent.click(await screen.findByRole('button',{name:/Eliminar entrega de Ana Prueba/}));
+    fireEvent.keyDown(screen.getByRole('alertdialog'),{key:'Escape'});
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(mocks.remove).not.toHaveBeenCalled();
   });
 
 });
