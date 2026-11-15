@@ -217,6 +217,7 @@ textarea.instructor-input { min-height: 96px; resize: vertical; }
 .instructor-review-list button { width: 100%; align-items: flex-start; flex-direction: column; gap: 5px; text-align: left; }
 .instructor-review-list button[aria-current="true"] { background: #ede9fe; border-color: #8b5cf6; }
 .instructor-review-list span { font-size: .75rem; }
+.instructor-review-list .instructor-delete-submission { margin-top: 6px; flex-direction: row; align-items: center; justify-content: center; padding: 8px 10px; font-size: .72rem; }
 .instructor-review-detail { border: 1px solid #cbd5e1; padding: 18px; border-radius: 14px; min-width: 0; }
 .instructor-review-item { margin-bottom: 24px; }
 .instructor-review-item .instructor-row { margin-top: 14px; }

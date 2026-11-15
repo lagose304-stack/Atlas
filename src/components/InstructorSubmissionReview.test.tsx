@@ -2,14 +2,15 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import InstructorSubmissionReview from './InstructorSubmissionReview';
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), review: vi.fn() }));
-vi.mock('../services/instructorTests', () => ({ listInstructorSubmissions: mocks.list, getInstructorSubmission: mocks.get, reviewInstructorSubmission: mocks.review }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), review: vi.fn(), remove: vi.fn() }));
+vi.mock('../services/instructorTests', () => ({ listInstructorSubmissions: mocks.list, getInstructorSubmission: mocks.get, reviewInstructorSubmission: mocks.review, deleteInstructorSubmission:mocks.remove }));
 vi.mock('./InstructorReferenceImageView', () => ({ default: ({ url, annotations }: { url: string; annotations: unknown }) => <div data-testid="image" data-markers={JSON.stringify(annotations)}>{url}</div> }));
 const detail = { id: 'submission-1', participant_name: 'Ana Prueba', test_id: 'test', test_revision: 2, snapshot: { nombre: 'Prueba', questions: [
   { id: 'point', type: 'image_point', titulo: 'Señala el núcleo', image: { url: 'https://example.test/original.webp' } },
 ] }, answers: { point: { x: .3, y: .4 } }, reviews: {}, revision: 1, created_at: '2026-11-14T12:00:00Z', auto_correct: 1, total: 2 };
 describe('Revisión manual de señalados', () => {
   beforeEach(() => {
+    mocks.remove.mockReset().mockResolvedValue({ok:true});
     mocks.list.mockReset().mockResolvedValue([{ id: detail.id, participant_name: detail.participant_name, correct: 1, percentage: null, created_at: detail.created_at, test_revision: 2, total: 2, pending_review: 1, revision: 1 }]);
     mocks.get.mockReset().mockResolvedValue(detail);
     mocks.review.mockReset().mockResolvedValue({ ...detail, reviews: { point: true }, revision: 2 });
@@ -46,7 +47,7 @@ describe('Revisión manual de señalados', () => {
     mocks.list.mockResolvedValue([{ id:'auto',participant_name:'Luis Prueba',created_at:detail.created_at,total:1,correct:1,percentage:100,pending_review:0,revision:1 }]);
     mocks.get.mockResolvedValue({...detail,id:'auto',participant_name:'Luis Prueba',total:1,snapshot:{nombre:'Prueba',questions:[{id:'q',type:'short_answer',titulo:'Tejido',accepted_answers:[]}]},answers:{q:'Epitelio'}});
     render(<InstructorSubmissionReview testId="test" name="Prueba" onClose={vi.fn()} />);
-    fireEvent.click(await screen.findByRole('button', { name: /Luis Prueba/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Luis Prueba/ }));
     expect(await screen.findByText('Epitelio')).toBeInTheDocument();
     expect(screen.getByText('Revisada')).toBeInTheDocument();
     expect(screen.getByText('Puntaje: 1/1 (100%)')).toBeInTheDocument();
@@ -72,6 +73,33 @@ describe('Revisión manual de señalados', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar revisión' }));
     await waitFor(() => expect(mocks.review).toHaveBeenCalledWith(weighted, { brief: true, point: false }));
     expect(await screen.findByText('Puntaje: 0.5/1 (50%)')).toBeInTheDocument();
+  });
+
+  it('confirma con nombre y cuenta y elimina la entrega seleccionada y su detalle',async()=>{
+    mocks.list.mockResolvedValueOnce([{id:detail.id,participant_name:'Ana Prueba',account_number:'001234567890',revision:1,created_at:detail.created_at,total:2,pending_review:1}]).mockResolvedValue([]);
+    render(<InstructorSubmissionReview testId="test" name="Prueba" onClose={vi.fn()}/>);
+    fireEvent.click(await screen.findByRole('button',{name:/^Ana Prueba Entrega/}));
+    await screen.findByText('1. Señala el núcleo');
+    vi.mocked(window.confirm).mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button',{name:'Eliminar esta entrega'}));
+    await waitFor(()=>expect(mocks.remove).toHaveBeenCalledWith('test',expect.objectContaining({id:detail.id,revision:1})));
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('001234567890'));
+    expect(await screen.findByRole('status')).toHaveTextContent('Entrega eliminada correctamente');
+    expect(screen.queryByText('1. Señala el núcleo')).not.toBeInTheDocument();
+    expect(screen.getByText('Todavía no hay pruebas enviadas.')).toBeInTheDocument();
+  });
+  it('cancelar no elimina y un fallo conserva la entrega y la revisión local',async()=>{
+    render(<InstructorSubmissionReview testId="test" name="Prueba" onClose={vi.fn()}/>);
+    fireEvent.click(await screen.findByRole('button',{name:/Eliminar entrega de Ana Prueba/}));
+    expect(mocks.remove).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:/^Ana Prueba Entrega/}));
+    fireEvent.click(await screen.findByRole('button',{name:'Correcto'}));
+    mocks.remove.mockRejectedValue(new Error('No autorizado'));
+    vi.mocked(window.confirm).mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button',{name:'Eliminar esta entrega'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('No autorizado');
+    expect(screen.getByRole('button',{name:'Correcto'})).toHaveAttribute('aria-pressed','true');
+    expect(screen.getByRole('button',{name:'Guardar revisión'})).toBeEnabled();
   });
 
 });

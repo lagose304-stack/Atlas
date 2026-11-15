@@ -5,8 +5,8 @@ import RealizarPruebaInstructores from './RealizarPruebaInstructores';
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock('../services/supabase', () => ({ supabase: { rpc: mocks.rpc } }));
-vi.mock('../components/Header', () => ({ default: () => null }));
-vi.mock('../components/Footer', () => ({ default: () => null }));
+vi.mock('../components/Header', () => ({ default: () => <header data-testid="site-header">Cabecera del sitio</header> }));
+vi.mock('../components/Footer', () => ({ default: () => <footer data-testid="site-footer">Pie del sitio</footer> }));
 const meta = { id: 't1', nombre: 'Evaluación docente', instrucciones: 'Lee atentamente.', question_count: 1 };
 const publicContent = { nombre: meta.nombre, instrucciones: meta.instrucciones, questions: [
   { id: 'q1', titulo: 'Identifica el tejido', options: [{ id: 'a', texto: 'Epitelio' }, { id: 'b', texto: 'Músculo' }] },
@@ -195,6 +195,25 @@ describe('Acceso público a prueba de instructores', () => {
     expect(screen.getByLabelText('Epitelio')).toBeDisabled();
     expect(screen.getByRole('button',{name:'Finalizar prueba'})).toBeDisabled();
     expect(mocks.rpc.mock.calls.some(([name])=>name==='atlas_grade_instructor_test')).toBe(false);
+  });
+
+  it('oculta cabecera y pie al responder y los restaura al entregar',async()=>{
+    renderPage();
+    expect(screen.getByTestId('site-header')).toBeInTheDocument();
+    expect(screen.getByTestId('site-footer')).toBeInTheDocument();
+    await enter();await screen.findByLabelText('Epitelio');
+    expect(screen.queryByTestId('site-header')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('site-footer')).not.toBeInTheDocument();
+    expect(document.querySelector('.instructor-taking-exam')).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Guardar y salir'})).toBeInTheDocument();
+    expect(document.body.style.overflow).toBe('hidden');
+    fireEvent.click(screen.getByLabelText('Epitelio'));
+    fireEvent.click(screen.getByRole('button',{name:'Finalizar prueba'}));
+    await screen.findByText('100%');
+    expect(screen.getByTestId('site-header')).toBeInTheDocument();
+    expect(screen.getByTestId('site-footer')).toBeInTheDocument();
+    expect(document.querySelector('.instructor-taking-exam')).not.toBeInTheDocument();
+    expect(document.body.style.overflow).not.toBe('hidden');
   });
 
 });

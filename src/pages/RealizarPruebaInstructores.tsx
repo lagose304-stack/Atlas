@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import HoldToRevealCodeInput from '../components/HoldToRevealCodeInput';
 import InstructorExamNavigator from '../components/InstructorExamNavigator';
-import { ArrowLeft, ArrowRight, CalendarClock, CheckCheck, ClipboardCheck, CloudCheck, KeyRound, Layers3, LoaderCircle, RotateCcw, Send, ShieldCheck, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarClock, CheckCheck, ClipboardCheck, CloudCheck, KeyRound, Layers3, LoaderCircle, Maximize2, RotateCcw, Send, ShieldCheck, UserRound } from 'lucide-react';
+import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
 import useInstructorProgress from '../hooks/useInstructorProgress';
 import InstructorSectionScores from '../components/InstructorSectionScores';
 import InstructorParticipantResults from '../components/InstructorParticipantResults';
@@ -36,6 +38,22 @@ function InstructorRunner({ id }: { id: string }) {
   const [retry, setRetry] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const availability = useInstructorAvailability(meta);
+  const focusMode = !!access && started && !result;
+  const fullscreenOwned = useRef(false);
+  const expandScreen = () => {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      void document.documentElement.requestFullscreen().then(() => { fullscreenOwned.current = true; }).catch(() => {});
+    }
+  };
+  useEffect(() => {
+    if (!focusMode) return;
+    acquireAtlasScrollLock(); expandScreen();
+    return () => {
+      releaseAtlasScrollLock();
+      if (fullscreenOwned.current && document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
+      fullscreenOwned.current = false;
+    };
+  }, [focusMode]);
   useEffect(() => {
     if (availability !== 'open' && access && !started && !result) { setAccess(null); setName(''); setAccount(''); setCode(''); }
   }, [availability, access, started, result]);
@@ -101,13 +119,17 @@ function InstructorRunner({ id }: { id: string }) {
     finally { setBusy(false); }
   };
 
-  return <div className="instructor-page instructor-public-scope">
-    <Header onBeforeNavigate={leave} />
+  const view = <div className={`instructor-page instructor-public-scope${focusMode ? ' instructor-taking-exam' : ''}`}>
+    {!focusMode && <Header onBeforeNavigate={leave} />}
+    {focusMode && <header className="instructor-taking-topbar"><div><p className="instructor-public-kicker">Atlas · Prueba en curso</p><h1>{access.test.nombre}</h1></div><div className="instructor-taking-actions">
+      <button type="button" className="instructor-btn" aria-label="Ampliar a pantalla completa" onClick={expandScreen}><Maximize2 size={17} /><span>Pantalla completa</span></button>
+      <button type="button" className="instructor-btn" disabled={busy} onClick={() => leave(() => navigate('/evaluaciones'))}><ArrowLeft size={16} />Guardar y salir</button>
+    </div></header>}
     <main className="instructor-main">
-      <Link to="/evaluaciones" className="instructor-btn" onClick={event => { if (started && !result) { event.preventDefault(); leave(() => navigate('/evaluaciones')); } }}><ArrowLeft size={16} />Volver a evaluaciones</Link>
+      {!focusMode && <><Link to="/evaluaciones" className="instructor-btn" onClick={event => { if (started && !result) { event.preventDefault(); leave(() => navigate('/evaluaciones')); } }}><ArrowLeft size={16} />Volver a evaluaciones</Link>
       <header className="instructor-public-hero"><div className="instructor-public-hero-icon"><ClipboardCheck size={30} /></div><div><p className="instructor-public-kicker">Atlas de Histología · Evaluaciones</p><h1>{access?.test.nombre ?? meta?.nombre ?? 'Prueba de instructores'}</h1><p>Un espacio para demostrar tus conocimientos y habilidades de microscopía.</p>
         <div className="instructor-public-meta"><span><Layers3 size={14} />{meta?.question_count ?? '—'} preguntas</span><span><ShieldCheck size={14} />Acceso con código</span>{meta?.closes_at && <span><CalendarClock size={14} />Cierre: {formatInstructorSchedule(meta.closes_at)}</span>}</div>
-      </div></header>
+      </div></header></>}
       {loading && <p role="status">Cargando prueba…</p>}
       {error && <p role="alert" className="instructor-error">{error}</p>}
       {!loading && !meta && <button type="button" className="instructor-btn" onClick={() => setRetry(n => n + 1)}>Volver a comprobar</button>}
@@ -181,8 +203,9 @@ function InstructorRunner({ id }: { id: string }) {
         <button type="button" className="instructor-btn" onClick={() => { setAccess(null); setStarted(false); setResult(null); setShowResults(true); setError(''); }}>Consultar una entrega revisada</button>
       </section>}
     </main>
-    <Footer />
+    {!focusMode && <Footer />}
   </div>;
+  return focusMode ? createPortal(view, document.body) : view;
 }
 
 export default function RealizarPruebaInstructores() {

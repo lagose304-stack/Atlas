@@ -8,7 +8,8 @@ import { pathToFileURL } from 'node:url';
 if (!process.argv[2]) throw new Error('Indica la ruta del módulo PGlite instalado fuera del proyecto.');
 const { PGlite } = await import(pathToFileURL(process.argv[2]).href);
 const db = new PGlite();
-const withSchedule = process.argv.includes('--schedule');
+const withDeletion = process.argv.includes('--deletion');
+const withSchedule = process.argv.includes('--schedule') || withDeletion;
 const withResume = process.argv.includes('--resume') || withSchedule;
 const withSections = process.argv.includes('--sections') || withResume;
 const withWeightedReview = process.argv.includes('--review') || withSections;
@@ -583,6 +584,38 @@ try {
     check((await call('atlas_instructor_participant_result',[m.id,'772211','1234567890'])).ok,'Reactivar consulta tras ventana de bloqueo');
     await db.exec(await readFile(new URL('../rollback_schedule_instructor_tests_and_results.sql',import.meta.url),'utf8'));
     check((await call('atlas_get_instructor_submission',[mr.submission_id])).answers.brief==='Texto enviado','Recuperacion conserva entregas');
+  }
+  if(withDeletion){
+    await db.exec(await readFile(new URL('../delete_instructor_submissions.sql',import.meta.url),'utf8'));
+    await actor(4);await ip('192.0.2.190');
+    let t=await call('atlas_save_instructor_test',[null,null,content,'664422']);t=await call('atlas_publish_instructor_test',[t.id,t.revision,true]);
+    const a=await call('atlas_unlock_instructor_test',[t.id,'664422']);await call('atlas_begin_instructor_test',[t.id,a.token,'Persona Eliminar','1234567890']);
+    const r=await call('atlas_grade_instructor_test',[t.id,a.token,{q1:'a'}]);
+    const b=await call('atlas_unlock_instructor_test',[t.id,'664422']);await call('atlas_begin_instructor_test',[t.id,b.token,'Conservar Persona','1234567891']);
+    const keep=await call('atlas_grade_instructor_test',[t.id,b.token,{q1:'b'}]);
+    const testBefore=await db.query('select draft,published from public.instructor_tests where id=$1',[t.id]);
+    await actor(null);await reject(()=>call('atlas_delete_instructor_submission',[t.id,r.submission_id,1]),/No autorizado/);
+    await actor(9);await reject(()=>call('atlas_delete_instructor_submission',[t.id,r.submission_id,1]),/No autorizado/);
+    await actor(4);
+    await reject(()=>call('atlas_delete_instructor_submission',[t.id,r.submission_id,99]),/entrega cambio/);
+    check((await call('atlas_get_instructor_submission',[r.submission_id])).answers.q1==='a','Conflicto no borra respuestas');
+    let unrelated=await call('atlas_save_instructor_test',[null,null,content,'664422']);
+    check((await call('atlas_delete_instructor_submission',[unrelated.id,r.submission_id,1])).ok,'ID de otra prueba no borra entrega ajena');
+    check((await call('atlas_get_instructor_submission',[r.submission_id])).answers.q1==='a','Entrega sigue si se selecciona otra prueba');
+    check((await call('atlas_delete_instructor_submission',[t.id,r.submission_id,1])).ok,'Borrar una entrega con autoridad y revision correctas');
+    await reject(()=>call('atlas_get_instructor_submission',[r.submission_id]),/Entrega no disponible/);
+    check((await db.query('select count(*)::integer n from public.instructor_test_progress where submission_id=$1',[r.submission_id])).rows[0].n===0,'Eliminar progreso asociado a la entrega');
+    check((await call('atlas_grade_instructor_test',[t.id,a.token,{q1:'a'}])).status==='expired','Eliminar resultado temporal y token para no recuperar datos borrados');
+    check((await call('atlas_get_instructor_submission',[keep.submission_id])).answers.q1==='b','Otra entrega de la misma prueba se conserva');
+    check(JSON.stringify((await db.query('select draft,published from public.instructor_tests where id=$1',[t.id])).rows)===JSON.stringify(testBefore.rows),'Borrar entrega no altera preguntas ni publicacion');
+    check((await call('atlas_delete_instructor_submission',[t.id,r.submission_id,1])).ok,'Reintento de borrado idempotente');
+    const c=await call('atlas_unlock_instructor_test',[t.id,'664422']);
+    check((await call('atlas_begin_instructor_test',[t.id,c.token,'Persona Nueva','1234567890'])).ok,'Cuenta puede iniciar de nuevo al eliminar entrega y progreso');
+    await db.exec(await readFile(new URL('../disable_delete_instructor_submissions.sql',import.meta.url),'utf8'));
+    await db.exec('SET ROLE anon');await actor(4);
+    await reject(()=>call('atlas_delete_instructor_submission',[t.id,keep.submission_id,1]),/permission denied/);
+    await db.exec('RESET ROLE');
+    check((await call('atlas_get_instructor_submission',[keep.submission_id])).answers.q1==='b','Desactivar borrado conserva entregas');
   }
   await db.exec('SET ROLE anon');
   await reject(() => db.query('select * from public.instructor_tests'), /permission denied/);

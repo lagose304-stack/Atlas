@@ -1,6 +1,14 @@
 /* Public evaluation surfaces share Atlas blue/teal tones; editor stays scoped separately. */
 .instructor-public-scope { --exam-ink: #16344c; --exam-muted: #587086; --exam-line: #c9dde6; --exam-teal: #087f8c; --exam-blue: #155477; color: var(--exam-ink); }
 .instructor-public-scope .atlas-compact-bar { display: none !important; }
+.instructor-taking-exam { position: fixed; inset: 0; z-index: 900; width: 100%; height: 100dvh; overflow: auto; overscroll-behavior: contain; background: #e4eef3; }
+.instructor-taking-exam .instructor-main { width: 100%; box-sizing: border-box; margin: 0 auto; flex: 1; padding-top: 18px; }
+.instructor-taking-topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 15px 28px; border-bottom: 1px solid #c5dce5; background: #f5fbfe; }
+.instructor-taking-topbar > div:first-child { flex: 1; min-width: 180px; }
+.instructor-taking-topbar h1 { margin: 0; color: #214b62; font-size: 1.05rem; line-height: 1.5; overflow-wrap: anywhere; }
+.instructor-taking-topbar .instructor-public-kicker { font-size: .6rem !important; margin-bottom: 4px; }
+.instructor-taking-actions { display: flex; gap: 8px; }
+@media(max-width:540px) { .instructor-taking-topbar { padding: 12px 16px; } .instructor-taking-actions .instructor-btn { padding: 9px 12px; font-size: .75rem; } .instructor-taking-actions button:first-child span { display: none; } }
 .instructor-public-scope .instructor-main > a.instructor-btn { width: fit-content; max-width: 100%; }
 .instructor-public-scope .instructor-public-group { background: #edf5f9; border-color: #c3dbe5; border-radius: 17px; }
 .instructor-public-scope .instructor-main { max-width: 1240px; padding: 28px 32px 56px; }

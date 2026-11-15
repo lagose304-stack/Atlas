@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Check, ClipboardCheck, LoaderCircle, Save, X } from 'lucide-react';
-import { getInstructorSubmission, listInstructorSubmissions, reviewInstructorSubmission, type InstructorSubmission, type InstructorSubmissionSummary } from '../services/instructorTests';
+import { ArrowLeft, Check, ClipboardCheck, LoaderCircle, Save, Trash2, X } from 'lucide-react';
+import { deleteInstructorSubmission, getInstructorSubmission, listInstructorSubmissions, reviewInstructorSubmission, type InstructorSubmission, type InstructorSubmissionSummary } from '../services/instructorTests';
 import { formatInstructorPoints, incisoLetter, instructorIncisoWeight, instructorReviewPoints, instructorSectionResults, isInstructorPointAnswer, requiresInstructorReview, type PublicInstructorQuestion } from '../types/instructorQuestions';
 import InstructorReferenceImageView from './InstructorReferenceImageView';
 import InstructorSectionScores from './InstructorSectionScores';
@@ -43,6 +43,29 @@ export default function InstructorSubmissionReview({ testId, name, onClose }: { 
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar la revisión.'); }
     finally { setBusy(false); }
   };
+  const remove = async (row: InstructorSubmissionSummary) => {
+    if (busy) return;
+    const label = `${row.participant_name || 'Sin nombre registrado'}${row.account_number ? ` · Cuenta ${row.account_number}` : ''} · Entrega ${row.id.slice(0, 8)}`;
+    if (!window.confirm(`¿Eliminar definitivamente esta entrega?\n\n${label}\n\nSe borrarán sus respuestas, calificación y progreso asociado. No se puede deshacer.${selected?.id === row.id && dirty ? '\nTambién se descartará la revisión que no has guardado.' : ''}`)) return;
+    setBusy(true); setError(''); setMessage('');
+    let deleted = false;
+    try {
+      await deleteInstructorSubmission(testId, row);
+      deleted = true;
+      // Reload the loaded window so pagination doesn't skip a row after deletion.
+      if (selected?.id === row.id) { setSelected(null); setReviews({}); setDirty(false); }
+      setRows(old => old.filter(item => item.id !== row.id));
+      const size = Math.max(1, Math.ceil((rows.length - 1) / 50));
+      const refreshed: InstructorSubmissionSummary[] = [];
+      for (let page = 0; page < size; page++) {
+        const batch = await listInstructorSubmissions(testId, page * 50); refreshed.push(...batch);
+        if (batch.length < 50) { setMore(false); break; }
+        if (page === size - 1) setMore(true);
+      }
+      setRows(refreshed); setMessage('Entrega eliminada correctamente. Sus respuestas ya no están disponibles para consulta.');
+    } catch (e) { setError(deleted ? 'La entrega se eliminó, pero no se pudo actualizar el listado. Vuelve a abrir Respuestas recibidas.' : e instanceof Error ? e.message : 'No se pudo eliminar la entrega.'); }
+    finally { setBusy(false); }
+  };
   const manual = selected?.snapshot.questions.filter(q => requiresInstructorReview(selected.snapshot, q)) ?? [];
   const pending = manual.filter(q => !(q.id in reviews)).length;
   const correct = (selected?.auto_correct ?? 0) + (selected ? instructorReviewPoints(selected.snapshot, reviews) : 0);
@@ -66,6 +89,7 @@ export default function InstructorSubmissionReview({ testId, name, onClose }: { 
           <span className="instructor-badge">{row.pending_review ? 'Pendiente' : 'Revisada'}</span>
           <span>{row.pending_review ? `Puntaje provisional: ${formatInstructorPoints(row.correct ?? 0)}/${row.total} · ${row.pending_review} por revisar` : `Puntaje: ${formatInstructorPoints(row.correct ?? 0)}/${row.total} (${row.percentage ?? 0}%)`}</span>
         </button>
+        <button type="button" className="instructor-btn instructor-btn-danger instructor-delete-submission" disabled={busy} aria-label={`Eliminar entrega de ${row.participant_name || 'Sin nombre registrado'} (${row.id.slice(0, 8)})`} title="Eliminar esta entrega" onClick={() => void remove(row)}><Trash2 size={15} />Eliminar entrega</button>
       </li>)}</ul>
       {more && <button type="button" className="instructor-btn" disabled={busy} onClick={async () => {
         setBusy(true); setError(''); try { const next = await listInstructorSubmissions(testId, rows.length); setRows(old => [...old, ...next]); setMore(next.length === 50); }
@@ -73,6 +97,7 @@ export default function InstructorSubmissionReview({ testId, name, onClose }: { 
       }}>Cargar más entregas</button>}
     </div>
     {selected && <fieldset disabled={busy} className="instructor-review-detail"><legend>{selected.participant_name || 'Sin nombre registrado'} · Entrega {selected.id.slice(0, 8)} · Versión {selected.test_revision}</legend>
+      <button type="button" className="instructor-btn instructor-btn-danger" onClick={() => { const row = rows.find(item => item.id === selected.id); if (row) void remove({ ...row, revision: selected.revision }); }}><Trash2 size={16} />Eliminar esta entrega</button>
       {selected.account_number && <p className="instructor-muted">Número de cuenta: <strong>{selected.account_number}</strong></p>}
       <InstructorSectionScores sections={instructorSectionResults(selected.snapshot, selected.auto_results ?? {}, reviews)} />
       {!manual.length && <p className="instructor-success">Esta entrega se calificó automáticamente. No tiene respuestas pendientes de revisión.</p>}
