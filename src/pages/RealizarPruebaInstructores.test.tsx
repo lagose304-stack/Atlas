@@ -18,6 +18,13 @@ const enter = async (start = true) => {
   fireEvent.change(await screen.findByLabelText('Código de acceso'), { target: { value: '001234' } });
   fireEvent.click(screen.getByRole('button', { name: 'Comenzar prueba' }));
   if (start) {
+    const backend = mocks.rpc.getMockImplementation();
+    mocks.rpc.mockImplementation(async (name: string, args?: Record<string, unknown>) => {
+      if (name === 'atlas_begin_instructor_test') return { data: { ok:true,participant_name:args?.p_name,account_number:args?.p_account,answers:{},current_question_id:null,progress_revision:1 },error:null };
+      if (name === 'atlas_save_instructor_progress') return { data:{ok:true,progress_revision:Number(args?.p_revision)+1},error:null };
+      return backend?.(name,args);
+    });
+    fireEvent.change(await screen.findByLabelText('N\u00famero de cuenta'), { target:{value:'001234567890'} });
     fireEvent.change(await screen.findByLabelText('Nombre completo'), { target: { value: 'Persona de prueba' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continuar a las preguntas' }));
   }
@@ -27,6 +34,7 @@ describe('Acceso público a prueba de instructores', () => {
   beforeEach(() => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     mocks.rpc.mockReset().mockImplementation(async (name: string) => {
+      if (name === 'atlas_begin_instructor_test') return { data: { ok:true,participant_name:'Ana Prueba',account_number:'001234567890',answers:{},current_question_id:null,progress_revision:1 },error:null };
       if (name === 'atlas_public_instructor_tests') return { data: [meta], error: null };
       if (name === 'atlas_unlock_instructor_test') return { data: { ok: true, token: 'opaque-token', test: publicContent }, error: null };
       return { data: { ok: true, correct: 1, total: 1, percentage: 100 }, error: null };
@@ -42,9 +50,42 @@ describe('Acceso público a prueba de instructores', () => {
     expect(screen.queryByText('1. Identifica el tejido')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continuar a las preguntas' })).toBeDisabled();
     fireEvent.change(input, { target: { value: '  Ana Prueba  ' } });
+    fireEvent.change(screen.getByLabelText('N\u00famero de cuenta'), { target:{value:'001234567890'} });
     fireEvent.click(screen.getByRole('button', { name: 'Continuar a las preguntas' }));
     expect(await screen.findByText('1. Identifica el tejido')).toBeInTheDocument();
-    expect(mocks.rpc).toHaveBeenCalledWith('atlas_start_instructor_test', { p_id:'t1', p_token:'opaque-token', p_name:'Ana Prueba' });
+    expect(mocks.rpc).toHaveBeenCalledWith('atlas_begin_instructor_test', { p_id:'t1', p_token:'opaque-token', p_name:'Ana Prueba',p_account:'001234567890' });
+  });
+  it('exige cuenta de 10 a 13 dígitos y recupera sin pedir nombre ni perder la respuesta anterior', async () => {
+    const backend = mocks.rpc.getMockImplementation();
+    mocks.rpc.mockImplementation(async (name: string, args?: Record<string, unknown>) => {
+      if (name === 'atlas_resume_instructor_test') return { data: { ok:true, participant_name:'Nombre recuperado',account_number:'001234567890',answers:{q1:'b'},current_question_id:null,progress_revision:7 },error:null };
+      if (name === 'atlas_save_instructor_progress') return { data:{ok:true,progress_revision:8},error:null };
+      return backend?.(name,args);
+    });
+    renderPage(); await enter(false);
+    fireEvent.click(await screen.findByRole('button', {name:'Continuar prueba'}));
+    expect(screen.queryByLabelText('Nombre completo')).not.toBeInTheDocument();
+    const account = screen.getByLabelText('Número de cuenta');
+    fireEvent.change(account,{target:{value:'123456789'}});
+    expect(screen.getByRole('button',{name:'Recuperar y continuar'})).toBeDisabled();
+    fireEvent.change(account,{target:{value:'12345678901234'}});
+    expect(screen.getByRole('button',{name:'Recuperar y continuar'})).toBeDisabled();
+    fireEvent.change(account,{target:{value:'001234567890'}});
+    fireEvent.click(screen.getByRole('button',{name:'Recuperar y continuar'}));
+    expect(await screen.findByText('Nombre recuperado')).toBeInTheDocument();
+    expect(screen.getByLabelText('Músculo')).toBeChecked();
+    expect(mocks.rpc).toHaveBeenCalledWith('atlas_resume_instructor_test',{p_id:'t1',p_token:'opaque-token',p_account:'001234567890'});
+    expect(mocks.rpc.mock.calls.some(([name])=>name==='atlas_begin_instructor_test')).toBe(false);
+  });
+  it.each(['not_found','locked','submitted'])('explica una recuperación %s sin mostrar preguntas', async status => {
+    const backend=mocks.rpc.getMockImplementation();
+    mocks.rpc.mockImplementation(async(name: string,args?: Record<string,unknown>)=>name==='atlas_resume_instructor_test'?{data:{ok:false,status},error:null}:backend?.(name,args));
+    renderPage();await enter(false);
+    fireEvent.click(await screen.findByRole('button',{name:'Continuar prueba'}));
+    fireEvent.change(screen.getByLabelText('Número de cuenta'),{target:{value:'1234567890'}});
+    fireEvent.click(screen.getByRole('button',{name:'Recuperar y continuar'}));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Finalizar prueba'})).not.toBeInTheDocument();
   });
 
   it('solo pide metadatos antes del código y entrega respuestas al servidor sin calificar en cliente', async () => {

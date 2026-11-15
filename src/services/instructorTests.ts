@@ -51,10 +51,15 @@ export const unlockInstructorTest = (id: string, code: string) => {
 export const gradeInstructorTest = (id: string, token: string, answers: InstructorAnswers) => rpc<InstructorGrade>(
   'atlas_grade_instructor_test', { p_id: id, p_token: token, p_answers: answers },
 );
-export const startInstructorTest = (id: string, token: string, name: string) => rpc<{ ok: boolean; status?: 'expired' | 'unavailable'; participant_name?: string }>('atlas_start_instructor_test', { p_id: id, p_token: token, p_name: name });
+export const isInstructorAccount = (account: string) => /^[0-9]{10,13}$/.test(account);
+export type InstructorProgress = { ok: true; participant_name: string; account_number: string; answers: InstructorAnswers; current_question_id: string | null; progress_revision: number };
+export type InstructorRecovery = InstructorProgress | { ok: false; status: 'not_found' | 'locked' | 'submitted' };
+export const startInstructorTest = (id: string, token: string, name: string, account: string) => rpc<InstructorProgress>('atlas_begin_instructor_test', { p_id: id, p_token: token, p_name: name, p_account: account });
+export const resumeInstructorTest = (id: string, token: string, account: string) => rpc<InstructorRecovery>('atlas_resume_instructor_test', { p_id: id, p_token: token, p_account: account });
+export const saveInstructorProgress = (id: string, token: string, revision: number, answers: InstructorAnswers, questionId: string | null) => rpc<{ ok: true; progress_revision: number }>('atlas_save_instructor_progress', { p_id: id, p_token: token, p_revision: revision, p_answers: answers, p_current_question_id: questionId });
 
-export type InstructorSubmissionSummary = { id: string; participant_name: string | null; created_at: string; test_revision: number; total: number; pending_review: number; revision: number; correct: number; percentage: number | null };
-export type InstructorSubmission = { id: string; participant_name: string | null; test_id: string; test_revision: number; snapshot: InstructorSubmissionSnapshot;
+export type InstructorSubmissionSummary = { id: string; participant_name: string | null; account_number?: string | null; created_at: string; test_revision: number; total: number; pending_review: number; revision: number; correct: number; percentage: number | null };
+export type InstructorSubmission = { id: string; participant_name: string | null; account_number?: string | null; test_id: string; test_revision: number; snapshot: InstructorSubmissionSnapshot;
   answers: InstructorAnswers; reviews: Record<string, boolean>; auto_results?: Record<string, boolean>; revision: number; created_at: string; auto_correct: number; total: number };
 export const listInstructorSubmissions = (testId: string, offset = 0) => rpc<InstructorSubmissionSummary[]>('atlas_list_instructor_submissions', { p_test_id: testId, p_offset: offset });
 export const getInstructorSubmission = (id: string) => rpc<InstructorSubmission>('atlas_get_instructor_submission', { p_id: id });

@@ -62,6 +62,7 @@ export default function InstructorSubmissionReview({ testId, name, onClose }: { 
       <ul className="instructor-review-list" aria-label="Entregas para revisar">{rows.map(row => <li key={row.id}>
         <button type="button" className="instructor-btn" aria-current={selected?.id === row.id ? 'true' : undefined} disabled={busy} onClick={() => void open(row.id)}>
           <strong>{row.participant_name || 'Sin nombre registrado'}</strong><span>Entrega {row.id.slice(0, 8)}</span><span>{new Date(row.created_at).toLocaleString('es-HN')}</span>
+          {row.account_number && <span>Cuenta: {row.account_number}</span>}
           <span className="instructor-badge">{row.pending_review ? 'Pendiente' : 'Revisada'}</span>
           <span>{row.pending_review ? `Puntaje provisional: ${formatInstructorPoints(row.correct ?? 0)}/${row.total} · ${row.pending_review} por revisar` : `Puntaje: ${formatInstructorPoints(row.correct ?? 0)}/${row.total} (${row.percentage ?? 0}%)`}</span>
         </button>
@@ -72,6 +73,7 @@ export default function InstructorSubmissionReview({ testId, name, onClose }: { 
       }}>Cargar más entregas</button>}
     </div>
     {selected && <fieldset disabled={busy} className="instructor-review-detail"><legend>{selected.participant_name || 'Sin nombre registrado'} · Entrega {selected.id.slice(0, 8)} · Versión {selected.test_revision}</legend>
+      {selected.account_number && <p className="instructor-muted">Número de cuenta: <strong>{selected.account_number}</strong></p>}
       <InstructorSectionScores sections={instructorSectionResults(selected.snapshot, selected.auto_results ?? {}, reviews)} />
       {!manual.length && <p className="instructor-success">Esta entrega se calificó automáticamente. No tiene respuestas pendientes de revisión.</p>}
       {selected.snapshot.questions.filter(q => !requiresInstructorReview(selected.snapshot, q)).map(q => <section className="instructor-review-item" key={q.id}><h3>{questionTitle(q)} {q.titulo}</h3>

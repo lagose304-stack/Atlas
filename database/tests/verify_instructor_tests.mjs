@@ -8,7 +8,8 @@ import { pathToFileURL } from 'node:url';
 if (!process.argv[2]) throw new Error('Indica la ruta del módulo PGlite instalado fuera del proyecto.');
 const { PGlite } = await import(pathToFileURL(process.argv[2]).href);
 const db = new PGlite();
-const withSections = process.argv.includes('--sections');
+const withResume = process.argv.includes('--resume');
+const withSections = process.argv.includes('--sections') || withResume;
 const withWeightedReview = process.argv.includes('--review') || withSections;
 const withAllSubmissions = process.argv.includes('--submissions') || withWeightedReview;
 const withPoints = process.argv.includes('--points') || withAllSubmissions;
@@ -454,6 +455,72 @@ try {
     await db.exec(await readFile(new URL('../rollback_section_instructor_tests_by_topic.sql', import.meta.url), 'utf8'));
     check((await call('atlas_get_instructor_submission',[r.submission_id])).answers.brief==='Libre','Recuperacion conserva las respuestas y secciones de entregas');
   }
+  if (withResume) {
+    await db.exec((await readFile(new URL('../section_instructor_tests_by_topic.sql', import.meta.url), 'utf8')).replaceAll('CREATE FUNCTION','CREATE OR REPLACE FUNCTION').replace("ALTER TABLE public.instructor_test_submissions ADD COLUMN auto_results jsonb NOT NULL DEFAULT '{}'::jsonb;",''));
+    await db.exec(await readFile(new URL('../resume_instructor_tests_by_account.sql', import.meta.url), 'utf8'));
+    await actor(4);await ip('192.0.2.150');
+    const testContent={nombre:'Recuperacion',instrucciones:'',questions:[content.questions[0],{id:'brief',type:'short_answer',titulo:'Describe',accepted_answers:['']},{id:'point',type:'image_point',titulo:'Senala',image:{url:'https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/site/x.webp',source:'upload'}}],groups:[{id:'g1',titulo:'',item_ids:['q1']},{id:'g2',titulo:'',item_ids:['brief','point']}]};
+    let t=await call('atlas_save_instructor_test',[null,null,testContent,'998877']);t=await call('atlas_publish_instructor_test',[t.id,t.revision,true]);
+    const a=await call('atlas_unlock_instructor_test',[t.id,'998877']);await actor(null);
+    for(const account of ['123456789','12345678901234','123456789x',''])await reject(()=>call('atlas_begin_instructor_test',[t.id,a.token,'Persona',account]),/cuenta/);
+    await reject(()=>call('atlas_begin_instructor_test',[t.id,'wrong','Persona','001234567890']),/acceso/);
+    const begin=await call('atlas_begin_instructor_test',[t.id,a.token,'Persona Original','001234567890']);
+    check(begin.account_number==='001234567890'&&begin.progress_revision===1,'Preservar ceros iniciales y registrar cuenta como texto');
+    check((await call('atlas_begin_instructor_test',[t.id,a.token,'Persona Original','001234567890'])).progress_revision===1,'Inicio idempotente si se pierde respuesta de red');
+    let save=await call('atlas_save_instructor_progress',[t.id,a.token,1,{q1:'a',brief:'Texto incompleto',point:{x:.4,y:.6}},'g2']);
+    check(save.progress_revision===2,'Guardar respuestas y pregunta actual antes de entregar');
+    check((await call('atlas_save_instructor_progress',[t.id,a.token,1,{q1:'a',brief:'Texto incompleto',point:{x:.4,y:.6}},'g2'])).progress_revision===2,'Reintento identico de guardado no duplica ni pierde progreso');
+    await reject(()=>call('atlas_save_instructor_progress',[t.id,a.token,1,{q1:'b'},'g1']),/progreso cambio/);
+    await reject(()=>call('atlas_save_instructor_progress',[t.id,a.token,2,{alien:'a'},'g2']),/ajena/);
+    await reject(()=>call('atlas_save_instructor_progress',[t.id,a.token,2,{q1:'fake'},'g2']),/Opcion/);
+    await reject(()=>call('atlas_save_instructor_progress',[t.id,a.token,2,{point:{x:1.1,y:.3}},'g2']),/posicion/);
+    await reject(()=>call('atlas_save_instructor_progress',[t.id,a.token,2,{},'nonexistent']),/Pregunta/);
+    const b=await call('atlas_unlock_instructor_test',[t.id,'998877']);
+    await reject(()=>call('atlas_begin_instructor_test',[t.id,b.token,'Persona Nueva','001234567890']),/Continuar prueba/);
+    const resumed=await call('atlas_resume_instructor_test',[t.id,b.token,'001234567890']);
+    check(resumed.participant_name==='Persona Original'&&resumed.answers.brief==='Texto incompleto'&&resumed.answers.point.x===.4&&resumed.current_question_id==='g2','Recuperar nombre, texto, punto y pregunta sin pedir nombre');
+    await reject(()=>call('atlas_save_instructor_progress',[t.id,a.token,2,{q1:'b'},'g1']),/otra sesion/);
+    await reject(()=>call('atlas_grade_instructor_test',[t.id,a.token,{q1:'a',brief:'A',point:{x:.2,y:.3}}]),/recupera/);
+    save=await call('atlas_save_instructor_progress',[t.id,b.token,resumed.progress_revision,{q1:'a',brief:'Texto completo',point:''},'g2']);
+    check(save.progress_revision===resumed.progress_revision+1,'Permitir quitar punto y conservar prueba incompleta');
+    await db.exec('DELETE FROM public.instructor_test_access');
+    const c=await call('atlas_unlock_instructor_test',[t.id,'998877']);
+    const afterExpiry=await call('atlas_resume_instructor_test',[t.id,c.token,'001234567890']);
+    check(afterExpiry.answers.brief==='Texto completo'&&afterExpiry.answers.point==='','Recuperar despues de limpiar o caducar accesos temporales');
+    const final=await call('atlas_grade_instructor_test',[t.id,c.token,{q1:'a',brief:'Texto final',point:{x:.2,y:.3}}]);
+    check(final.submission_id&&final.pending_review===2,'Entregar desde sesion recuperada');
+    await actor(4);const detail=await call('atlas_get_instructor_submission',[final.submission_id]);
+    check(detail.account_number==='001234567890'&&detail.participant_name==='Persona Original','Cuenta y nombre llegan a entrega y revision');
+    check((await call('atlas_list_instructor_submissions',[t.id,0]))[0].account_number==='001234567890','Listado identifica cuenta');
+    const d=await call('atlas_unlock_instructor_test',[t.id,'998877']);
+    check((await call('atlas_resume_instructor_test',[t.id,d.token,'001234567890'])).status==='submitted','No reabrir una entrega finalizada');
+    await reject(()=>call('atlas_begin_instructor_test',[t.id,d.token,'Persona Original','001234567890']),/ya entrego/);
+    const e=await call('atlas_unlock_instructor_test',[t.id,'998877']);
+    for(let i=0;i<5;i++)check((await call('atlas_resume_instructor_test',[t.id,e.token,'9999999999'])).status==='not_found','Cuenta sin progreso no devuelve datos');
+    const f=await call('atlas_unlock_instructor_test',[t.id,'998877']);
+    check((await call('atlas_resume_instructor_test',[t.id,f.token,'001234567890'])).status==='locked','Limite de recuperacion se mantiene aunque se renueve token');
+    await db.exec("UPDATE public.instructor_test_attempts SET recovery_window_start=now()-interval '16 minutes'");
+    const longAccount=await call('atlas_begin_instructor_test',[t.id,f.token,'Otra Persona','1234567890123']);
+    check(longAccount.account_number.length===13,'Aceptar cuenta de trece digitos');
+    const extraContent={nombre:'Formatos automaticos recuperables',instrucciones:'',questions:[
+      {id:'completion',type:'completion',titulo:'El {{1}}',blanks:[{id:'blank',accepted_answers:['epitelio']}]},
+      {id:'matching',type:'matching',titulo:'Relaciona',pairs:[{id:'term1',option_id:'option1',term:'A',definition:'Uno'},{id:'term2',option_id:'option2',term:'B',definition:'Dos'}]}]};
+    let extra=await call('atlas_save_instructor_test',[null,null,extraContent,'998877']);extra=await call('atlas_publish_instructor_test',[extra.id,extra.revision,true]);
+    const extraAccess=await call('atlas_unlock_instructor_test',[extra.id,'998877']);
+    await call('atlas_begin_instructor_test',[extra.id,extraAccess.token,'Persona Formatos','1234567890']);
+    await reject(()=>call('atlas_save_instructor_progress',[extra.id,extraAccess.token,1,{matching:{alien:'option1'}},'legacy-matching']),/Pareja/);
+    const extraAnswers={completion:{blank:'epitelio'},matching:{term1:'option1',term2:'option2'}};
+    check((await call('atlas_save_instructor_progress',[extra.id,extraAccess.token,1,extraAnswers,'legacy-matching'])).progress_revision===2,'Guardar completacion y pareados en progreso');
+    check((await call('atlas_grade_instructor_test',[extra.id,extraAccess.token,extraAnswers])).percentage===100,'Entregar formatos automaticos despues de guardar progreso');
+    const before=(await db.query('select count(*)::integer n from public.instructor_test_progress')).rows[0].n;
+    t=await call('atlas_save_instructor_test',[t.id,t.revision,{...testContent,nombre:'Version nueva'},null]);t=await call('atlas_publish_instructor_test',[t.id,t.revision,true]);
+    const g=await call('atlas_unlock_instructor_test',[t.id,'998877']);
+    check((await call('atlas_resume_instructor_test',[t.id,g.token,'1234567890123'])).status==='not_found','No mezclar progreso de versiones distintas');
+    await db.exec(await readFile(new URL('../clean_instructor_submissions.sql', import.meta.url), 'utf8'));
+    check((await db.query('select count(*)::integer n from public.instructor_test_progress')).rows[0].n===before,'Plantilla revierte tambien limpieza de progreso');
+    await db.exec((await readFile(new URL('../clean_instructor_submissions.sql', import.meta.url), 'utf8')).replace('\nROLLBACK;','\nCOMMIT;'));
+    check((await db.query('select count(*)::integer n from public.instructor_test_progress')).rows[0].n===0,'Limpieza completa vacia tambien copias empezadas');
+  }
   await db.exec('SET ROLE anon');
   await reject(() => db.query('select * from public.instructor_tests'), /permission denied/);
   await reject(() => db.query('select * from public.instructor_test_access'), /permission denied/);
@@ -477,6 +544,11 @@ try {
   if (withSections) {
     await reject(()=>call('atlas_instructor_section_results',[{questions:[]},{},{}]), /permission denied/);
     await reject(()=>call('atlas_validate_instructor_sections',[{},true]), /permission denied/);
+  }
+  if(withResume){
+    await reject(()=>db.query('select * from public.instructor_test_progress'),/permission denied/);
+    await reject(()=>call('atlas_require_instructor_access',[null,'x']),/permission denied/);
+    await reject(()=>call('atlas_start_instructor_test',[null,'x','name']),/permission denied/);
   }
   check(Array.isArray(await call('atlas_public_instructor_tests')), 'Catálogo público accesible sin sesión');
   await db.exec('RESET ROLE');

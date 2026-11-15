@@ -8,5 +8,10 @@ SET LOCAL lock_timeout = '5s';
 LOCK TABLE public.instructor_tests IN SHARE ROW EXCLUSIVE MODE;
 LOCK TABLE public.instructor_test_access, public.instructor_test_submissions IN ACCESS EXCLUSIVE MODE;
 TRUNCATE TABLE public.instructor_test_submissions, public.instructor_test_access;
+DO $$ BEGIN
+  IF to_regclass('public.instructor_test_progress') IS NOT NULL THEN
+    EXECUTE 'TRUNCATE TABLE public.instructor_test_progress';
+  END IF;
+END; $$;
 -- Revisar alcance y sustituir ROLLBACK por COMMIT solamente con autorizacion expresa.
 ROLLBACK;
