@@ -171,4 +171,30 @@ describe('Acceso público a prueba de instructores', () => {
     }));
     expect(await screen.findByText('2 puntos obtenidos de 2.')).toBeInTheDocument();
   });
+  it.each(['scheduled','closed'])('no permite introducir codigo fuera de horario %s y permite consultar resultados', async state => {
+    const now=Date.now();
+    const scheduled={...meta,opens_at:new Date(now+(state==='scheduled'?3600000:-7200000)).toISOString(),closes_at:new Date(now+(state==='scheduled'?7200000:-3600000)).toISOString(),server_time:new Date(now).toISOString()};
+    mocks.rpc.mockResolvedValue({data:[scheduled],error:null});
+    renderPage();await screen.findByRole('region',{name:'Prueba fuera de horario'});
+    expect(screen.queryByLabelText('C\u00f3digo de acceso')).not.toBeInTheDocument();
+    expect(mocks.rpc.mock.calls.some(([name])=>name==='atlas_unlock_instructor_test')).toBe(false);
+    fireEvent.click(screen.getByRole('button',{name:'Consultar resultados'}));
+    expect(await screen.findByLabelText('Cuenta para consultar resultados')).toBeInTheDocument();
+    expect(screen.queryByLabelText('C\u00f3digo de acceso')).not.toBeInTheDocument();
+  });
+
+  it('bloquea edici?n y entrega al llegar el cierre conservando la respuesta visible',async()=>{
+    const original=mocks.rpc.getMockImplementation();
+    const clock=Date.now();
+    const timed={...meta,opens_at:new Date(clock-3600000).toISOString(),closes_at:new Date(clock+1800).toISOString(),server_time:new Date(clock).toISOString()};
+    mocks.rpc.mockImplementation(async(name:string,args?:Record<string,unknown>)=>name==='atlas_public_instructor_tests'?{data:[timed],error:null}:original?.(name,args));
+    renderPage();await enter();
+    fireEvent.click(await screen.findByLabelText('Epitelio'));
+    await waitFor(()=>expect(screen.getByRole('alert')).toHaveTextContent('El horario de la prueba finalizó'),{timeout:3500});
+    expect(screen.getByLabelText('Epitelio')).toBeChecked();
+    expect(screen.getByLabelText('Epitelio')).toBeDisabled();
+    expect(screen.getByRole('button',{name:'Finalizar prueba'})).toBeDisabled();
+    expect(mocks.rpc.mock.calls.some(([name])=>name==='atlas_grade_instructor_test')).toBe(false);
+  });
+
 });

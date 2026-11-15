@@ -8,7 +8,8 @@ import { pathToFileURL } from 'node:url';
 if (!process.argv[2]) throw new Error('Indica la ruta del módulo PGlite instalado fuera del proyecto.');
 const { PGlite } = await import(pathToFileURL(process.argv[2]).href);
 const db = new PGlite();
-const withResume = process.argv.includes('--resume');
+const withSchedule = process.argv.includes('--schedule');
+const withResume = process.argv.includes('--resume') || withSchedule;
 const withSections = process.argv.includes('--sections') || withResume;
 const withWeightedReview = process.argv.includes('--review') || withSections;
 const withAllSubmissions = process.argv.includes('--submissions') || withWeightedReview;
@@ -521,6 +522,68 @@ try {
     await db.exec((await readFile(new URL('../clean_instructor_submissions.sql', import.meta.url), 'utf8')).replace('\nROLLBACK;','\nCOMMIT;'));
     check((await db.query('select count(*)::integer n from public.instructor_test_progress')).rows[0].n===0,'Limpieza completa vacia tambien copias empezadas');
   }
+  if(withSchedule){
+    await db.exec(await readFile(new URL('../schedule_instructor_tests_and_results.sql',import.meta.url),'utf8'));
+    await actor(4);await ip('192.0.2.170');
+    const stamp=(delta)=>new Date(Date.now()+delta).toISOString();
+    const scheduled={...content,schedule:{opens_at:stamp(3600000),closes_at:stamp(7200000)}};
+    let t=await call('atlas_save_instructor_test',[null,null,scheduled,'772211']);
+    t=await call('atlas_publish_instructor_test',[t.id,t.revision,true]);
+    let meta=(await call('atlas_public_instructor_tests')).find(x=>x.id===t.id);
+    check(meta.availability==='scheduled'&&meta.opens_at&&meta.server_time,'Catalogo conserva prueba publicada e informa horario del servidor');
+    check((await call('atlas_unlock_instructor_test',[t.id,'772211'])).status==='outside_schedule','Bloquear codigo incluso correcto antes de apertura');
+    for(const schedule of [{opens_at:'',closes_at:''},{opens_at:'2026-01-01',closes_at:'2026-01-02'},{opens_at:stamp(7200000),closes_at:stamp(3600000)},{opens_at:'nonsenseZ',closes_at:stamp(3600000)}]){
+      const run=async()=>{const draft=await call('atlas_save_instructor_test',[null,null,{...content,schedule},'772211']);return call('atlas_publish_instructor_test',[draft.id,draft.revision,true]);};
+      await reject(run,/Horario|horario|cierre/);
+    }
+    const open={...content,schedule:{opens_at:stamp(-3600000),closes_at:stamp(3600000)}};
+    t=await call('atlas_save_instructor_test',[t.id,t.revision,open,null]);t=await call('atlas_publish_instructor_test',[t.id,t.revision,true]);
+    const access=await call('atlas_unlock_instructor_test',[t.id,'772211']);
+    check(access.ok,'Codigo permite entrar dentro del intervalo');
+    await call('atlas_begin_instructor_test',[t.id,access.token,'Persona Horario','1234567890']);
+    await call('atlas_save_instructor_progress',[t.id,access.token,1,{q1:'a'},'legacy-q1']);
+    // Move only deadline in isolated fixture: don't invalidate its access while testing active-at-close semantics.
+    await db.query("UPDATE public.instructor_tests SET published=jsonb_set(published,'{schedule,closes_at}',to_jsonb((now()-interval '1 minute')::text)) WHERE id=$1",[t.id]);
+    meta=(await call('atlas_public_instructor_tests')).find(x=>x.id===t.id);
+    check(meta.availability==='closed','Catalogo marca cierre sin retirar publicacion');
+    check((await call('atlas_unlock_instructor_test',[t.id,'772211'])).status==='outside_schedule','No emitir nuevos accesos despues del cierre');
+    await reject(()=>call('atlas_resume_instructor_test',[t.id,access.token,'1234567890']),/horario/);
+    await reject(()=>call('atlas_begin_instructor_test',[t.id,access.token,'Persona','1234567891']),/horario/);
+    await reject(()=>call('atlas_save_instructor_progress',[t.id,access.token,1,{q1:'b'},'legacy-q1']),/horario/);
+    await reject(()=>call('atlas_grade_instructor_test',[t.id,access.token,{q1:'a'}]),/horario/);
+    t=await call('atlas_save_instructor_test',[t.id,t.revision,open,null]);t=await call('atlas_publish_instructor_test',[t.id,t.revision,true]);
+    const extended=await call('atlas_unlock_instructor_test',[t.id,'772211']);
+    const restored=await call('atlas_resume_instructor_test',[t.id,extended.token,'1234567890']);
+    check(restored.ok&&restored.participant_name==='Persona Horario'&&restored.answers.q1==='a','Ampliar solo horario conserva el intento y sus respuestas');
+    const delivered=await call('atlas_grade_instructor_test',[t.id,extended.token,{q1:'a'}]);
+    check(delivered.percentage===100,'Entregar intento recuperado tras ampliar horario');
+    await db.query("UPDATE public.instructor_tests SET published=jsonb_set(published,'{schedule,closes_at}',to_jsonb((now()-interval '1 minute')::text)) WHERE id=$1",[t.id]);
+    await actor(null);
+    const viewed=await call('atlas_instructor_participant_result',[t.id,'772211','1234567890']);
+    check(viewed.ok&&viewed.answers.q1==='a'&&viewed.result.percentage===100,'Consultar respuestas propias revisadas fuera del horario sin token temporal');
+    check(!JSON.stringify(viewed).includes('review_guides')&&!JSON.stringify(viewed).includes('token_hash')&&!JSON.stringify(viewed).includes('code_hash'),'No entregar referencias privadas, hashes ni tokens');
+    check((await call('atlas_instructor_participant_result',[t.id,'000000','1234567890'])).status==='unavailable','Codigo incorrecto no revela resultados');
+    check((await call('atlas_instructor_participant_result',[t.id,'772211','9999999999'])).status==='unavailable','Cuenta incorrecta no devuelve otro resultado');
+    await actor(4);
+    const mixed={nombre:'Pendiente',instrucciones:'',questions:[{id:'brief',type:'short_answer',titulo:'Describe',accepted_answers:['Referencia privada']}]};
+    let m=await call('atlas_save_instructor_test',[null,null,mixed,'772211']);m=await call('atlas_publish_instructor_test',[m.id,m.revision,true]);
+    const ma=await call('atlas_unlock_instructor_test',[m.id,'772211']);await call('atlas_begin_instructor_test',[m.id,ma.token,'Persona Manual','1234567890']);
+    const mr=await call('atlas_grade_instructor_test',[m.id,ma.token,{brief:'Texto enviado'}]);
+    check((await call('atlas_instructor_participant_result',[m.id,'772211','1234567890'])).status==='pending','No revelar entrega antes de terminar revision');
+    await call('atlas_review_instructor_submission',[mr.submission_id,1,{brief:false}]);
+    await db.exec('DELETE FROM public.instructor_test_access');
+    const completed=await call('atlas_instructor_participant_result',[m.id,'772211','1234567890']);
+    check(completed.ok&&completed.answers.brief==='Texto enviado'&&completed.result.percentage===0&&!JSON.stringify(completed).includes('Referencia privada'),'Consulta sigue tras caducar accesos y no filtra guia de texto');
+    await call('atlas_publish_instructor_test',[m.id,m.revision,false]);
+    check((await call('atlas_instructor_participant_result',[m.id,'772211','1234567890'])).ok,'Resultado sigue disponible al pasar prueba a borrador');
+    await ip('192.0.2.171');
+    for(let i=0;i<5;i++)await call('atlas_instructor_participant_result',[m.id,'000000','1234567890']);
+    check((await call('atlas_instructor_participant_result',[m.id,'772211','1234567890'])).status==='locked','Limitar intentos de consulta aunque luego se conozcan datos correctos');
+    await db.exec("UPDATE public.instructor_test_attempts SET result_window_start=now()-interval '16 minutes'");
+    check((await call('atlas_instructor_participant_result',[m.id,'772211','1234567890'])).ok,'Reactivar consulta tras ventana de bloqueo');
+    await db.exec(await readFile(new URL('../rollback_schedule_instructor_tests_and_results.sql',import.meta.url),'utf8'));
+    check((await call('atlas_get_instructor_submission',[mr.submission_id])).answers.brief==='Texto enviado','Recuperacion conserva entregas');
+  }
   await db.exec('SET ROLE anon');
   await reject(() => db.query('select * from public.instructor_tests'), /permission denied/);
   await reject(() => db.query('select * from public.instructor_test_access'), /permission denied/);
@@ -550,6 +613,7 @@ try {
     await reject(()=>call('atlas_require_instructor_access',[null,'x']),/permission denied/);
     await reject(()=>call('atlas_start_instructor_test',[null,'x','name']),/permission denied/);
   }
+  if(withSchedule)await reject(()=>call('atlas_instructor_participant_result',[null,'x','1234567890']),/permission denied/);
   check(Array.isArray(await call('atlas_public_instructor_tests')), 'Catálogo público accesible sin sesión');
   await db.exec('RESET ROLE');
   const countBefore = (await db.query('select count(*)::integer as n from public.instructor_tests')).rows[0].n;

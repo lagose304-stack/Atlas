@@ -3,16 +3,16 @@ import type { InstructorQuestion, PublicInstructorQuestion, InstructorAnswers, I
 export { newInstructorQuestion } from '../types/instructorQuestions';
 export type { InstructorQuestion, InstructorOption } from '../types/instructorQuestions';
 
-export type InstructorContent = { nombre: string; instrucciones: string; questions: InstructorQuestion[]; groups?: InstructorQuestionGroup[]; sections?: InstructorSection[] };
+export type InstructorContent = { nombre: string; instrucciones: string; questions: InstructorQuestion[]; groups?: InstructorQuestionGroup[]; sections?: InstructorSection[]; schedule?: { opens_at: string; closes_at: string } };
 export type InstructorSummary = { id: string; nombre: string; estado: 'borrador' | 'publicada'; revision: number; published_revision: number | null };
 export type InstructorEditor = Omit<InstructorSummary, 'nombre'> & { content: InstructorContent; has_code: boolean };
-export type PublicInstructorSummary = { id: string; nombre: string; instrucciones: string; question_count: number; inciso_count?: number | null };
+export type PublicInstructorSummary = { id: string; nombre: string; instrucciones: string; question_count: number; inciso_count?: number | null; opens_at?: string | null; closes_at?: string | null; server_time?: string; availability?: 'open' | 'scheduled' | 'closed' };
 export type PublicInstructorContent = Omit<InstructorContent, 'questions'> & {
   questions: PublicInstructorQuestion[];
 };
 export type InstructorResult = { ok: true; correct: number; total: number; percentage: number | null; pending_review?: number; submission_id?: string; sections?: InstructorSectionResult[] };
 export type InstructorUnlock = { ok: true; token: string; test: PublicInstructorContent } |
-  { ok: false; status: 'invalid_code' | 'locked' | 'unavailable' };
+  { ok: false; status: 'invalid_code' | 'locked' | 'unavailable' | 'outside_schedule' };
 export type InstructorGrade = InstructorResult | { ok: false; status: 'expired' | 'unavailable' };
 
 export const isSixDigitCode = (value: string) => /^[0-9]{6}$/.test(value);
@@ -64,3 +64,5 @@ export type InstructorSubmission = { id: string; participant_name: string | null
 export const listInstructorSubmissions = (testId: string, offset = 0) => rpc<InstructorSubmissionSummary[]>('atlas_list_instructor_submissions', { p_test_id: testId, p_offset: offset });
 export const getInstructorSubmission = (id: string) => rpc<InstructorSubmission>('atlas_get_instructor_submission', { p_id: id });
 export const reviewInstructorSubmission = (submission: InstructorSubmission, reviews: Record<string, boolean>) => rpc<InstructorSubmission>('atlas_review_instructor_submission', { p_id: submission.id, p_revision: submission.revision, p_reviews: reviews });
+export type InstructorParticipantResult = { ok: true; participant_name: string; account_number: string; created_at: string; snapshot: InstructorSubmissionSnapshot; answers: InstructorAnswers; auto_results: Record<string, boolean>; reviews: Record<string, boolean>; result: InstructorResult };
+export const getInstructorParticipantResult = (id: string, code: string, account: string) => rpc<InstructorParticipantResult | { ok: false; status: 'unavailable' | 'locked' | 'pending' }>('atlas_instructor_participant_result', { p_id: id, p_code: code, p_account: account });

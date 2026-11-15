@@ -193,6 +193,7 @@ textarea.instructor-input { min-height: 96px; resize: vertical; }
 .instructor-image-scope-note { font-size: .75rem; margin-bottom: 0; }
 .instructor-point-response { max-width: 760px; }
 [data-instructor-group] { scroll-margin-top: 100px; }
+.instructor-submitted-answer { white-space: pre-wrap; overflow-wrap: anywhere; }
 [aria-label="Comenzar o recuperar prueba"] button[aria-pressed="true"] { background: #ede9fe; color: #6d28d9; border-color: #8b5cf6; }
 .instructor-sections-list { list-style: none; padding: 0; display: grid; gap: 10px; }
 .instructor-sections-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; border: 1px solid #cbd5e1; border-radius: 12px; padding: 14px; background: #f1f5f9; }

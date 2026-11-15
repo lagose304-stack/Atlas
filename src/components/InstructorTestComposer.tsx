@@ -3,6 +3,7 @@ import { ArrowRight, ChevronLeft, ChevronRight, Layers3, Plus, Settings2, Shield
 import HoldToRevealCodeInput from './HoldToRevealCodeInput';
 import InstructorQuestionEditor from './InstructorQuestionEditor';
 import InstructorFormatIcon from './InstructorFormatIcon';
+import InstructorScheduleEditor from './InstructorScheduleEditor';
 import type { InstructorContent } from '../services/instructorTests';
 import {
   INSTRUCTOR_QUESTION_TYPES, incisoLetter, instructorGroups, newInstructorGroup, newInstructorQuestion,
@@ -102,6 +103,7 @@ export default function InstructorTestComposer({ content, code, hasCode, existin
           placeholder={hasCode ? '••••••' : '000000'} onChange={e => onCodeChange(e.target.value.replace(/[^0-9]/g, ''))} />
         <p className="instructor-muted">{hasCode ? 'Ya hay un código configurado. Deja el campo vacío para conservarlo.' : 'Define un código antes de publicar y compártelo con los instructores.'} El código nuevo se usará desde que guardes.</p>
         </section>
+        <InstructorScheduleEditor content={content} onChange={onChange} />
         <button type="button" className="instructor-btn" onClick={() => groups.length ? selectGroup(groups[0].id) : addGroup()}>Continuar a preguntas<ArrowRight size={17} aria-hidden="true" /></button>
       </> : group ? <>
         <div className="instructor-row instructor-between instructor-active-question-heading">

@@ -2,15 +2,15 @@ import { isInstructorPointAnswer, type InstructorAnswers, type PublicInstructorQ
 import InstructorReferenceImageView from './InstructorReferenceImageView';
 import InstructorPointResponse from './InstructorPointResponse';
 
-type Props = { question: PublicInstructorQuestion; index: number; label?: string; contextLabel?: string; answer: InstructorAnswers[string] | undefined; onChange: (value: InstructorAnswers[string]) => void };
+type Props = { disabled?: boolean; question: PublicInstructorQuestion; index: number; label?: string; contextLabel?: string; answer: InstructorAnswers[string] | undefined; onChange: (value: InstructorAnswers[string]) => void };
 
-export default function InstructorQuestionResponse({ question: q, index, label, contextLabel, answer, onChange }: Props) {
+export default function InstructorQuestionResponse({ question: q, index, label, contextLabel, answer, onChange, disabled }: Props) {
   const number = index + 1;
   const subject = contextLabel ?? `pregunta ${number}`;
   const objectAnswer = typeof answer === 'object' && answer && !isInstructorPointAnswer(answer) ? answer as Record<string, string> : {};
   return <fieldset className="instructor-question">
     <legend>{label ?? number}. {q.type === 'completion' ? 'Completa el enunciado' : q.titulo}</legend>
-    {q.type === 'image_point' ? <InstructorPointResponse url={q.image.url} instructions={q.titulo} answer={answer} onChange={onChange} /> : q.type === 'short_answer' ? <div className={q.image ? 'instructor-short-with-image' : undefined}>
+    {q.type === 'image_point' ? <InstructorPointResponse url={q.image.url} instructions={q.titulo} disabled={disabled} answer={answer} onChange={onChange} /> : q.type === 'short_answer' ? <div className={q.image ? 'instructor-short-with-image' : undefined}>
       {q.image && <InstructorReferenceImageView key={q.image.url} url={q.image.url} annotations={q.image.annotations} />}
       <label className="instructor-label">Respuesta de {subject}
       <input className="instructor-input" maxLength={1000} autoComplete="off" value={typeof answer === 'string' ? answer : ''} onChange={e => onChange(e.target.value)} />

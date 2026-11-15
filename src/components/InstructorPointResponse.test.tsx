@@ -28,3 +28,13 @@ it('usa el editor reducido, guarda solo una posición y permite reabrir y elimin
   fireEvent.click(await screen.findByRole('button', { name: 'Quitar punto' }));
   expect(screen.getByRole('button', { name: 'Señalar en la imagen' })).toBeInTheDocument();
 });
+it('cierra el editor abierto y bloquea cambios al finalizar el horario', async () => {
+  const props = { url:'https://example.test/test.webp',instructions:'Señala',answer:'',onChange:vi.fn() };
+  const {rerender}=render(<InstructorPointResponse {...props}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Señalar en la imagen'}));
+  await screen.findByRole('dialog');
+  rerender(<InstructorPointResponse {...props} disabled/>);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Señalar en la imagen'})).toBeDisabled();
+  expect(props.onChange).not.toHaveBeenCalled();
+});

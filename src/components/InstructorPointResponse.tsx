@@ -1,20 +1,21 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Target } from 'lucide-react';
 import IdentificationAnnotationOverlay from './IdentificationAnnotationOverlay';
 import { isInstructorPointAnswer, type InstructorAnswers } from '../types/instructorQuestions';
 
 const PointEditor = lazy(() => import('./PlateAnnotationViewerEditor'));
 
-export default function InstructorPointResponse({ url, instructions, answer, onChange }: {
-  url: string; instructions: string; answer: InstructorAnswers[string] | undefined; onChange: (answer: InstructorAnswers[string]) => void;
+export default function InstructorPointResponse({ url, instructions, answer, onChange, disabled = false }: {
+  url: string; instructions: string; answer: InstructorAnswers[string] | undefined; onChange: (answer: InstructorAnswers[string]) => void; disabled?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [failed, setFailed] = useState(false);
+  useEffect(() => { if (disabled) setEditing(false); }, [disabled]);
   const point = isInstructorPointAnswer(answer) ? answer : null;
   return <div className="instructor-point-response">
     <p className="instructor-muted">Abre la imagen y coloca un único señalado sobre la estructura indicada. Puedes moverlo o eliminarlo antes de entregar.</p>
-    <button type="button" className="instructor-reference-open" aria-label={point ? 'Editar señalado de respuesta' : 'Señalar en la imagen'} onClick={() => setEditing(true)}>
+    <button type="button" disabled={disabled} className="instructor-reference-open" aria-label={point ? 'Editar señalado de respuesta' : 'Señalar en la imagen'} onClick={() => setEditing(true)}>
       <div className="instructor-reference-photo"><img src={url} alt="Imagen para señalar" onError={() => setFailed(true)} onLoad={event => { setFailed(false); setSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }); }} />
         {point && size.width > 0 && <IdentificationAnnotationOverlay marker={{ ...point, label: 'Tu señalado' }} width={size.width} height={size.height} />}
       </div>
