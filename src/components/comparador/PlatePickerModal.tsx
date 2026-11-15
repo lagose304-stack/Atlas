@@ -60,6 +60,7 @@ interface PlatePickerModalProps {
   onClose: () => void;
   onSelectPlate: (plate: ComparadorPlacaItem) => void;
   targetLetter: 'A' | 'B' | 'C' | 'D';
+  title?: string;
   initialParcial?: 'primer' | 'segundo' | 'tercer';
 }
 
@@ -118,6 +119,7 @@ export const PlatePickerModal: React.FC<PlatePickerModalProps> = ({
   onClose,
   onSelectPlate,
   targetLetter,
+  title,
   initialParcial,
 }) => {
   const { user, isAuthenticated } = useAuth();
@@ -340,7 +342,7 @@ export const PlatePickerModal: React.FC<PlatePickerModalProps> = ({
             </div>
             <div>
               <h2 id="picker-title" className="plate-picker-title">
-                Seleccionar Placa {targetLetter}
+                {title ?? `Seleccionar Placa ${targetLetter}`}
               </h2>
             </div>
           </div>

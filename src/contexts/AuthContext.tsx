@@ -11,6 +11,7 @@ interface AuthUser {
   activo?: boolean;
   session_version?: number;
   is_protected?: boolean;
+  can_manage_microscopy?: boolean;
 }
 
 export type LoginStatus =
@@ -32,6 +33,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<LoginResult>;
   logout: () => void;
   user: AuthUser | null;
+  refreshSession: () => Promise<boolean>;
 }
 
 type SessionResponse = {
@@ -85,14 +87,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const cached = JSON.parse(localStorage.getItem(USER_KEY) || 'null') as AuthUser | null;
       if (!cached || !Number.isInteger(cached.id) || typeof cached.username !== 'string') return false;
-      acceptSession(cached);
+      acceptSession({ ...cached, can_manage_microscopy: false });
       return true;
     } catch {
       return false;
     }
   };
 
-  const performSessionValidation = async (force = false) => {
+  const performSessionValidation = async (force = false, clearMicroscopyOnFailure = false) => {
     if (!localStorage.getItem(ATLAS_SESSION_TOKEN_KEY)) {
       clearLocalSession();
       return false;
@@ -130,12 +132,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // Si Supabase no respondió, conservamos la sesión y probamos de nuevo después.
     // Las operaciones protegidas siguen siendo verificadas por el servidor.
+    if (clearMicroscopyOnFailure) {
+      setUser(current => current ? { ...current, can_manage_microscopy: false } : null);
+    }
     return isAuthenticated || restoreCachedSession();
   };
 
-  const validateSession = (force = false) => {
+  const validateSession = (force = false, clearMicroscopyOnFailure = false) => {
     if (validationInFlight.current) return validationInFlight.current;
-    const validation = performSessionValidation(force).finally(() => {
+    const validation = performSessionValidation(force, clearMicroscopyOnFailure).finally(() => {
       if (validationInFlight.current === validation) validationInFlight.current = null;
     });
     validationInFlight.current = validation;
@@ -237,7 +242,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [isAuthenticated]);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, login, logout, user }}>
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, login, logout, user, refreshSession: async () => {
+      if (validationInFlight.current) await validationInFlight.current;
+      // Mantener el editor mientras se comprueba la sesión. Retirar la capacidad
+      // si la comprobación falla, sin confundir un corte de red con un logout.
+      return validateSession(true, true);
+    } }}>
       {children}
     </AuthContext.Provider>
   );

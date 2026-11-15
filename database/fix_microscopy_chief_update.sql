@@ -1,0 +1,34 @@
+-- Corrección acotada: conserva permisos y contrato de la función existente.
+-- Aplicada con autorización el 14 de noviembre de 2026:
+-- migración fix_microscopy_chief_update_where. No es necesario repetirla.
+-- No crea tablas, no modifica usuarios ni asigna la jefatura.
+-- Requiere autorización explícita antes de ejecutarse en producción.
+BEGIN;
+CREATE OR REPLACE FUNCTION public.atlas_set_microscopy_chief(p_user_id integer, p_revision bigint)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE v_actor integer; v_state public.atlas_microscopy_chief%ROWTYPE;
+BEGIN
+  -- Serializa transferencias; comprobar permisos DESPUÉS de obtener el bloqueo.
+  SELECT * INTO STRICT v_state FROM public.atlas_microscopy_chief FOR UPDATE;
+  v_actor := public.atlas_session_user_id();
+  IF v_actor IS NULL OR (v_actor <> v_state.owner_id AND v_actor IS DISTINCT FROM v_state.user_id) THEN
+    RAISE EXCEPTION 'No autorizado' USING ERRCODE = '42501';
+  END IF;
+  IF p_revision IS DISTINCT FROM v_state.revision THEN
+    RAISE EXCEPTION 'La jefatura cambió. Recarga e intenta de nuevo.' USING ERRCODE = '40001';
+  END IF;
+  IF p_user_id IS NOT NULL THEN
+    PERFORM 1 FROM public.usuarios WHERE id = p_user_id AND activo AND rol = 'Administrador' FOR SHARE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'El usuario debe ser un Administrador activo'; END IF;
+  END IF;
+  UPDATE public.atlas_microscopy_chief
+    SET user_id = p_user_id, revision = revision + 1
+    WHERE singleton = true;
+END;
+$function$;
+
+COMMIT;

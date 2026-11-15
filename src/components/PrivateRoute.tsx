@@ -10,9 +10,11 @@ interface PrivateRouteProps {
   allowedRoles?: UserRole[];
   requireProtectedUser?: boolean;
   allowedUserIds?: number[];
+  allowMicroscopyManager?: boolean;
+  requireMicroscopyManager?: boolean;
 }
 
-const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles, requireProtectedUser, allowedUserIds }) => {
+const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles, requireProtectedUser, allowedUserIds, allowMicroscopyManager, requireMicroscopyManager }) => {
   const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
 
@@ -24,6 +26,15 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles, req
   // Si no está autenticado, redirigir a home
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;
+  }
+
+  if (requireMicroscopyManager && user?.can_manage_microscopy !== true) {
+    void logSecurityEvent('route_denied', {
+      userId: user?.id ?? null,
+      username: user?.username ?? null,
+      details: { path: location.pathname, reason: 'requires_microscopy_manager' },
+    });
+    return <Navigate to="/acceso-denegado" replace state={{ from: location.pathname }} />;
   }
 
   // Si la ruta requiere ser el usuario protegido/propietario
@@ -41,7 +52,7 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles, req
 
   if (allowedRoles && allowedRoles.length > 0) {
     const currentRole = user?.rol;
-    if (!currentRole || !allowedRoles.includes(currentRole)) {
+    if ((!currentRole || !allowedRoles.includes(currentRole)) && !(allowMicroscopyManager && user?.can_manage_microscopy === true)) {
       void logSecurityEvent('route_denied', {
         userId: user?.id ?? null,
         username: user?.username ?? null,

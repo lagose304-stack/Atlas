@@ -1,3 +1,5 @@
+import { useAuth } from '../contexts/AuthContext';
+import MicroscopyChiefEditor from '../components/MicroscopyChiefEditor';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import BackButton from '../components/BackButton';
@@ -31,6 +33,9 @@ const panelColor: Record<NonNullable<Panel>, string> = {
 };
 
 const GestionUsuarios: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.rol === 'Administrador';
+  const canManageChief = user?.can_manage_microscopy === true;
   const [activePanel, setActivePanel] = usePreservedParam<Panel>('panel', null);
   const [toast, setToast]   = useState<{ msg: string; ok: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -135,13 +140,14 @@ const GestionUsuarios: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!isAdmin) return;
     void detectSecurityColumns();
     void detectProtectedColumn();
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
-    if (activePanel === 'editar' || activePanel === 'borrar') loadUsuarios();
-  }, [activePanel, supportsSecurityColumns, supportsProtectedColumn]);
+    if (isAdmin && (activePanel === 'editar' || activePanel === 'borrar')) loadUsuarios();
+  }, [activePanel, supportsSecurityColumns, supportsProtectedColumn, isAdmin]);
 
   const togglePanel = (p: Panel) => setActivePanel(prev => (prev === p ? null : p));
 
@@ -195,7 +201,7 @@ const GestionUsuarios: React.FC = () => {
   // EDITAR
   // ======================================================
   const seleccionarParaEditar = (u: Usuario) => {
-    if (isProtectedUser(u)) {
+    if (isProtectedUser(u) && !canManageChief) {
       showToast('Este usuario esta protegido y no puede editarse desde este panel.', false);
       return;
     }
@@ -206,7 +212,7 @@ const GestionUsuarios: React.FC = () => {
 
   const handleEditar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!usuarioEditar) return;
+    if (!isAdmin || !usuarioEditar || isProtectedUser(usuarioEditar)) return;
     if (!editarForm.rol) { showToast('Selecciona un rol.', false); return; }
     const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRx.test(editarForm.username)) { showToast('El username debe ser un correo válido.', false); return; }
@@ -319,6 +325,18 @@ const GestionUsuarios: React.FC = () => {
     u.nombre.toLowerCase().includes(busquedaBorrar.toLowerCase())
   );
   const handleGoBack = useSmartBackNavigation('/edicion');
+
+  if (!isAdmin) return (
+    <div style={s.page}>
+      <Header />
+      <main style={s.main}>
+        <BackButton onClick={handleGoBack} />
+        <h1 style={s.pageTitle}>Editar usuario</h1>
+        <MicroscopyChiefEditor />
+      </main>
+      <Footer />
+    </div>
+  );
 
   return (
     <div style={s.page}>
@@ -459,7 +477,9 @@ const GestionUsuarios: React.FC = () => {
                           key={u.id}
                           style={s.userRow}
                           onClick={() => seleccionarParaEditar(u)}
-                          title={isProtectedUser(u) ? 'Usuario protegido: no editable' : 'Seleccionar usuario para editar'}
+                          title={isProtectedUser(u)
+                            ? canManageChief ? 'Editar solo la jefatura de Microscopia' : 'Usuario protegido: no editable'
+                            : 'Seleccionar usuario para editar'}
                         >
                           <span style={s.userAvatar}>{u.nombre.charAt(0).toUpperCase()}</span>
                           <span style={s.userInfo}>
@@ -480,6 +500,8 @@ const GestionUsuarios: React.FC = () => {
                       </button>
                     </div>
 
+                    <MicroscopyChiefEditor key={usuarioEditar.id} target={usuarioEditar} />
+                    {!isProtectedUser(usuarioEditar) && <>
                     <div style={s.formGrid}>
                       <label style={s.label}>
                         Correo electrónico (username)
@@ -548,6 +570,7 @@ const GestionUsuarios: React.FC = () => {
                     <button type="submit" style={{ ...s.submitBtn, background: 'linear-gradient(135deg,#3b82f6,#60a5fa)' }} disabled={loading}>
                       {loading ? 'Guardando...' : '✔ Guardar cambios'}
                     </button>
+                    </>}
                   </form>
                 )}
               </div>

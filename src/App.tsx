@@ -32,6 +32,8 @@ const GestionTinciones = lazy(() => import('./pages/GestionTinciones'));
 const MapasInteractivos = lazy(() => import('./pages/MapasInteractivos'));
 const GestionUsuarios = lazy(() => import('./pages/GestionUsuarios'));
 const Pruebas = lazy(() => import('./pages/Pruebas'));
+const PruebaInstructores = lazy(() => import('./pages/PruebaInstructores'));
+const RealizarPruebaInstructores = lazy(() => import('./pages/RealizarPruebaInstructores'));
 const GestionPruebas = lazy(() => import('./pages/GestionPruebas'));
 const EditorDePruebas = lazy(() => import('./pages/EditorDePruebas'));
 const EjecutarPrueba = lazy(() => import('./pages/EjecutarPrueba'));
@@ -287,7 +289,7 @@ const App: React.FC = () => {
           <Route
             path="/gestion-usuarios"
             element={
-              <PrivateRoute allowedRoles={[ROLE_ADMIN]}>
+              <PrivateRoute allowedRoles={[ROLE_ADMIN]} allowMicroscopyManager>
                 <GestionUsuarios />
               </PrivateRoute>
             }
@@ -325,6 +327,14 @@ const App: React.FC = () => {
             }
           />
           <Route
+            path="/pruebas/instructores"
+            element={
+              <PrivateRoute requireMicroscopyManager>
+                <PruebaInstructores />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/pruebas/editor/:pruebaId"
             element={
               <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
@@ -341,6 +351,7 @@ const App: React.FC = () => {
             }
           />
           <Route path="/evaluaciones" element={<Evaluaciones />} />
+          <Route path="/evaluaciones/instructores/:pruebaId" element={<RealizarPruebaInstructores />} />
           <Route path="/evaluaciones/ejecutar/:pruebaId" element={<EjecutarPrueba />} />
           <Route
             path="/acceso-denegado"

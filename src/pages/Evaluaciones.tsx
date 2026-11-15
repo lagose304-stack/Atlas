@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { supabase } from '../services/supabase';
+import PublicInstructorTests from '../components/PublicInstructorTests';
 import { useAuth } from '../contexts/AuthContext';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
@@ -465,7 +466,7 @@ const Evaluaciones: React.FC = () => {
               </div>
             </div>
           ) : !hasAnyPublishedTest ? (
-            <div style={s.statusBox}><BookOpenCheck size={28} aria-hidden="true" /><div style={s.statusCopy}><strong>Aún no hay evaluaciones publicadas</strong><span>Cuando haya contenido disponible, aparecerá organizado en esta página.</span></div></div>
+            <div style={s.statusBox}><BookOpenCheck size={28} aria-hidden="true" /><div style={s.statusCopy}><strong>Aún no hay evaluaciones de parciales publicadas</strong><span>Cuando haya contenido disponible, aparecerá organizado en esta página.</span></div></div>
           ) : (
             <>
               <div style={s.parcialSections}>
@@ -701,6 +702,8 @@ const Evaluaciones: React.FC = () => {
               </div>
             </>
           )}
+
+          {!isLoading && (canBypass || !isFeatureDisabled('evaluations', maintenanceStatus?.disabledFeatures ?? [])) && <PublicInstructorTests reloadKey={reloadTick} />}
 
           {user?.rol === 'Administrador' && (
             <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'center' }}>

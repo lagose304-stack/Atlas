@@ -1,7 +1,8 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth } from './AuthContext';
 import { ATLAS_SESSION_TOKEN_KEY } from '../services/supabase';
+import MicroscopyChiefEditor from '../components/MicroscopyChiefEditor';
 
 const rpc = vi.hoisted(() => vi.fn());
 
@@ -40,6 +41,15 @@ const AccountActions = () => {
   );
 };
 
+const MicroscopyCapability = () => {
+  const { isAuthenticated, user, refreshSession } = useAuth();
+  return <>
+    <span>{isAuthenticated ? 'authenticated' : 'anonymous'}</span>
+    <span>{user?.can_manage_microscopy === true ? 'chief-enabled' : 'chief-disabled'}</span>
+    <button onClick={() => void refreshSession()}>Actualizar permisos</button>
+  </>;
+};
+
 const validSession = {
   data: {
     ok: true,
@@ -65,6 +75,50 @@ describe('AuthProvider session validation', () => {
     });
     localStorage.setItem(ATLAS_SESSION_TOKEN_KEY, 'valid-token');
     rpc.mockReset();
+  });
+
+  it('retira la capacidad de jefatura tras transferir sin cerrar la sesión habitual', async () => {
+    rpc.mockResolvedValue({ data: {
+      ...validSession.data, user: { ...validSession.data.user, can_manage_microscopy: true },
+    }, error: null });
+    render(<AuthProvider><MicroscopyCapability /></AuthProvider>);
+    await screen.findByText('chief-enabled');
+    rpc.mockResolvedValue(validSession);
+    await act(async () => screen.getByText('Actualizar permisos').click());
+    await screen.findByText('chief-disabled');
+    expect(screen.getByText('authenticated')).toBeInTheDocument();
+  });
+
+  it.each([true, false])('conserva la confirmación al guardar y refrescar permisos (conserva autoridad: %s)', async retainsAuthority => {
+    let saved = false;
+    rpc.mockImplementation(async (name: string) => {
+      if (name === 'atlas_validate_session') return { data: {
+        ok: true, user: { ...validSession.data.user, can_manage_microscopy: !saved || retainsAuthority },
+      }, error: null };
+      if (name === 'atlas_get_microscopy_chief') return {
+        data: { user_id: saved ? 9 : null, revision: saved ? 1 : 0 }, error: null,
+      };
+      if (name === 'atlas_set_microscopy_chief') saved = true;
+      return { data: null, error: null };
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<AuthProvider>
+      <MicroscopyChiefEditor target={{ id: 9, nombre: 'Sucesor', rol: 'Administrador' }} />
+    </AuthProvider>);
+    const checkbox = await screen.findByRole('checkbox');
+    await waitFor(() => expect(checkbox).toBeEnabled());
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar jefatura' }));
+    await waitFor(() => expect(rpc.mock.calls.filter(([name]) => name === 'atlas_validate_session')).toHaveLength(2));
+    expect(await screen.findByRole('status')).toHaveTextContent('Sucesor es ahora Jefe de Microscopia. Cambio guardado correctamente.');
+    if (retainsAuthority) {
+      expect(screen.getByRole('checkbox')).toBeChecked();
+      expect(screen.getByText('Estado guardado: Jefe de Microscopia.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Guardar jefatura' })).toBeDisabled();
+    } else {
+      await waitFor(() => expect(screen.queryByRole('checkbox')).not.toBeInTheDocument());
+      expect(screen.getByRole('status')).toHaveTextContent('Cambio guardado correctamente.');
+    }
   });
 
   it('conserva la sesión cuando una revalidación falla temporalmente', async () => {

@@ -1,0 +1,104 @@
+import { useEffect, useState } from 'react';
+import { ArrowLeft, Check, ClipboardCheck, LoaderCircle, Save, X } from 'lucide-react';
+import { getInstructorSubmission, listInstructorSubmissions, reviewInstructorSubmission, type InstructorSubmission, type InstructorSubmissionSummary } from '../services/instructorTests';
+import { formatInstructorPoints, incisoLetter, instructorIncisoWeight, instructorReviewPoints, instructorSectionResults, isInstructorPointAnswer, requiresInstructorReview, type PublicInstructorQuestion } from '../types/instructorQuestions';
+import InstructorReferenceImageView from './InstructorReferenceImageView';
+import InstructorSectionScores from './InstructorSectionScores';
+
+export default function InstructorSubmissionReview({ testId, name, onClose }: { testId: string; name: string; onClose: () => void }) {
+  const [rows, setRows] = useState<InstructorSubmissionSummary[]>([]);
+  const [selected, setSelected] = useState<InstructorSubmission | null>(null);
+  const [reviews, setReviews] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(true), [dirty, setDirty] = useState(false), [more, setMore] = useState(false);
+  const [error, setError] = useState(''), [message, setMessage] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    void listInstructorSubmissions(testId).then(data => { if (!cancelled) { setRows(data); setMore(data.length === 50); } })
+      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'No se pudieron cargar las entregas.'); })
+      .finally(() => { if (!cancelled) setBusy(false); });
+    return () => { cancelled = true; };
+  }, [testId]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  const mayLeave = () => !dirty || window.confirm('Hay una revisión sin guardar. ¿Quieres descartarla?');
+  const open = async (id: string) => {
+    if (busy || !mayLeave()) return;
+    setBusy(true); setError(''); setMessage('');
+    try { const detail = await getInstructorSubmission(id); setSelected(detail); setReviews(detail.reviews); setDirty(false); }
+    catch (e) { setError(e instanceof Error ? e.message : 'No se pudo abrir la entrega.'); }
+    finally { setBusy(false); }
+  };
+  const save = async () => {
+    if (!selected || busy) return;
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const detail = await reviewInstructorSubmission(selected, reviews); setSelected(detail); setReviews(detail.reviews); setDirty(false);
+      const pending = detail.snapshot.questions.filter(q => requiresInstructorReview(detail.snapshot, q) && !(q.id in detail.reviews)).length;
+      const correct = detail.auto_correct + instructorReviewPoints(detail.snapshot, detail.reviews);
+      setRows(old => old.map(row => row.id === detail.id ? { ...row, pending_review: pending, revision: detail.revision, correct, percentage: pending ? null : Math.round(10000 * correct / detail.total) / 100 } : row));
+      setMessage('Revisión guardada correctamente.');
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar la revisión.'); }
+    finally { setBusy(false); }
+  };
+  const manual = selected?.snapshot.questions.filter(q => requiresInstructorReview(selected.snapshot, q)) ?? [];
+  const pending = manual.filter(q => !(q.id in reviews)).length;
+  const correct = (selected?.auto_correct ?? 0) + (selected ? instructorReviewPoints(selected.snapshot, reviews) : 0);
+  const questionTitle = (question: PublicInstructorQuestion) => {
+    const siblings = selected?.snapshot.questions.filter(q => q.group?.id === question.group?.id) ?? [];
+    return question.group ? `Pregunta ${question.group.position} · Inciso ${incisoLetter(siblings.findIndex(q => q.id === question.id))}`
+      : `${(selected?.snapshot.questions.findIndex(q => q.id === question.id) ?? 0) + 1}.`;
+  };
+  return <section className="instructor-panel instructor-review-panel">
+    <button type="button" className="instructor-btn" disabled={busy} onClick={() => { if (mayLeave()) onClose(); }}><ArrowLeft size={16} />Volver a pruebas</button>
+    <h2><ClipboardCheck size={22} /> Respuestas enviadas · {name}</h2>
+    <p className="instructor-muted">Consulta las entregas por nombre, estado y puntaje. Cada una conserva las respuestas de la versión que se realizó.</p>
+    {error && <p role="alert" className="instructor-error">{error}</p>}{message && <p role="status" className="instructor-success">{message}</p>}
+    {busy && <p role="status"><LoaderCircle size={16} className="instructor-spin" />Cargando…</p>}
+    <div className="instructor-review-layout"><div>
+      {!busy && !rows.length && !error && <p>Todavía no hay pruebas enviadas.</p>}
+      <ul className="instructor-review-list" aria-label="Entregas para revisar">{rows.map(row => <li key={row.id}>
+        <button type="button" className="instructor-btn" aria-current={selected?.id === row.id ? 'true' : undefined} disabled={busy} onClick={() => void open(row.id)}>
+          <strong>{row.participant_name || 'Sin nombre registrado'}</strong><span>Entrega {row.id.slice(0, 8)}</span><span>{new Date(row.created_at).toLocaleString('es-HN')}</span>
+          <span className="instructor-badge">{row.pending_review ? 'Pendiente' : 'Revisada'}</span>
+          <span>{row.pending_review ? `Puntaje provisional: ${formatInstructorPoints(row.correct ?? 0)}/${row.total} · ${row.pending_review} por revisar` : `Puntaje: ${formatInstructorPoints(row.correct ?? 0)}/${row.total} (${row.percentage ?? 0}%)`}</span>
+        </button>
+      </li>)}</ul>
+      {more && <button type="button" className="instructor-btn" disabled={busy} onClick={async () => {
+        setBusy(true); setError(''); try { const next = await listInstructorSubmissions(testId, rows.length); setRows(old => [...old, ...next]); setMore(next.length === 50); }
+        catch (e) { setError(e instanceof Error ? e.message : 'No se pudieron cargar más entregas.'); } finally { setBusy(false); }
+      }}>Cargar más entregas</button>}
+    </div>
+    {selected && <fieldset disabled={busy} className="instructor-review-detail"><legend>{selected.participant_name || 'Sin nombre registrado'} · Entrega {selected.id.slice(0, 8)} · Versión {selected.test_revision}</legend>
+      <InstructorSectionScores sections={instructorSectionResults(selected.snapshot, selected.auto_results ?? {}, reviews)} />
+      {!manual.length && <p className="instructor-success">Esta entrega se calificó automáticamente. No tiene respuestas pendientes de revisión.</p>}
+      {selected.snapshot.questions.filter(q => !requiresInstructorReview(selected.snapshot, q)).map(q => <section className="instructor-review-item" key={q.id}><h3>{questionTitle(q)} {q.titulo}</h3>
+        <p className="instructor-muted">Valor del inciso: {formatInstructorPoints(instructorIncisoWeight(selected.snapshot, q))} puntos · Calificación automática</p>
+        {q.type === 'short_answer' && q.image && <InstructorReferenceImageView key={`${selected.id}-${q.id}`} url={q.image.url} annotations={q.image.annotations} />}
+        <p className="instructor-muted">Respuesta enviada:</p><div className="instructor-submitted-answer">{typeof selected.answers[q.id] === 'string'
+          ? q.type === 'single_choice' || !q.type ? q.options.find(option => option.id === selected.answers[q.id])?.texto ?? String(selected.answers[q.id]) : String(selected.answers[q.id])
+          : q.type === 'completion' ? q.blanks.map((blank, i) => <p key={blank.id}>Hueco {i + 1}: {String((selected.answers[q.id] as Record<string, string>)?.[blank.id] ?? '')}</p>)
+          : q.type === 'matching' ? q.terms.map(term => <p key={term.id}>{term.texto}: {q.choices.find(choice => choice.id === (selected.answers[q.id] as Record<string, string>)?.[term.id])?.texto ?? ''}</p>) : ''}</div>
+      </section>)}
+      {manual.map((q, index) => {
+        if (q.type !== 'image_point' && q.type !== 'short_answer') return null;
+        const point = selected.answers[q.id];
+        return <section className="instructor-review-item" key={q.id}><h3>{questionTitle(q)} {q.titulo}</h3>
+          <p className="instructor-muted">Valor del inciso: {formatInstructorPoints(instructorIncisoWeight(selected.snapshot, q))} puntos · {q.id in reviews ? 'Revisada' : 'Pendiente'}</p>
+          {q.type === 'image_point' ? <InstructorReferenceImageView key={`${selected.id}-${q.id}`} url={q.image.url} annotations={isInstructorPointAnswer(point) ? [{ ...point, label: 'Respuesta entregada' }] : []} />
+            : <>{q.image && <InstructorReferenceImageView key={`${selected.id}-${q.id}`} url={q.image.url} annotations={q.image.annotations} />}<p className="instructor-submitted-answer">{typeof point === 'string' ? point : ''}</p></>}
+          {q.type === 'short_answer' && selected.snapshot.review_guides?.[q.id]?.some(guide => guide.trim()) && <details><summary>Referencias del autor para revisar</summary><p>{selected.snapshot.review_guides[q.id].filter(guide => guide.trim()).join(' · ')}</p></details>}
+          <div className="instructor-row" role="group" aria-label={`Calificar respuesta abierta ${index + 1}`}>
+            <button type="button" className="instructor-btn instructor-review-correct" aria-pressed={reviews[q.id] === true} onClick={() => { setReviews(old => ({ ...old, [q.id]: true })); setDirty(true); setMessage(''); }}><Check size={16} />Correcto</button>
+            <button type="button" className="instructor-btn instructor-btn-danger" aria-pressed={reviews[q.id] === false} onClick={() => { setReviews(old => ({ ...old, [q.id]: false })); setDirty(true); setMessage(''); }}><X size={16} />Incorrecto</button>
+          </div>
+        </section>;
+      })}
+      <p>{pending ? `${pending} ${pending === 1 ? 'respuesta' : 'respuestas'} por revisar. Puntaje provisional: ${formatInstructorPoints(correct)}/${selected.total}.` : `Calificación: ${(100 * correct / selected.total).toFixed(2)}% (${formatInstructorPoints(correct)}/${selected.total}).`}</p>
+      <button type="button" className="instructor-btn instructor-btn-primary" disabled={!dirty} onClick={() => void save()}><Save size={16} />Guardar revisión</button>
+    </fieldset>}
+    </div>
+  </section>;
+}

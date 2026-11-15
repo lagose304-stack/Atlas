@@ -82,7 +82,7 @@ describe('PlateEditorPanel - conservación de cambios sin guardar', () => {
   beforeEach(() => {
     vi.mocked(AuthContextModule.useAuth).mockReturnValue({
       user: { id: 4, username: 'usuario_prueba', rol: 'Microscopía' },
-      isAuthenticated: true, isLoading: false, login: vi.fn(), logout: vi.fn(),
+      isAuthenticated: true, isLoading: false, login: vi.fn(), logout: vi.fn(), refreshSession: vi.fn(),
     });
   });
 

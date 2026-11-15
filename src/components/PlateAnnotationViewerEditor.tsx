@@ -66,6 +66,8 @@ export interface PlateAnnotationViewerEditorProps {
   initialSenaladosPos?: Array<MarkerLocation | null>;
   // Single/Batch picker compatibility
   singlePickerMode?: boolean;
+  answerPointMode?: boolean;
+  pointInstructions?: string;
   batchPickerMode?: boolean;
   borderPickerMode?: boolean;
   initialLocation?: MarkerLocation | null;
@@ -352,6 +354,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   initialSenalados = [],
   initialSenaladosPos = [],
   singlePickerMode = false,
+  answerPointMode = false,
+  pointInstructions,
   batchPickerMode = false,
   borderPickerMode = false,
   initialLocation = null,
@@ -469,7 +473,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   });
 
   // Current active tool mode (Mano / Paneo por defecto, o Borde si viene en borderPickerMode)
-  const [activeTool, setActiveTool] = useState<EditorTool>(() => (borderPickerMode ? 'border' : 'pan'));
+  const [activeTool, setActiveTool] = useState<EditorTool>(() => answerPointMode ? 'pointer' : (borderPickerMode ? 'border' : 'pan'));
 
   // Freehand continuous drawing state
   const [isDrawingFreehand, setIsDrawingFreehand] = useState(false);
@@ -575,6 +579,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   // Tool switcher with clean session reset
   const handleSelectTool = useCallback((newTool: EditorTool) => {
+    if (answerPointMode && newTool !== 'pointer' && newTool !== 'pan') return;
     if (drawingPolygonPointsRef.current.length && newTool !== activeTool) { setRegionError('Cierra o cancela el contorno antes de cambiar de herramienta. Para navegar usa Mover placa.'); return; }
     // Si se hace clic en la misma herramienta que ya está activa, mantener sesión y selección intactas
     if (newTool === activeTool) {
@@ -610,7 +615,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
     setSessionMarkerIds([]);
     setSelectedMarkerId(null);
     setSidebarOpen(true);
-  }, [activeTool, currentCreationLabel, sessionMarkerIds, singlePickerMode, targetLabel]);
+  }, [activeTool, currentCreationLabel, sessionMarkerIds, singlePickerMode, targetLabel, answerPointMode]);
 
   // Canvas zoom, pan, rotation
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -1913,6 +1918,10 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
   return createPortal(
     <div
+      data-answer-point-editor={answerPointMode || undefined}
+      role={answerPointMode ? 'dialog' : undefined}
+      aria-modal={answerPointMode || undefined}
+      aria-label={answerPointMode ? 'Responder con un señalado' : undefined}
       onContextMenu={e => { if (!isEditableTarget(e.target)) e.preventDefault(); }}
       style={{
         position: 'fixed',
@@ -2039,11 +2048,12 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           <div className="annotation-editor-actions__buttons">
             <button type="button" onClick={handleConfirmSave} disabled={isSavingLocally || imageStatus !== 'ready'}>
               {isSavingLocally ? <Loader2 size={16} className="annotation-editor-actions__spinner" /> : <Check size={16} />}
-              {isSavingLocally ? 'Guardando...' : 'Guardar señalados'}
+              {isSavingLocally ? 'Guardando...' : answerPointMode ? 'Guardar respuesta' : 'Guardar señalados'}
             </button>
             <button type="button" onClick={handleRequestClose}><X size={15} /> Cancelar / Salir</button>
           </div>
           <div className="annotation-inspector__save-state" role="status"><span data-pending={hasUnsavedModifications || drawingPolygonPoints.length > 0} />{drawingPolygonPoints.length ? 'Contorno pendiente de cierre' : hasUnsavedModifications ? 'Cambios pendientes de guardar' : 'Todo listo para editar'}</div>
+          {answerPointMode && <p className="instructor-point-instructions">{pointInstructions || 'Haz clic para colocar o mover tu señalado. Usa Mano para desplazar la imagen.'}</p>}
         </div>
 
         {/* Top Center Toast Notification (Guardando / Guardado con éxito) */}
@@ -2093,7 +2103,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         )}
 
         {/* Top Right Controls when Sidebar is Closed */}
-        {!sidebarOpen && (
+        {!sidebarOpen && !answerPointMode && (
           <div
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
@@ -2186,7 +2196,11 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
           <div style={{ width: '28px', height: '1px', background: '#cbd5e1', margin: '1px 0' }} />
 
-          <details className="annotation-navigation-appearance" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
+          {answerPointMode && <>
+            <button type="button" className="instructor-point-tool" aria-label="Colocar o mover señalado" aria-pressed={activeTool === 'pointer'} onClick={() => handleSelectTool('pointer')}><Target size={20} /></button>
+            <button type="button" className="instructor-point-tool" aria-label="Eliminar señalado" disabled={!markers.some(marker => marker.x != null)} onClick={() => { pushHistory(markers); setMarkers([]); setSelectedMarkerId(null); setHasUnsavedModifications(true); }}><Trash2 size={18} /></button>
+          </>}
+          {!answerPointMode && <details className="annotation-navigation-appearance" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
             <summary title="Apariencia del puntero" aria-label="Apariencia del puntero"><MousePointer size={18} /></summary>
             <div>
               <div className="annotation-navigation-appearance__title"><strong>Apariencia del puntero</strong><button type="button" aria-label="Cerrar apariencia del puntero" onClick={event => { event.currentTarget.closest('details')!.open = false; }}><X size={14} /></button></div>
@@ -2200,7 +2214,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 {MARKER_COLOR_OPTIONS.map(color => <button key={color.key} type="button" title={`Color: ${color.label}`} aria-label={`Color: ${color.label}`} aria-pressed={markerColorKey === color.key} onClick={() => setMarkerColorKey(color.key)} style={{ background: color.fill }} />)}
               </div>
             </div>
-          </details>
+          </details>}
           <div style={{ width: '28px', height: '1px', background: '#cbd5e1', margin: '1px 0' }} />
 
           {/* Zoom Section */}
@@ -2262,6 +2276,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
           <div style={{ width: '28px', height: '1px', background: '#cbd5e1', margin: '1px 0' }} />
 
           {/* Bottom Section: Canvas Actions */}
+          {!answerPointMode && <>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
             <button
               type="button"
@@ -2329,6 +2344,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
               <Undo size={16} />
             </button>
           </div>
+          </>}
         </div>
 
         <RegionBordersOverlay layer={borderImageLayer} size={imageSize} zoom={zoomLevel} viewKey={`${position.x}:${position.y}:${rotation}`} regions={showAllMarkers ? [
@@ -3041,7 +3057,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       </div>
 
       {/* Right Inspector & Marker List Drawer (MODO CLARO) */}
-      {sidebarOpen && (
+      {sidebarOpen && !answerPointMode && (
         <aside
           className="annotation-inspector"
           aria-label="Panel del editor de señalados"

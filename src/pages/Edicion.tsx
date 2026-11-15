@@ -14,9 +14,10 @@ const Edicion: React.FC = () => {
   const canTemario = hasPermission(user?.rol, 'temario');
   const canPlacas = hasPermission(user?.rol, 'placas');
   const canEditarPaginas = hasPermission(user?.rol, 'editar_paginas');
-  const canGestionUsuarios = hasPermission(user?.rol, 'gestion_usuarios');
+  const canGestionUsuarios = hasPermission(user?.rol, 'gestion_usuarios') || user?.can_manage_microscopy === true;
   const canEstadisticas = hasPermission(user?.rol, 'estadisticas');
   const canAuditoria = hasPermission(user?.rol, 'auditoria');
+  const canPruebaInstructores = user?.can_manage_microscopy === true;
 
   const handleLogout = () => {
     logout();
@@ -213,7 +214,7 @@ const Edicion: React.FC = () => {
             </div>
           </div>}
 
-          {canEditarPaginas && <div style={s.card} className="edicion-card">
+          {(canEditarPaginas || canPruebaInstructores) && <div style={s.card} className="edicion-card">
             <div style={{ ...s.cardAccent, background: 'linear-gradient(135deg, #8b5cf6, #a78bfa)' }} />
             <div style={s.cardIcon}>🧪</div>
             <div style={s.cardBody}>
@@ -223,12 +224,15 @@ const Edicion: React.FC = () => {
               </p>
             </div>
             <div style={s.pagesBtnGroup} className="edicion-pages-btn-group">
-              <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas')}>
+              {canEditarPaginas && <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas')}>
                 Administración
-              </button>
-              <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas/crear')}>
+              </button>}
+              {canEditarPaginas && <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas/crear')}>
                 Crear
-              </button>
+              </button>}
+              {canPruebaInstructores && <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas/instructores')}>
+                Prueba de instructores
+              </button>}
             </div>
           </div>}
 
@@ -239,7 +243,9 @@ const Edicion: React.FC = () => {
             <div style={s.cardBody}>
               <h2 style={s.cardTitle}>Gestión de usuarios</h2>
               <p style={s.cardDesc}>
-                Crea, edita o elimina cuentas de usuario del sistema. Asigna roles y administra el acceso al panel de edición.
+                {hasPermission(user?.rol, 'gestion_usuarios')
+                  ? 'Crea, edita o desactiva cuentas de usuario del sistema.'
+                  : 'Edita un usuario para transferir o retirar la jefatura de Microscopia.'}
               </p>
             </div>
             <Link

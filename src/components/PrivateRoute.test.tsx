@@ -8,7 +8,7 @@ const authState = vi.hoisted(() => ({
   current: {
     isAuthenticated: false,
     isLoading: false,
-    user: null as null | { id: number; username: string; rol: 'Administrador' | 'Microscopía' | 'Instructor' },
+    user: null as null | { id: number; username: string; rol: 'Administrador' | 'Microscopía' | 'Instructor'; can_manage_microscopy?: boolean },
   },
 }));
 
@@ -22,7 +22,7 @@ vi.mock('../services/securityAudit', () => ({
 
 const renderProtectedRoute = (
   allowedRoles?: Array<'Administrador' | 'Microscopía' | 'Instructor'>,
-  restrictions: Pick<ComponentProps<typeof PrivateRoute>, 'allowedUserIds' | 'requireProtectedUser'> = {},
+  restrictions: Pick<ComponentProps<typeof PrivateRoute>, 'allowedUserIds' | 'requireProtectedUser' | 'allowMicroscopyManager' | 'requireMicroscopyManager'> = {},
 ) => render(
   <MemoryRouter initialEntries={['/privada']}>
     <Routes>
@@ -43,6 +43,53 @@ const renderProtectedRoute = (
 describe('PrivateRoute', () => {
   beforeEach(() => {
     authState.current = { isAuthenticated: false, isLoading: false, user: null };
+  });
+
+  it.each([
+    { authority: true, expected: 'Contenido privado' },
+    { authority: false, expected: 'Acceso denegado' },
+    { authority: undefined, expected: 'Acceso denegado' },
+  ])('exige la capacidad del servidor para pruebas de instructores: $authority', ({ authority, expected }) => {
+    authState.current = {
+      isAuthenticated: true, isLoading: false,
+      user: { id: 8, username: 'admin', rol: 'Administrador', can_manage_microscopy: authority },
+    };
+    renderProtectedRoute(undefined, { requireMicroscopyManager: true });
+    expect(screen.getByText(expected)).toBeInTheDocument();
+  });
+
+  it('retira el contenido del módulo cuando se pierde la jefatura durante la sesión', () => {
+    authState.current = {
+      isAuthenticated: true, isLoading: false,
+      user: { id: 8, username: 'admin', rol: 'Administrador', can_manage_microscopy: true },
+    };
+    const view = renderProtectedRoute(undefined, { requireMicroscopyManager: true });
+    expect(screen.getByText('Contenido privado')).toBeInTheDocument();
+    authState.current.user!.can_manage_microscopy = false;
+    view.rerender(<MemoryRouter initialEntries={['/privada']}><Routes>
+      <Route path="/acceso-denegado" element={<div>Acceso denegado</div>} />
+      <Route path="/privada" element={<PrivateRoute requireMicroscopyManager><div>Contenido privado</div></PrivateRoute>} />
+    </Routes></MemoryRouter>);
+    expect(screen.getByText('Acceso denegado')).toBeInTheDocument();
+    expect(screen.queryByText('Contenido privado')).not.toBeInTheDocument();
+  });
+
+  it('admite al jefe instructor solo en una ruta que habilita esta excepción', () => {
+    authState.current = {
+      isAuthenticated: true, isLoading: false,
+      user: { id: 8, username: 'titular', rol: 'Instructor', can_manage_microscopy: true },
+    };
+    renderProtectedRoute(['Administrador'], { allowMicroscopyManager: true });
+    expect(screen.getByText('Contenido privado')).toBeInTheDocument();
+  });
+
+  it('la jefatura no abre otras rutas administrativas', () => {
+    authState.current = {
+      isAuthenticated: true, isLoading: false,
+      user: { id: 8, username: 'titular', rol: 'Instructor', can_manage_microscopy: true },
+    };
+    renderProtectedRoute(['Administrador']);
+    expect(screen.getByText('Acceso denegado')).toBeInTheDocument();
   });
 
   it('redirige al inicio cuando no existe una sesión', () => {
