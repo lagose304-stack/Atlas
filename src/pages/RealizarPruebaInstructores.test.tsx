@@ -77,7 +77,7 @@ describe('Acceso público a prueba de instructores', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('atlas_resume_instructor_test',{p_id:'t1',p_token:'opaque-token',p_account:'001234567890'});
     expect(mocks.rpc.mock.calls.some(([name])=>name==='atlas_begin_instructor_test')).toBe(false);
   });
-  it.each(['not_found','locked','submitted'])('explica una recuperación %s sin mostrar preguntas', async status => {
+  it.each(['not_found','locked','submitted','version_changed'])('explica una recuperación %s sin mostrar preguntas', async status => {
     const backend=mocks.rpc.getMockImplementation();
     mocks.rpc.mockImplementation(async(name: string,args?: Record<string,unknown>)=>name==='atlas_resume_instructor_test'?{data:{ok:false,status},error:null}:backend?.(name,args));
     renderPage();await enter(false);

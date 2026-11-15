@@ -53,7 +53,7 @@ export const gradeInstructorTest = (id: string, token: string, answers: Instruct
 );
 export const isInstructorAccount = (account: string) => /^[0-9]{10,13}$/.test(account);
 export type InstructorProgress = { ok: true; participant_name: string; account_number: string; answers: InstructorAnswers; current_question_id: string | null; progress_revision: number };
-export type InstructorRecovery = InstructorProgress | { ok: false; status: 'not_found' | 'locked' | 'submitted' };
+export type InstructorRecovery = InstructorProgress | { ok: false; status: 'not_found' | 'locked' | 'submitted' | 'version_changed' };
 export const startInstructorTest = (id: string, token: string, name: string, account: string) => rpc<InstructorProgress>('atlas_begin_instructor_test', { p_id: id, p_token: token, p_name: name, p_account: account });
 export const resumeInstructorTest = (id: string, token: string, account: string) => rpc<InstructorRecovery>('atlas_resume_instructor_test', { p_id: id, p_token: token, p_account: account });
 export const saveInstructorProgress = (id: string, token: string, revision: number, answers: InstructorAnswers, questionId: string | null) => rpc<{ ok: true; progress_revision: number }>('atlas_save_instructor_progress', { p_id: id, p_token: token, p_revision: revision, p_answers: answers, p_current_question_id: questionId });

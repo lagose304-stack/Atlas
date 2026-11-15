@@ -8,7 +8,8 @@ import { pathToFileURL } from 'node:url';
 if (!process.argv[2]) throw new Error('Indica la ruta del módulo PGlite instalado fuera del proyecto.');
 const { PGlite } = await import(pathToFileURL(process.argv[2]).href);
 const db = new PGlite();
-const withDeletion = process.argv.includes('--deletion');
+const withUniqueAccount = process.argv.includes('--unique-account');
+const withDeletion = process.argv.includes('--deletion') || withUniqueAccount;
 const withSchedule = process.argv.includes('--schedule') || withDeletion;
 const withResume = process.argv.includes('--resume') || withSchedule;
 const withSections = process.argv.includes('--sections') || withResume;
@@ -616,6 +617,57 @@ try {
     await reject(()=>call('atlas_delete_instructor_submission',[t.id,keep.submission_id,1]),/permission denied/);
     await db.exec('RESET ROLE');
     check((await call('atlas_get_instructor_submission',[keep.submission_id])).answers.q1==='b','Desactivar borrado conserva entregas');
+  }
+  if(withUniqueAccount){
+    // Restaurar definiciones actuales despues de comprobar el rollback de horarios.
+    const schedule=await readFile(new URL('../schedule_instructor_tests_and_results.sql',import.meta.url),'utf8');
+    for(const match of schedule.matchAll(/CREATE (?:OR REPLACE )?FUNCTION[\s\S]*?\$\$;/g))
+      await db.exec(match[0].replace('CREATE FUNCTION','CREATE OR REPLACE FUNCTION'));
+    const install=await readFile(new URL('../unique_instructor_attempt_per_account.sql',import.meta.url),'utf8');
+    await actor(4);await ip('192.0.2.210');
+    let t=await call('atlas_save_instructor_test',[null,null,content,'112233']);
+    t=await call('atlas_publish_instructor_test',[t.id,t.revision,true]);
+    const a=await call('atlas_unlock_instructor_test',[t.id,'112233']);
+    await call('atlas_begin_instructor_test',[t.id,a.token,'Persona Unica','001234567890']);
+    await call('atlas_save_instructor_progress',[t.id,a.token,1,{q1:'a'},'legacy-q1']);
+    await db.query(`INSERT INTO public.instructor_test_progress(test_id,test_revision,account_number,participant_name,active_token_hash)
+      VALUES($1,-1,'001234567890','Duplicado de prueba','duplicate-fixture')`,[t.id]);
+    await reject(()=>db.exec(install),/duplicados por prueba/);await db.exec('ROLLBACK');
+    check((await db.query('select count(*)::int n from public.instructor_test_progress where test_id=$1',[t.id])).rows[0].n===2,'Instalacion con duplicados aborta sin borrar datos');
+    await db.query('delete from public.instructor_test_progress where test_id=$1 and test_revision=-1',[t.id]);
+    await db.exec(install);
+    const b=await call('atlas_unlock_instructor_test',[t.id,'112233']);
+    await reject(()=>call('atlas_begin_instructor_test',[t.id,b.token,'Otro Nombre','001234567890']),/Continuar prueba/);
+    const resumed=await call('atlas_resume_instructor_test',[t.id,b.token,'001234567890']);
+    check(resumed.ok&&resumed.answers.q1==='a'&&resumed.participant_name==='Persona Unica'&&resumed.current_question_id==='legacy-q1','Recuperar conserva nombre, respuestas y posicion del unico intento');
+    await reject(()=>call('atlas_save_instructor_progress',[t.id,a.token,2,{q1:'b'},'legacy-q1']),/otra sesion|otro acceso|recuperad|activo/i);
+    const delivered=await call('atlas_grade_instructor_test',[t.id,b.token,{q1:'a'}]);
+    check((await call('atlas_grade_instructor_test',[t.id,b.token,{q1:'a'}])).submission_id===delivered.submission_id,'Reintentar entrega es idempotente');
+    const c=await call('atlas_unlock_instructor_test',[t.id,'112233']);
+    await reject(()=>call('atlas_begin_instructor_test',[t.id,c.token,'Nuevo Nombre','001234567890']),/ya entrego esta prueba/);
+    check((await call('atlas_resume_instructor_test',[t.id,c.token,'001234567890'])).status==='submitted','Recuperacion no reabre una entrega');
+    const changed={...content,nombre:'Contenido actualizado'};
+    t=await call('atlas_save_instructor_test',[t.id,t.revision,changed,null]);
+    t=await call('atlas_publish_instructor_test',[t.id,t.revision,true]);
+    const d=await call('atlas_unlock_instructor_test',[t.id,'112233']);
+    await reject(()=>call('atlas_begin_instructor_test',[t.id,d.token,'Otra Persona','001234567890']),/ya entrego esta prueba/);
+    check((await call('atlas_resume_instructor_test',[t.id,d.token,'001234567890'])).status==='submitted','Republicar no habilita otra entrega de la misma cuenta');
+    check((await db.query('select count(*)::int n from public.instructor_test_submissions where test_id=$1',[t.id])).rows[0].n===1,'Solo una revision por prueba y cuenta');
+    await reject(()=>db.query(`INSERT INTO public.instructor_test_submissions SELECT (jsonb_populate_record(NULL::public.instructor_test_submissions,to_jsonb(s)||jsonb_build_object('id',gen_random_uuid(),'token_hash','duplicate-delivery'))).* FROM public.instructor_test_submissions s WHERE id=$1`,[delivered.submission_id]),/unique constraint/);
+    await reject(()=>db.query(`INSERT INTO public.instructor_test_progress(test_id,test_revision,account_number,participant_name,active_token_hash) VALUES($1,-2,'001234567890','Duplicado','duplicate-progress')`,[t.id]),/unique constraint/);
+    let other=await call('atlas_save_instructor_test',[null,null,content,'112233']);
+    other=await call('atlas_publish_instructor_test',[other.id,other.revision,true]);
+    const e=await call('atlas_unlock_instructor_test',[other.id,'112233']);
+    check((await call('atlas_begin_instructor_test',[other.id,e.token,'Persona Unica','001234567890'])).ok,'Misma cuenta puede realizar otra prueba');
+    await call('atlas_save_instructor_progress',[other.id,e.token,1,{q1:'b'},'legacy-q1']);
+    other=await call('atlas_save_instructor_test',[other.id,other.revision,changed,null]);
+    other=await call('atlas_publish_instructor_test',[other.id,other.revision,true]);
+    const f=await call('atlas_unlock_instructor_test',[other.id,'112233']);
+    await reject(()=>call('atlas_begin_instructor_test',[other.id,f.token,'Persona Unica','001234567890']),/version anterior/);
+    check((await call('atlas_resume_instructor_test',[other.id,f.token,'001234567890'])).status==='version_changed','No mezcla respuestas con preguntas nuevas ni permite otro intento');
+    check((await db.query('select answers from public.instructor_test_progress where test_id=$1',[other.id])).rows[0].answers.q1==='b','Cambio de contenido conserva progreso anterior');
+    await db.exec(await readFile(new URL('../rollback_unique_instructor_attempt_per_account.sql',import.meta.url),'utf8'));
+    check((await call('atlas_get_instructor_submission',[delivered.submission_id])).answers.q1==='a','Rollback conserva entrega y calificacion');
   }
   await db.exec('SET ROLE anon');
   await reject(() => db.query('select * from public.instructor_tests'), /permission denied/);

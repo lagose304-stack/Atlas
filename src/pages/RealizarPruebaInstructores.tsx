@@ -155,7 +155,7 @@ function InstructorRunner({ id }: { id: string }) {
             const response = await resumeInstructorTest(id, access.token, account);
             if (response.ok) adopt(response);
             else setError(response.status === 'locked' ? 'Demasiados intentos. Espera 15 minutos antes de volver a recuperar una prueba.'
-              : response.status === 'submitted' ? 'Esta cuenta ya entregó esta versión de la prueba.' : 'No encontramos una prueba iniciada para esta cuenta en la versión actual. Comprueba el número de cuenta.');
+              : response.status === 'submitted' ? 'Esta cuenta ya entregó esta prueba. Puedes consultar sus resultados cuando termine la revisión.' : response.status === 'version_changed' ? 'Tu intento pertenece a una versión anterior. Contacta al responsable de la prueba; tu progreso sigue guardado.' : 'No encontramos una prueba iniciada para esta cuenta. Comprueba el número de cuenta.');
           } else adopt(await startInstructorTest(id, access.token, name.trim(), account));
         } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo preparar la prueba.'); } finally { setBusy(false); }
       }}>
@@ -168,6 +168,7 @@ function InstructorRunner({ id }: { id: string }) {
         {!recovering && <label className="instructor-label">Nombre completo<input className="instructor-input" autoComplete="name" maxLength={150} required disabled={busy} value={name} onChange={event => setName(event.target.value)} /></label>}
         <label className="instructor-label">Número de cuenta<input className="instructor-input" type="text" inputMode="numeric" autoComplete="off" pattern="[0-9]{10,13}" minLength={10} maxLength={13} required disabled={busy} value={account} onChange={event => setAccount(event.target.value.replace(/[^0-9]/g, ''))} /></label>
         <p className="instructor-muted">Entre 10 y 13 dígitos, sin espacios. Conservamos los ceros iniciales.</p>
+        <p className="instructor-muted">Solo se permite un intento por cuenta en esta prueba. Si ya comenzaste, usa Continuar prueba para recuperar tu progreso.</p>
         <button type="submit" className="instructor-btn instructor-btn-primary" disabled={busy || !isInstructorAccount(account) || (!recovering && !name.trim())}><ArrowRight size={17} />{busy ? 'Preparando prueba…' : recovering ? 'Recuperar y continuar' : 'Continuar a las preguntas'}</button>
       </form>}
       {access && started && !result && <form onSubmit={event => { event.preventDefault(); void submit(); }}>
