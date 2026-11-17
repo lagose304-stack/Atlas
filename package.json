@@ -13,6 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "design:check": "node scripts/design-check.mjs",
+    "design:check:strict": "node scripts/design-check.mjs --strict",
     "publish:github": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"git add -A; git diff --cached --quiet; if ($LASTEXITCODE -eq 0) { Write-Host 'No hay cambios para publicar.'; exit 0 }; $msg = 'chore: publish ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'); git commit -m $msg; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git push origin main\""
   },
   "dependencies": {

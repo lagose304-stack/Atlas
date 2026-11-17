@@ -1,6 +1,9 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import RaffleModal from './RaffleModal';
+import RaffleModal, { CLOSE_ANIMATION_MS } from './RaffleModal';
+import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scrollLock';
+
+const ADVANCE_PAST_CLOSE = CLOSE_ANIMATION_MS + 20;
 
 describe('RaffleModal Component', () => {
   beforeEach(() => {
@@ -28,65 +31,104 @@ describe('RaffleModal Component', () => {
     expect(ctaLink).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
-  it('muestra la animación de la carita triste al hacer clic en el botón superior (X) y luego se cierra', () => {
+  it('se cierra en cuanto termina la transición al pulsar la X, sin pantalla intermedia', () => {
     const handleClose = vi.fn();
     render(<RaffleModal onClose={handleClose} />);
 
-    const closeBtn = screen.getByLabelText(/Cerrar ventana emergente/i);
-    fireEvent.click(closeBtn);
+    fireEvent.click(screen.getByLabelText(/Cerrar ventana emergente/i));
 
-    // Debe mostrar la carita triste y el mensaje de despedida
-    expect(screen.getByText(/¡Esperamos verte en la rifa!/i)).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveClass('home-raffle-overlay-closing');
+    expect(dialog.querySelector('.home-raffle-card-closing')).not.toBeNull();
 
-    // Avanza la animación completa (1850ms de carita triste + 220ms de fade-out)
     act(() => {
-      vi.advanceTimersByTime(2100);
+      vi.advanceTimersByTime(ADVANCE_PAST_CLOSE);
     });
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(handleClose).toHaveBeenCalledTimes(1);
+    expect(document.body.style.overflow).toBe('');
   });
 
-  it('muestra la carita triste al pulsar la tecla Escape y luego se cierra', () => {
+  it('se cierra al pulsar Escape con la misma rapidez', () => {
     const handleClose = vi.fn();
     render(<RaffleModal onClose={handleClose} />);
 
     fireEvent.keyDown(window, { key: 'Escape' });
-
-    expect(screen.getByText(/¡Esperamos verte en la rifa!/i)).toBeInTheDocument();
-
     act(() => {
-      vi.advanceTimersByTime(2100);
+      vi.advanceTimersByTime(ADVANCE_PAST_CLOSE);
     });
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
 
-  it('se cierra al hacer clic en el fondo (backdrop) pero no al hacer clic dentro del contenedor', () => {
+  it('atrapa el foco dentro del diálogo y lo devuelve al cerrar', () => {
+    const trigger = document.createElement('button');
+    document.body.appendChild(trigger);
+    trigger.focus();
+
+    render(<RaffleModal />);
+    const dialog = screen.getByRole('dialog');
+    const closeBtn = screen.getByLabelText(/Cerrar ventana emergente/i);
+    const cta = screen.getByRole('link', { name: /Quiero un boleto/i });
+
+    expect(closeBtn).toHaveFocus();
+
+    cta.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(closeBtn).toHaveFocus();
+
+    closeBtn.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(cta).toHaveFocus();
+
+    trigger.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(closeBtn).toHaveFocus();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    act(() => {
+      vi.advanceTimersByTime(ADVANCE_PAST_CLOSE);
+    });
+
+    expect(trigger).toHaveFocus();
+    trigger.remove();
+  });
+
+  it('respeta un bloqueo de scroll previo al liberar el suyo', () => {
+    document.body.style.overflow = 'auto';
+    acquireAtlasScrollLock();
+
+    render(<RaffleModal />);
+    expect(document.body.style.overflow).toBe('hidden');
+
+    fireEvent.click(screen.getByLabelText(/Cerrar ventana emergente/i));
+    act(() => {
+      vi.advanceTimersByTime(ADVANCE_PAST_CLOSE);
+    });
+
+    expect(document.body.style.overflow).toBe('hidden');
+    releaseAtlasScrollLock();
+    expect(document.body.style.overflow).toBe('auto');
+    document.body.style.overflow = '';
+  });
+
+  it('se cierra al hacer clic en el fondo pero no al hacer clic dentro del contenedor', () => {
     const handleClose = vi.fn();
     render(<RaffleModal onClose={handleClose} />);
 
-    const img = screen.getByRole('img', { name: /Gran Rifa de Histología/i });
-    fireEvent.click(img);
-
+    fireEvent.click(screen.getByRole('img', { name: /Gran Rifa de Histología/i }));
     act(() => {
-      vi.advanceTimersByTime(2100);
+      vi.advanceTimersByTime(ADVANCE_PAST_CLOSE);
     });
 
-    // Sigue abierto porque se hizo clic adentro
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-
     expect(document.body.style.overflow).toBe('hidden');
 
-    // Clic en el backdrop overlay
-    const overlay = screen.getByRole('dialog');
-    fireEvent.click(overlay);
-
-    expect(screen.getByText(/¡Esperamos verte en la rifa!/i)).toBeInTheDocument();
-
+    fireEvent.click(screen.getByRole('dialog'));
     act(() => {
-      vi.advanceTimersByTime(2100);
+      vi.advanceTimersByTime(ADVANCE_PAST_CLOSE);
     });
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

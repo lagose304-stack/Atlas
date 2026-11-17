@@ -1,0 +1,5 @@
+# Atlas — Windsurf
+
+Lee `AGENTS.md` y `.agents/skills/atlas-desarrollo/SKILL.md`.
+
+Para cambios en `src/**/*.{tsx,jsx,css,scss,html}`, aplica `.agents/rules/design-quality.md`, `.agents/skills/diseno-web/SKILL.md` y `docs/diseno-web.md`. Carga Emil Kowalski, Impeccable y Taste según el caso, ejecuta `npm run design:check` con el diff visible y reporta lo verificado. No hagas push ni publiques sin petición expresa.

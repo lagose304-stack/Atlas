@@ -1,0 +1,8 @@
+---
+description: Contrato de diseño web de Atlas con Emil Kowalski, Impeccable y Taste
+alwaysApply: true
+---
+
+Atlas exige el contrato de [`.agents/rules/design-quality.md`](../../.agents/rules/design-quality.md), la skill [`diseno-web`](../../.agents/skills/diseno-web/SKILL.md) y la guía [`docs/diseno-web.md`](../../docs/diseno-web.md) para cualquier cambio en `src/**/*.{tsx,jsx,css,scss,html}`.
+
+Antes de terminar: ejecuta `npm run design:check` con el diff visible, corrige los fallos, justifica las advertencias que queden e informa qué skills se cargaron realmente y qué no se pudo verificar. No hagas push ni publiques sin petición expresa.

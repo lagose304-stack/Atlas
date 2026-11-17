@@ -14,6 +14,8 @@ Referencia para localizar el código, comprender sus conexiones y preparar cambi
 
 La habilidad local [atlas-desarrollo](../.agents/skills/atlas-desarrollo/SKILL.md) aplica este recorrido a tareas del repositorio. Puede invocarse como `$atlas-desarrollo`; sus instrucciones también están enlazadas desde `AGENTS.md`.
 
+Para cambios de diseño web rige el [contrato portable](diseno-web.md): [la regla](../.agents/rules/design-quality.md), la skill [diseno-web](../.agents/skills/diseno-web/SKILL.md) y los adaptadores por editor fijan el uso de Emil Kowalski, Impeccable y Taste. La skill puede invocarse como `$diseno-web`.
+
 La guía es un índice de investigación, no una afirmación de que todos los módulos han sido auditados.
 
 **Mapa especializado:** [gestión y recorrido de las imágenes](mapa-gestion-imagenes.md), desde subida clasificada o lista de espera hasta catálogo, preguntas, bloques, versiones, créditos y eliminación. Incluye carpetas, campos, consumidores y fuentes de código.
@@ -96,7 +98,7 @@ Todas las rutas de archivo de esta sección parten de la raíz del repositorio.
 
 | Área | Puntos de entrada | Conexiones que revisar |
 | --- | --- | --- |
-| Inicio y contenido semanal | `src/pages/Home.tsx`, `src/components/HomeHistologyFact.tsx`, `src/components/ExamWeekTestsCarousel.tsx` | Publicación de bloques, estilos del inicio, `ChristmasCountdown.tsx` y componentes de temporada cuando corresponda. |
+| Inicio y contenido semanal | `src/pages/Home.tsx`, `src/components/HomeHistologyFact.tsx`, `src/components/ExamWeekTestsCarousel.tsx`, `src/components/RaffleModal.tsx` | Publicación de bloques, estilos del inicio, `ChristmasCountdown.tsx` y componentes de temporada cuando corresponda. |
 | Catálogo público | `src/pages/TemarioPublico.tsx`, `src/pages/Subtemas.tsx`, `src/pages/PlacasSubtema.tsx` | `src/services/catalogService.ts`, cachés, orden de temas y subtemas, publicación y visor. |
 | Edición del catálogo | `src/pages/EditarTemario.tsx`, `src/pages/EditarSubtemas.tsx`, `src/components/temario/` | Tablas `temas` y `subtemas`, orden, dependencias de placas, permisos y auditoría. |
 | Placas y lista de espera | `src/pages/EditarPlacas.tsx`, `src/pages/ListaEspera.tsx`, `src/pages/MoverPlaca.tsx`, `src/components/PlateEditorPanel.tsx` | `placas`, `placas_sin_clasificar`, servicio de imágenes, miniaturas y registros de actividad. |
@@ -112,6 +114,8 @@ Todas las rutas de archivo de esta sección parten de la raíz del repositorio.
 | Navegación persistente | `src/services/navigationStateKeeper.ts`, `src/hooks/useSmartBackNavigation.ts`, `src/components/BackButton.tsx` | Parámetros de URL, filtros, restauración de scroll y botones de regreso. |
 
 No elimines archivos solo por llamarse `Old`, `backup` o estar en `archived/`: comprueba imports y consumidores. Por ejemplo, `PlacasSubtema.tsx` importa un componente de `archived/`.
+
+La ventana de la rifa (`RaffleModal.tsx`) se cierra en ~260 ms con una animación retro hecha solo con CSS: destello rojo, sacudidas y recortes de la tarjeta hasta desaparecer. Conserva X, Escape, clic en el fondo y el enlace a WhatsApp; no añade librerías. Al abrir enfoca el botón de cierre, atrapa Tab/Shift+Tab dentro del diálogo y devuelve el foco al control previo; usa `acquireAtlasScrollLock`/`releaseAtlasScrollLock` para no romper otros overlays.
 
 ## 4. Recorridos que conviene entender antes de cambiar
 
@@ -275,9 +279,13 @@ Comandos desde la raíz, definidos en `package.json`:
 | `npm test` | Ejecuta la suite Vitest. |
 | `npm test -- src/contexts/AuthContext.test.tsx` | Ejecuta un archivo de pruebas concreto. |
 | `npm run test:watch` | Mantiene Vitest observando cambios. |
+| `npm run design:check` | Audita el contrato y las líneas nuevas de archivos de diseño; usa el detector de Impeccable si está instalado. |
+| `npm run design:check:strict` | Igual que `design:check`, pero exige que el detector de Impeccable esté disponible. |
 | `npm run typecheck` | Comprueba tipos del frontend con `tsc --noEmit`. |
 | `npm run build` | Compila el frontend en `dist/`; no publica por sí solo. |
 | `npm run preview` | Sirve la compilación para vista previa; no equivale al entorno de API desplegado. |
+
+Antes de cerrar un cambio visual, la [regla de calidad visual](../.agents/rules/design-quality.md) exige cargar Emil Kowalski, Impeccable y Taste, ejecutar `npm run design:check` con el diff visible y reportar herramientas usadas, comprobaciones y limitaciones. El script detecta patrones concretos y llama al detector de Impeccable cuando está instalado, pero no sustituye la revisión en navegador.
 
 `publish:github` prepara archivos, crea un commit y hace push a `main`: solo usarlo por petición explícita de publicación y tras revisar qué incluye.
 

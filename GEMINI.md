@@ -9,3 +9,8 @@
 - **Cloudinary está 100% DEPRECADO**: Nunca asumir, sugerir ni configurar Cloudinary, ni mostrar "Cloudinary" en la interfaz de usuario, mensajes o documentación.
 - **Nombres heredados de funciones/archivos**: Funciones y archivos como `src/services/cloudinary.ts`, `src/services/cloudinaryImages.ts`, `uploadToCloudinary` o `getCloudinaryImageUrl` conservan ese prefijo exclusivamente por compatibilidad interna histórica, pero **operan internamente sobre Cloudflare R2**. Todas las imágenes se suben, optimizan a WebP y se sirven desde Cloudflare R2.
 
+## Diseño Web (Obligatorio)
+- Para cualquier cambio en `src/**/*.{tsx,jsx,css,scss,html}` que afecte interfaz, lee `.agents/rules/design-quality.md`, `.agents/skills/diseno-web/SKILL.md` y `docs/diseno-web.md`.
+- Usa Emil Kowalski, Impeccable y Taste según el recorrido descrito; no afirmes que usaste una skill que no se cargó.
+- Ejecuta `npm run design:check` con el diff visible, corrige fallos y reporta limitaciones. No hagas push ni publiques sin petición expresa.
+

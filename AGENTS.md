@@ -3,6 +3,8 @@
 ## Contexto y guía
 Atlas es un sitio de histología en producción. Usa [atlas-desarrollo](.agents/skills/atlas-desarrollo/SKILL.md) para investigar y modificar este repositorio; consulta [la guía](docs/guia-atlas.md). Comunícate en español. Conserva datos y comportamiento fuera del cambio solicitado.
 
+Para cambios de diseño web, aplica [la regla de calidad visual](.agents/rules/design-quality.md), la skill [diseno-web](.agents/skills/diseno-web/SKILL.md) y el [contrato portable](docs/diseno-web.md): usa Emil Kowalski, Impeccable y Taste, y ejecuta `npm run design:check` antes de cerrar.
+
 ## Protección de producción
 - Para investigar Supabase, usa consultas de lectura acotadas. Una función RPC puede escribir aunque parezca una consulta: revisa su definición antes de ejecutarla.
 - Tener un complemento conectado no autoriza cambios remotos. Antes de modificar producción, prepara el cambio local, identifica registros y dependencias afectados, explica riesgos y recuperación, verifica un respaldo adecuado y obtén autorización explícita para esa operación.
