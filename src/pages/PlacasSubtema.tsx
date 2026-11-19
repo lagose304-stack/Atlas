@@ -9,6 +9,7 @@ import Footer from '../components/Footer';
 import ImageViewerModal from '../components/ImageViewerModal';
 import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
+import Editor2PublicSlot from '../editor2/public/Editor2PublicSlot';
 import AtlasLoadingScreen from '../components/AtlasLoadingScreen';
 import type { ContentBlock } from '../types/contentBlocks';
 import DiapedesisHistologyFact from '../components/archived/DiapedesisHistologyFact';
@@ -820,12 +821,18 @@ const PlacasSubtemaContent: React.FC = () => {
             </div>
           </div>
 
-          {/* Bloques de contenido editorial */}
-          {contentBlocks.length > 0 && (
-            <div className="public-editor-content public-editor-content-before-system">
-              <ContentBlockRenderer blocks={contentBlocks} />
-            </div>
-          )}
+          {/* Bloques de contenido editorial (v2 si está publicado, fallback automático a v1) */}
+          <Editor2PublicSlot
+            pageKey={numSubtemaId > 0 ? `subtema-${numSubtemaId}` : null}
+            className="public-editor-content public-editor-content-before-system"
+            fallback={
+              contentBlocks.length > 0 ? (
+                <div className="public-editor-content public-editor-content-before-system">
+                  <ContentBlockRenderer blocks={contentBlocks} />
+                </div>
+              ) : null
+            }
+          />
 
           {/* Dato Histológico Interactivo Guardado: Diapédesis (Tema Sanguíneo / Subtema Neutrófilos) */}
           {isNeutrofilos && (

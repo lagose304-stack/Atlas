@@ -21,6 +21,7 @@ import {
 import Footer from '../components/Footer';
 import Header from '../components/Header';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
+import Editor2PublicSlot from '../editor2/public/Editor2PublicSlot';
 import { OPEN_HEADER_SEARCH_EVENT } from '../constants/uiEvents';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks } from '../services/contentPublication';
@@ -154,15 +155,24 @@ const Home: React.FC = () => {
           Atlas de Histología — Laboratorio de Histología FCM UNAH
         </h1>
 
-        {featuredPublication.length > 0 && (
-          <section className="home-weekly-publication home-reveal" aria-label="Publicación destacada">
-            <ContentBlockRenderer blocks={featuredPublication} />
-          </section>
-        )}
+        <Editor2PublicSlot
+          pageKey="home"
+          className="home-weekly-publication home-reveal"
+          ariaLabel="Contenido principal"
+          fallback={
+            <>
+              {featuredPublication.length > 0 && (
+                <section className="home-weekly-publication home-reveal" aria-label="Publicación destacada">
+                  <ContentBlockRenderer blocks={featuredPublication} />
+                </section>
+              )}
 
-        {contentBlocks.some(block => block.block_type === 'weekly_histology_facts')
-          ? <ContentBlockRenderer blocks={contentBlocks.filter(block => block.block_type === 'weekly_histology_facts')} />
-          : <WeeklyHistologyFacts />}
+              {contentBlocks.some(block => block.block_type === 'weekly_histology_facts')
+                ? <ContentBlockRenderer blocks={contentBlocks.filter(block => block.block_type === 'weekly_histology_facts')} />
+                : <WeeklyHistologyFacts />}
+            </>
+          }
+        />
 
         <ChristmasCountdown />
 

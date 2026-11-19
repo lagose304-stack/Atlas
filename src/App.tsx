@@ -23,6 +23,9 @@ const EditarSubtemas = lazy(() => import('./pages/EditarSubtemas'));
 const OrdenarPlacas = lazy(() => import('./pages/OrdenarPlacas'));
 const EditarPlacas = lazy(() => import('./pages/EditarPlacas'));
 const EditorPaginas = lazy(() => import('./pages/EditorPaginas'));
+const Editor2Home = lazy(() => import('./editor2/pages/Editor2Home'));
+const Editor2Workspace = lazy(() => import('./editor2/pages/Editor2Workspace'));
+const Editor2PublicView = lazy(() => import('./editor2/pages/Editor2PublicView'));
 const EliminarPlacas = lazy(() => import('./pages/EliminarPlacas'));
 const MoverPlaca = lazy(() => import('./pages/MoverPlaca'));
 const TrasladarPlaca = lazy(() => import('./pages/TrasladarPlaca'));
@@ -238,6 +241,22 @@ const App: React.FC = () => {
             }
           />
           <Route
+            path="/editor-paginas-v2"
+            element={
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
+                <Editor2Home />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/editor-paginas-v2/p/:pageKey"
+            element={
+              <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
+                <Editor2Workspace />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/eliminar-placas"
             element={
               <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
@@ -367,6 +386,9 @@ const App: React.FC = () => {
 
           {/* Placas de un subtema - ruta pública */}
           <Route path="/ver-placas/:subtemaId" element={<PlacasSubtema />} />
+
+          {/* Vista pública aislada de Editor 2.0 (solo versión publicada, sin sesión) */}
+          <Route path="/vista-v2/:pageKey" element={<Editor2PublicView />} />
 
           {/* Ruta de fallback */}
           <Route path="*" element={<Home />} />

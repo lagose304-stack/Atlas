@@ -6,6 +6,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import AtlasLoadingScreen from '../components/AtlasLoadingScreen';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
+import Editor2PublicSlot from '../editor2/public/Editor2PublicSlot';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks } from '../services/contentPublication';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
@@ -315,12 +316,18 @@ const StandardSubtemas: React.FC = () => {
             {/* Separador */}
             <div style={styles.divider} />
 
-            {/* Bloques de contenido editorial */}
-            {contentBlocks.length > 0 && (
-              <div className="public-editor-content public-editor-content-before-system">
-                <ContentBlockRenderer blocks={contentBlocks} />
-              </div>
-            )}
+            {/* Bloques de contenido editorial (v2 si está publicado, fallback automático a v1) */}
+            <Editor2PublicSlot
+              pageKey={currentTemaId > 0 ? `tema-${currentTemaId}` : null}
+              className="public-editor-content public-editor-content-before-system"
+              fallback={
+                contentBlocks.length > 0 ? (
+                  <div className="public-editor-content public-editor-content-before-system">
+                    <ContentBlockRenderer blocks={contentBlocks} />
+                  </div>
+                ) : null
+              }
+            />
 
             {/* Grilla de subtemas */}
             {subtemas.length > 0 && (

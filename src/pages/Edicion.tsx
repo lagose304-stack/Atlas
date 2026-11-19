@@ -5,6 +5,7 @@ import Footer from '../components/Footer';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import { hasPermission } from '../security/permissions';
+import { canSeeEditor2Card } from '../security/editorV2Access';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 const Edicion: React.FC = () => {
@@ -212,6 +213,25 @@ const Edicion: React.FC = () => {
                 Añadir créditos →
               </Link>}
             </div>
+          </div>}
+
+          {canEditarPaginas && canSeeEditor2Card(user) && <div style={s.card} className="edicion-card">
+            <div style={{ ...s.cardAccent, background: '#0f766e' }} />
+            <div style={s.cardIcon}>🧩</div>
+            <div style={s.cardBody}>
+              <h2 style={s.cardTitle}>Editor de páginas 2.0</h2>
+              <p style={s.cardDesc}>
+                Sistema paralelo con búsqueda rápida, lienzo propio y versiones separadas.
+                Convive con el editor actual mientras se prueba.
+              </p>
+            </div>
+            <Link
+              to="/editor-paginas-v2"
+              style={{ ...s.cardBtn, color: '#0f766e', background: '#ecfdf5', borderColor: '#99f6e4' }}
+              className="edicion-action-btn"
+            >
+              Abrir editor 2.0 →
+            </Link>
           </div>}
 
           {(canEditarPaginas || canPruebaInstructores) && <div style={s.card} className="edicion-card">

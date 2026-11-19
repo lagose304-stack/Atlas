@@ -12,6 +12,7 @@ import {
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ContentBlockRenderer from '../components/ContentBlockRenderer';
+import Editor2PublicSlot from '../editor2/public/Editor2PublicSlot';
 import type { ContentBlock } from '../types/contentBlocks';
 import { getRenderableBlocks, getCachedRenderableBlocks } from '../services/contentPublication';
 import { determineActiveWeeklyParcial } from './evaluacionesUtils';
@@ -361,11 +362,17 @@ const TemarioPublico: React.FC = () => {
       <Header />
 
       <main className="atlas-temario-main" style={styles.main}>
-        {contentBlocks.length > 0 && (
-          <section className="public-editor-content public-editor-content-before-system" style={styles.auxContentCard}>
-            <ContentBlockRenderer blocks={contentBlocks} />
-          </section>
-        )}
+        <Editor2PublicSlot
+          pageKey="temario"
+          className="public-editor-content public-editor-content-before-system"
+          fallback={
+            contentBlocks.length > 0 ? (
+              <section className="public-editor-content public-editor-content-before-system" style={styles.auxContentCard}>
+                <ContentBlockRenderer blocks={contentBlocks} />
+              </section>
+            ) : null
+          }
+        />
 
         <section className="temario-main-block" style={styles.temarioCard}>
           <div style={styles.panelTexture} />
