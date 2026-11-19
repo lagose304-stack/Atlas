@@ -8,7 +8,7 @@ const plates = [
   { id: 3, tema: 30, name: 'Muscular', parcial: 'segundo' },
 ].map(p => ({ id: p.id, photo_url: `https://r2.atlas-tests.invalid/${p.id}.jpg`, subtema_id: p.id, senalados: p.id === 2 ? ['Núcleo', 'Citoplasma'] : [], senalados_meta: p.id === 2 ? [{ label: 'Núcleo', x: .3, y: .5 }, { label: 'Citoplasma', x: .6, y: .5 }] : [], subtemas: { id: p.id, nombre: `Subtema ${p.id}`, temas: { id: p.tema, nombre: p.name, parcial: p.parcial, sort_order: p.id * 10 } } }));
 
-vi.mock('../services/supabase', () => ({ supabase: { from: () => ({ select: async () => ({ data: plates, error: null }) }) } }));
+vi.mock('../services/supabase', () => ({ supabase: { from: () => ({ select: () => ({ eq: async () => ({ data: plates, error: null }) }) }) } }));
 vi.mock('../services/cloudinaryImages', () => ({ getCloudinaryImageUrl: (url: string) => url }));
 vi.mock('../hooks/useSmartBackNavigation', () => ({ useSmartBackNavigation: () => vi.fn() }));
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ user: null, isAuthenticated: false }) }));
