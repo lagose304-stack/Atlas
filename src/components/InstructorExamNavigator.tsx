@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { ArrowLeft, ArrowRight, Check, Circle, CircleDot, Layers3, ListChecks } from 'lucide-react';
 import InstructorQuestionResponse from './InstructorQuestionResponse';
-import { groupPublicInstructorQuestions, incisoLetter, isInstructorAnswerComplete, isInstructorPointAnswer, type InstructorAnswers, type PublicInstructorQuestion } from '../types/instructorQuestions';
+import { groupPublicInstructorQuestions, incisoLetter, isInstructorAnswerComplete, isInstructorGradedQuestion, isInstructorPointAnswer, type InstructorAnswers, type PublicInstructorQuestion } from '../types/instructorQuestions';
 
 export default function InstructorExamNavigator({ questions, answers, currentId, onSelect, onAnswer, disabled, saveState }: {
   questions: PublicInstructorQuestion[]; answers: InstructorAnswers; currentId: string | null;
@@ -14,10 +14,13 @@ export default function InstructorExamNavigator({ questions, answers, currentId,
   useEffect(() => {
     if (currentId) heading.current?.scrollIntoView?.({ block: 'start' });
   }, []);
-  const complete = (group: typeof groups[number]) => group.items.every(question => isInstructorAnswerComplete(question, answers[question.id]));
+  const complete = (group: typeof groups[number]) => {
+    const graded = group.items.filter(isInstructorGradedQuestion);
+    return graded.length > 0 && graded.every(question => isInstructorAnswerComplete(question, answers[question.id]));
+  };
   const state = (group: typeof groups[number]): 'complete' | 'partial' | 'empty' => {
     if (complete(group)) return 'complete';
-    const started = group.items.some(question => {
+    const started = group.items.filter(isInstructorGradedQuestion).some(question => {
       const answer = answers[question.id];
       return typeof answer === 'string' ? !!answer.trim() : isInstructorPointAnswer(answer) || (!!answer && Object.values(answer).some(value => typeof value === 'string' && !!value.trim()));
     });
@@ -49,7 +52,12 @@ export default function InstructorExamNavigator({ questions, answers, currentId,
     </aside>
     <section className="instructor-exam-workspace" id={`instructor-group-${active.id}`} data-instructor-group={active.id}>
       <div className="instructor-exam-question-heading"><div><p className="instructor-public-kicker"><Layers3 size={14} />{active.section?.nombre ?? 'Evaluación de instructores'}</p>
-        <h2 ref={heading} tabIndex={-1}>Pregunta {active.position}</h2><p>{active.items.length} {active.items.length === 1 ? 'inciso' : 'incisos'} · 1 punto en total</p></div><span className="instructor-state-pill" data-state={complete(active) ? 'open' : 'scheduled'}>{complete(active) ? <Check size={14} /> : <Circle size={13} />}{complete(active) ? 'Respondida' : 'Por completar'}</span></div>
+        <h2 ref={heading} tabIndex={-1}>Pregunta {active.position}</h2><p>{(() => {
+          const graded = active.items.filter(isInstructorGradedQuestion).length;
+          return graded !== active.items.length
+            ? `${graded} ${graded === 1 ? 'inciso evaluable' : 'incisos evaluables'} · 1 punto en total`
+            : `${active.items.length} ${active.items.length === 1 ? 'inciso' : 'incisos'} · 1 punto en total`;
+        })()}</p></div><span className="instructor-state-pill" data-state={complete(active) ? 'open' : 'scheduled'}>{complete(active) ? <Check size={14} /> : <Circle size={13} />}{complete(active) ? 'Respondida' : 'Por completar'}</span></div>
       {active.titulo && <p className="instructor-exam-context">{active.titulo}</p>}
       {active.items.map((question, i) => <InstructorQuestionResponse key={question.id} question={question} index={active.grouped ? i : active.position - 1}
         label={active.grouped ? incisoLetter(i) : undefined} contextLabel={active.grouped ? `inciso ${incisoLetter(i)} de pregunta ${active.position}` : undefined}

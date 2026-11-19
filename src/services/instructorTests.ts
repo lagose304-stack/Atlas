@@ -3,8 +3,28 @@ import type { InstructorQuestion, PublicInstructorQuestion, InstructorAnswers, I
 export { newInstructorQuestion } from '../types/instructorQuestions';
 export type { InstructorQuestion, InstructorOption } from '../types/instructorQuestions';
 
-export type InstructorContent = { nombre: string; instrucciones: string; questions: InstructorQuestion[]; groups?: InstructorQuestionGroup[]; sections?: InstructorSection[]; schedule?: { opens_at: string; closes_at: string } };
-export type InstructorSummary = { id: string; nombre: string; estado: 'borrador' | 'publicada'; revision: number; published_revision: number | null };
+export type InstructorContent = {
+  nombre: string;
+  instrucciones: string;
+  questions: InstructorQuestion[];
+  groups?: InstructorQuestionGroup[];
+  sections?: InstructorSection[];
+  schedule?: { opens_at: string; closes_at: string };
+  mode?: 'bank';
+  questions_per_topic?: number;
+};
+export type InstructorSummary = {
+  id: string;
+  nombre: string;
+  estado: 'borrador' | 'publicada';
+  revision: number;
+  published_revision: number | null;
+  mode?: 'bank' | 'legacy';
+  legacy_question_count?: number;
+};
+export type InstructorBankContent = { groups: InstructorQuestionGroup[]; questions: InstructorQuestion[] };
+export type InstructorBankSummary = { tema_id: number; question_count: number; inciso_count: number; revision: number; updated_at?: string | null };
+export type InstructorBankTopic = { tema_id: number; content: InstructorBankContent; revision: number };
 export type InstructorEditor = Omit<InstructorSummary, 'nombre'> & { content: InstructorContent; has_code: boolean };
 export type PublicInstructorSummary = { id: string; nombre: string; instrucciones: string; question_count: number; inciso_count?: number | null; opens_at?: string | null; closes_at?: string | null; server_time?: string; availability?: 'open' | 'scheduled' | 'closed' };
 export type PublicInstructorContent = Omit<InstructorContent, 'questions'> & {
@@ -52,7 +72,7 @@ export const gradeInstructorTest = (id: string, token: string, answers: Instruct
   'atlas_grade_instructor_test', { p_id: id, p_token: token, p_answers: answers },
 );
 export const isInstructorAccount = (account: string) => /^[0-9]{10,13}$/.test(account);
-export type InstructorProgress = { ok: true; participant_name: string; account_number: string; answers: InstructorAnswers; current_question_id: string | null; progress_revision: number };
+export type InstructorProgress = { ok: true; participant_name: string; account_number: string; answers: InstructorAnswers; current_question_id: string | null; progress_revision: number; questions?: PublicInstructorQuestion[] };
 export type InstructorRecovery = InstructorProgress | { ok: false; status: 'not_found' | 'locked' | 'submitted' | 'version_changed' };
 export const startInstructorTest = (id: string, token: string, name: string, account: string) => rpc<InstructorProgress>('atlas_begin_instructor_test', { p_id: id, p_token: token, p_name: name, p_account: account });
 export const resumeInstructorTest = (id: string, token: string, account: string) => rpc<InstructorRecovery>('atlas_resume_instructor_test', { p_id: id, p_token: token, p_account: account });
@@ -67,3 +87,8 @@ export const reviewInstructorSubmission = (submission: InstructorSubmission, rev
 export const deleteInstructorSubmission = (testId: string, submission: Pick<InstructorSubmissionSummary, 'id' | 'revision'>) => rpc<{ ok: true }>('atlas_delete_instructor_submission', { p_test_id: testId, p_id: submission.id, p_revision: submission.revision });
 export type InstructorParticipantResult = { ok: true; participant_name: string; account_number: string; created_at: string; snapshot: InstructorSubmissionSnapshot; answers: InstructorAnswers; auto_results: Record<string, boolean>; reviews: Record<string, boolean>; result: InstructorResult };
 export const getInstructorParticipantResult = (id: string, code: string, account: string) => rpc<InstructorParticipantResult | { ok: false; status: 'unavailable' | 'locked' | 'pending' }>('atlas_instructor_participant_result', { p_id: id, p_code: code, p_account: account });
+
+export const listInstructorBank = () => rpc<InstructorBankSummary[]>('atlas_list_instructor_bank');
+export const getInstructorBankTopic = (temaId: number) => rpc<InstructorBankTopic>('atlas_get_instructor_bank_topic', { p_tema_id: temaId });
+export const saveInstructorBankTopic = (temaId: number, revision: number | null, content: InstructorBankContent) => rpc<InstructorBankTopic>('atlas_save_instructor_bank_topic', { p_tema_id: temaId, p_revision: revision, p_content: content });
+export const migrateInstructorQuestionToBank = (testId: string, testRevision: number, groupId: string, temaId: number) => rpc<{ test: InstructorEditor; bank: InstructorBankTopic }>('atlas_migrate_instructor_question_to_bank', { p_test_id: testId, p_test_revision: testRevision, p_group_id: groupId, p_tema_id: temaId });

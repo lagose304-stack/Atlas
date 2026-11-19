@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import InstructorQuestionResponse from './InstructorQuestionResponse';
-import { isInstructorAnswerComplete, type InstructorAnswers, type PublicInstructorQuestion } from '../types/instructorQuestions';
+import { isInstructorAnswerComplete, instructorIncisoWeight, type InstructorAnswers, type PublicInstructorQuestion } from '../types/instructorQuestions';
 
 vi.mock('./ImageViewerModal', () => ({ default: ({ src, hideSidebar, senaladosMeta }: { src: string; hideSidebar: boolean; senaladosMeta: unknown }) => <div role="dialog" data-hide-sidebar={hideSidebar} data-markers={JSON.stringify(senaladosMeta)}><img src={src} alt="Imagen ampliada" /></div> }));
 
@@ -66,6 +66,70 @@ describe('Responder formatos de instructores', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ampliar imagen de referencia' }));
     expect(await screen.findByRole('dialog')).toHaveAttribute('data-hide-sidebar', 'true');
     expect(screen.getByTestId('answer')).toHaveTextContent('epitelio');
+  });
+
+  it('muestra un versus de imágenes lado a lado con Imagen A e Imagen B sin exigir respuesta ni puntaje', () => {
+    const versus: PublicInstructorQuestion = {
+      id: 'v1',
+      type: 'image_versus',
+      titulo: 'Compara ambos epitelios',
+      image_a: { url: 'https://example.test/a.webp' },
+      image_b: { url: 'https://example.test/b.webp' },
+      group: { id: 'g1', titulo: '', position: 1 },
+    };
+    const sibling: PublicInstructorQuestion = {
+      id: 'q1',
+      type: 'short_answer',
+      titulo: 'Indica la diferencia principal',
+      group: { id: 'g1', titulo: '', position: 1 },
+    };
+    render(<Response question={versus} />);
+    expect(screen.getByText('Imagen A')).toBeInTheDocument();
+    expect(screen.getByText('Imagen B')).toBeInTheDocument();
+    const images = screen.getAllByAltText('Imagen de referencia del inciso');
+    expect(images).toHaveLength(2);
+    expect(images[0]).toHaveAttribute('src', 'https://example.test/a.webp');
+    expect(images[1]).toHaveAttribute('src', 'https://example.test/b.webp');
+    expect(isInstructorAnswerComplete(versus, undefined)).toBe(true);
+    const snapshot = { nombre: 'Prueba', scoring_version: 2, questions: [versus, sibling] };
+    expect(instructorIncisoWeight(snapshot, versus)).toBe(0);
+    expect(instructorIncisoWeight(snapshot, sibling)).toBe(1);
+  });
+
+  it('muestra la imagen opcional debajo del enunciado en selección única, completación y términos pareados', () => {
+    const cases: [PublicInstructorQuestion, string][] = [
+      [{ id: 'c1', type: 'single_choice', titulo: 'Elige el epitelio', options: [{ id: 'o1', texto: 'Plano' }, { id: 'o2', texto: 'Cúbico' }], image: { url: 'https://example.test/choice.webp' } }, 'https://example.test/choice.webp'],
+      [{ id: 'f1', type: 'completion', titulo: 'Tejido {{1}}', blanks: [{ id: 'b1' }], image: { url: 'https://example.test/completion.webp' } }, 'https://example.test/completion.webp'],
+      [{ id: 'm1', type: 'matching', titulo: 'Relaciona', terms: [{ id: 't1', texto: 'A' }], choices: [{ id: 'c1', texto: '1' }], image: { url: 'https://example.test/matching.webp' } }, 'https://example.test/matching.webp'],
+    ];
+    for (const [question, url] of cases) {
+      const { unmount } = render(<Response question={question} />);
+      expect(screen.getByAltText('Imagen de referencia del inciso')).toHaveAttribute('src', url);
+      unmount();
+    }
+  });
+
+  it('usa el señalador negro en miniaturas y numera los señalados en orden cuando son varios', () => {
+    const { container } = render(<Response question={{
+      id: 'q-multi',
+      type: 'short_answer',
+      titulo: 'Identifica las estructuras',
+      image: {
+        url: 'https://example.test/multi.webp',
+        annotations: [
+          { x: 0.25, y: 0.3, label: 'Primero' },
+          { x: 0.7, y: 0.65, label: 'Segundo' },
+        ],
+      },
+    }} />);
+    const img = screen.getByAltText('Imagen de referencia del inciso');
+    Object.defineProperty(img, 'naturalWidth', { configurable: true, value: 1000 });
+    Object.defineProperty(img, 'naturalHeight', { configurable: true, value: 800 });
+    fireEvent.load(img);
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(container.querySelectorAll('polygon[fill="#0a0a0a"]').length).toBe(2);
+    expect(container.innerHTML).not.toContain('#facc15');
   });
 
 });

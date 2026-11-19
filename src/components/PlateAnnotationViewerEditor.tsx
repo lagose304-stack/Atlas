@@ -67,6 +67,7 @@ export interface PlateAnnotationViewerEditorProps {
   // Single/Batch picker compatibility
   singlePickerMode?: boolean;
   answerPointMode?: boolean;
+  showMarkerNumbers?: boolean;
   pointInstructions?: string;
   batchPickerMode?: boolean;
   borderPickerMode?: boolean;
@@ -355,6 +356,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   initialSenaladosPos = [],
   singlePickerMode = false,
   answerPointMode = false,
+  showMarkerNumbers = false,
   pointInstructions,
   batchPickerMode = false,
   borderPickerMode = false,
@@ -963,14 +965,15 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
   }, [selectedMarker]);
 
   // Marcadores visibles en la imagen: si hay uno seleccionado, solo se muestran el seleccionado y sus hermanos del mismo grupo múltiple
+  // (en modo numerado de pruebas de instructores siempre se muestran todos para ver el orden en tiempo real).
   const activeGroupMarkers = useMemo(() => {
-    if (!selectedMarkerId) return markers;
+    if (showMarkerNumbers || !selectedMarkerId) return markers;
     return markers.filter(m => {
       if (m.id === selectedMarkerId) return true;
       if (selectedGroupLabel && m.label.trim().toLowerCase() === selectedGroupLabel) return true;
       return false;
     });
-  }, [markers, selectedMarkerId, selectedGroupLabel]);
+  }, [markers, selectedMarkerId, selectedGroupLabel, showMarkerNumbers]);
 
   // Orden Z inteligente de renderizado para el canvas SVG:
   // 1. Las regiones/bordes más grandes y envolventes se renderizan primero (al fondo).
@@ -1484,6 +1487,23 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
         return;
       }
 
+      if (showMarkerNumbers) {
+        if (answerPointMode && markers.filter(m => m.x != null && m.y != null).length >= 20) return;
+        const newMarker: InternalMarkerItem = {
+          id: `marker-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          label: answerPointMode ? '' : (currentCreationLabel.trim() || `Señalado ${markers.length + 1}`),
+          x: coords.x,
+          y: coords.y,
+          startX: null,
+          startY: null,
+        };
+        setMarkers(prev => [...prev, newMarker]);
+        setSessionMarkerIds(prev => [...prev, newMarker.id]);
+        setSelectedMarkerId(newMarker.id);
+        setHasUnsavedModifications(true);
+        return;
+      }
+
       if (sessionMarkerIds.length > 0) {
         // Si ya colocó el señalado individual en esta sesión, reposicionarlo al nuevo clic
         const existingId = sessionMarkerIds[0];
@@ -1852,7 +1872,7 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
       const finalPositions: Array<MarkerLocation | null> = [];
 
       markersToSave.forEach((m, idx) => {
-        const label = m.label.trim() || `Señalado ${idx + 1}`;
+        const label = answerPointMode ? m.label.trim() : (m.label.trim() || `Señalado ${idx + 1}`);
         finalLabels.push(label);
         if (m.x != null && m.y != null) {
           finalPositions.push({
@@ -2198,7 +2218,18 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
 
           {answerPointMode && <>
             <button type="button" className="instructor-point-tool" aria-label="Colocar o mover señalado" aria-pressed={activeTool === 'pointer'} onClick={() => handleSelectTool('pointer')}><Target size={20} /></button>
-            <button type="button" className="instructor-point-tool" aria-label="Eliminar señalado" disabled={!markers.some(marker => marker.x != null)} onClick={() => { pushHistory(markers); setMarkers([]); setSelectedMarkerId(null); setHasUnsavedModifications(true); }}><Trash2 size={18} /></button>
+            <button type="button" className="instructor-point-tool" aria-label="Eliminar señalado" disabled={!markers.some(marker => marker.x != null)} onClick={() => {
+              pushHistory(markers);
+              if (!singlePickerMode && selectedMarkerId) {
+                setMarkers(prev => prev.filter(marker => marker.id !== selectedMarkerId));
+              } else if (!singlePickerMode) {
+                setMarkers(prev => prev.slice(0, -1));
+              } else {
+                setMarkers([]);
+              }
+              setSelectedMarkerId(null);
+              setHasUnsavedModifications(true);
+            }}><Trash2 size={18} /></button>
           </>}
           {!answerPointMode && <details className="annotation-navigation-appearance" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
             <summary title="Apariencia del puntero" aria-label="Apariencia del puntero"><MousePointer size={18} /></summary>
@@ -2433,6 +2464,23 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                           setSelectedMarkerId(marker.id);
                         }}
                       />
+                      {showMarkerNumbers && markers.length > 1 && (() => {
+                        const minX = Math.min(...pts.map(p => p.x));
+                        const maxX = Math.max(...pts.map(p => p.x));
+                        const minY = Math.min(...pts.map(p => p.y));
+                        const maxY = Math.max(...pts.map(p => p.y));
+                        const badgeSize = 22 / zoomLevel;
+                        const cx = (minX + maxX) / 2;
+                        const cy = (minY + maxY) / 2;
+                        return (
+                          <g pointerEvents="none" transform={`translate(${cx - badgeSize / 2}, ${cy - badgeSize / 2})`} data-marker-order={originalIndex !== -1 ? originalIndex + 1 : 1}>
+                            <rect width={badgeSize} height={badgeSize} rx={badgeSize / 2} fill="#0f172a" stroke={isSelected ? '#38bdf8' : '#ffffff'} strokeWidth={1.5 / zoomLevel} />
+                            <text x={badgeSize / 2} y={badgeSize * 0.68} textAnchor="middle" fill="#ffffff" fontSize={11 / zoomLevel} fontWeight="800" fontFamily="Inter, sans-serif">
+                              {originalIndex !== -1 ? originalIndex + 1 : 1}
+                            </text>
+                          </g>
+                        );
+                      })()}
 
 
                       {/* Interactive Vertex Handles on Outer Polygon when selected */}

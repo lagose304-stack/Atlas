@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import InstructorQuestionEditor from './InstructorQuestionEditor';
-import type { InstructorQuestion } from '../types/instructorQuestions';
+import { newInstructorQuestion, type InstructorQuestion } from '../types/instructorQuestions';
 
 const legacy: InstructorQuestion = { id: 'q1', titulo: 'Tejido', options: [{ id: 'a', texto: 'Epitelio' }, { id: 'b', texto: 'Músculo' }], correct_option_id: 'a' };
 function Editor({ initial = legacy }: { initial?: InstructorQuestion }) {
@@ -63,5 +63,29 @@ describe('Formatos de pregunta del editor de instructores', () => {
     expect(current().pairs).toHaveLength(3);
     fireEvent.click(screen.getByRole('button', { name: 'Quitar última pareja' }));
     expect(current().pairs).toHaveLength(2);
+  });
+
+  it('configura un inciso de versus de imágenes con Imagen A e Imagen B', () => {
+    const onSelect = vi.fn();
+    render(<Editor initial={{ id: 'v1', type: 'image_versus', titulo: 'Compara ambas placas' }} />);
+    expect(screen.getByRole('region', { name: 'Imagen A del versus' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Imagen B del versus' })).toBeInTheDocument();
+    expect(screen.getByText(/No pide respuesta ni consume puntaje/)).toBeInTheDocument();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('ofrece imagen opcional del sitio o subida en selección única, completación y términos pareados', () => {
+    const types: InstructorQuestion[] = [
+      newInstructorQuestion('single_choice'),
+      newInstructorQuestion('completion'),
+      newInstructorQuestion('matching'),
+    ];
+    for (const initial of types) {
+      const { unmount } = render(<Editor initial={initial} />);
+      expect(screen.getByRole('region', { name: 'Imagen de referencia del inciso' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Elegir del sitio' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Subir imagen' })).toBeInTheDocument();
+      unmount();
+    }
   });
 });

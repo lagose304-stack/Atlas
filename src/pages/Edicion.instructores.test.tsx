@@ -16,7 +16,11 @@ vi.mock('../components/Footer', () => ({ default: () => null }));
 vi.mock('../components/BackButton', () => ({ default: () => null }));
 vi.mock('../hooks/useSmartBackNavigation', () => ({ useSmartBackNavigation: () => vi.fn() }));
 vi.mock('../services/securityAudit', () => ({ logSecurityEvent: vi.fn() }));
-vi.mock('../services/instructorTests', () => ({ listInstructorTests: vi.fn().mockResolvedValue([]) }));
+vi.mock('../services/catalogService', () => ({ getCachedTemas: vi.fn().mockResolvedValue([]) }));
+vi.mock('../services/instructorTests', () => ({
+  listInstructorTests: vi.fn().mockResolvedValue([]),
+  listInstructorBank: vi.fn().mockResolvedValue([]),
+}));
 
 describe('Entrada a prueba de instructores', () => {
   it.each([
@@ -38,6 +42,6 @@ describe('Entrada a prueba de instructores', () => {
     expect(button).toBeInTheDocument();
     fireEvent.click(button!);
     expect(screen.getByRole('heading', { name: 'Prueba de instructores' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Nueva prueba' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Banco de preguntas' })).toHaveAttribute('aria-selected', 'true'));
   });
 });

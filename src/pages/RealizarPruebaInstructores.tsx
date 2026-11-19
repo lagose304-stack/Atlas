@@ -85,6 +85,9 @@ function InstructorRunner({ id }: { id: string }) {
     void progress.flush().then(proceed).catch(() => setError('No se pudo guardar el progreso antes de salir. Reintenta cuando vuelva la conexión.'));
   };
   const adopt = (response: InstructorProgress) => {
+    if (response.questions?.length) {
+      setAccess(current => current ? { ...current, test: { ...current.test, questions: response.questions! } } : current);
+    }
     setName(response.participant_name); setAccount(response.account_number); setAnswers(response.answers);
     setCurrentQuestion(response.current_question_id);
     setProgressRevision(response.progress_revision); setStarted(true); setError('');

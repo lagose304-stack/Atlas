@@ -50,6 +50,7 @@ interface ImageViewerModalProps {
   placaId?: number | string | null;
   hasInteractiveMapHint?: boolean;
   hideSidebar?: boolean;
+  showMarkerNumbers?: boolean;
   initialMarkerVisualMode?: 'pointer' | 'arrow';
   initialActiveMarkerIndex?: number | null;
   onActiveMarkerChange?: (index: number | null) => void;
@@ -408,6 +409,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   placaId,
   hasInteractiveMapHint,
   hideSidebar = false,
+  showMarkerNumbers = false,
   initialMarkerVisualMode = 'arrow',
   initialActiveMarkerIndex,
   onActiveMarkerChange,
@@ -3512,6 +3514,25 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                               />
                             </>
                           ))}
+                          {showMarkerNumbers && senaladosItems.length > 1 && (() => {
+                            const badgeR = 11 / zoomLevel;
+                            const badgeFont = 11.5 / zoomLevel;
+                            const badgeStroke = 2 / zoomLevel;
+                            const bx = regionPixelPoints.length >= 3
+                              ? clamp((regionMinX + regionMaxX) / 2, badgeR + 2, Math.max(badgeR + 2, imageSize.width - badgeR - 2))
+                              : clamp(endPx.x - ux * Math.min(directionLen * 0.55, Math.max(badgeR * 2.5, 28 / zoomLevel)), badgeR + 2, Math.max(badgeR + 2, imageSize.width - badgeR - 2));
+                            const by = regionPixelPoints.length >= 3
+                              ? clamp((regionMinY + regionMaxY) / 2, badgeR + 2, Math.max(badgeR + 2, imageSize.height - badgeR - 2))
+                              : clamp(endPx.y - uy * Math.min(directionLen * 0.55, Math.max(badgeR * 2.5, 28 / zoomLevel)), badgeR + 2, Math.max(badgeR + 2, imageSize.height - badgeR - 2));
+                            return (
+                              <g pointerEvents="none" data-marker-order={markerIndex + 1}>
+                                <circle cx={bx} cy={by} r={badgeR} fill="#0f172a" stroke="#ffffff" strokeWidth={badgeStroke} />
+                                <text x={bx} y={by} fill="#ffffff" fontSize={badgeFont} fontWeight="800" textAnchor="middle" dominantBaseline="central">
+                                  {markerIndex + 1}
+                                </text>
+                              </g>
+                            );
+                          })()}
                           {false && regionPixelPoints.length >= 3 && (
                             <g pointerEvents="none" style={{ animation: prefersReducedMotion ? 'none' : 'mapCalloutIn 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
                               <line

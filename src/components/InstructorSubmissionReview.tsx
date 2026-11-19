@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Check, ClipboardCheck, LoaderCircle, Save, Trash2, X } from 'lucide-react';
 import { deleteInstructorSubmission, getInstructorSubmission, listInstructorSubmissions, reviewInstructorSubmission, type InstructorSubmission, type InstructorSubmissionSummary } from '../services/instructorTests';
-import { formatInstructorPoints, incisoLetter, instructorIncisoWeight, instructorReviewPoints, instructorSectionResults, isInstructorPointAnswer, requiresInstructorReview, type PublicInstructorQuestion } from '../types/instructorQuestions';
+import { formatInstructorPoints, getInstructorPointCoordinates, incisoLetter, instructorIncisoWeight, instructorReviewPoints, instructorSectionResults, requiresInstructorReview, type PublicInstructorQuestion } from '../types/instructorQuestions';
 import InstructorReferenceImageView from './InstructorReferenceImageView';
 import InstructorSectionScores from './InstructorSectionScores';
 import InstructorDeleteConfirmation from './InstructorDeleteConfirmation';
@@ -102,20 +102,35 @@ export default function InstructorSubmissionReview({ testId, name, onClose }: { 
       {selected.account_number && <p className="instructor-muted">Número de cuenta: <strong>{selected.account_number}</strong></p>}
       <InstructorSectionScores sections={instructorSectionResults(selected.snapshot, selected.auto_results ?? {}, reviews)} />
       {!manual.length && <p className="instructor-success">Esta entrega se calificó automáticamente. No tiene respuestas pendientes de revisión.</p>}
-      {selected.snapshot.questions.filter(q => !requiresInstructorReview(selected.snapshot, q)).map(q => <section className="instructor-review-item" key={q.id}><h3>{questionTitle(q)} {q.titulo}</h3>
-        <p className="instructor-muted">Valor del inciso: {formatInstructorPoints(instructorIncisoWeight(selected.snapshot, q))} puntos · Calificación automática</p>
-        {q.type === 'short_answer' && q.image && <InstructorReferenceImageView key={`${selected.id}-${q.id}`} url={q.image.url} annotations={q.image.annotations} />}
-        <p className="instructor-muted">Respuesta enviada:</p><div className="instructor-submitted-answer">{typeof selected.answers[q.id] === 'string'
-          ? q.type === 'single_choice' || !q.type ? q.options.find(option => option.id === selected.answers[q.id])?.texto ?? String(selected.answers[q.id]) : String(selected.answers[q.id])
-          : q.type === 'completion' ? q.blanks.map((blank, i) => <p key={blank.id}>Hueco {i + 1}: {String((selected.answers[q.id] as Record<string, string>)?.[blank.id] ?? '')}</p>)
-          : q.type === 'matching' ? q.terms.map(term => <p key={term.id}>{term.texto}: {q.choices.find(choice => choice.id === (selected.answers[q.id] as Record<string, string>)?.[term.id])?.texto ?? ''}</p>) : ''}</div>
+      {selected.snapshot.questions.filter(q => !requiresInstructorReview(selected.snapshot, q)).map(q => <section className="instructor-review-item" key={q.id}><h3>{questionTitle(q)} {q.type === 'image_versus' ? (q.titulo.trim() || 'Comparación de imágenes') : q.titulo}</h3>
+        {q.type === 'image_versus' ? <>
+          <p className="instructor-muted">Referencia comparativa · Sin puntaje</p>
+          <div className="instructor-versus-grid">
+            <div className="instructor-versus-card"><span className="instructor-versus-label">Imagen A</span><InstructorReferenceImageView key={`${selected.id}-${q.id}-a`} url={q.image_a.url} annotations={q.image_a.annotations} /></div>
+            <div className="instructor-versus-card"><span className="instructor-versus-label">Imagen B</span><InstructorReferenceImageView key={`${selected.id}-${q.id}-b`} url={q.image_b.url} annotations={q.image_b.annotations} /></div>
+          </div>
+        </> : <>
+          <p className="instructor-muted">Valor del inciso: {formatInstructorPoints(instructorIncisoWeight(selected.snapshot, q))} puntos · Calificación automática</p>
+          {q.type !== 'image_point' && q.image && <div className="instructor-question-image"><InstructorReferenceImageView key={`${selected.id}-${q.id}`} url={q.image.url} annotations={q.image.annotations} /></div>}
+          <p className="instructor-muted">Respuesta enviada:</p><div className="instructor-submitted-answer">{typeof selected.answers[q.id] === 'string'
+            ? q.type === 'single_choice' || !q.type ? q.options.find(option => option.id === selected.answers[q.id])?.texto ?? String(selected.answers[q.id]) : String(selected.answers[q.id])
+            : q.type === 'completion' ? q.blanks.map((blank, i) => <p key={blank.id}>Hueco {i + 1}: {String((selected.answers[q.id] as Record<string, string>)?.[blank.id] ?? '')}</p>)
+            : q.type === 'matching' ? q.terms.map(term => <p key={term.id}>{term.texto}: {q.choices.find(choice => choice.id === (selected.answers[q.id] as Record<string, string>)?.[term.id])?.texto ?? ''}</p>) : ''}</div>
+        </>}
       </section>)}
       {manual.map((q, index) => {
         if (q.type !== 'image_point' && q.type !== 'short_answer') return null;
         const point = selected.answers[q.id];
         return <section className="instructor-review-item" key={q.id}><h3>{questionTitle(q)} {q.titulo}</h3>
           <p className="instructor-muted">Valor del inciso: {formatInstructorPoints(instructorIncisoWeight(selected.snapshot, q))} puntos · {q.id in reviews ? 'Revisada' : 'Pendiente'}</p>
-          {q.type === 'image_point' ? <InstructorReferenceImageView key={`${selected.id}-${q.id}`} url={q.image.url} annotations={isInstructorPointAnswer(point) ? [{ ...point, label: 'Respuesta entregada' }] : []} />
+          {q.type === 'image_point' ? (() => {
+            const coords = getInstructorPointCoordinates(point);
+            const hasTexts = coords.some(c => typeof c.text === 'string' && c.text.trim().length > 0);
+            return <>
+              <InstructorReferenceImageView key={`${selected.id}-${q.id}`} url={q.image.url} alwaysShowNumbers={hasTexts} annotations={coords.map((coord, idx) => ({ ...coord, label: `Respuesta entregada ${idx + 1}` }))} />
+              {hasTexts && <ol className="instructor-point-review-list">{coords.map((coord, idx) => <li key={idx}><strong>{idx + 1}.</strong> {coord.text || 'Sin texto'}</li>)}</ol>}
+            </>;
+          })()
             : <>{q.image && <InstructorReferenceImageView key={`${selected.id}-${q.id}`} url={q.image.url} annotations={q.image.annotations} />}<p className="instructor-submitted-answer">{typeof point === 'string' ? point : ''}</p></>}
           {q.type === 'short_answer' && selected.snapshot.review_guides?.[q.id]?.some(guide => guide.trim()) && <details><summary>Referencias del autor para revisar</summary><p>{selected.snapshot.review_guides[q.id].filter(guide => guide.trim()).join(' · ')}</p></details>}
           <div className="instructor-row" role="group" aria-label={`Calificar respuesta abierta ${index + 1}`}>

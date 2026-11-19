@@ -14,21 +14,30 @@ type Props = {
   image?: InstructorReferenceImage; onChange: (image?: InstructorReferenceImage) => void;
   onSelectFile?: (file: File) => void;
   allowAnnotations?: boolean;
+  title?: string;
+  optional?: boolean;
+  description?: string;
+  ariaLabel?: string;
+  targetLetter?: 'A' | 'B';
 };
 
-export default function InstructorShortAnswerImage({ image, onChange, onSelectFile, allowAnnotations = true }: Props) {
+export default function InstructorShortAnswerImage({
+  image, onChange, onSelectFile, allowAnnotations = true,
+  title = 'Imagen de referencia', optional = true, description, ariaLabel = 'Imagen de respuesta breve', targetLetter = 'A',
+}: Props) {
   const input = useRef<HTMLInputElement>(null);
   const [picker, setPicker] = useState(false);
   const [annotating, setAnnotating] = useState(false);
   const [error, setError] = useState('');
-  return <section className="instructor-image-editor" aria-label="Imagen de respuesta breve">
+  const helperText = description ?? `${allowAnnotations ? 'Se mostrará junto al campo de respuesta.' : 'El instructor colocará un señalado sobre esta imagen.'} Puedes elegir una placa o subir una imagen.`;
+  return <section className="instructor-image-editor" aria-label={ariaLabel}>
     <div className="instructor-row instructor-between">
-      <div><h4><ImagePlus size={18} aria-hidden="true" />Imagen de referencia <span>Opcional</span></h4>
-        <p>{allowAnnotations ? 'Se mostrará junto al campo de respuesta.' : 'El instructor colocará un señalado sobre esta imagen.'} Puedes elegir una placa o subir una imagen.</p></div>
+      <div><h4><ImagePlus size={18} aria-hidden="true" />{title}{optional && <span>Opcional</span>}</h4>
+        <p>{helperText}</p></div>
     </div>
     {image && <div className="instructor-image-preview">{image.annotations?.length
       ? <InstructorReferenceImageView key={image.url} url={image.url} annotations={image.annotations} />
-      : <img src={image.url} alt="Vista previa de la imagen de referencia" />}
+      : <img src={image.url} alt={`Vista previa de ${title.toLowerCase()}`} />}
       <span>{image.source === 'catalog' ? 'Imagen del catálogo' : image.url.startsWith('blob:') ? 'Imagen lista para subir al guardar' : 'Imagen subida'}</span>
     </div>}
     <div className="instructor-row">
@@ -38,7 +47,7 @@ export default function InstructorShortAnswerImage({ image, onChange, onSelectFi
       {image && <button type="button" className="instructor-btn instructor-btn-danger" onClick={() => { setError(''); onChange(undefined); }}><Trash2 size={16} aria-hidden="true" />Quitar imagen</button>}
     </div>
     {image && allowAnnotations && <p className="instructor-muted instructor-image-scope-note">Los señalados se guardan solo en este inciso. La imagen del catálogo conserva sus señalados originales.</p>}
-    <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" hidden aria-label="Archivo de imagen de respuesta breve" onChange={event => {
+    <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" hidden aria-label={`Archivo de ${ariaLabel.toLowerCase()}`} onChange={event => {
       const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
       if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { setError('Elige una imagen PNG, JPEG o WebP.'); return; }
       if (file.size > 20 * 1024 * 1024) { setError('La imagen no puede superar 20 MB.'); return; }
@@ -46,14 +55,14 @@ export default function InstructorShortAnswerImage({ image, onChange, onSelectFi
     }} />
     {error && <p role="alert" className="instructor-error">{error}</p>}
     {annotating && image && <Suspense fallback={<p role="status">Abriendo editor de señalados…</p>}>
-      <PlateAnnotationViewerEditor imageSrc={image.url} imageAlt="Imagen del inciso" initialSenalados={(image.annotations ?? []).map(marker => marker.label)}
+      <PlateAnnotationViewerEditor imageSrc={image.url} imageAlt={title} showMarkerNumbers initialSenalados={(image.annotations ?? []).map(marker => marker.label)}
         initialSenaladosPos={image.annotations ?? []} onCancel={() => setAnnotating(false)} onSaveAll={(labels, positions) => {
           const annotations = labels.flatMap((label, index) => { const position = positions[index]; return position ? [{ ...position, label }] : []; });
           onChange({ ...image, annotations }); setAnnotating(false);
         }} />
     </Suspense>}
     {picker && createPortal(<Suspense fallback={<div role="status">Abriendo catálogo de imágenes…</div>}>
-      <PlatePickerModal isOpen title="Elegir imagen del sitio" targetLetter="A" onClose={() => setPicker(false)} onSelectPlate={plate => {
+      <PlatePickerModal isOpen title={`Elegir ${title.toLowerCase()} del sitio`} targetLetter={targetLetter} onClose={() => setPicker(false)} onSelectPlate={plate => {
         onChange({ url: getCloudinaryImageUrl(plate.photo_url, 'view'), source: 'catalog', plate_id: plate.id }); setPicker(false);
       }} />
     </Suspense>, document.body)}

@@ -3,7 +3,7 @@ import HoldToRevealCodeInput from './HoldToRevealCodeInput';
 import InstructorReferenceImageView from './InstructorReferenceImageView';
 import InstructorSectionScores from './InstructorSectionScores';
 import { getInstructorParticipantResult, isInstructorAccount, isSixDigitCode, type InstructorParticipantResult } from '../services/instructorTests';
-import { formatInstructorPoints, groupPublicInstructorQuestions, incisoLetter, instructorIncisoWeight, isInstructorPointAnswer, requiresInstructorReview } from '../types/instructorQuestions';
+import { formatInstructorPoints, getInstructorPointCoordinates, groupPublicInstructorQuestions, incisoLetter, instructorIncisoWeight, requiresInstructorReview } from '../types/instructorQuestions';
 
 export default function InstructorParticipantResults({ testId }: { testId: string }) {
   const [code, setCode] = useState(''), [account, setAccount] = useState('');
@@ -32,13 +32,31 @@ export default function InstructorParticipantResults({ testId }: { testId: strin
         {group.items.map((question, index) => {
           const answer = data.answers[question.id]; const values = answer && typeof answer === 'object' ? answer as Record<string, string> : {};
           const decision = (requiresInstructorReview(data.snapshot, question) ? data.reviews : data.auto_results)[question.id];
-          return <section className="instructor-review-item" key={question.id}><h4>{incisoLetter(index)}. {question.titulo}</h4>
-            <p className="instructor-muted">{formatInstructorPoints(instructorIncisoWeight(data.snapshot, question))} puntos · {decision === true ? 'Correcta' : decision === false ? 'Incorrecta' : 'Calificada'}</p>
-            {question.type === 'image_point' ? <InstructorReferenceImageView url={question.image.url} annotations={isInstructorPointAnswer(answer) ? [{ ...answer, label: 'Tu respuesta' }] : []} />
-              : question.type === 'short_answer' ? <>{question.image && <InstructorReferenceImageView url={question.image.url} annotations={question.image.annotations} />}<p className="instructor-submitted-answer">{String(answer ?? '')}</p></>
-                : question.type === 'completion' ? question.blanks.map((blank, i) => <p key={blank.id}>Hueco {i + 1}: {values[blank.id] ?? ''}</p>)
-                  : question.type === 'matching' ? question.terms.map(term => <p key={term.id}>{term.texto}: {question.choices.find(choice => choice.id === values[term.id])?.texto ?? ''}</p>)
-                    : <p className="instructor-submitted-answer">{question.options.find(option => option.id === answer)?.texto ?? ''}</p>}
+          return <section className="instructor-review-item" key={question.id}><h4>{incisoLetter(index)}. {question.type === 'image_versus' ? (question.titulo.trim() || 'Comparación de imágenes') : question.titulo}</h4>
+            {question.type === 'image_versus' ? <>
+              <p className="instructor-muted">Referencia comparativa · Sin puntaje</p>
+              <div className="instructor-versus-grid">
+                <div className="instructor-versus-card"><span className="instructor-versus-label">Imagen A</span><InstructorReferenceImageView url={question.image_a.url} annotations={question.image_a.annotations} /></div>
+                <div className="instructor-versus-card"><span className="instructor-versus-label">Imagen B</span><InstructorReferenceImageView url={question.image_b.url} annotations={question.image_b.annotations} /></div>
+              </div>
+            </> : <>
+              <p className="instructor-muted">{formatInstructorPoints(instructorIncisoWeight(data.snapshot, question))} puntos · {decision === true ? 'Correcta' : decision === false ? 'Incorrecta' : 'Calificada'}</p>
+              {question.type === 'image_point' ? (() => {
+                const coords = getInstructorPointCoordinates(answer);
+                const hasTexts = coords.some(c => typeof c.text === 'string' && c.text.trim().length > 0);
+                return <>
+                  <InstructorReferenceImageView url={question.image.url} alwaysShowNumbers={hasTexts} annotations={coords.map((coord, idx) => ({ ...coord, label: `Tu respuesta ${idx + 1}` }))} />
+                  {hasTexts && <ol className="instructor-point-review-list">{coords.map((coord, idx) => <li key={idx}><strong>{idx + 1}.</strong> {coord.text || 'Sin texto'}</li>)}</ol>}
+                </>;
+              })()
+                : <>
+                  {question.image && <div className="instructor-question-image"><InstructorReferenceImageView url={question.image.url} annotations={question.image.annotations} /></div>}
+                  {question.type === 'short_answer' ? <p className="instructor-submitted-answer">{String(answer ?? '')}</p>
+                    : question.type === 'completion' ? question.blanks.map((blank, i) => <p key={blank.id}>Hueco {i + 1}: {values[blank.id] ?? ''}</p>)
+                      : question.type === 'matching' ? question.terms.map(term => <p key={term.id}>{term.texto}: {question.choices.find(choice => choice.id === values[term.id])?.texto ?? ''}</p>)
+                        : <p className="instructor-submitted-answer">{question.options.find(option => option.id === answer)?.texto ?? ''}</p>}
+                </>}
+            </>}
           </section>;
         })}
       </section>)}

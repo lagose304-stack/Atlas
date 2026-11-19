@@ -6,7 +6,7 @@ import InstructorFormatIcon from './InstructorFormatIcon';
 import InstructorScheduleEditor from './InstructorScheduleEditor';
 import type { InstructorContent } from '../services/instructorTests';
 import {
-  INSTRUCTOR_QUESTION_TYPES, incisoLetter, instructorGroups, newInstructorGroup, newInstructorQuestion,
+  INSTRUCTOR_QUESTION_TYPES, incisoLetter, instructorGroups, isInstructorGradedQuestion, newInstructorGroup, newInstructorQuestion,
   type InstructorQuestion, type InstructorQuestionGroup, type InstructorQuestionType,
 } from '../types/instructorQuestions';
 
@@ -15,12 +15,15 @@ const InstructorSectionsEditor = lazy(() => import('./InstructorSectionsEditor')
 type Props = {
   content: InstructorContent; code: string; hasCode: boolean; existing: boolean; busy: boolean;
   onChange: (content: InstructorContent) => void; onCodeChange: (code: string) => void;
-  onSelectImageFile?: (questionId: string, file: File) => void;
+  onSelectImageFile?: (questionId: string, file: File, slot?: 'image' | 'image_a' | 'image_b') => void;
+  onMilestoneAction?: (nextContent?: InstructorContent) => void;
+  bankTopicName?: string;
 };
 
-export default function InstructorTestComposer({ content, code, hasCode, existing, busy, onChange, onCodeChange, onSelectImageFile }: Props) {
+export default function InstructorTestComposer({ content, code, hasCode, existing, busy, onChange, onCodeChange, onSelectImageFile, onMilestoneAction, bankTopicName }: Props) {
   const groups = instructorGroups(content);
-  const [showSettings, setShowSettings] = useState(!existing || groups.length === 0);
+  const isBankMode = !!bankTopicName;
+  const [showSettings, setShowSettings] = useState(!isBankMode && (!existing || groups.length === 0));
   const [activeGroupId, setActiveGroupId] = useState(groups[0]?.id ?? '');
   const [selectedItems, setSelectedItems] = useState<Record<string, string>>({});
   const [addingItem, setAddingItem] = useState(false);
@@ -33,41 +36,55 @@ export default function InstructorTestComposer({ content, code, hasCode, existin
   const itemIndex = Math.max(0, items.findIndex(q => q.id === selectedItems[group?.id]));
   const item = items[itemIndex];
 
-  const apply = (nextGroups: InstructorQuestionGroup[], nextItems = content.questions) => {
+  const apply = (nextGroups: InstructorQuestionGroup[], nextItems = content.questions): InstructorContent => {
     const byId = new Map(nextItems.map(q => [q.id, q]));
     const ordered = content.sections?.length ? [...nextGroups].sort((a, b) => {
       const rank = (id?: string) => { const index = content.sections!.findIndex(section => section.id === id); return index < 0 ? 1000 : index; };
       return rank(a.section_id) - rank(b.section_id);
     }) : nextGroups;
-    onChange({ ...content, groups: ordered, questions: ordered.flatMap(g => g.item_ids.map(id => byId.get(id)).filter((q): q is InstructorQuestion => !!q)) });
+    const nextContent: InstructorContent = { ...content, groups: ordered, questions: ordered.flatMap(g => g.item_ids.map(id => byId.get(id)).filter((q): q is InstructorQuestion => !!q)) };
+    onChange(nextContent);
+    return nextContent;
   };
-  const selectGroup = (id: string) => { setActiveGroupId(id); setShowSettings(false); setAddingItem(false); };
+  const selectGroup = (id: string) => {
+    setActiveGroupId(id); setShowSettings(false); setAddingItem(false);
+  };
   const addGroup = () => {
     const next = newInstructorGroup();
     if (group?.section_id) next.section_id = group.section_id;
-    apply([...groups, next]); selectGroup(next.id);
+    const nextContent = apply([...groups, next]);
+    selectGroup(next.id);
+    onMilestoneAction?.(nextContent);
   };
-  const selectItem = (id: string) => { if (group) setSelectedItems(previous => ({ ...previous, [group.id]: id })); };
+  const selectItem = (id: string) => {
+    if (group) setSelectedItems(previous => ({ ...previous, [group.id]: id }));
+  };
   const addItem = (type: InstructorQuestionType) => {
     if (!group || content.questions.length >= 100) return;
     const next = newInstructorQuestion(type);
-    apply(groups.map(g => g.id === group.id ? { ...g, item_ids: [...g.item_ids, next.id] } : g), [...content.questions, next]);
+    const nextContent = apply(groups.map(g => g.id === group.id ? { ...g, item_ids: [...g.item_ids, next.id] } : g), [...content.questions, next]);
     selectItem(next.id); setAddingItem(false);
+    onMilestoneAction?.(nextContent);
   };
-  const formatDescriptions = {
+  const formatDescriptions: Record<InstructorQuestionType, string> = {
     single_choice: 'Varias opciones, una correcta', short_answer: 'Texto libre · Revisión manual',
     completion: 'Enunciado con espacios por completar', matching: 'Relacionar términos y conceptos',
     image_point: 'Colocar un señalado · Revisión manual',
+    image_versus: 'Dos imágenes lado a lado · Sin puntaje',
   };
+  const gradedItemsCount = items.filter(isInstructorGradedQuestion).length;
 
   return <div className="instructor-composer">
     <aside className="instructor-question-nav" aria-label="Navegación del editor">
-      <button type="button" className="instructor-nav-entry instructor-settings-entry" aria-current={showSettings ? 'page' : undefined}
-        aria-controls={workspaceId} onClick={() => setShowSettings(true)}>
-        <Settings2 size={19} aria-hidden="true" />
-        <span>Datos de la prueba<small>Nombre, instrucciones y código</small></span>
-      </button>
-      <button type="button" className="instructor-btn" onClick={() => { setShowSettings(true); setShowSections(true); }}><Layers3 size={16} />Secciones por tema</button>
+      {!isBankMode && <>
+        <button type="button" className="instructor-nav-entry instructor-settings-entry" aria-current={showSettings ? 'page' : undefined}
+          aria-controls={workspaceId} onClick={() => setShowSettings(true)}>
+          <Settings2 size={19} aria-hidden="true" />
+          <span>Datos de la prueba<small>Nombre, instrucciones y código</small></span>
+        </button>
+        <button type="button" className="instructor-btn" onClick={() => { setShowSettings(true); setShowSections(true); }}><Layers3 size={16} />Secciones por tema</button>
+      </>}
+      {isBankMode && <div className="instructor-bank-topic-pill"><Layers3 size={16} aria-hidden="true" /><span>Tema asignado<strong>{bankTopicName}</strong></span></div>}
       <div className="instructor-row instructor-between instructor-nav-heading"><h3>Preguntas</h3><span className="instructor-badge">{groups.length}</span></div>
       <ol className="instructor-question-nav-list" aria-label="Preguntas de la prueba">
         {groups.map((g, index) => <li key={g.id}>
@@ -107,15 +124,16 @@ export default function InstructorTestComposer({ content, code, hasCode, existin
         <button type="button" className="instructor-btn" onClick={() => groups.length ? selectGroup(groups[0].id) : addGroup()}>Continuar a preguntas<ArrowRight size={17} aria-hidden="true" /></button>
       </> : group ? <>
         <div className="instructor-row instructor-between instructor-active-question-heading">
-          <div><span className="instructor-eyebrow">Edición de preguntas</span><h3>Pregunta {groupIndex + 1} de {groups.length}</h3><p>{items.length} {items.length === 1 ? 'inciso' : 'incisos'} · 1 punto repartido entre sus incisos.</p></div>
+          <div><span className="instructor-eyebrow">Edición de preguntas</span><h3>Pregunta {groupIndex + 1} de {groups.length}</h3><p>{gradedItemsCount !== items.length ? `${items.length} ${items.length === 1 ? 'inciso' : 'incisos'} (${gradedItemsCount} con puntaje) · 1 punto repartido entre los incisos evaluables.` : `${items.length} ${items.length === 1 ? 'inciso' : 'incisos'} · 1 punto repartido entre sus incisos.`}</p></div>
           <div className="instructor-row">
           {!!items.length && <button type="button" className="instructor-btn" aria-expanded={addingItem} aria-controls={`${workspaceId}-formats`} disabled={content.questions.length >= 100} onClick={() => setAddingItem(value => !value)}><Plus size={17} aria-hidden="true" />Agregar inciso</button>}
           <button type="button" className="instructor-btn instructor-btn-danger instructor-btn-icon" aria-label={`Eliminar pregunta ${groupIndex + 1}`} title={`Eliminar pregunta ${groupIndex + 1}`} onClick={() => {
             if (!window.confirm(`¿Eliminar la pregunta ${groupIndex + 1} y sus ${items.length} incisos?`)) return;
             const next = groups.filter(g => g.id !== group.id);
-            apply(next);
+            const nextContent = apply(next);
             if (next.length) selectGroup(next[Math.min(groupIndex, next.length - 1)].id);
-            else { setActiveGroupId(''); setShowSettings(true); }
+            else { setActiveGroupId(''); if (!isBankMode) setShowSettings(true); }
+            onMilestoneAction?.(nextContent);
           }}><Trash2 size={17} aria-hidden="true" /></button>
           </div>
         </div>
@@ -153,12 +171,13 @@ export default function InstructorTestComposer({ content, code, hasCode, existin
           </div>
           {item && <div role="tabpanel" id={incisoPanelId} aria-labelledby={`${incisoPanelId}-${item.id}`}>
             <InstructorQuestionEditor key={item.id} question={item} index={itemIndex} label={`Inciso ${incisoLetter(itemIndex)}`}
-              onSelectImageFile={onSelectImageFile ? file => onSelectImageFile(item.id, file) : undefined}
+              onSelectImageFile={onSelectImageFile ? (file, slot) => onSelectImageFile(item.id, file, slot) : undefined}
               contextLabel={`inciso ${incisoLetter(itemIndex)} de pregunta ${groupIndex + 1}`}
               onChange={next => apply(groups, content.questions.map(q => q.id === item.id ? next : q))}
               onRemove={() => {
-                apply(groups.map(g => g.id === group.id ? { ...g, item_ids: g.item_ids.filter(id => id !== item.id) } : g));
+                const nextContent = apply(groups.map(g => g.id === group.id ? { ...g, item_ids: g.item_ids.filter(id => id !== item.id) } : g));
                 selectItem(items.filter(q => q.id !== item.id)[Math.min(itemIndex, items.length - 2)]?.id ?? '');
+                onMilestoneAction?.(nextContent);
               }} />
           </div>}
         </> : null}
