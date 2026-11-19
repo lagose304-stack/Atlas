@@ -55,6 +55,7 @@ interface Placa {
   }> | null;
   comentario?: string | null;
   tincion?: string | null;
+  is_published?: boolean | null;
 }
 
 interface SubtemaInfo {
@@ -1142,11 +1143,18 @@ const PlacasSubtemaContent: React.FC = () => {
           senaladosMeta={selectedPlaca.senalados_meta}
           comentario={selectedPlaca.comentario}
           tincion={selectedPlaca.tincion}
+          isPublished={selectedPlaca.is_published ?? true}
           platePosition={selectedPlacaIndex + 1}
           plateCount={placas.length}
           onPreviousPlate={selectedPlacaIndex > 0 ? () => navigateToPlate(selectedPlacaIndex - 1) : undefined}
           onNextPlate={selectedPlacaIndex >= 0 && selectedPlacaIndex < placas.length - 1 ? () => navigateToPlate(selectedPlacaIndex + 1) : undefined}
           onPlateUpdated={(updated) => {
+            if (updated.isPublished === false) {
+              setPlacas(prevPlacas => prevPlacas.filter(p => p.id !== selectedPlaca.id));
+              syncUrlSearchParam('placa', null);
+              setSelectedPlaca(null);
+              return;
+            }
             setSelectedPlaca(prev => {
               if (!prev) return null;
               return {
@@ -1155,6 +1163,7 @@ const PlacasSubtemaContent: React.FC = () => {
                 ...(updated.aumento !== undefined ? { aumento: updated.aumento } : {}),
                 ...(updated.tincion !== undefined ? { tincion: updated.tincion } : {}),
                 ...(updated.comentario !== undefined ? { comentario: updated.comentario } : {}),
+                ...(updated.isPublished !== undefined ? { is_published: updated.isPublished } : {}),
                 ...(updated.senalados !== undefined ? { senalados: updated.senalados } : {}),
                 ...(updated.senaladosMeta !== undefined ? { senalados_meta: updated.senaladosMeta } : {}),
               };
@@ -1168,6 +1177,7 @@ const PlacasSubtemaContent: React.FC = () => {
                   ...(updated.aumento !== undefined ? { aumento: updated.aumento } : {}),
                   ...(updated.tincion !== undefined ? { tincion: updated.tincion } : {}),
                   ...(updated.comentario !== undefined ? { comentario: updated.comentario } : {}),
+                  ...(updated.isPublished !== undefined ? { is_published: updated.isPublished } : {}),
                   ...(updated.senalados !== undefined ? { senalados: updated.senalados } : {}),
                   ...(updated.senaladosMeta !== undefined ? { senalados_meta: updated.senaladosMeta } : {}),
                 };

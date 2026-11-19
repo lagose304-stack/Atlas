@@ -43,6 +43,7 @@ interface Placa {
   photo_url: string;
   aumento?: string | null;
   sort_order: number;
+  is_published?: boolean | null;
 }
 
 interface RectBox {
@@ -833,7 +834,7 @@ const MapasInteractivos: React.FC = () => {
     let isEffectActive = true;
     const fetchPlacas = async () => {
       try {
-        const bundle = await getCachedPlacasForSubtema(numSubtemaId);
+        const bundle = await getCachedPlacasForSubtema(numSubtemaId, { includeDrafts: true });
         if (!isEffectActive) return;
 
         if (bundle && bundle.placas) {
@@ -2621,7 +2622,7 @@ const MapasInteractivos: React.FC = () => {
       if (targetSubtemaId !== null) {
         const { data: siblingPlacas } = await supabase
           .from('placas')
-          .select('id, photo_url, aumento, sort_order')
+          .select('id, photo_url, aumento, sort_order, is_published')
           .eq('subtema_id', targetSubtemaId)
           .order('sort_order', { ascending: true });
 
@@ -2711,6 +2712,28 @@ const MapasInteractivos: React.FC = () => {
       >
         <div style={s.cardAccent} />
         <span style={s.positionBadge}>{visualIndex + 1}</span>
+        {placa.is_published === false && (
+          <span
+            style={{
+              position: 'absolute',
+              top: '10px',
+              left: '44px',
+              zIndex: 3,
+              padding: '3px 8px',
+              borderRadius: '999px',
+              background: '#fef3c7',
+              border: '1px solid #f59e0b',
+              color: '#92400e',
+              fontSize: '0.72em',
+              fontWeight: 800,
+              letterSpacing: '0.02em',
+              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.14)',
+            }}
+            title="Esta placa está en borrador y no se muestra en la vista pública"
+          >
+            Borrador
+          </span>
+        )}
         {hasInteractiveMap && (
           <span
             style={s.interactiveMapBadge}

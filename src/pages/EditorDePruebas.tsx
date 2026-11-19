@@ -56,6 +56,7 @@ interface PlacaRow {
   photo_url: string;
   tema_id: number;
   subtema_id: number;
+  is_published?: boolean | null;
 }
 
 interface MarkerLocation {
@@ -1020,7 +1021,7 @@ const EditorDePruebas: React.FC = () => {
     setReferencePicker(prev => (prev ? { ...prev, loading: true, error: '' } : prev));
     const { data, error: fetchError } = await supabase
       .from('placas')
-      .select('id, photo_url, tema_id, subtema_id')
+      .select('id, photo_url, tema_id, subtema_id, is_published')
       .eq('subtema_id', subtemaId)
       .order('sort_order', { ascending: true });
 
@@ -2018,7 +2019,9 @@ const EditorDePruebas: React.FC = () => {
                             alt="Placa disponible"
                             style={s.referencePlateImg}
                           />
-                          <span style={s.referencePlateLabel}>Seleccionar placa</span>
+                          <span style={s.referencePlateLabel}>
+                            {placa.is_published === false ? 'Borrador · Seleccionar' : 'Seleccionar placa'}
+                          </span>
                         </button>
                       ))}
                     </div>

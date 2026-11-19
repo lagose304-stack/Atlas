@@ -16,14 +16,211 @@ export interface MarkerLocationData {
 
 export interface PlateComparisonState {
   photo_url?: string | null;
+  tema_id?: number | null;
+  subtema_id?: number | null;
   aumento?: string | null;
   tincion?: string | null;
   comentario?: string | null;
+  is_published?: boolean | null;
   subtema_nombre?: string | null;
   tema_nombre?: string | null;
   senalados?: string[] | null;
   senalados_meta?: Array<MarkerLocationData | null> | null;
 }
+
+interface NormalizedMarkerEntry {
+  label: string;
+  x: number | null;
+  y: number | null;
+  startX: number | null;
+  startY: number | null;
+  regionPoints: number[] | null;
+  regionHoles: number[][] | null;
+  regionColor: string | null;
+  regionOpacity: number | null;
+  regionStrokeWidth: number | null;
+  regionDashLength: number | null;
+  regionDashGap: number | null;
+  regionSmooth: boolean | null;
+}
+
+const COORD_EPSILON = 1e-6;
+
+const normalizeFiniteNumber = (value: number | null | undefined): number | null => {
+  if (value == null) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const normalizeNumberArray = (values: number[] | null | undefined): number[] | null => {
+  if (!Array.isArray(values) || values.length === 0) return null;
+  const normalized = values.map(v => Number(v)).filter(Number.isFinite);
+  return normalized.length > 0 ? normalized : null;
+};
+
+const normalizeHoles = (holes: number[][] | null | undefined): number[][] | null => {
+  if (!Array.isArray(holes) || holes.length === 0) return null;
+  const normalized = holes
+    .map(hole => normalizeNumberArray(hole))
+    .filter((hole): hole is number[] => hole !== null);
+  return normalized.length > 0 ? normalized : null;
+};
+
+const normalizeMarkerEntry = (
+  rawLabel: string | null | undefined,
+  meta: MarkerLocationData | null | undefined
+): NormalizedMarkerEntry => ({
+  label: String(rawLabel ?? meta?.label ?? '').trim(),
+  x: normalizeFiniteNumber(meta?.x),
+  y: normalizeFiniteNumber(meta?.y),
+  startX: normalizeFiniteNumber(meta?.startX),
+  startY: normalizeFiniteNumber(meta?.startY),
+  regionPoints: normalizeNumberArray(meta?.regionPoints),
+  regionHoles: normalizeHoles(meta?.regionHoles),
+  regionColor: meta?.regionColor != null && String(meta.regionColor).trim() !== ''
+    ? String(meta.regionColor).trim()
+    : null,
+  regionOpacity: normalizeFiniteNumber(meta?.regionOpacity),
+  regionStrokeWidth: normalizeFiniteNumber(meta?.regionStrokeWidth),
+  regionDashLength: normalizeFiniteNumber(meta?.regionDashLength),
+  regionDashGap: normalizeFiniteNumber(meta?.regionDashGap),
+  regionSmooth: typeof meta?.regionSmooth === 'boolean' ? meta.regionSmooth : null,
+});
+
+const normalizeMarkerList = (
+  labels?: string[] | null,
+  meta?: Array<MarkerLocationData | null> | null
+): NormalizedMarkerEntry[] => {
+  const safeLabels = Array.isArray(labels) ? labels : [];
+  const safeMeta = Array.isArray(meta) ? meta : [];
+  const total = Math.max(safeLabels.length, safeMeta.length);
+  const entries: NormalizedMarkerEntry[] = [];
+
+  for (let i = 0; i < total; i++) {
+    const entry = normalizeMarkerEntry(safeLabels[i], safeMeta[i]);
+    const isCompletelyEmpty =
+      entry.label === '' &&
+      entry.x === null &&
+      entry.y === null &&
+      entry.startX === null &&
+      entry.startY === null &&
+      entry.regionPoints === null &&
+      entry.regionHoles === null;
+    if (!isCompletelyEmpty) {
+      entries.push(entry);
+    }
+  }
+
+  return entries;
+};
+
+const numbersDiffer = (
+  a: number | null | undefined,
+  b: number | null | undefined,
+  epsilon = COORD_EPSILON
+): boolean => {
+  const na = normalizeFiniteNumber(a);
+  const nb = normalizeFiniteNumber(b);
+  if (na === null && nb === null) return false;
+  if (na === null || nb === null) return true;
+  return Math.abs(na - nb) > epsilon;
+};
+
+const numberArraysDiffer = (
+  a: number[] | null | undefined,
+  b: number[] | null | undefined,
+  epsilon = COORD_EPSILON
+): boolean => {
+  const na = normalizeNumberArray(a);
+  const nb = normalizeNumberArray(b);
+  if (na === null && nb === null) return false;
+  if (na === null || nb === null) return true;
+  if (na.length !== nb.length) return true;
+  return na.some((value, idx) => Math.abs(value - nb[idx]) > epsilon);
+};
+
+const holesDiffer = (
+  a: number[][] | null | undefined,
+  b: number[][] | null | undefined,
+  epsilon = COORD_EPSILON
+): boolean => {
+  const na = normalizeHoles(a);
+  const nb = normalizeHoles(b);
+  if (na === null && nb === null) return false;
+  if (na === null || nb === null) return true;
+  if (na.length !== nb.length) return true;
+  return na.some((hole, idx) => numberArraysDiffer(hole, nb[idx], epsilon));
+};
+
+const markerStyleDiffers = (a: NormalizedMarkerEntry, b: NormalizedMarkerEntry): boolean => {
+  if ((a.regionColor ?? null) !== (b.regionColor ?? null)) return true;
+  if (numbersDiffer(a.regionOpacity, b.regionOpacity)) return true;
+  if (numbersDiffer(a.regionStrokeWidth, b.regionStrokeWidth)) return true;
+  if (numbersDiffer(a.regionDashLength, b.regionDashLength)) return true;
+  if (numbersDiffer(a.regionDashGap, b.regionDashGap)) return true;
+  if (a.regionSmooth !== b.regionSmooth) return true;
+  return false;
+};
+
+const markerEntriesDiffer = (a: NormalizedMarkerEntry, b: NormalizedMarkerEntry): boolean => {
+  if (a.label !== b.label) return true;
+  if (numbersDiffer(a.x, b.x)) return true;
+  if (numbersDiffer(a.y, b.y)) return true;
+  if (numbersDiffer(a.startX, b.startX)) return true;
+  if (numbersDiffer(a.startY, b.startY)) return true;
+  if (numberArraysDiffer(a.regionPoints, b.regionPoints)) return true;
+  if (holesDiffer(a.regionHoles, b.regionHoles)) return true;
+  if (markerStyleDiffers(a, b)) return true;
+  return false;
+};
+
+/**
+ * Detecta si existe cualquier cambio (incluidos ajustes finos de posición,
+ * flechas, vértices de contorno, huecos, estilos visuales de borde, texto,
+ * aumento, tinción, comentario, ubicación o imagen) entre dos estados de placa.
+ */
+export const hasPlateStateChanges = (
+  before: PlateComparisonState,
+  after: PlateComparisonState,
+  options?: { isNewImageReplaced?: boolean }
+): boolean => {
+  if (options?.isNewImageReplaced) return true;
+
+  if (before.photo_url !== undefined || after.photo_url !== undefined) {
+    const oldPhoto = (before.photo_url ?? '').trim();
+    const newPhoto = (after.photo_url ?? '').trim();
+    if (oldPhoto !== newPhoto) return true;
+  }
+
+  if (before.tema_id !== undefined || after.tema_id !== undefined) {
+    if ((before.tema_id ?? null) !== (after.tema_id ?? null)) return true;
+  }
+
+  if (before.subtema_id !== undefined || after.subtema_id !== undefined) {
+    if ((before.subtema_id ?? null) !== (after.subtema_id ?? null)) return true;
+  }
+
+  if ((before.aumento ?? '').trim() !== (after.aumento ?? '').trim()) return true;
+  if ((before.tincion ?? '').trim() !== (after.tincion ?? '').trim()) return true;
+  if ((before.comentario ?? '').trim() !== (after.comentario ?? '').trim()) return true;
+
+  if (before.is_published !== undefined || after.is_published !== undefined) {
+    if (Boolean(before.is_published ?? true) !== Boolean(after.is_published ?? true)) return true;
+  }
+
+  const beforeMarkers = normalizeMarkerList(before.senalados, before.senalados_meta);
+  const afterMarkers = normalizeMarkerList(after.senalados, after.senalados_meta);
+
+  if (beforeMarkers.length !== afterMarkers.length) return true;
+
+  for (let i = 0; i < afterMarkers.length; i++) {
+    if (markerEntriesDiffer(beforeMarkers[i], afterMarkers[i])) {
+      return true;
+    }
+  }
+
+  return false;
+};
 
 /**
  * Limpia un nombre de autor o correo para mostrar siempre un nombre legible y amigable.
@@ -97,6 +294,17 @@ export const computePlateChangesDiff = (
     changes.push('Actualizó la fotografía de la placa histológica');
   }
 
+  // 1b. Estado de publicación (borrador / publicada)
+  if (before.is_published !== undefined || after.is_published !== undefined) {
+    const wasPublished = Boolean(before.is_published ?? true);
+    const isNowPublished = Boolean(after.is_published ?? true);
+    if (!wasPublished && isNowPublished) {
+      changes.push('Publicó la placa para la vista pública');
+    } else if (wasPublished && !isNowPublished) {
+      changes.push('Pasó la placa a borrador (oculta en la vista pública)');
+    }
+  }
+
   // 2. Aumento
   const oldAumento = (before.aumento || '').trim();
   const newAumento = (after.aumento || '').trim();
@@ -137,59 +345,73 @@ export const computePlateChangesDiff = (
   }
 
   // 5. Señalados
-  const oldLabels = (before.senalados || []).map(s => String(s).trim()).filter(Boolean);
-  const newLabels = (after.senalados || []).map(s => String(s).trim()).filter(Boolean);
-  const oldMeta = before.senalados_meta || [];
-  const newMeta = after.senalados_meta || [];
+  const oldEntries = normalizeMarkerList(before.senalados, before.senalados_meta).filter(entry => entry.label !== '');
+  const newEntries = normalizeMarkerList(after.senalados, after.senalados_meta).filter(entry => entry.label !== '');
+
+  const matchedOldIndices = new Set<number>();
+  const matchedPairs: Array<{ oldEntry: NormalizedMarkerEntry; newEntry: NormalizedMarkerEntry }> = [];
+  const addedEntries: NormalizedMarkerEntry[] = [];
+
+  newEntries.forEach(newEntry => {
+    // Priorizar coincidencia exacta (respetando mayúsculas/minúsculas) y luego insensible a mayúsculas
+    let oldIdx = oldEntries.findIndex(
+      (oldEntry, idx) => !matchedOldIndices.has(idx) && oldEntry.label === newEntry.label
+    );
+    if (oldIdx === -1) {
+      oldIdx = oldEntries.findIndex(
+        (oldEntry, idx) => !matchedOldIndices.has(idx) && oldEntry.label.toLowerCase() === newEntry.label.toLowerCase()
+      );
+    }
+
+    if (oldIdx !== -1) {
+      matchedOldIndices.add(oldIdx);
+      matchedPairs.push({ oldEntry: oldEntries[oldIdx], newEntry });
+    } else {
+      addedEntries.push(newEntry);
+    }
+  });
 
   // Señalados agregados
-  const added = newLabels.filter(nl => !oldLabels.some(ol => ol.toLowerCase() === nl.toLowerCase()));
-  added.forEach(lbl => {
-    changes.push(`Agregó el señalado "${lbl}"`);
+  addedEntries.forEach(entry => {
+    changes.push(`Agregó el señalado "${entry.label}"`);
   });
 
   // Señalados borrados
-  const removed = oldLabels.filter(ol => !newLabels.some(nl => nl.toLowerCase() === ol.toLowerCase()));
-  removed.forEach(lbl => {
-    changes.push(`Borró el señalado "${lbl}"`);
+  oldEntries.forEach((entry, idx) => {
+    if (!matchedOldIndices.has(idx)) {
+      changes.push(`Borró el señalado "${entry.label}"`);
+    }
   });
 
-  // Señalados coincidentes que fueron modificados (posición, contorno o zonas de exclusión)
-  newLabels.forEach((nl, newIdx) => {
-    const oldIdx = oldLabels.findIndex(ol => ol.toLowerCase() === nl.toLowerCase());
-    if (oldIdx !== -1) {
-      const nm = newMeta[newIdx];
-      const om = oldMeta[oldIdx];
-      if (nm && om) {
-        // ¿Cambió el borde o región?
-        const newPts = nm.regionPoints || [];
-        const oldPts = om.regionPoints || [];
-        const regionChanged =
-          newPts.length !== oldPts.length ||
-          newPts.some((pt, i) => Math.abs(pt - (oldPts[i] ?? 0)) > 0.005);
+  // Señalados coincidentes que fueron modificados (nombre, posición, contorno, huecos o estilo)
+  matchedPairs.forEach(({ oldEntry, newEntry }) => {
+    const label = newEntry.label;
 
-        if (regionChanged) {
-          changes.push(`Modificó el contorno / borde del señalado "${nl}"`);
-        } else {
-          // ¿Cambió la posición central o punta de la flecha?
-          const xChanged = nm.x != null && om.x != null && Math.abs(nm.x - om.x) > 0.005;
-          const yChanged = nm.y != null && om.y != null && Math.abs(nm.y - om.y) > 0.005;
-          const startChanged =
-            nm.startX != null && om.startX != null &&
-            (Math.abs(nm.startX - om.startX) > 0.005 || Math.abs((nm.startY ?? 0) - (om.startY ?? 0)) > 0.005);
+    if (oldEntry.label !== newEntry.label) {
+      changes.push(`Renombró el señalado "${oldEntry.label}" a "${newEntry.label}"`);
+    }
 
-          if (xChanged || yChanged || startChanged) {
-            changes.push(`Reubicó la posición del señalado "${nl}"`);
-          }
-        }
+    const regionChanged = numberArraysDiffer(oldEntry.regionPoints, newEntry.regionPoints);
+    if (regionChanged) {
+      changes.push(`Modificó el contorno / borde del señalado "${label}"`);
+    } else {
+      const posChanged =
+        numbersDiffer(oldEntry.x, newEntry.x) ||
+        numbersDiffer(oldEntry.y, newEntry.y) ||
+        numbersDiffer(oldEntry.startX, newEntry.startX) ||
+        numbersDiffer(oldEntry.startY, newEntry.startY);
 
-        // ¿Cambiaron los huecos/donas de exclusión?
-        const newHoles = nm.regionHoles || [];
-        const oldHoles = om.regionHoles || [];
-        if (newHoles.length !== oldHoles.length) {
-          changes.push(`Ajustó las zonas de exclusión (huecos) del señalado "${nl}"`);
-        }
+      if (posChanged) {
+        changes.push(`Reubicó la posición del señalado "${label}"`);
       }
+    }
+
+    if (holesDiffer(oldEntry.regionHoles, newEntry.regionHoles)) {
+      changes.push(`Ajustó las zonas de exclusión (huecos) del señalado "${label}"`);
+    }
+
+    if (markerStyleDiffers(oldEntry, newEntry)) {
+      changes.push(`Actualizó el estilo visual del señalado "${label}"`);
     }
   });
 

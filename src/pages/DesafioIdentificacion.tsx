@@ -629,7 +629,8 @@ const DesafioIdentificacion: React.FC = () => {
                 sort_order
               )
             )
-          `);
+          `)
+          .eq('is_published', true);
 
         if (!error && data && isMounted) {
           const formatted: PlacaGameItem[] = [];

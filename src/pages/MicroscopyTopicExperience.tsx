@@ -519,6 +519,7 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
           .from('placas')
           .select('id, photo_url, tema_id, subtema_id, sort_order, aumento, senalados, senalados_meta, comentario, tincion')
           .eq('tema_id', temaId)
+          .eq('is_published', true)
           .order('sort_order', { ascending: true }),
         supabase
           .from('interactive_maps')
@@ -528,6 +529,7 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
         supabase
           .from('placas')
           .select('id, photo_url, tema_id, subtema_id, aumento, comentario, tincion, temas(nombre), subtemas(nombre)')
+          .eq('is_published', true)
           .not('aumento', 'is', null)
           .order('id', { ascending: true }),
       ]);
@@ -554,10 +556,12 @@ const MicroscopyTopicExperience: React.FC<MicroscopyTopicExperienceProps> = ({ t
       }
 
       const nextSubtemas = (subtemasResult.data ?? []) as Subtema[];
+      const nextPlacas = (placasResult.data ?? []) as Placa[];
+      const publishedPlacaIds = new Set(nextPlacas.map((placa) => placa.id));
       setTema(temaResult.data as Tema);
       setSubtemas(nextSubtemas);
-      setPlacas((placasResult.data ?? []) as Placa[]);
-      setMaps((mapsResult.data ?? []) as InteractiveMap[]);
+      setPlacas(nextPlacas);
+      setMaps(((mapsResult.data ?? []) as InteractiveMap[]).filter((map) => publishedPlacaIds.has(map.placa_id)));
       if (objectiveSamplesResult.error) {
         console.warn('No se pudieron cargar placas de ejemplo por aumento:', objectiveSamplesResult.error);
         setObjectiveSamples({});

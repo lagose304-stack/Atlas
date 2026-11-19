@@ -6,7 +6,15 @@ vi.mock('../styles/comparador.css', () => ({}));
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('../services/supabase', () => ({
-  supabase: { from: () => ({ select: () => ({ in: mocks.fetch }) }) },
+  supabase: {
+    from: () => ({
+      select: () => ({
+        in: (...args: unknown[]) => ({
+          eq: () => mocks.fetch(...args),
+        }),
+      }),
+    }),
+  },
 }));
 vi.mock('../components/comparador/DualPlateViewport', () => ({
   default: ({ letter, plate, zoom, pan, showSignalings, onOpenPicker, onPanZoomChange }: any) => (

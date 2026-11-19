@@ -12,6 +12,7 @@ import PlateEditorPanel from '../components/PlateEditorPanel';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
+import { invalidatePlacasCache } from '../services/catalogService';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 interface Tema {
@@ -203,6 +204,7 @@ const ListaEspera: React.FC = () => {
   const [subtemaId,       setSubtemaId]       = useState<number | null>(null);
   const [loadingSubtemas, setLoadingSubtemas] = useState(false);
   const [aumento,         setAumento]         = useState('');
+  const [isPublished,     setIsPublished]     = useState(false);
   const [senalados,       setSenalados]       = useState<string[]>([]);
   const [senaladosPos,    setSenaladosPos]    = useState<Array<MarkerLocation | null>>([]);
   const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
@@ -271,6 +273,7 @@ const ListaEspera: React.FC = () => {
     setSubtemaId(null);
     setSubtemas([]);
     setAumento('');
+    setIsPublished(false);
     setSenalados([]);
     setSenaladosPos([]);
     setEditingSenaladoIndex(null);
@@ -407,11 +410,12 @@ const ListaEspera: React.FC = () => {
           p_comentario: comentario.trim() || null,
           p_tincion: tincion.trim() || null,
           p_photo_url: finalPhotoUrl,
+          p_is_published: isPublished,
         });
         if (error) throw error;
         createdPlacaId = typeof data === 'number' ? data : null;
       } catch (rpcErr: any) {
-        // Fallback para esquemas RPC remotos que aún no tengan el parámetro p_photo_url
+        // Fallback para esquemas RPC remotos que aún no tengan el parámetro p_is_published / p_photo_url
         const { data: fallbackId, error: fallbackErr } = await supabase.rpc('classify_waiting_plate', {
           p_waiting_id: selected.id,
           p_tema_id: temaId,
@@ -425,10 +429,14 @@ const ListaEspera: React.FC = () => {
         if (fallbackErr) throw fallbackErr;
         createdPlacaId = typeof fallbackId === 'number' ? fallbackId : null;
 
-        if (createdPlacaId && finalPhotoUrl !== selected.photo_url) {
+        if (createdPlacaId) {
+          const fallbackUpdates: Record<string, any> = { is_published: isPublished };
+          if (finalPhotoUrl !== selected.photo_url) {
+            fallbackUpdates.photo_url = finalPhotoUrl;
+          }
           await supabase
             .from('placas')
-            .update({ photo_url: finalPhotoUrl })
+            .update(fallbackUpdates)
             .eq('id', createdPlacaId);
         }
       }
@@ -458,9 +466,14 @@ const ListaEspera: React.FC = () => {
           aumento: aumento || null,
           tincion: tincion.trim() || null,
           comentario: comentario.trim() || null,
+          is_published: isPublished,
           source: 'lista_espera',
         },
       }).catch(auditErr => console.warn('Advertencia al registrar auditoría de clasificación:', auditErr));
+
+      if (isPublished) {
+        invalidatePlacasCache(subtemaId);
+      }
 
       setPlacas(prev => prev.filter(p => p.id !== selected.id));
       setSelected(null);
@@ -475,7 +488,7 @@ const ListaEspera: React.FC = () => {
       setIsSaving(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, temaId, subtemaId, aumento, senalados, senaladosPos, comentario, tincion, temas, subtemas]);
+  }, [selected, temaId, subtemaId, aumento, isPublished, senalados, senaladosPos, comentario, tincion, temas, subtemas]);
 
   const handleDeletePlaca = async () => {
     if (!deleteTarget) return;
@@ -963,9 +976,11 @@ const ListaEspera: React.FC = () => {
                       primaryActionFeedback={saveError || (saveSuccess ? 'Placa clasificada correctamente.' : '')}
                       primaryActionFeedbackTone={saveError ? 'error' : saveSuccess ? 'success' : 'info'}
                       onPrimaryAction={handleClasificar}
-                      hasChanges={Boolean(aumento || tincion || comentario || senalados.some(s => s.trim() !== ''))}
+                      hasChanges={Boolean(isPublished || aumento || tincion || comentario || senalados.some(s => s.trim() !== '') || senaladosPos.some(Boolean))}
                       aumento={aumento}
                       onAumentoChange={setAumento}
+                      isPublished={isPublished}
+                      onIsPublishedChange={setIsPublished}
                       showTincion={showTincion}
                       onShowTincion={() => setShowTincion(true)}
                       tincion={tincion}

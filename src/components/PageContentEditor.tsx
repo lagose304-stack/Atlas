@@ -130,6 +130,7 @@ const getBlocksFingerprint = (list: EditorBlock[]): string => {
 interface PickerPlaca {
   id: number;
   photo_url: string;
+  is_published?: boolean | null;
 }
 
 interface AllTema {
@@ -1214,7 +1215,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
           // Placas del subtema actual
           const { data } = await supabase
             .from('placas')
-            .select('id, photo_url')
+            .select('id, photo_url, is_published')
             .eq('subtema_id', entityId)
             .order('sort_order', { ascending: true });
           setAvailablePlacas(data ?? []);
@@ -1226,7 +1227,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
             .eq('tema_id', entityId);
           const subIds = (subData ?? []).map(s => s.id);
 
-          let query = supabase.from('placas').select('id, photo_url').order('sort_order', { ascending: true });
+          let query = supabase.from('placas').select('id, photo_url, is_published').order('sort_order', { ascending: true });
           if (subIds.length > 0) {
             query = query.or(`tema_id.eq.${entityId},subtema_id.in.(${subIds.join(',')})`);
           } else {
@@ -1238,7 +1239,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
           // En home_page o páginas generales: Cargar placas recientes y disponibles para nunca dejar vacío
           const { data } = await supabase
             .from('placas')
-            .select('id, photo_url')
+            .select('id, photo_url, is_published')
             .order('id', { ascending: false })
             .limit(50);
           setAvailablePlacas(data ?? []);
@@ -1277,7 +1278,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     const temaIdNum = Number(temaId);
     const subIds = allSubtemas.filter(s => s.tema_id === temaIdNum).map(s => s.id);
 
-    let query = supabase.from('placas').select('id, photo_url').order('sort_order', { ascending: true });
+    let query = supabase.from('placas').select('id, photo_url, is_published').order('sort_order', { ascending: true });
     if (subIds.length > 0) {
       query = query.or(`tema_id.eq.${temaIdNum},subtema_id.in.(${subIds.join(',')})`);
     } else {
@@ -1299,7 +1300,7 @@ const PageContentEditor = React.forwardRef<PageContentEditorHandle, PageContentE
     setLoadingAll(true);
     const { data } = await supabase
       .from('placas')
-      .select('id, photo_url')
+      .select('id, photo_url, is_published')
       .eq('subtema_id', Number(subtemaId))
       .order('sort_order', { ascending: true });
     setAllPlacas(data ?? []);
@@ -4886,7 +4887,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
                   {placas.map(p => (
                     <div
                       key={p.id}
-                      style={es.placaThumb}
+                      style={{ ...es.placaThumb, position: 'relative' }}
                       onClick={() => onPickPlaca(p)}
                       onMouseEnter={e => {
                         const el = e.currentTarget as HTMLElement;
@@ -4898,8 +4899,27 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
                         el.style.borderColor = '#e2e8f0';
                         el.style.transform = 'scale(1)';
                       }}
-                      title="Usar esta placa"
+                      title={p.is_published === false ? 'Placa en borrador (usar esta placa)' : 'Usar esta placa'}
                     >
+                      {p.is_published === false && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: '6px',
+                            left: '6px',
+                            zIndex: 2,
+                            padding: '2px 6px',
+                            borderRadius: '999px',
+                            background: '#fef3c7',
+                            border: '1px solid #f59e0b',
+                            color: '#92400e',
+                            fontSize: '0.66rem',
+                            fontWeight: 800,
+                          }}
+                        >
+                          Borrador
+                        </span>
+                      )}
                       <img
                         src={getCloudinaryImageUrl(p.photo_url, 'thumb')}
                         alt={`Placa ${p.id}`}
@@ -4959,7 +4979,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
                   {allPlacas.map(p => (
                     <div
                       key={p.id}
-                      style={es.placaThumb}
+                      style={{ ...es.placaThumb, position: 'relative' }}
                       onClick={() => onPickPlaca(p)}
                       onMouseEnter={e => {
                         const el = e.currentTarget as HTMLElement;
@@ -4971,8 +4991,27 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
                         el.style.borderColor = '#e2e8f0';
                         el.style.transform = 'scale(1)';
                       }}
-                      title="Usar esta placa"
+                      title={p.is_published === false ? 'Placa en borrador (usar esta placa)' : 'Usar esta placa'}
                     >
+                      {p.is_published === false && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: '6px',
+                            left: '6px',
+                            zIndex: 2,
+                            padding: '2px 6px',
+                            borderRadius: '999px',
+                            background: '#fef3c7',
+                            border: '1px solid #f59e0b',
+                            color: '#92400e',
+                            fontSize: '0.66rem',
+                            fontWeight: 800,
+                          }}
+                        >
+                          Borrador
+                        </span>
+                      )}
                       <img
                         src={getCloudinaryImageUrl(p.photo_url, 'thumb')}
                         alt={`Placa ${p.id}`}

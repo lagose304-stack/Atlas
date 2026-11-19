@@ -41,6 +41,7 @@ interface Placa {
   sort_order: number;
   tema_id?: number;
   subtema_id?: number;
+  is_published?: boolean | null;
 }
 
 interface InteractiveMapPlacaRow {
@@ -216,7 +217,7 @@ const EliminarPlacas: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('placas')
-        .select('id, photo_url, aumento, sort_order, tema_id, subtema_id')
+        .select('id, photo_url, aumento, sort_order, tema_id, subtema_id, is_published')
         .eq('subtema_id', numSubtemaId)
         .order('sort_order', { ascending: true });
 
@@ -547,6 +548,29 @@ const EliminarPlacas: React.FC = () => {
         }} />
 
         <span style={s.positionBadge}>{index + 1}</span>
+
+        {placa.is_published === false && (
+          <span
+            style={{
+              position: 'absolute',
+              top: '10px',
+              left: '44px',
+              zIndex: 3,
+              padding: '3px 8px',
+              borderRadius: '999px',
+              background: '#fef3c7',
+              border: '1px solid #f59e0b',
+              color: '#92400e',
+              fontSize: '0.72em',
+              fontWeight: 800,
+              letterSpacing: '0.02em',
+              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.14)',
+            }}
+            title="Esta placa está en borrador y no se muestra en la vista pública"
+          >
+            Borrador
+          </span>
+        )}
 
         {hasInteractiveMap && (
           <span style={s.interactiveMapBadge} title="Mapa interactivo disponible" aria-label="Mapa interactivo disponible">

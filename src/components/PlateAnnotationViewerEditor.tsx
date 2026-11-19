@@ -3294,8 +3294,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                     <div className="annotation-option-heading">Color y relleno</div>
                     <AnnotationColorPicker colors={REGION_PALETTE_COLORS} value={drawingPolygonColor} onChange={color => {
                       setDrawingPolygonColor(color);
-                      if (sessionMarkerIds.length > 0) {
-                        setMarkers(previous => previous.map(marker => sessionMarkerIds.includes(marker.id) ? { ...marker, regionColor: color } : marker));
+                      const ids = sessionMarkerIds.length ? sessionMarkerIds : selectedMarkerId ? [selectedMarkerId] : [];
+                      if (ids.length > 0) {
+                        setMarkers(previous => previous.map(marker => ids.includes(marker.id) && marker.regionPoints?.length ? { ...marker, regionColor: color } : marker));
                         setHasUnsavedModifications(true);
                       }
                     }} />
@@ -3315,8 +3316,9 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                         onChange={(e) => {
                           const val = Number.parseFloat(e.target.value);
                           setDrawingPolygonOpacity(val);
-                          if (sessionMarkerIds.length > 0) {
-                            setMarkers(prev => prev.map(m => sessionMarkerIds.includes(m.id) ? { ...m, regionOpacity: val } : m));
+                          const ids = sessionMarkerIds.length ? sessionMarkerIds : selectedMarkerId ? [selectedMarkerId] : [];
+                          if (ids.length > 0) {
+                            setMarkers(prev => prev.map(m => ids.includes(m.id) && m.regionPoints?.length ? { ...m, regionOpacity: val } : m));
                             setHasUnsavedModifications(true);
                           }
                         }}
@@ -3466,12 +3468,95 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                 )}
 
                 {/* If polygon region */}
-                {activeSelectedMarker.regionPoints && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <AnnotationColorPicker colors={REGION_PALETTE_COLORS} value={activeSelectedMarker.regionColor ?? '#22c55e'} onChange={color => {
-                      setMarkers(previous => previous.map(marker => marker.id === activeSelectedMarker.id ? { ...marker, regionColor: color } : marker));
-                      setHasUnsavedModifications(true);
-                    }} />
+                {activeSelectedMarker.regionPoints && (() => {
+                  const selectedBorderStyle = regionBorderStyle(activeSelectedMarker);
+                  const selectedRegionColor = activeSelectedMarker.regionColor ?? '#22c55e';
+                  const selectedRegionOpacity = activeSelectedMarker.regionOpacity ?? 0.28;
+                  const selectedRegionSmooth = activeSelectedMarker.regionSmooth ?? false;
+                  return (
+                  <div className="annotation-option-appearance" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <details className="annotation-option-border-settings" open>
+                      <summary><span>Estilo del borde</span><ChevronDown size={14} /></summary>
+                      <div className="annotation-option-border-settings__body">
+                        <span className="annotation-option-kicker">Vista previa de la línea</span>
+                        <svg aria-label="Vista previa de la guía del borde" role="img" style={{ width: '100%', height: '28px', background: '#f8fafc', borderRadius: '4px' }}>
+                          <line
+                            x1="8"
+                            y1="14"
+                            x2="96%"
+                            y2="14"
+                            stroke={selectedRegionColor}
+                            strokeWidth={selectedBorderStyle.width}
+                            strokeDasharray={`${selectedBorderStyle.dash} ${selectedBorderStyle.gap + selectedBorderStyle.width}`}
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        {[
+                          { label: 'Grosor de la línea', help: 'Qué tan marcada se ve la línea', value: selectedBorderStyle.width, options: REGION_BORDER_PRESETS.width, set: (value: number) => changeBorderStyle('regionStrokeWidth', value) },
+                          { label: 'Separación entre segmentos', help: 'Espacio entre cada raya', value: selectedBorderStyle.gap, options: REGION_BORDER_PRESETS.gap, set: (value: number) => changeBorderStyle('regionDashGap', value) },
+                          { label: 'Longitud de los segmentos', help: 'Largo de cada raya', value: selectedBorderStyle.dash, options: REGION_BORDER_PRESETS.dash, set: (value: number) => changeBorderStyle('regionDashLength', value) },
+                        ].map(control => (
+                          <label className="annotation-option-preset" key={control.label}>
+                            <span><span>{control.label}</span><small>{control.help}</small></span>
+                            <select
+                              aria-label={control.label}
+                              value={control.value}
+                              onChange={event => control.set(Number(event.target.value))}
+                              style={{ display: 'block', width: '100%', marginTop: '4px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '7px', background: '#fff', color: '#334155', font: 'inherit' }}
+                            >
+                              {!control.options.some(option => option.value === control.value) && <option value={control.value} disabled>Valor guardado</option>}
+                              {control.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            </select>
+                          </label>
+                        ))}
+                        <label className="annotation-option-smooth">
+                          <input
+                            type="checkbox"
+                            checked={selectedRegionSmooth}
+                            onChange={event => {
+                              const value = event.target.checked;
+                              setBorderSmooth(value);
+                              setMarkers(previous => previous.map(marker => marker.id === activeSelectedMarker.id ? { ...marker, regionSmooth: value } : marker));
+                              setHasUnsavedModifications(true);
+                            }}
+                          />Suavizado leve del trazo
+                        </label>
+                        <small style={{ color: '#64748b', fontSize: '0.72em' }}>Los cambios de estilo se aplican a este borde y se conservan al guardar.</small>
+                      </div>
+                    </details>
+
+                    <section className="annotation-option-fill">
+                      <div className="annotation-option-heading">Color y relleno</div>
+                      <AnnotationColorPicker colors={REGION_PALETTE_COLORS} value={selectedRegionColor} onChange={color => {
+                        setDrawingPolygonColor(color);
+                        setMarkers(previous => previous.map(marker => marker.id === activeSelectedMarker.id ? { ...marker, regionColor: color } : marker));
+                        setHasUnsavedModifications(true);
+                      }} />
+
+                      <div className="annotation-option-opacity">
+                        <div>
+                          <span>Opacidad de relleno:</span>
+                          <span>{Math.round(selectedRegionOpacity * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          aria-label="Opacidad de relleno"
+                          min="0.10"
+                          max="0.80"
+                          step="0.05"
+                          value={selectedRegionOpacity}
+                          onChange={(e) => {
+                            const val = Number.parseFloat(e.target.value);
+                            setDrawingPolygonOpacity(val);
+                            setMarkers(previous => previous.map(marker => marker.id === activeSelectedMarker.id ? { ...marker, regionOpacity: val } : marker));
+                            setHasUnsavedModifications(true);
+                          }}
+                          style={{ width: '100%', cursor: 'pointer', marginTop: '4px' }}
+                        />
+                      </div>
+
+                      <div className="annotation-option-fill-preview" style={{ borderColor: selectedRegionColor }}><span style={{ background: selectedRegionColor, opacity: selectedRegionOpacity }} /><span>Vista del relleno</span></div>
+                    </section>
 
                     {/* Zonas de exclusión / Huecos interiores */}
                     {activeSelectedMarker.regionHoles && activeSelectedMarker.regionHoles.length > 0 && (
@@ -3578,7 +3663,8 @@ const PlateAnnotationViewerEditor: React.FC<PlateAnnotationViewerEditorProps> = 
                     )}
 
                   </div>
-                )}
+                  );
+                })()}
               </div>
             )}
 

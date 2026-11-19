@@ -14,6 +14,7 @@ import { getCloudinaryImageUrl, invalidateImageCache } from '../services/cloudin
 import ResilientPlacaThumb from '../components/ResilientPlacaThumb';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
+import { computePlateChangesDiff, hasPlateStateChanges } from '../services/plateDiffHelper';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas, invalidatePlacasCache } from '../services/catalogService';
 import { syncUrlSearchParam } from '../services/navigationStateKeeper';
@@ -43,6 +44,7 @@ interface Placa {
   senalados_meta?: SenaladoMetaItem[] | null;
   comentario?: string | null;
   tincion?: string | null;
+  is_published?: boolean | null;
 }
 
 interface InteractiveMapPlacaRow {
@@ -284,6 +286,7 @@ const MoverPlaca: React.FC = () => {
 
   // ── Campos editables adicionales ─────────────────────────────────────
   const [editAumento,       setEditAumento]       = useState('');
+  const [editIsPublished,   setEditIsPublished]   = useState(false);
   const [editSenalados,     setEditSenalados]     = useState<string[]>([]);
   const [editSenaladosPos,  setEditSenaladosPos]  = useState<Array<MarkerLocation | null>>([]);
   const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
@@ -379,7 +382,7 @@ const MoverPlaca: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('placas')
-        .select('id, photo_url, sort_order, tema_id, subtema_id, aumento, senalados, senalados_meta, comentario, tincion')
+        .select('id, photo_url, sort_order, tema_id, subtema_id, aumento, senalados, senalados_meta, comentario, tincion, is_published')
         .eq('subtema_id', subtemaId)
         .order('sort_order', { ascending: true });
 
@@ -479,7 +482,7 @@ const MoverPlaca: React.FC = () => {
         if (initialPlacaIdParam) {
           const { data, error } = await supabase
             .from('placas')
-            .select('id, photo_url, sort_order, tema_id, subtema_id, aumento, senalados, senalados_meta, comentario, tincion')
+            .select('id, photo_url, sort_order, tema_id, subtema_id, aumento, senalados, senalados_meta, comentario, tincion, is_published')
             .eq('id', initialPlacaIdParam)
             .single();
 
@@ -578,6 +581,7 @@ const MoverPlaca: React.FC = () => {
     setEditTemaId(selectedPlaca.tema_id);
     setEditSubtemaId(selectedPlaca.subtema_id);
     setEditAumento(selectedPlaca.aumento ?? '');
+    setEditIsPublished(selectedPlaca.is_published ?? true);
     const nextNames = selectedPlaca.senalados ? [...selectedPlaca.senalados] : [];
     const nextLocations = deriveLocations(nextNames, selectedPlaca.senalados_meta ?? null);
     setEditSenalados(nextNames);
@@ -697,6 +701,7 @@ const MoverPlaca: React.FC = () => {
           senalados_meta: senalados_meta.length > 0 ? senalados_meta : null,
           comentario:  editComentario.trim() || null,
           tincion:     editTincion.trim() || null,
+          is_published: editIsPublished,
         })
         .eq('id', selectedPlaca.id);
       if (error) throw error;
@@ -725,7 +730,30 @@ const MoverPlaca: React.FC = () => {
         senalados_meta: senalados_meta.length > 0 ? senalados_meta : null,
         comentario: editComentario.trim() || null,
         tincion:    editTincion.trim() || null,
+        is_published: editIsPublished,
       };
+
+      const humanChanges = computePlateChangesDiff(
+        {
+          photo_url: selectedPlaca.photo_url.trim().split('?')[0],
+          aumento: selectedPlaca.aumento,
+          tincion: selectedPlaca.tincion,
+          comentario: selectedPlaca.comentario,
+          is_published: selectedPlaca.is_published ?? true,
+          senalados: selectedPlaca.senalados,
+          senalados_meta: selectedPlaca.senalados_meta,
+        },
+        {
+          photo_url: finalPhotoUrl,
+          aumento: editAumento || null,
+          tincion: editTincion.trim() || null,
+          comentario: editComentario.trim() || null,
+          is_published: editIsPublished,
+          senalados: senalados_filtrados,
+          senalados_meta,
+        },
+        { isNewImageReplaced: Boolean(pendingImageFile) }
+      );
 
       // Registro de auditoría asíncrono en segundo plano para no demorar la respuesta de guardado
       void logPlateActivity({
@@ -748,11 +776,13 @@ const MoverPlaca: React.FC = () => {
           aumento: editAumento || null,
           tincion: editTincion.trim() || null,
           comentario: editComentario.trim() || null,
+          is_published: editIsPublished,
           from_tema_id: selectedPlaca.tema_id,
           from_subtema_id: selectedPlaca.subtema_id,
           to_tema_id: editTemaId,
           to_subtema_id: editSubtemaId,
           source: 'mover_placa',
+          cambios_resumen: humanChanges,
           changed_fields: updatedFields,
         },
       }).catch(auditErr => console.warn('Advertencia al registrar auditoría de edición de placa:', auditErr));
@@ -796,6 +826,7 @@ const MoverPlaca: React.FC = () => {
     editTemaId,
     editSubtemaId,
     editAumento,
+    editIsPublished,
     editSenalados,
     editSenaladosPos,
     editComentario,
@@ -886,15 +917,28 @@ const MoverPlaca: React.FC = () => {
     return new Map<number, number>(displayOrder.map((placa, index) => [placa.id, index + 1]));
   }, [interactivePlacas, placasByAumento]);
 
-  const hasChanges = selectedPlaca !== null && (
-    pendingImageFile !== null ||
-    editTemaId    !== selectedPlaca.tema_id ||
-    editSubtemaId !== selectedPlaca.subtema_id ||
-    editAumento   !== (selectedPlaca.aumento ?? '') ||
-    editComentario !== (selectedPlaca.comentario ?? '') ||
-    JSON.stringify(buildSenaladosPayload(editSenalados, editSenaladosPos).meta) !==
-      JSON.stringify(selectedPlaca.senalados_meta ?? buildSenaladosPayload(selectedPlaca.senalados ?? [], []).meta) ||
-    editTincion !== (selectedPlaca.tincion ?? '')
+  const hasChanges = selectedPlaca !== null && hasPlateStateChanges(
+    {
+      tema_id: selectedPlaca.tema_id,
+      subtema_id: selectedPlaca.subtema_id,
+      aumento: selectedPlaca.aumento,
+      tincion: selectedPlaca.tincion,
+      comentario: selectedPlaca.comentario,
+      is_published: selectedPlaca.is_published ?? true,
+      senalados: selectedPlaca.senalados,
+      senalados_meta: selectedPlaca.senalados_meta,
+    },
+    {
+      tema_id: editTemaId,
+      subtema_id: editSubtemaId,
+      aumento: editAumento,
+      tincion: editTincion,
+      comentario: editComentario,
+      is_published: editIsPublished,
+      senalados: editSenalados,
+      senalados_meta: editSenaladosPos,
+    },
+    { isNewImageReplaced: pendingImageFile !== null }
   );
 
   const renderPlacaCard = (placa: Placa) => {
@@ -934,6 +978,29 @@ const MoverPlaca: React.FC = () => {
         }} />
 
         <span style={s.positionBadge}>{globalPosition}</span>
+
+        {placa.is_published === false && (
+          <span
+            style={{
+              position: 'absolute',
+              top: '10px',
+              left: '44px',
+              zIndex: 3,
+              padding: '3px 8px',
+              borderRadius: '999px',
+              background: '#fef3c7',
+              border: '1px solid #f59e0b',
+              color: '#92400e',
+              fontSize: '0.72em',
+              fontWeight: 800,
+              letterSpacing: '0.02em',
+              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.14)',
+            }}
+            title="Esta placa está en borrador y no se muestra en la vista pública"
+          >
+            Borrador
+          </span>
+        )}
 
         {hasInteractiveMap && (
           <span
@@ -1324,6 +1391,8 @@ const MoverPlaca: React.FC = () => {
                   hasChanges={hasChanges}
                   aumento={editAumento}
                   onAumentoChange={setEditAumento}
+                  isPublished={editIsPublished}
+                  onIsPublishedChange={setEditIsPublished}
                   showTincion={showEditTincion}
                   onShowTincion={() => setShowEditTincion(true)}
                   tincion={editTincion}

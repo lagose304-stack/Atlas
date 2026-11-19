@@ -132,12 +132,13 @@ describe('catalogService', () => {
 
     supabaseMock.from.mockImplementation((table: string) => {
       if (table === 'placas') {
+        const query = {
+          eq: vi.fn(),
+          order: () => Promise.resolve({ data: mockPlacas, error: null }),
+        };
+        query.eq.mockReturnValue(query);
         return {
-          select: () => ({
-            eq: () => ({
-              order: () => Promise.resolve({ data: mockPlacas, error: null }),
-            }),
-          }),
+          select: () => query,
         };
       }
       if (table === 'interactive_maps') {

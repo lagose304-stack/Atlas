@@ -10,7 +10,7 @@ import EditorParcialAccordionPicker from './editor/EditorParcialAccordionPicker'
 
 interface Tema { id: number; nombre: string; parcial: string; sort_order: number }
 interface Subtema { id: number; nombre: string; tema_id: number; sort_order: number }
-interface Placa { id: number; photo_url: string; aumento: string | null; sort_order: number }
+interface Placa { id: number; photo_url: string; aumento: string | null; sort_order: number; is_published?: boolean | null }
 interface MapRow { placa_id: number; sections: unknown[] | null }
 interface Group { key: string; title: string; sortValue: number; items: Placa[] }
 
@@ -86,7 +86,7 @@ const PlacasOrderManager: React.FC = () => {
     const load = async () => {
       setLoading(true);
       const { data, error } = await supabase.from('placas')
-        .select('id, photo_url, aumento, sort_order').eq('subtema_id', subtemaId)
+        .select('id, photo_url, aumento, sort_order, is_published').eq('subtema_id', subtemaId)
         .order('sort_order', { ascending: true });
       if (error) { setMessage('No se pudieron cargar las placas.'); setLoading(false); return; }
       const next = (data ?? []) as Placa[];
@@ -165,7 +165,7 @@ const PlacasOrderManager: React.FC = () => {
         <div style={s.sectionHead}><h3 style={s.sectionTitle}>{group.title}</h3><span style={s.count}>{group.items.length} {group.items.length === 1 ? 'placa' : 'placas'}</span></div>
         <div className="temas-grid-home" onDragOver={e => drag.onDragOverContainer(e, group.key)} onDrop={e => handleDrop(e, group)}>
           {renderItems.map(item => item.type === 'placeholder' ? <div key={item.key} style={s.placeholder}>Suelta aquí</div> : <div key={item.item.id} draggable style={{...s.plate, opacity: drag.dragId === item.item.id ? .25 : 1}} onDragStart={e => drag.onDragStart(e, item.item.id, group.key)} onDragOver={e => drag.onDragOverCard(e, group.key, item.realIndex)} onDragEnd={drag.resetDrag}>
-            <span style={s.position}>{item.realIndex + 1}</span><img src={getCloudinaryImageUrl(item.item.photo_url, 'thumb')} alt={`Placa ${item.realIndex + 1}`} style={s.image} loading="lazy" /><span style={s.dragText}>Arrastra para ordenar</span>
+            <span style={s.position}>{item.realIndex + 1}</span>{item.item.is_published === false && <span style={s.draftBadge} title="Esta placa está en borrador y no se muestra en la vista pública">Borrador</span>}<img src={getCloudinaryImageUrl(item.item.photo_url, 'thumb')} alt={`Placa ${item.realIndex + 1}`} style={s.image} loading="lazy" /><span style={s.dragText}>Arrastra para ordenar</span>
           </div>)}
         </div>
       </section>;
@@ -179,7 +179,7 @@ const s: Record<string, React.CSSProperties> = {
   card:{padding:'clamp(16px,3vw,36px)'}, header:{textAlign:'center',marginBottom:24}, title:{margin:'0 0 6px',fontSize:'clamp(1.4em,3vw,2.2em)'}, subtitle:{margin:'0 0 14px',color:'#64748b'}, divider:{width:56,height:4,margin:'auto',borderRadius:4,background:'linear-gradient(90deg,#38bdf8,#818cf8)'},
   filters:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:16,padding:20,background:'#fff',border:'1px solid #e2e8f0',borderRadius:14,marginBottom:24}, label:{display:'flex',flexDirection:'column',gap:7,fontWeight:700,color:'#334155'}, select:{padding:'12px 14px',border:'1.5px solid #cbd5e1',borderRadius:10,background:'#f8fafc',fontFamily:'inherit'},
   section:{padding:'clamp(14px,2vw,22px)',border:'1px solid #e2e8f0',borderRadius:16,background:'linear-gradient(135deg,#fff,#f8fafc)',marginBottom:20}, sectionHead:{display:'flex',alignItems:'center',gap:10,marginBottom:14}, sectionTitle:{margin:0,color:'#0f172a'}, count:{color:'#64748b',fontSize:'.85em'},
-  plate:{position:'relative',overflow:'hidden',border:'1px solid #dbeafe',borderRadius:14,background:'#fff',padding:10,cursor:'grab',display:'flex',flexDirection:'column',gap:8}, image:{width:'100%',aspectRatio:'4 / 3',objectFit:'cover',borderRadius:10}, position:{position:'absolute',top:16,right:16,zIndex:1,background:'rgba(15,23,42,.8)',color:'#fff',borderRadius:99,padding:'4px 8px',fontWeight:800}, dragText:{textAlign:'center',color:'#64748b',fontSize:'.75em',fontWeight:700}, placeholder:{minHeight:150,border:'2px dashed #38bdf8',borderRadius:14,display:'grid',placeItems:'center',color:'#0284c7',background:'#f0f9ff'},
+  plate:{position:'relative',overflow:'hidden',border:'1px solid #dbeafe',borderRadius:14,background:'#fff',padding:10,cursor:'grab',display:'flex',flexDirection:'column',gap:8}, image:{width:'100%',aspectRatio:'4 / 3',objectFit:'cover',borderRadius:10}, position:{position:'absolute',top:16,right:16,zIndex:1,background:'rgba(15,23,42,.8)',color:'#fff',borderRadius:99,padding:'4px 8px',fontWeight:800}, draftBadge:{position:'absolute',top:16,left:16,zIndex:1,background:'#fef3c7',border:'1px solid #f59e0b',color:'#92400e',borderRadius:99,padding:'3px 8px',fontSize:'.72em',fontWeight:800}, dragText:{textAlign:'center',color:'#64748b',fontSize:'.75em',fontWeight:700}, placeholder:{minHeight:150,border:'2px dashed #38bdf8',borderRadius:14,display:'grid',placeItems:'center',color:'#0284c7',background:'#f0f9ff'},
   empty:{padding:36,textAlign:'center',color:'#64748b',border:'1px dashed #cbd5e1',borderRadius:12}, notice:{padding:12,marginBottom:18,borderRadius:10,background:'#fff7ed',color:'#9a3412'}, success:{padding:12,marginBottom:18,borderRadius:10,background:'#ecfdf5',color:'#047857'}, actions:{display:'flex',justifyContent:'flex-end'}, button:{padding:'13px 22px',border:0,borderRadius:99,background:'linear-gradient(135deg,#0ea5e9,#6366f1)',color:'#fff',fontWeight:800,cursor:'pointer'}, buttonDisabled:{padding:'13px 22px',border:0,borderRadius:99,background:'#e2e8f0',color:'#94a3b8',fontWeight:800}
 };
 

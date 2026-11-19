@@ -22,7 +22,7 @@ import { replaceCloudinaryImage } from '../services/cloudinary';
 import { invalidateImageCache } from '../services/cloudinaryImages';
 import { invalidatePlacasCache } from '../services/catalogService';
 import { logPlateActivity } from '../services/plateActivityAudit';
-import { computePlateChangesDiff, type PlateComparisonState } from '../services/plateDiffHelper';
+import { computePlateChangesDiff, hasPlateStateChanges, type PlateComparisonState } from '../services/plateDiffHelper';
 import './plateWatermark.css';
 import { isEditableTarget } from '../utils/editableTarget';
 import { boldTextContent } from '../utils/boldTextContent';
@@ -65,6 +65,7 @@ interface ImageViewerModalProps {
   senaladosMeta?: SenaladoMetaItem[] | null;
   comentario?: string | null;
   tincion?: string | null;
+  isPublished?: boolean | null;
   onPreviousPlate?: () => void;
   onNextPlate?: () => void;
   platePosition?: number;
@@ -74,6 +75,7 @@ interface ImageViewerModalProps {
     aumento?: string | null;
     tincion?: string | null;
     comentario?: string | null;
+    isPublished?: boolean;
     senalados?: string[] | null;
     senaladosMeta?: SenaladoMetaItem[] | null;
   }) => void;
@@ -424,6 +426,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   senaladosMeta,
   comentario,
   tincion,
+  isPublished,
   onPreviousPlate,
   onNextPlate,
   platePosition,
@@ -440,6 +443,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [currentAumento, setCurrentAumento] = useState(aumento ?? '');
   const [currentTincion, setCurrentTincion] = useState(tincion ?? '');
   const [currentComentario, setCurrentComentario] = useState(comentario ?? '');
+  const canEditPublishState = isPublished !== undefined;
+  const [currentIsPublished, setCurrentIsPublished] = useState(isPublished ?? true);
   const [currentSenalados, setCurrentSenalados] = useState<string[]>(() => senalados ? [...senalados] : []);
   const [currentSenaladosMeta, setCurrentSenaladosMeta] = useState<SenaladoMetaItem[] | null>(() => senaladosMeta ? [...senaladosMeta] : null);
 
@@ -465,6 +470,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, [comentario]);
 
   useEffect(() => {
+    setCurrentIsPublished(isPublished ?? true);
+  }, [isPublished]);
+
+  useEffect(() => {
     setCurrentSenalados(senalados ? [...senalados] : []);
   }, [senalados]);
 
@@ -475,6 +484,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   // Estados del modal de edición de placa (PlateEditorPanel)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editAumento, setEditAumento] = useState('');
+  const [editIsPublished, setEditIsPublished] = useState(true);
   const [editTincion, setEditTincion] = useState('');
   const [showEditTincion, setShowEditTincion] = useState(false);
   const [editComentario, setEditComentario] = useState('');
@@ -509,6 +519,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     });
 
     setEditAumento(currentAumento || '');
+    setEditIsPublished(currentIsPublished);
     setEditTincion(currentTincion || '');
     setShowEditTincion(Boolean(currentTincion));
     setEditComentario(currentComentario || '');
@@ -523,7 +534,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     setSavePlateError('');
     setSavePlateSuccess(false);
     setIsEditModalOpen(true);
-  }, [currentAumento, currentTincion, currentComentario, currentSenalados, currentSenaladosMeta]);
+  }, [currentAumento, currentIsPublished, currentTincion, currentComentario, currentSenalados, currentSenaladosMeta]);
 
   const handleSavePlateFromViewer = useCallback(async () => {
     if (!placaId) return;
@@ -598,6 +609,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         senalados_meta: meta.length > 0 ? meta : null,
         comentario: editComentario.trim() || null,
         tincion: editTincion.trim() || null,
+        ...(canEditPublishState ? { is_published: editIsPublished } : {}),
       };
 
       const { error: dbError } = await supabase
@@ -613,6 +625,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         aumento: currentAumento,
         tincion: currentTincion,
         comentario: currentComentario,
+        ...(canEditPublishState ? { is_published: currentIsPublished } : {}),
         senalados: currentSenalados,
         senalados_meta: currentSenaladosMeta,
       };
@@ -621,6 +634,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         aumento: editAumento || null,
         tincion: editTincion.trim() || null,
         comentario: editComentario.trim() || null,
+        ...(canEditPublishState ? { is_published: editIsPublished } : {}),
         senalados: labels,
         senalados_meta: meta,
       };
@@ -668,6 +682,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       setCurrentSrc(finalPhotoUrl);
       setCurrentSrcZoom(finalPhotoUrl);
       setCurrentAumento(editAumento);
+      if (canEditPublishState) {
+        setCurrentIsPublished(editIsPublished);
+      }
       setCurrentTincion(editTincion.trim());
       setCurrentComentario(editComentario.trim());
       setCurrentSenalados(labels);
@@ -678,6 +695,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         aumento: editAumento || null,
         tincion: editTincion.trim() || null,
         comentario: editComentario.trim() || null,
+        ...(canEditPublishState ? { isPublished: editIsPublished } : {}),
         senalados: labels.length > 0 ? labels : null,
         senaladosMeta: meta.length > 0 ? meta : null,
       });
@@ -696,6 +714,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     placaId,
     currentSrc,
     editAumento,
+    canEditPublishState,
+    editIsPublished,
+    currentIsPublished,
     editTincion,
     editComentario,
     editSenalados,
@@ -710,22 +731,40 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   ]);
 
   const hasPlateEditorChanges = useMemo(() => {
-    if (pendingImageFile) return true;
-    if (editAumento !== (currentAumento || '')) return true;
-    if (editTincion.trim() !== (currentTincion || '').trim()) return true;
-    if (editComentario.trim() !== (currentComentario || '').trim()) return true;
-    if (JSON.stringify(editSenalados) !== JSON.stringify(currentSenalados)) return true;
-    return false;
+    return hasPlateStateChanges(
+      {
+        aumento: currentAumento,
+        tincion: currentTincion,
+        comentario: currentComentario,
+        ...(canEditPublishState ? { is_published: currentIsPublished } : {}),
+        senalados: currentSenalados,
+        senalados_meta: currentSenaladosMeta,
+      },
+      {
+        aumento: editAumento,
+        tincion: editTincion,
+        comentario: editComentario,
+        ...(canEditPublishState ? { is_published: editIsPublished } : {}),
+        senalados: editSenalados,
+        senalados_meta: editSenaladosPos,
+      },
+      { isNewImageReplaced: Boolean(pendingImageFile) }
+    );
   }, [
     pendingImageFile,
     editAumento,
     currentAumento,
+    canEditPublishState,
+    editIsPublished,
+    currentIsPublished,
     editTincion,
     currentTincion,
     editComentario,
     currentComentario,
     editSenalados,
     currentSenalados,
+    editSenaladosPos,
+    currentSenaladosMeta,
   ]);
   const resolvedInitialMarkerVisualMode: MarkerVisualMode = hideSidebar ? 'pointer' : initialMarkerVisualMode;
   const resolvedInitialMarkerIndex = hideSidebar && ((senaladosMeta?.length ?? senalados?.length ?? 0) > 0) ? 0 : null;
@@ -4929,6 +4968,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           hasChanges={hasPlateEditorChanges}
           aumento={editAumento}
           onAumentoChange={setEditAumento}
+          isPublished={canEditPublishState ? editIsPublished : undefined}
+          onIsPublishedChange={canEditPublishState ? setEditIsPublished : undefined}
           showTincion={showEditTincion}
           onShowTincion={() => setShowEditTincion(true)}
           tincion={editTincion}

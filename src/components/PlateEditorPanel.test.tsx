@@ -153,4 +153,35 @@ describe('PlateEditorPanel - conservación de cambios sin guardar', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onSave).not.toHaveBeenCalled();
   });
+
+  it('permite alternar el estado de publicación entre Borrador y Publicada', () => {
+    const onIsPublishedChange = vi.fn();
+    render(
+      <PlateEditorPanel
+        title="Editar placa"
+        aumento="x10"
+        onAumentoChange={vi.fn()}
+        isPublished={false}
+        onIsPublishedChange={onIsPublishedChange}
+        showTincion={false}
+        onShowTincion={vi.fn()}
+        tincion=""
+        onTincionChange={vi.fn()}
+        senalados={[]}
+        senaladosPos={[]}
+        showComentario={false}
+        onShowComentario={vi.fn()}
+        comentario=""
+        onComentarioChange={vi.fn()}
+      />
+    );
+
+    const borradorBtn = screen.getByRole('button', { name: 'Borrador' });
+    const publicadaBtn = screen.getByRole('button', { name: 'Publicada' });
+    expect(borradorBtn).toHaveAttribute('aria-pressed', 'true');
+    expect(publicadaBtn).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(publicadaBtn);
+    expect(onIsPublishedChange).toHaveBeenCalledWith(true);
+  });
 });

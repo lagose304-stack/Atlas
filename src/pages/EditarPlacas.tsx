@@ -31,6 +31,7 @@ interface Placa {
   photo_url: string;
   aumento?: string | null;
   sort_order: number;
+  is_published?: boolean | null;
 }
 
 interface InteractiveMapPlacaRow {
@@ -137,7 +138,7 @@ const EditarPlacas: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('placas')
-        .select('id, photo_url, aumento, sort_order')
+        .select('id, photo_url, aumento, sort_order, is_published')
         .eq('subtema_id', subtemaId)
         .order('sort_order', { ascending: true });
 
@@ -341,6 +342,29 @@ const EditarPlacas: React.FC = () => {
       >
         <div style={s.cardAccent} />
         <span style={s.positionBadge}>{globalPosition}</span>
+
+        {placa.is_published === false && (
+          <span
+            style={{
+              position: 'absolute',
+              top: '10px',
+              left: '44px',
+              zIndex: 3,
+              padding: '3px 8px',
+              borderRadius: '999px',
+              background: '#fef3c7',
+              border: '1px solid #f59e0b',
+              color: '#92400e',
+              fontSize: '0.72em',
+              fontWeight: 800,
+              letterSpacing: '0.02em',
+              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.14)',
+            }}
+            title="Esta placa está en borrador y no se muestra en la vista pública"
+          >
+            Borrador
+          </span>
+        )}
 
         {hasInteractiveMap && (
           <span

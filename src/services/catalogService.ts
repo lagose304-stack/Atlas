@@ -41,6 +41,7 @@ export interface CatalogPlaca {
   }> | null;
   comentario?: string | null;
   tincion?: string | null;
+  is_published?: boolean | null;
 }
 
 export interface SubtemaPlacasBundle {
@@ -56,7 +57,7 @@ interface CacheState<T> {
 const TEMAS_CACHE_KEY = 'atlas_cached_temas_v2';
 const ALL_SUBTEMAS_CACHE_KEY = 'atlas_cached_all_subtemas_v2';
 const SUBTEMA_PER_TEMA_PREFIX = 'atlas_cached_subtemas_tema_v2_';
-const PLACAS_CACHE_PREFIX = 'atlas_cached_placas_subtema_v2_';
+const PLACAS_CACHE_PREFIX = 'atlas_cached_placas_subtema_v3_';
 const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minutos
 
 let temasInMemory: CacheState<CatalogTema[]> = {
@@ -416,29 +417,35 @@ export const getCachedSubtemas = async (
  */
 export const getCachedPlacasForSubtema = async (
   subtemaId: number,
-  options?: { forceRefresh?: boolean }
+  options?: { forceRefresh?: boolean; includeDrafts?: boolean }
 ): Promise<SubtemaPlacasBundle> => {
   const numSubtemaId = Number(subtemaId);
   const force = options?.forceRefresh === true;
-  const inMem = placasInMemory.get(numSubtemaId);
-  const isFresh = !force && inMem?.data && inMem.data.placas && inMem.data.placas.length > 0 && Date.now() - inMem.timestamp < DEFAULT_TTL_MS;
+  const includeDrafts = options?.includeDrafts === true;
+  if (!includeDrafts) {
+    const inMem = placasInMemory.get(numSubtemaId);
+    const isFresh = !force && inMem?.data && inMem.data.placas && inMem.data.placas.length > 0 && Date.now() - inMem.timestamp < DEFAULT_TTL_MS;
 
-  if (isFresh && inMem?.data) {
-    return inMem.data;
-  }
+    if (isFresh && inMem?.data) {
+      return inMem.data;
+    }
 
-  const existingInFlight = placasInFlightPromises.get(numSubtemaId);
-  if (existingInFlight) {
-    return existingInFlight;
+    const existingInFlight = placasInFlightPromises.get(numSubtemaId);
+    if (existingInFlight) {
+      return existingInFlight;
+    }
   }
 
   const fetchPromise = (async () => {
     try {
-      const { data: placasData, error: placasError } = await supabase
+      let query = supabase
         .from('placas')
-        .select('id, photo_url, aumento, senalados, senalados_meta, comentario, tincion, subtema_id, sort_order')
-        .eq('subtema_id', numSubtemaId)
-        .order('sort_order', { ascending: true });
+        .select('id, photo_url, aumento, senalados, senalados_meta, comentario, tincion, subtema_id, sort_order, is_published')
+        .eq('subtema_id', numSubtemaId);
+      if (!includeDrafts) {
+        query = query.eq('is_published', true);
+      }
+      const { data: placasData, error: placasError } = await query.order('sort_order', { ascending: true });
 
       if (placasError) {
         throw placasError;
@@ -470,11 +477,13 @@ export const getCachedPlacasForSubtema = async (
         placasConMapa,
       };
 
-      placasInMemory.set(numSubtemaId, {
-        data: bundle,
-        timestamp: Date.now(),
-      });
-      writeLocalStorage(`${PLACAS_CACHE_PREFIX}${numSubtemaId}`, bundle);
+      if (!includeDrafts) {
+        placasInMemory.set(numSubtemaId, {
+          data: bundle,
+          timestamp: Date.now(),
+        });
+        writeLocalStorage(`${PLACAS_CACHE_PREFIX}${numSubtemaId}`, bundle);
+      }
 
       return bundle;
     } catch (err) {
@@ -483,11 +492,15 @@ export const getCachedPlacasForSubtema = async (
       if (fallback) return fallback;
       throw err;
     } finally {
-      placasInFlightPromises.delete(numSubtemaId);
+      if (!includeDrafts) {
+        placasInFlightPromises.delete(numSubtemaId);
+      }
     }
   })();
 
-  placasInFlightPromises.set(numSubtemaId, fetchPromise);
+  if (!includeDrafts) {
+    placasInFlightPromises.set(numSubtemaId, fetchPromise);
+  }
   return fetchPromise;
 };
 

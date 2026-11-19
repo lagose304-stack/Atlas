@@ -44,6 +44,53 @@ describe('herramientas del editor: alineación y teclado', () => {
     expect(saved.regionDashGap).toBe(12);
     expect(saved.regionSmooth).toBe(true);
   });
+  it('permite editar todas las propiedades de un borde ya existente al seleccionarlo en modo normal sin cambiar de herramienta', () => {
+    const save = vi.fn();
+    const location = {
+      x: 0.4,
+      y: 0.4,
+      regionPoints: [0.1, 0.1, 0.8, 0.1, 0.4, 0.8],
+      regionColor: '#22c55e',
+      regionOpacity: 0.25,
+      regionStrokeWidth: 2.5,
+      regionDashLength: 10,
+      regionDashGap: 7,
+      regionSmooth: false,
+    };
+    render(
+      <PlateAnnotationViewerEditor
+        imageSrc="https://isolated.atlas-tests.invalid/placa.webp"
+        initialSenalados={['Epitelio']}
+        initialSenaladosPos={[location]}
+        onSaveAll={save}
+        onCancel={vi.fn()}
+      />
+    );
+    fireEvent.load(screen.getByAltText('Placa histológica de alta calidad'));
+    // Seleccionar directamente el borde existente en modo normal (sin activar la herramienta "Borde")
+    fireEvent.click(document.querySelector('path[fill-rule="evenodd"]')!);
+
+    expect(screen.getByLabelText('Grosor de la línea')).toHaveValue('2.5');
+    expect(screen.getByLabelText('Separación entre segmentos')).toHaveValue('7');
+    expect(screen.getByLabelText('Longitud de los segmentos')).toHaveValue('10');
+    expect(screen.getByLabelText('Suavizado leve del trazo')).not.toBeChecked();
+    expect(screen.getByLabelText('Opacidad de relleno')).toHaveValue('0.25');
+
+    fireEvent.change(screen.getByLabelText('Grosor de la línea'), { target: { value: '4' } });
+    fireEvent.change(screen.getByLabelText('Separación entre segmentos'), { target: { value: '12' } });
+    fireEvent.change(screen.getByLabelText('Longitud de los segmentos'), { target: { value: '16' } });
+    fireEvent.click(screen.getByLabelText('Suavizado leve del trazo'));
+    fireEvent.change(screen.getByLabelText('Opacidad de relleno'), { target: { value: '0.5' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar señalados' }));
+    const saved = save.mock.calls[0][1][0];
+    expect(saved.regionPoints).toEqual(location.regionPoints);
+    expect(saved.regionStrokeWidth).toBe(4);
+    expect(saved.regionDashLength).toBe(16);
+    expect(saved.regionDashGap).toBe(12);
+    expect(saved.regionSmooth).toBe(true);
+    expect(saved.regionOpacity).toBe(0.5);
+  });
   it('libera el paneo al soltar espacio sobre un campo o al perder el foco', () => {
     render(<PlateAnnotationViewerEditor imageSrc="https://pub-isolated.r2.dev/placa.webp" onCancel={vi.fn()} />);
     const canvas = screen.getByTestId('annotation-editor-canvas');

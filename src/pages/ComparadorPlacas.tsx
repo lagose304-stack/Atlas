@@ -77,7 +77,8 @@ const ComparadorPlacas: React.FC = () => {
         const { data, error } = await supabase
           .from('placas')
           .select('id, photo_url, aumento, tincion, comentario, senalados, senalados_meta, subtema_id, subtemas(id, nombre, tema_id, temas(id, nombre, parcial))')
-          .in('id', idsToFetch);
+          .in('id', idsToFetch)
+          .eq('is_published', true);
         if (!cancelled && !error && data) {
           const items = data.map((row: any): ComparadorPlacaItem => {
             const subtema = Array.isArray(row.subtemas) ? row.subtemas[0] : row.subtemas;

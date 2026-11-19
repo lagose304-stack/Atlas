@@ -13,7 +13,7 @@ import PlateEditorPanel from '../components/PlateEditorPanel';
 import { useAuth } from '../contexts/AuthContext';
 import { logPlateActivity } from '../services/plateActivityAudit';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
-import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas } from '../services/catalogService';
+import { getCachedTemas, getCachedSubtemas, getQuickTemas, getQuickSubtemas, invalidatePlacasCache } from '../services/catalogService';
 
 // --- Interfaces ---
 interface Tema {
@@ -324,6 +324,7 @@ const Placas: React.FC = () => {
   const [temasReloadTick, setTemasReloadTick] = useState(0);
   const [subtemasReloadTick, setSubtemasReloadTick] = useState(0);
   const [selectedAumento, setSelectedAumento] = useState('');
+  const [isPublished, setIsPublished] = useState(false);
   const [senalados, setSenalados] = useState<string[]>([]);
   const [senaladosPos, setSenaladosPos] = useState<Array<MarkerLocation | null>>([]);
   const [editingSenaladoIndex, setEditingSenaladoIndex] = useState<number | null>(null);
@@ -513,11 +514,16 @@ const Placas: React.FC = () => {
           comentario: comentario.trim() || null,
           tincion: tincion.trim() || null,
           sort_order: nextPlacaSortOrder,
+          is_published: isPublished,
         })
         .select('id')
         .single();
 
       if (error) throw error;
+
+      if (isPublished) {
+        invalidatePlacasCache(Number(selectedSubtema));
+      }
 
       await logPlateActivity({
         actionType: 'upload_classified',
@@ -539,6 +545,7 @@ const Placas: React.FC = () => {
           aumento: selectedAumento || null,
           tincion: tincion.trim() || null,
           comentario: comentario.trim() || null,
+          is_published: isPublished,
           source: 'placas_form',
         },
       });
@@ -549,6 +556,7 @@ const Placas: React.FC = () => {
       setSelectedTema('');
       setSelectedSubtema('');
       setSelectedAumento('');
+      setIsPublished(false);
       setSenalados([]);
       setSenaladosPos([]);
       setEditingSenaladoIndex(null);
@@ -677,6 +685,7 @@ const Placas: React.FC = () => {
     setSelectedTema('');
     setSelectedSubtema('');
     setSelectedAumento('');
+    setIsPublished(false);
     setSenalados([]);
     setSenaladosPos([]);
     setEditingSenaladoIndex(null);
@@ -873,6 +882,8 @@ const Placas: React.FC = () => {
                           onPrimaryAction={handleGuardar}
                           aumento={selectedAumento}
                           onAumentoChange={setSelectedAumento}
+                          isPublished={isPublished}
+                          onIsPublishedChange={setIsPublished}
                           showTincion={showTincion}
                           onShowTincion={() => setShowTincion(true)}
                           tincion={tincion}

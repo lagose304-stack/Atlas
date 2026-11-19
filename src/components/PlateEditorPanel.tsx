@@ -39,6 +39,8 @@ interface PlateEditorPanelProps {
   primaryActionFeedbackTone?: 'success' | 'error' | 'info';
   aumento: string;
   onAumentoChange: (value: string) => void;
+  isPublished?: boolean;
+  onIsPublishedChange?: (published: boolean) => void;
   showTincion: boolean;
   onShowTincion: () => void;
   tincion: string;
@@ -219,6 +221,8 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
   primaryActionFeedbackTone,
   aumento,
   onAumentoChange,
+  isPublished,
+  onIsPublishedChange,
   showTincion,
   onShowTincion,
   tincion,
@@ -611,6 +615,57 @@ const PlateEditorPanel: React.FC<PlateEditorPanelProps> = ({
           )}
 
           <div style={{ minHeight: 0, overflow: 'auto', paddingRight: imageSrc ? '4px' : 0, display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            {typeof isPublished === 'boolean' && onIsPublishedChange && (
+              <div style={mergedStyles.section}>
+                <label style={mergedStyles.label}>Estado de publicación</label>
+                <div
+                  role="group"
+                  aria-label="Estado de publicación de la placa"
+                  style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}
+                >
+                  <button
+                    type="button"
+                    aria-pressed={!isPublished}
+                    onClick={() => onIsPublishedChange(false)}
+                    style={{
+                      border: !isPublished ? '1.5px solid #d97706' : '1px solid #cbd5e1',
+                      background: !isPublished ? '#fef3c7' : '#ffffff',
+                      color: !isPublished ? '#92400e' : '#334155',
+                      borderRadius: '999px',
+                      padding: '8px 16px',
+                      fontFamily: 'inherit',
+                      fontWeight: !isPublished ? 800 : 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Borrador
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={isPublished}
+                    onClick={() => onIsPublishedChange(true)}
+                    style={{
+                      border: isPublished ? '1.5px solid #16a34a' : '1px solid #cbd5e1',
+                      background: isPublished ? '#dcfce7' : '#ffffff',
+                      color: isPublished ? '#166534' : '#334155',
+                      borderRadius: '999px',
+                      padding: '8px 16px',
+                      fontFamily: 'inherit',
+                      fontWeight: isPublished ? 800 : 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Publicada
+                  </button>
+                </div>
+                <div style={{ fontSize: '0.82em', color: '#475569', lineHeight: 1.45 }}>
+                  {isPublished
+                    ? 'Visible para todos los usuarios en el atlas público.'
+                    : 'Guardada como borrador: solo visible en los editores, oculta en la vista pública.'}
+                </div>
+              </div>
+            )}
+
             <div style={mergedStyles.section}>
               <label style={mergedStyles.label}>{texts.aumento}</label>
               <div style={mergedStyles.aumentoGroup}>

@@ -11,7 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import './trasladarPlaca.css';
 
 type Option = { id: number; nombre: string };
-type Plate = PlateLocation & { photo_url: string };
+type Plate = PlateLocation & { photo_url: string; is_published?: boolean | null };
 const PAGE_SIZE = 48;
 export default function TrasladarPlaca() {
   const navigate = useNavigate();
@@ -47,7 +47,7 @@ export default function TrasladarPlaca() {
     setLoading(true); setError('');
     void (async () => {
       try {
-        const { data, error: failure } = await supabase.from('placas').select('id,photo_url,tema_id,subtema_id')
+        const { data, error: failure } = await supabase.from('placas').select('id,photo_url,tema_id,subtema_id,is_published')
           .eq('tema_id', sourceTema).eq('subtema_id', sourceSubtema).order('sort_order').order('id').range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
         if (failure) throw failure;
         if (alive) { setPlates((data ?? []).slice(0, PAGE_SIZE)); setHasMore((data?.length ?? 0) > PAGE_SIZE); }
@@ -80,7 +80,7 @@ export default function TrasladarPlaca() {
       {select('Subtema de origen', sourceSubtema, sourceOptions, id => { setSourceSubtema(id); setPage(0); setSelected(null); setConfirm(false); })}
     </div><button type="button" disabled={saving || loading || !sourceSubtema} onClick={() => { setSelected(null); setConfirm(false); setReload(value => value + 1); }}>Actualizar listado</button>
       {loading ? <p role="status">Cargando miniaturas…</p> : sourceSubtema > 0 && !plates.length ? <p>No hay placas en esta página.</p> : null}
-      <div className="plate-transfer__grid">{plates.map(plate => <button type="button" key={plate.id} aria-pressed={selected?.id === plate.id} disabled={saving} onClick={() => { setSelected(plate); setConfirm(false); setError(''); setMessage(''); }}><ResilientPlacaThumb photoUrl={plate.photo_url} alt={`Placa #${plate.id}`} loading="lazy" /><span>Placa #{plate.id}</span></button>)}</div>
+      <div className="plate-transfer__grid">{plates.map(plate => <button type="button" key={plate.id} aria-pressed={selected?.id === plate.id} disabled={saving} onClick={() => { setSelected(plate); setConfirm(false); setError(''); setMessage(''); }}><ResilientPlacaThumb photoUrl={plate.photo_url} alt={`Placa #${plate.id}`} loading="lazy" /><span>Placa #{plate.id}{plate.is_published === false ? ' · Borrador' : ''}</span></button>)}</div>
       {sourceSubtema > 0 && <nav aria-label="Páginas de placas"><button disabled={saving || loading || page === 0} onClick={() => { setPage(value => value - 1); setSelected(null); setConfirm(false); }}>Anterior</button><span>Página {page + 1}</span><button disabled={saving || loading || !hasMore} onClick={() => { setPage(value => value + 1); setSelected(null); setConfirm(false); }}>Siguiente</button></nav>}
     </section>
     {selected && <section><h2>2. Destino de la placa #{selected.id}</h2><p>Origen: {name(temas, sourceTema)} / {name(sourceOptions, sourceSubtema)}</p><div className="plate-transfer__fields">
