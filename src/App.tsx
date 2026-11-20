@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 import { logSiteVisitOncePerSession } from './services/analytics';
@@ -34,7 +34,6 @@ const ReencontrarPlaca = lazy(() => import('./pages/ReencontrarPlaca'));
 const GestionTinciones = lazy(() => import('./pages/GestionTinciones'));
 const MapasInteractivos = lazy(() => import('./pages/MapasInteractivos'));
 const GestionUsuarios = lazy(() => import('./pages/GestionUsuarios'));
-const Pruebas = lazy(() => import('./pages/Pruebas'));
 const PruebaInstructores = lazy(() => import('./pages/PruebaInstructores'));
 const RealizarPruebaInstructores = lazy(() => import('./pages/RealizarPruebaInstructores'));
 const GestionPruebas = lazy(() => import('./pages/GestionPruebas'));
@@ -333,7 +332,7 @@ const App: React.FC = () => {
             path="/pruebas/crear"
             element={
               <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
-                <Pruebas />
+                <Navigate to="/pruebas" replace />
               </PrivateRoute>
             }
           />

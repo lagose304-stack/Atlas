@@ -33,6 +33,7 @@ describe('Entrada a prueba de instructores', () => {
       <Route path="/edicion" element={<Edicion />} />
       <Route path="/pruebas/instructores" element={<PrivateRoute requireMicroscopyManager><PruebaInstructores /></PrivateRoute>} />
     </Routes></MemoryRouter>);
+    expect(screen.queryByRole('button', { name: /^Crear$/ })).not.toBeInTheDocument();
     const button = screen.queryByRole('button', { name: 'Prueba de instructores' });
     if (!visible) {
       expect(button).not.toBeInTheDocument();

@@ -6,6 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 import ImageViewerModal from '../components/ImageViewerModal';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
+import { getPublicBankPool, gradePublicBankQuestion, startPublicBankTest } from '../services/publicTestsBank';
+import { drawPublicBankQuestions } from '../utils/publicBankSeenHistory';
 import { supabase } from '../services/supabase';
 import {
   canBypassMaintenance,
@@ -257,7 +259,7 @@ const EjecutarPrueba: React.FC = () => {
   const { pruebaId } = useParams<{ pruebaId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [prueba, setPrueba] = useState<PruebaRow | null>(null);
   const [questions, setQuestions] = useState<QuestionDraft[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<SelectedAnswersState>({});
@@ -273,9 +275,12 @@ const EjecutarPrueba: React.FC = () => {
   const [reviewedQuestions, setReviewedQuestions] = useState<Record<string, boolean>>({});
   const [gradingQuestionId, setGradingQuestionId] = useState<string | null>(null);
   const [usesLocalGrading, setUsesLocalGrading] = useState(false);
+  const [isBankMode, setIsBankMode] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    if (authLoading) return;
+    let active = true;
     const loadPrueba = async () => {
       if (!pruebaId) {
         setError('No se encontró la prueba a ejecutar.');
@@ -292,6 +297,7 @@ const EjecutarPrueba: React.FC = () => {
 
         if (!canBypass && !isManagementPreview) {
           const maintenanceStatus = await fetchSiteMaintenanceStatus();
+          if (!active) return;
           if (maintenanceStatus.enabled) {
             setError('El sitio se encuentra temporalmente fuera de servicio por mantenimiento.');
             setIsLoading(false);
@@ -310,6 +316,7 @@ const EjecutarPrueba: React.FC = () => {
             .eq('id', pruebaId)
             .maybeSingle();
 
+          if (!active) return;
           if (testMeta) {
             if (
               isParcialDisabled(testMeta.parcial_key, maintenanceStatus.disabledFeatures) ||
@@ -322,15 +329,27 @@ const EjecutarPrueba: React.FC = () => {
           }
         }
 
-        const { data, error: pruebaError } = await supabase.rpc('atlas_get_public_test', {
-          p_prueba_id: pruebaId,
-        });
-        const payload = data as PublicTestPayload | null;
-
-        if (!pruebaError && payload?.test) {
-          setPrueba(payload.test);
+        if (!active) return;
+        const pool = isManagementPreview ? undefined : await getPublicBankPool(pruebaId);
+        if (!active) return;
+        let bankPayload;
+        if (pool) {
+          const historyKey = user ? `user:${user.id}:${pruebaId}` : pruebaId;
+          const draw = () => active ? drawPublicBankQuestions(historyKey, pool.questions, pool.config) : [];
+          const questions = navigator.locks
+            ? await navigator.locks.request(`atlas-bank:${historyKey}`, draw)
+            : draw();
+          bankPayload = { test: pool.test, questions };
+        } else if (pool === undefined) {
+          bankPayload = await startPublicBankTest(pruebaId, isManagementPreview);
+        }
+        if (!active) return;
+        if (bankPayload?.test) {
+          setPrueba(bankPayload.test);
+          setIsBankMode(true);
           setUsesLocalGrading(false);
-          setQuestions(payload.questions.map((pregunta) => ({
+          setSelectedAnswers({});
+          setQuestions(bankPayload.questions.map((pregunta) => ({
             id: pregunta.id,
             sortOrder: pregunta.sort_order,
             title: pregunta.titulo,
@@ -356,45 +375,86 @@ const EjecutarPrueba: React.FC = () => {
                   }
                 : null,
           })));
-        } else if (isManagementPreview) {
-          const previewPayload = await loadPrivateTestPreview(pruebaId);
-          if (!previewPayload) {
-            setError('No se pudo cargar la prueba guardada para vista previa.');
+        } else {
+          setIsBankMode(false);
+          const { data, error: pruebaError } = await supabase.rpc('atlas_get_public_test', {
+            p_prueba_id: pruebaId,
+          });
+          if (!active) return;
+          const payload = data as PublicTestPayload | null;
+
+          if (!pruebaError && payload?.test) {
+            setPrueba(payload.test);
+            setUsesLocalGrading(false);
+            setSelectedAnswers({});
+            setQuestions(payload.questions.map((pregunta) => ({
+              id: pregunta.id,
+              sortOrder: pregunta.sort_order,
+              title: pregunta.titulo,
+              retroalimentacion: '',
+              required: pregunta.required,
+              options: pregunta.options.map((opcion) => ({
+                id: opcion.id,
+                text: opcion.texto,
+                isCorrect: false,
+                sortOrder: opcion.sort_order,
+              })),
+              referencePhotoUrl: pregunta.reference_photo_url,
+              referenceTemaName: pregunta.reference_tema_name ?? '',
+              referenceSubtemaName: pregunta.reference_subtema_name ?? '',
+              referenceSenaladoLocation:
+                pregunta.reference_senalado_x != null &&
+                pregunta.reference_senalado_y != null
+                  ? {
+                      x: pregunta.reference_senalado_x,
+                      y: pregunta.reference_senalado_y,
+                      startX: pregunta.reference_senalado_start_x,
+                      startY: pregunta.reference_senalado_start_y,
+                    }
+                  : null,
+            })));
+          } else if (isManagementPreview) {
+            const previewPayload = await loadPrivateTestPreview(pruebaId);
+            if (!active) return;
+            if (!previewPayload) {
+              setError('No se pudo cargar la prueba guardada para vista previa.');
+              setIsLoading(false);
+              return;
+            }
+
+            setPrueba(previewPayload.test);
+            setUsesLocalGrading(true);
+            setSelectedAnswers({});
+            setQuestions(previewPayload.questions.map((pregunta) => ({
+              id: pregunta.id,
+              sortOrder: pregunta.sort_order,
+              title: pregunta.titulo,
+              retroalimentacion: pregunta.retroalimentacion ?? '',
+              required: pregunta.required,
+              options: pregunta.options.map((opcion) => ({
+                id: opcion.id,
+                text: opcion.texto,
+                isCorrect: opcion.is_correct,
+                sortOrder: opcion.sort_order,
+              })),
+              referencePhotoUrl: pregunta.reference_photo_url,
+              referenceTemaName: pregunta.reference_tema_name ?? '',
+              referenceSubtemaName: pregunta.reference_subtema_name ?? '',
+              referenceSenaladoLocation:
+                pregunta.reference_senalado_x != null && pregunta.reference_senalado_y != null
+                  ? {
+                      x: pregunta.reference_senalado_x,
+                      y: pregunta.reference_senalado_y,
+                      startX: pregunta.reference_senalado_start_x,
+                      startY: pregunta.reference_senalado_start_y,
+                    }
+                  : null,
+            })));
+          } else {
+            setError('Esta prueba todavía no está publicada.');
             setIsLoading(false);
             return;
           }
-
-          setPrueba(previewPayload.test);
-          setUsesLocalGrading(true);
-          setQuestions(previewPayload.questions.map((pregunta) => ({
-            id: pregunta.id,
-            sortOrder: pregunta.sort_order,
-            title: pregunta.titulo,
-            retroalimentacion: pregunta.retroalimentacion ?? '',
-            required: pregunta.required,
-            options: pregunta.options.map((opcion) => ({
-              id: opcion.id,
-              text: opcion.texto,
-              isCorrect: opcion.is_correct,
-              sortOrder: opcion.sort_order,
-            })),
-            referencePhotoUrl: pregunta.reference_photo_url,
-            referenceTemaName: pregunta.reference_tema_name ?? '',
-            referenceSubtemaName: pregunta.reference_subtema_name ?? '',
-            referenceSenaladoLocation:
-              pregunta.reference_senalado_x != null && pregunta.reference_senalado_y != null
-                ? {
-                    x: pregunta.reference_senalado_x,
-                    y: pregunta.reference_senalado_y,
-                    startX: pregunta.reference_senalado_start_x,
-                    startY: pregunta.reference_senalado_start_y,
-                  }
-                : null,
-          })));
-        } else {
-          setError('Esta prueba todavía no está publicada.');
-          setIsLoading(false);
-          return;
         }
 
         setCurrentQuestionIndex(0);
@@ -402,15 +462,17 @@ const EjecutarPrueba: React.FC = () => {
         setShowReviewSummary(false);
         setReviewedQuestions({});
       } catch (err) {
+        if (!active) return;
         console.error('Error al cargar la prueba:', err);
         setError('Ocurrió un problema de conexión al cargar la evaluación. Revisa tu conexión.');
       } finally {
-        setIsLoading(false);
+        if (active) setIsLoading(false);
       }
     };
 
     void loadPrueba();
-  }, [pruebaId, location.pathname, reloadKey]);
+    return () => { active = false; };
+  }, [pruebaId, location.pathname, reloadKey, authLoading, user?.id]);
 
   const parcialLabel = prueba
     ? parciales.find(item => item.key === prueba.parcial_key)?.label ?? prueba.parcial_key
@@ -446,14 +508,32 @@ const EjecutarPrueba: React.FC = () => {
 
     setGradingQuestionId(questionId);
 
-    const { data, error: gradeError } = await supabase.rpc('atlas_grade_test', {
-      p_prueba_id: pruebaId,
-      p_answers: nextAnswers,
-    });
-    const result = ((data as { results?: GradeResult[] } | null)?.results ?? [])
-      .find(item => item.question_id === questionId);
+    let result: GradeResult | undefined;
+    let failed = false;
 
-    if (gradeError || !result) {
+    if (isBankMode) {
+      try {
+        const isManagementPreview = location.pathname.startsWith('/pruebas/ejecutar/');
+        const graded = await gradePublicBankQuestion(pruebaId, questionId, optionId, isManagementPreview);
+        if (graded) {
+          result = graded;
+        } else {
+          failed = true;
+        }
+      } catch {
+        failed = true;
+      }
+    } else {
+      const { data, error: gradeError } = await supabase.rpc('atlas_grade_test', {
+        p_prueba_id: pruebaId,
+        p_answers: nextAnswers,
+      });
+      result = ((data as { results?: GradeResult[] } | null)?.results ?? [])
+        .find(item => item.question_id === questionId);
+      failed = Boolean(gradeError) || !result;
+    }
+
+    if (failed || !result) {
       setSelectedAnswers(previous => {
         const restored = { ...previous };
         delete restored[questionId];
@@ -482,7 +562,7 @@ const EjecutarPrueba: React.FC = () => {
       return;
     }
 
-    if (usesLocalGrading) {
+    if (usesLocalGrading || isBankMode) {
       setReviewedQuestions(Object.fromEntries(questions.map(question => [question.id, true])));
       setIsGraded(true);
       setShowCompletion(true);
@@ -861,7 +941,20 @@ const EjecutarPrueba: React.FC = () => {
                   <p style={s.completionText}>Has completado la prueba <SafeRichText as="strong" value={prueba?.nombre ?? ''} fallback="Prueba" />.</p>
                   <p style={s.completionScore}>Tu puntuación: <strong>{correctCount}</strong> de <strong>{totalQuestions}</strong> ({totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0}%)</p>
                   <div style={s.completionActions}>
-                    <button type="button" style={s.primaryFinishButton} onClick={() => navigate('/evaluaciones')}>Finalizar y volver a Evaluaciones</button>
+                    {isBankMode && (
+                      <button
+                        type="button"
+                        style={s.primaryFinishButton}
+                        onClick={() => {
+                          setShowCompletion(false);
+                          setShowReviewSummary(false);
+                          setReloadKey(k => k + 1);
+                        }}
+                      >
+                        Practicar de nuevo (nuevas preguntas)
+                      </button>
+                    )}
+                    <button type="button" style={isBankMode ? s.secondaryFinishButton : s.primaryFinishButton} onClick={() => navigate('/evaluaciones')}>Finalizar y volver a Evaluaciones</button>
                     <button type="button" style={s.secondaryFinishButton} onClick={() => { setShowCompletion(false); setShowReviewSummary(true); }}>Ver revisión detallada</button>
                   </div>
                 </div>

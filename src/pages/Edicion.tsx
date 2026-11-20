@@ -240,15 +240,12 @@ const Edicion: React.FC = () => {
             <div style={s.cardBody}>
               <h2 style={s.cardTitle}>Pruebas</h2>
               <p style={s.cardDesc}>
-                Espacio reservado para administrar el flujo de pruebas desde cero.
+                Administra las pruebas y sus bancos de preguntas.
               </p>
             </div>
             <div style={s.pagesBtnGroup} className="edicion-pages-btn-group">
               {canEditarPaginas && <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas')}>
                 Administración
-              </button>}
-              {canEditarPaginas && <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas/crear')}>
-                Crear
               </button>}
               {canPruebaInstructores && <button type="button" style={s.pagesBtn} className="edicion-pages-btn" onClick={() => navigate('/pruebas/instructores')}>
                 Prueba de instructores

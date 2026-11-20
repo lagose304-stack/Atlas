@@ -1,3088 +1,981 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import BackButton from '../components/BackButton';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  ArrowLeft, ArrowRight, ArrowRightLeft, BookOpen, Check, ClipboardCheck, Eye, EyeOff,
+  FolderOpen, LoaderCircle, Pencil, Play, Plus, RefreshCw, Search, Settings2, Shield,
+  Sparkles, Trash2, X,
+} from 'lucide-react';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
-import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import PublicBankTestConfig from '../components/PublicBankTestConfig';
+import PublicBankTopicEditor from '../components/PublicBankTopicEditor';
+import PublicLegacyMigrator from '../components/PublicLegacyMigrator';
 import { useAuth } from '../contexts/AuthContext';
+import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
+import { getCachedTemas, type CatalogTema } from '../services/catalogService';
 import { deleteFromCloudinary } from '../services/cloudinary';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
-import { getRenderableBlocks } from '../services/contentPublication';
-import { hasHtmlMarkup, toSafeHtml } from '../services/richText';
+import {
+  checkPublicBankImageRefs,
+  countPendingSubtemaMigration,
+  listLegacyPublicTestsForMigration,
+  listPublicBankSummary,
+  migrateSubtemaTestsToBank,
+  publishPublicBankTest,
+} from '../services/publicTestsBank';
 import { supabase } from '../services/supabase';
 import { deleteOwnedTestReferenceImages } from '../services/testReferenceImages';
 import { logAuditEvent } from '../services/unifiedAuditService';
-import { collectWeeklyThemeIds, getActiveExamParcial, groupHistoricalTestsByPartial, orderTestsByWeeklyPriority } from './evaluacionesUtils';
-import { usePreservedParam } from '../hooks/usePreservedParam';
 import {
-  BookOpenCheck,
-  CalendarDays,
-  Check,
-  ChevronsDownUp,
-  ChevronsUpDown,
-  ClipboardCheck,
-  Eye,
-  EyeOff,
-  Filter,
-  Layers,
-  Pencil,
-  Play,
-  Plus,
-  Search,
-  SlidersHorizontal,
-  Sparkles,
-  Trash2,
-  UserCheck,
-  X,
-} from 'lucide-react';
+  calculateExpectedBankTestCount,
+  type LegacyMigrationTest,
+  type PublicBankTestRow,
+  type PublicBankTopicSummary,
+} from '../types/publicQuestionBank';
+import { groupTemasByParcial, PARCIAL_LABELS } from '../utils/instructorTopics';
+import '../styles/instructorTests.css';
+import '../styles/publicBankTests.css';
 
-export type TestScope = 'parcial' | 'tema' | 'subtema';
-export type ParcialKey = 'primer' | 'segundo' | 'tercer';
+type ActiveTab = 'bank' | 'tests' | 'migrate';
 
-export interface TemaOption {
-  id: number;
-  nombre: string;
-  parcial: string;
-  sort_order: number | null;
-}
+const SUBTEMA_MIGRATION_DONE_KEY = 'atlas_public_bank_subtema_migrated_v1';
 
-export interface SubtemaOption {
-  id: number;
-  nombre: string;
-  tema_id: number;
-  sort_order: number | null;
-}
-
-export interface AdminPrueba {
-  id: string;
-  nombre: string;
-  instrucciones: string;
-  scope: TestScope;
-  parcial_key: ParcialKey;
-  estado: string;
-  created_at: string;
-  updated_at?: string | null;
-  created_by_id?: number | null;
-  created_by_name?: string | null;
-  updated_by_id?: number | null;
-  updated_by_name?: string | null;
-  image_url?: string | null;
-  tema_id?: number | null;
-  subtema_id?: number | null;
-  tema?: { id: number; nombre: string; logo_url?: string | null } | null;
-  subtema?: { id: number; nombre: string; logo_url?: string | null } | null;
-}
-
-interface ParcialSection {
-  key: ParcialKey;
-  title: string;
-  parcialTests: AdminPrueba[];
-  temaTests: AdminPrueba[];
-  subtemaTests: AdminPrueba[];
-}
-
-const PARCIALES: Array<{ key: ParcialKey; title: string }> = [
-  { key: 'primer', title: 'Primer parcial' },
-  { key: 'segundo', title: 'Segundo parcial' },
-  { key: 'tercer', title: 'Tercer parcial' },
-];
-
-const HISTORICAL_SCOPE_ORDER: Record<TestScope, number> = {
-  parcial: 0,
-  tema: 1,
-  subtema: 2,
-};
-
-const toPlainText = (value: string): string => (value || '').replace(/<[^>]+>/g, '').trim();
-
-const InlineRichText: React.FC<{ value: string; fallback?: string }> = ({ value, fallback = '' }) => {
-  const content = (value || '').trim();
-  if (!content) return <span>{fallback}</span>;
-  if (hasHtmlMarkup(content)) {
-    return <span dangerouslySetInnerHTML={{ __html: toSafeHtml(content) }} />;
-  }
-  return <span>{content}</span>;
-};
-
-interface TestCardAdminProps {
-  prueba: AdminPrueba;
-  badge: string;
-  badges?: string[];
-  isUpdating: boolean;
-  isHighlighted?: boolean;
-  onTogglePublication: (prueba: AdminPrueba) => void;
-  onReclassify: (prueba: AdminPrueba) => void;
-  onRunTest: (prueba: AdminPrueba) => void;
-  onEditTest: (prueba: AdminPrueba) => void;
-  onDeleteTest: (prueba: AdminPrueba) => void;
-}
-
-const AdminTestCard: React.FC<TestCardAdminProps> = ({
-  prueba,
-  badge,
-  badges = [],
-  isUpdating,
-  isHighlighted = false,
-  onTogglePublication,
-  onReclassify,
-  onRunTest,
-  onEditTest,
-  onDeleteTest,
-}) => {
-  const candidateImages = useMemo(() => {
-    return [
-      prueba.image_url,
-      prueba.subtema?.logo_url,
-      prueba.tema?.logo_url,
-    ].filter((url): url is string => Boolean(url && typeof url === 'string' && url.trim().length > 0));
-  }, [prueba.image_url, prueba.subtema?.logo_url, prueba.tema?.logo_url]);
-
-  const [imageIndex, setImageIndex] = useState(0);
-  const [logoFailed, setLogoFailed] = useState(false);
-
-  const plainName = toPlainText(prueba.nombre) || 'Prueba';
-  const currentUrl = candidateImages[imageIndex] || '';
-  const logoSrc = currentUrl ? getCloudinaryImageUrl(currentUrl, 'cardWide') : '';
-
-  const handleImageError = () => {
-    if (imageIndex + 1 < candidateImages.length) {
-      setImageIndex((prev) => prev + 1);
-    } else {
-      setLogoFailed(true);
-    }
-  };
-
-  const isPublished = prueba.estado === 'publicada';
-  const badgeStyle = badge === 'Tema' ? s.badgeTema : badge === 'Subtema' ? s.badgeSubtema : s.badge;
-
-  return (
-    <article
-      id={`test-card-${prueba.id}`}
-      className={`evaluacion-test-card ${isHighlighted ? 'test-card-highlighted' : ''}`}
-      style={{
-        ...s.testCard,
-        ...(isHighlighted
-          ? {
-              outline: '3px solid #3b82f6',
-              outlineOffset: '2px',
-              boxShadow: '0 0 25px rgba(59, 130, 246, 0.45)',
-              transform: 'scale(1.01)',
-              transition: 'all 300ms ease',
-            }
-          : {}),
-      }}
-    >
-      <div
-        className="evaluacion-test-image"
-        style={{
-          height: '100%',
-          width: '100%',
-          overflow: 'hidden',
-          background: isPublished
-            ? 'linear-gradient(145deg, #e1f2fc, #cfe5f5)'
-            : 'linear-gradient(145deg, #fef3c7, #fef08a)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-        }}
-      >
-        {logoSrc && !logoFailed ? (
-          <img
-            src={logoSrc}
-            alt={plainName}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center' }}
-            loading="lazy"
-            decoding="async"
-            onError={handleImageError}
-          />
-        ) : (
-          <span style={isPublished ? s.imageFallback : s.imageFallbackDraft}>
-            <BookOpenCheck size={28} aria-hidden="true" />
-            <strong>{plainName}</strong>
-          </span>
-        )}
-      </div>
-
-      <div
-        className="evaluacion-test-body"
-        style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={badgeStyle}>{badge}</span>
-            <span style={isPublished ? s.statePillPublished : s.statePillDraft}>
-              {isPublished ? '● Publicada' : '○ Borrador'}
-            </span>
-          </div>
-          <span style={s.meta}>
-            <CalendarDays size={13} aria-hidden="true" />
-            {new Date(prueba.created_at).toLocaleDateString('es-MX')}
-          </span>
-        </div>
-
-        <h4 style={s.cardTitle}>
-          <InlineRichText value={prueba.nombre} fallback="Prueba sin nombre" />
-        </h4>
-        <p style={s.cardText}>
-          <InlineRichText value={prueba.instrucciones} fallback="Sin instrucciones registradas." />
-        </p>
-
-        {badges.length > 0 && (
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: 'auto', paddingTop: '4px' }}>
-            {badges.map((b) => (
-              <span key={b} style={s.scopeTag}>{b}</span>
-            ))}
-          </div>
-        )}
-
-        {/* Acciones de administración completas */}
-        <div className="evaluacion-admin-actions" style={s.cardActions}>
-          <button
-            type="button"
-            className="eval-admin-btn"
-            onClick={() => onTogglePublication(prueba)}
-            style={isPublished ? s.unpublishButton : s.publishButton}
-            disabled={isUpdating}
-            title={isPublished ? 'Ocultar al público y pasar a borrador' : 'Publicar prueba'}
-          >
-            {isPublished ? <EyeOff size={13} aria-hidden="true" /> : <Eye size={13} aria-hidden="true" />}
-            <span>{isPublished ? 'Borrador' : 'Publicar'}</span>
-          </button>
-
-          <button
-            type="button"
-            className="eval-admin-btn"
-            onClick={() => onReclassify(prueba)}
-            style={s.reclassifyButton}
-            title="Cambiar categoría, parcial, tema o subtema de la prueba"
-          >
-            <SlidersHorizontal size={13} aria-hidden="true" />
-            <span>Reclasificar</span>
-          </button>
-
-          <button
-            type="button"
-            className="eval-admin-btn"
-            onClick={() => onRunTest(prueba)}
-            style={s.runButton}
-            title="Ejecutar y probar la evaluación"
-          >
-            <Play size={13} aria-hidden="true" />
-            <span>Ejecutar</span>
-          </button>
-
-          <button
-            type="button"
-            className="eval-admin-btn"
-            onClick={() => onEditTest(prueba)}
-            style={s.editButton}
-            title="Editar preguntas y contenido de la prueba"
-          >
-            <Pencil size={13} aria-hidden="true" />
-            <span>Editar</span>
-          </button>
-
-          <button
-            type="button"
-            className="eval-admin-btn"
-            onClick={() => onDeleteTest(prueba)}
-            style={s.deleteButton}
-            disabled={isUpdating}
-            title="Eliminar permanentemente esta prueba"
-          >
-            <Trash2 size={13} aria-hidden="true" />
-            <span>Borrar</span>
-          </button>
-        </div>
-
-        {/* Metadatos de auditoría: Creada por y Editada por */}
-        <div style={s.auditBox}>
-          <div style={s.auditRow}>
-            <span style={s.auditUserText} title={`Creada por: ${prueba.created_by_name || 'No registrado'}`}>
-              <UserCheck size={13} aria-hidden="true" style={{ color: '#0284c7', flexShrink: 0 }} />
-              <span><strong>Creada por:</strong> {prueba.created_by_name || 'No registrado'}</span>
-            </span>
-            <span style={s.auditDateText}>
-              <CalendarDays size={12} aria-hidden="true" style={{ flexShrink: 0 }} />
-              {new Date(prueba.created_at).toLocaleDateString('es-MX')}
-            </span>
-          </div>
-
-          <div style={s.auditRow}>
-            <span style={s.auditUserText} title={`Editada por: ${prueba.updated_by_name || prueba.created_by_name || 'No registrado'}`}>
-              <Pencil size={12} aria-hidden="true" style={{ color: '#7c3aed', flexShrink: 0 }} />
-              <span><strong>Editada por:</strong> {prueba.updated_by_name || prueba.created_by_name || 'No registrado'}</span>
-            </span>
-            <span style={s.auditDateText}>
-              <CalendarDays size={12} aria-hidden="true" style={{ flexShrink: 0 }} />
-              {new Date(prueba.updated_at || prueba.created_at).toLocaleDateString('es-MX')}
-            </span>
-          </div>
-        </div>
-      </div>
-    </article>
-  );
-};
-
-const WeekThemeThumbnail: React.FC<{
-  themeGroup: { temaNombre: string; items: AdminPrueba[] };
-}> = ({ themeGroup }) => {
-  const candidateImages = useMemo(() => {
-    const list: string[] = [];
-    themeGroup.items.forEach((item) => {
-      if (item.tema?.logo_url) list.push(item.tema.logo_url);
-      if (item.subtema?.logo_url) list.push(item.subtema.logo_url);
-      if (item.image_url) list.push(item.image_url);
-    });
-    return Array.from(new Set(list.filter((url): url is string => Boolean(url && typeof url === 'string' && url.trim().length > 0))));
-  }, [themeGroup.items]);
-
-  const [imageIndex, setImageIndex] = useState(0);
-  const [failed, setFailed] = useState(false);
-
-  const currentUrl = candidateImages[imageIndex];
-  const logoSrc = currentUrl ? getCloudinaryImageUrl(currentUrl, 'thumb') : '';
-
-  const handleError = () => {
-    if (imageIndex + 1 < candidateImages.length) {
-      setImageIndex((prev) => prev + 1);
-    } else {
-      setFailed(true);
-    }
-  };
-
-  if (!logoSrc || failed) {
-    return <span style={s.weekThemeThumbFallback}>{(themeGroup.temaNombre || 'T').slice(0, 1).toUpperCase()}</span>;
-  }
-
-  return (
-    <img
-      src={logoSrc}
-      alt={themeGroup.temaNombre}
-      style={s.weekThemeThumb}
-      loading="lazy"
-      onError={handleError}
-    />
-  );
-};
-
-const ACCORDION_STORAGE_KEY = 'atlas_admin_tests_accordions';
-const TARGET_STORAGE_KEY = 'atlas_admin_tests_target_id';
-const SCROLL_STORAGE_KEY = 'atlas_admin_tests_scroll_y';
-
-const GestionPruebas: React.FC = () => {
+export default function GestionPruebas() {
   const handleGoBack = useSmartBackNavigation('/edicion');
   const navigate = useNavigate();
-  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
 
-  const [highlightedTestId, setHighlightedTestId] = useState<string | null>(null);
-  const hasRestoredScrollRef = useRef(false);
+  const initialTab = (searchParams.get('tab') as ActiveTab | null) ?? 'bank';
+  const [tab, setTab] = useState<ActiveTab>(
+    initialTab === 'tests' || initialTab === 'migrate' ? initialTab : 'bank',
+  );
 
-  // Estados persistidos de los acordeones en localStorage
-  const [accordionStates, setAccordionStates] = useState<Record<string, boolean>>(() => {
+  const [temas, setTemas] = useState<CatalogTema[]>([]);
+  const [bankSummary, setBankSummary] = useState<PublicBankTopicSummary[]>([]);
+  const [tests, setTests] = useState<PublicBankTestRow[]>([]);
+  const [legacyMigrationTests, setLegacyMigrationTests] = useState<LegacyMigrationTest[]>([]);
+  const [pendingSubtemaMigration, setPendingSubtemaMigration] = useState<{
+    pending_questions: number;
+    pending_tests: number;
+  } | null>(null);
+  const [subtemaMigrationDismissed, setSubtemaMigrationDismissed] = useState<boolean>(() => {
     try {
-      const saved = localStorage.getItem(ACCORDION_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : {};
+      return localStorage.getItem(SUBTEMA_MIGRATION_DONE_KEY) === '1';
     } catch {
-      return {};
+      return false;
     }
   });
-
-  const handleToggleAccordion = useCallback((key: string, isOpen: boolean) => {
-    setAccordionStates((prev) => {
-      if (prev[key] === isOpen) return prev;
-      const next = { ...prev, [key]: isOpen };
-      try {
-        localStorage.setItem(ACCORDION_STORAGE_KEY, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  }, []);
-
-  // Guardar posición de scroll antes de navegar o desmontar
-  useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 0) {
-        try {
-          sessionStorage.setItem(SCROLL_STORAGE_KEY, String(window.scrollY));
-        } catch {}
-      }
-    };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      handleScroll();
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
-
-  const [pruebas, setPruebas] = useState<AdminPrueba[]>([]);
-  const [weeklyThemeIds, setWeeklyThemeIds] = useState<number[]>([]);
-  const [activeExamParcial, setActiveExamParcial] = useState<string | null>(null);
-  const [allTemas, setAllTemas] = useState<TemaOption[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [autoMigrating, setAutoMigrating] = useState(false);
   const [error, setError] = useState('');
-  const [updatingTestId, setUpdatingTestId] = useState<string | null>(null);
+  const [bankWarning, setBankWarning] = useState('');
+  const [message, setMessage] = useState('');
+  const [reload, setReload] = useState(0);
 
-  // Filtros preservados al recargar
-  const [search, setSearch] = usePreservedParam<string>('q', '');
-  const [statusFilter, setStatusFilter] = usePreservedParam<'todos' | 'publicada' | 'borrador'>('estado', 'todos');
-  const [scopeFilter, setScopeFilter] = usePreservedParam<'todos' | TestScope>('alcance', 'todos');
+  const [activeBankTema, setActiveBankTema] = useState<CatalogTema | null>(null);
+  const [configuringTest, setConfiguringTest] = useState<{
+    test: PublicBankTestRow | null;
+    defaultTemaId?: number | null;
+  } | null>(null);
+  const [migratingTest, setMigratingTest] = useState<LegacyMigrationTest | null>(null);
 
-  // Modal de confirmación de borrado
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<AdminPrueba | null>(null);
+  const [topicQuery, setTopicQuery] = useState('');
+  const [topicFilter, setTopicFilter] = useState<'all' | 'filled' | 'empty'>('all');
+  const [testTopicQuery, setTestTopicQuery] = useState('');
+  const [testTopicFilter, setTestTopicFilter] = useState<'all' | 'configured' | 'unconfigured'>('all');
+  const [failedLogos, setFailedLogos] = useState<Record<number, boolean>>({});
 
-  // Modal de reclasificación
-  const [showReclassifyModal, setShowReclassifyModal] = useState(false);
-  const [reclassifyTarget, setReclassifyTarget] = useState<AdminPrueba | null>(null);
-  const [reclassifyScope, setReclassifyScope] = useState<TestScope>('parcial');
-  const [reclassifyParcial, setReclassifyParcial] = useState<ParcialKey>('primer');
-  const [reclassifyTemaId, setReclassifyTemaId] = useState<number | null>(null);
-  const [reclassifySubtemaId, setReclassifySubtemaId] = useState<number | null>(null);
-  const [modalSubtemas, setModalSubtemas] = useState<SubtemaOption[]>([]);
-  const [isLoadingSubtemas, setIsLoadingSubtemas] = useState(false);
-  const [reclassifyError, setReclassifyError] = useState('');
-  const [isSavingReclassification, setIsSavingReclassification] = useState(false);
-
-  // Cargar temas globales para selector de reclasificación
-  useEffect(() => {
-    const fetchAllTemas = async () => {
-      const { data } = await supabase
-        .from('temas')
-        .select('id, nombre, parcial, sort_order')
-        .order('parcial', { ascending: true })
-        .order('sort_order', { ascending: true });
-
-      if (data) {
-        setAllTemas(data as TemaOption[]);
-      }
-    };
-
-    void fetchAllTemas();
-  }, []);
-
-  const allTemasMap = useMemo(() => {
-    const map = new Map<number, TemaOption>();
-    allTemas.forEach((t) => map.set(t.id, t));
-    return map;
-  }, [allTemas]);
-
-  // Cargar temas semanales
-  useEffect(() => {
-    const loadWeeklyThemes = async () => {
-      try {
-        const blocks = await getRenderableBlocks('home_page', 0);
-        setActiveExamParcial(getActiveExamParcial(blocks));
-        setWeeklyThemeIds(collectWeeklyThemeIds(blocks, allTemas));
-      } catch (loadError) {
-        console.warn('No se pudieron cargar los temas activos de la semana.', loadError);
-        setWeeklyThemeIds([]);
-        setActiveExamParcial(null);
-      }
-    };
-
-    void loadWeeklyThemes();
-  }, [allTemas]);
-
-  // Cargar todas las pruebas
-  const fetchPruebas = useCallback(async () => {
-    setIsLoading(true);
+  const loadAll = useCallback(async () => {
+    setLoading(true);
     setError('');
+    setBankWarning('');
 
-    let data: unknown[] | null = null;
-    let queryError: unknown = null;
-
-    const fullResult = await supabase
-      .from('pruebas')
-      .select('id, nombre, instrucciones, scope, parcial_key, estado, created_at, updated_at, created_by_id, created_by_name, updated_by_id, updated_by_name, image_url, tema_id, subtema_id, tema:temas(id, nombre, logo_url), subtema:subtemas(id, nombre, logo_url)')
-      .order('created_at', { ascending: false });
-
-    if (fullResult.error) {
-      // Fallback: si las nuevas columnas aún no existen en la BD de Supabase, reintentar con la consulta base
-      const fallbackResult = await supabase
+    const [temasRes, bankRes, pruebasRes, legacyRes, pendingSubRes] = await Promise.allSettled([
+      getCachedTemas(),
+      listPublicBankSummary(),
+      supabase
         .from('pruebas')
-        .select('id, nombre, instrucciones, scope, parcial_key, estado, created_at, image_url, tema_id, subtema_id, tema:temas(id, nombre, logo_url), subtema:subtemas(id, nombre, logo_url)')
+        .select('id, nombre, instrucciones, scope, parcial_key, tema_id, subtema_id, estado, image_url, mode, bank_config, revision, created_at, updated_at, created_by_id, created_by_name, updated_by_id, updated_by_name')
+        .order('created_at', { ascending: false }),
+      listLegacyPublicTestsForMigration(),
+      countPendingSubtemaMigration(),
+    ]);
+
+    if (temasRes.status === 'fulfilled') setTemas(temasRes.value);
+    else setError('No se pudieron cargar los temas del Atlas.');
+
+    if (bankRes.status === 'fulfilled') setBankSummary(bankRes.value);
+    else {
+      setBankWarning(
+        bankRes.reason instanceof Error
+          ? bankRes.reason.message
+          : 'El banco de preguntas públicas todavía no está habilitado en la base de datos.',
+      );
+    }
+
+    if (pruebasRes.status === 'fulfilled' && !pruebasRes.value.error) {
+      setTests((pruebasRes.value.data ?? []) as PublicBankTestRow[]);
+    } else {
+      // Fallback si las columnas nuevas aún no están aplicadas en Supabase
+      const fallback = await supabase
+        .from('pruebas')
+        .select('id, nombre, instrucciones, scope, parcial_key, tema_id, subtema_id, estado, image_url, created_at')
         .order('created_at', { ascending: false });
-
-      data = (fallbackResult.data as unknown[]) ?? null;
-      queryError = fallbackResult.error;
-    } else {
-      data = (fullResult.data as unknown[]) ?? null;
-      queryError = fullResult.error;
+      if (!fallback.error) {
+        setTests((fallback.data ?? []) as PublicBankTestRow[]);
+      } else {
+        setError('No se pudieron cargar las pruebas.');
+      }
     }
 
-    if (queryError || !data) {
-      setPruebas([]);
-      setError('No se pudieron cargar las evaluaciones.');
+    if (legacyRes.status === 'fulfilled') {
+      setLegacyMigrationTests(legacyRes.value);
     } else {
-      setPruebas(data as unknown as AdminPrueba[]);
+      setLegacyMigrationTests([]);
     }
 
-    setIsLoading(false);
+    if (pendingSubRes.status === 'fulfilled') {
+      setPendingSubtemaMigration(pendingSubRes.value);
+    } else {
+      setPendingSubtemaMigration(null);
+    }
+
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    void fetchPruebas();
-  }, [fetchPruebas]);
+    void loadAll();
+  }, [loadAll, reload]);
 
-  // Contadores generales
-  const publishedCount = useMemo(() => pruebas.filter((p) => p.estado === 'publicada').length, [pruebas]);
-  const draftCount = useMemo(() => pruebas.filter((p) => p.estado !== 'publicada').length, [pruebas]);
+  const refreshBankSummary = useCallback(async () => {
+    try {
+      const next = await listPublicBankSummary();
+      setBankSummary(next);
+    } catch {
+      // mantener resumen actual si falla temporalmente
+    }
+  }, []);
 
-  // Filtrado de pruebas en memoria
-  const filteredPruebas = useMemo(() => {
-    return pruebas.filter((item) => {
-      if (statusFilter === 'publicada' && item.estado !== 'publicada') return false;
-      if (statusFilter === 'borrador' && item.estado === 'publicada') return false;
+  const bankByTema = useMemo(
+    () => new Map(bankSummary.map(item => [item.tema_id, item])),
+    [bankSummary],
+  );
 
-      if (scopeFilter !== 'todos' && item.scope !== scopeFilter) return false;
+  const bankTests = useMemo(
+    () => tests.filter(t => t.mode === 'bank'),
+    [tests],
+  );
+  const bankTestByTemaId = useMemo(() => {
+    const map = new Map<number, PublicBankTestRow>();
+    bankTests.forEach(t => {
+      if (t.tema_id != null) map.set(t.tema_id, t);
+    });
+    return map;
+  }, [bankTests]);
 
-      if (search.trim()) {
-        const query = search.toLowerCase().trim();
-        const matchName = (item.nombre || '').toLowerCase().includes(query);
-        const matchInstructions = (item.instrucciones || '').toLowerCase().includes(query);
-        const matchTema = (item.tema?.nombre || '').toLowerCase().includes(query);
-        const matchSubtema = (item.subtema?.nombre || '').toLowerCase().includes(query);
-        if (!matchName && !matchInstructions && !matchTema && !matchSubtema) return false;
+  const normalizedTestQuery = testTopicQuery.trim().toLowerCase();
+  const filteredTestTemas = useMemo(() => {
+    return temas.filter(tema => {
+      const existing = bankTestByTemaId.get(tema.id);
+      if (normalizedTestQuery) {
+        const matchTema = tema.nombre.toLowerCase().includes(normalizedTestQuery);
+        const matchTestName = (existing?.nombre ?? '').toLowerCase().includes(normalizedTestQuery);
+        if (!matchTema && !matchTestName) return false;
       }
-
+      if (testTopicFilter === 'configured') return Boolean(existing);
+      if (testTopicFilter === 'unconfigured') return !existing;
       return true;
     });
-  }, [pruebas, statusFilter, scopeFilter, search]);
+  }, [temas, bankTestByTemaId, normalizedTestQuery, testTopicFilter]);
 
-  const orderedPruebas = useMemo(
-    () => orderTestsByWeeklyPriority(filteredPruebas, weeklyThemeIds),
-    [filteredPruebas, weeklyThemeIds]
+  const groupedTestTemas = useMemo(() => groupTemasByParcial(filteredTestTemas), [filteredTestTemas]);
+
+  const legacySubtemaTests = useMemo(
+    () => tests.filter(t => t.mode !== 'bank' && t.scope === 'subtema' && t.estado !== 'archivada'),
+    [tests],
+  );
+  const showAutoMigrationBanner = useMemo(() => {
+    if (loading || bankWarning || migratingTest) return false;
+    // Si la RPC exacta está instalada en BD, mostrar solo cuando haya preguntas pendientes reales.
+    if (pendingSubtemaMigration !== null) {
+      return pendingSubtemaMigration.pending_questions > 0;
+    }
+    // Fallback si aún no se aplicó la RPC de conteo: ocultar tras ejecutar la migración.
+    return !subtemaMigrationDismissed && legacySubtemaTests.length > 0;
+  }, [loading, bankWarning, migratingTest, pendingSubtemaMigration, subtemaMigrationDismissed, legacySubtemaTests.length]);
+  const usedBankTemaIds = useMemo(
+    () => new Set(bankTests.map(t => t.tema_id).filter((id): id is number => id != null)),
+    [bankTests],
   );
 
-  const parcialSections = useMemo<ParcialSection[]>(() => {
-    return PARCIALES.map((parcial) => {
-      const testsForParcial = orderedPruebas.filter((item) => item.parcial_key === parcial.key);
-      const weeklyTests = testsForParcial.filter((item) => item.tema_id != null && weeklyThemeIds.includes(item.tema_id));
-      const historicalTests = testsForParcial.filter((item) => !(item.tema_id != null && weeklyThemeIds.includes(item.tema_id)));
-
-      return {
-        key: parcial.key,
-        title: parcial.title,
-        parcialTests: weeklyTests.filter((item) => item.scope === 'parcial').concat(historicalTests.filter((item) => item.scope === 'parcial')),
-        temaTests: weeklyTests.filter((item) => item.scope === 'tema').concat(historicalTests.filter((item) => item.scope === 'tema')),
-        subtemaTests: weeklyTests.filter((item) => item.scope === 'subtema').concat(historicalTests.filter((item) => item.scope === 'subtema')),
-      };
-    });
-  }, [orderedPruebas, weeklyThemeIds]);
-
-  const getHistoricalParcialGroups = useCallback((section: ParcialSection) => {
-    const historicalItems = [
-      ...section.parcialTests.filter((prueba) => !(prueba.tema_id != null && weeklyThemeIds.includes(prueba.tema_id))),
-      ...section.temaTests.filter((prueba) => !(prueba.tema_id != null && weeklyThemeIds.includes(prueba.tema_id))),
-      ...section.subtemaTests.filter((prueba) => !(prueba.tema_id != null && weeklyThemeIds.includes(prueba.tema_id))),
-    ];
-
-    return groupHistoricalTestsByPartial(historicalItems).map((group) => ({
-      key: group.key,
-      title: PARCIALES.find((parcial) => parcial.key === group.key)?.title ?? 'Parcial',
-      items: group.items,
-    })).sort((a, b) => {
-      const aIndex = PARCIALES.findIndex((parcial) => parcial.key === a.key);
-      const bIndex = PARCIALES.findIndex((parcial) => parcial.key === b.key);
-      return aIndex - bIndex;
-    });
-  }, [weeklyThemeIds]);
-
-  const getWeeklyThemeGroups = useCallback((section: ParcialSection) => {
-    const weeklyItems = [
-      ...section.parcialTests.filter((prueba) => prueba.tema_id != null && weeklyThemeIds.includes(prueba.tema_id)),
-      ...section.temaTests.filter((prueba) => prueba.tema_id != null && weeklyThemeIds.includes(prueba.tema_id)),
-      ...section.subtemaTests.filter((prueba) => prueba.tema_id != null && weeklyThemeIds.includes(prueba.tema_id)),
-    ];
-
-    const grouped = new Map<string, AdminPrueba[]>();
-
-    weeklyItems.forEach((prueba) => {
-      const themeKey = String(prueba.tema_id ?? prueba.tema?.id ?? 'sin-tema');
-      const current = grouped.get(themeKey) ?? [];
-      current.push(prueba);
-      grouped.set(themeKey, current);
-    });
-
-    return Array.from(grouped.entries())
-      .map(([key, items]) => ({
-        key,
-        temaNombre: items[0]?.tema?.nombre || (items[0]?.tema_id ? `Tema ${items[0].tema_id}` : 'Tema sin identificar'),
-        items: [...items].sort((a, b) => {
-          const scopeDelta = HISTORICAL_SCOPE_ORDER[a.scope] - HISTORICAL_SCOPE_ORDER[b.scope];
-          if (scopeDelta !== 0) return scopeDelta;
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        }),
-      }))
-      .sort((a, b) => {
-        const idA = Number(a.key);
-        const idB = Number(b.key);
-        const idxA = weeklyThemeIds.indexOf(idA);
-        const idxB = weeklyThemeIds.indexOf(idB);
-        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-        if (idxA !== -1) return -1;
-        if (idxB !== -1) return 1;
-        const sortA = allTemasMap.get(idA)?.sort_order;
-        const sortB = allTemasMap.get(idB)?.sort_order;
-        if (sortA != null && sortB != null) return sortA - sortB;
-        return a.temaNombre.localeCompare(b.temaNombre, 'es');
-      });
-  }, [weeklyThemeIds, allTemasMap]);
-
-  // Acciones administrativas
-  const handleTogglePublication = async (prueba: AdminPrueba) => {
-    if (updatingTestId) return;
-
-    const nextEstado = prueba.estado === 'publicada' ? 'borrador' : 'publicada';
-    const editorName = user?.nombre?.trim() || user?.username?.trim() || 'Administrador';
-    const nowIso = new Date().toISOString();
-    setUpdatingTestId(prueba.id);
-
-    let { error: updateError } = await supabase
-      .from('pruebas')
-      .update({
-        estado: nextEstado,
-        updated_by_id: user?.id ?? null,
-        updated_by_name: editorName,
-        updated_at: nowIso,
-      })
-      .eq('id', prueba.id);
-
-    // Fallback si aún no existen las columnas de auditoría en la BD
-    if (updateError) {
-      const fallbackResult = await supabase
-        .from('pruebas')
-        .update({ estado: nextEstado })
-        .eq('id', prueba.id);
-      updateError = fallbackResult.error;
-    }
-
-    if (updateError) {
-      setError('No se pudo cambiar el estado de la prueba.');
-      setUpdatingTestId(null);
-      return;
-    }
-
-    void logAuditEvent({
-      entityType: 'prueba',
-      actionType: nextEstado === 'publicada' ? 'publish' : 'unpublish',
-      entityId: prueba.id,
-      entityName: `Prueba: ${prueba.nombre}`,
-      actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
-      details: {
-        estado_anterior: prueba.estado,
-        nuevo_estado: nextEstado,
-        scope: prueba.scope,
-        parcial_key: prueba.parcial_key,
-      },
-    });
-
-    setPruebas((prev) =>
-      prev.map((item) => (item.id === prueba.id ? {
-        ...item,
-        estado: nextEstado,
-        updated_by_id: user?.id ?? null,
-        updated_by_name: editorName,
-        updated_at: nowIso,
-      } : item))
-    );
-    setUpdatingTestId(null);
-  };
-
-  const handleRunTest = (prueba: AdminPrueba) => {
-    try {
-      sessionStorage.setItem(TARGET_STORAGE_KEY, prueba.id);
-      sessionStorage.setItem(SCROLL_STORAGE_KEY, String(window.scrollY));
-    } catch {}
-    const currentUrl = `${location.pathname}${location.search}`;
-    navigate(`/pruebas/ejecutar/${prueba.id}`, { state: { from: currentUrl, targetTestId: prueba.id } });
-  };
-
-  const handleEditTest = (prueba: AdminPrueba) => {
-    try {
-      sessionStorage.setItem(TARGET_STORAGE_KEY, prueba.id);
-      sessionStorage.setItem(SCROLL_STORAGE_KEY, String(window.scrollY));
-    } catch {}
-    const currentUrl = `${location.pathname}${location.search}`;
-    navigate(`/pruebas/editor/${prueba.id}`, { state: { from: currentUrl, targetTestId: prueba.id } });
-  };
-
-  // Obtener target test ID que el usuario estaba editando o ejecutando
-  const targetTestId = useMemo(() => {
-    return (
-      (location.state as { targetTestId?: string } | null)?.targetTestId ||
-      (() => {
-        try {
-          return sessionStorage.getItem(TARGET_STORAGE_KEY) || null;
-        } catch {
-          return null;
-        }
-      })()
-    );
-  }, [location.state]);
-
-  // Claves de acordeones que deben abrirse sí o sí para mostrar la prueba editada
-  const targetAccordionKeys = useMemo(() => {
-    const keys = new Set<string>();
-    if (!targetTestId || pruebas.length === 0) return keys;
-
-    const target = pruebas.find((p) => p.id === targetTestId);
-    if (!target) return keys;
-
-    const isWeekly = target.tema_id != null && weeklyThemeIds.includes(target.tema_id);
-    if (isWeekly) {
-      const themeKey = String(target.tema_id ?? target.tema?.id ?? 'sin-tema');
-      keys.add(`week-${target.parcial_key}-${themeKey}`);
-    } else {
-      keys.add(`hist-partial-${target.parcial_key}-${target.parcial_key}`);
-      const themeKey = target.tema_id ?? target.tema?.id;
-      if (themeKey != null) {
-        keys.add(`hist-theme-${target.parcial_key}-${target.parcial_key}-${themeKey}`);
-      }
-    }
-    return keys;
-  }, [pruebas, targetTestId, weeklyThemeIds]);
-
-  // Asegurar que los acordeones que contienen la prueba objetivo se abran
-  useEffect(() => {
-    if (targetAccordionKeys.size > 0) {
-      setAccordionStates((prev) => {
-        let changed = false;
-        const next = { ...prev };
-        targetAccordionKeys.forEach((key) => {
-          if (!next[key]) {
-            next[key] = true;
-            changed = true;
-          }
-        });
-        if (changed) {
-          try {
-            localStorage.setItem(ACCORDION_STORAGE_KEY, JSON.stringify(next));
-          } catch {}
-          return next;
-        }
-        return prev;
-      });
-    }
-  }, [targetAccordionKeys]);
-
-  const isAccordionOpen = useCallback(
-    (key: string, defaultOpen: boolean): boolean => {
-      if (search.trim()) return true;
-      if (targetAccordionKeys.has(key)) return true;
-      if (accordionStates[key] !== undefined) {
-        return accordionStates[key];
-      }
-      return defaultOpen;
-    },
-    [search, targetAccordionKeys, accordionStates]
+  const totalBankQuestions = useMemo(
+    () => bankSummary.reduce((sum, item) => sum + item.total_count, 0),
+    [bankSummary],
+  );
+  const totalGeneralQuestions = useMemo(
+    () => bankSummary.reduce((sum, item) => sum + item.general_count, 0),
+    [bankSummary],
+  );
+  const totalSubtemaQuestions = useMemo(
+    () => bankSummary.reduce((sum, item) => sum + item.subtema_total_count, 0),
+    [bankSummary],
   );
 
-  // Restaurar el scroll y enfocar la prueba editada cuando los datos se cargan
-  useEffect(() => {
-    if (isLoading || pruebas.length === 0 || hasRestoredScrollRef.current) return;
-
-    const targetId = targetTestId;
-    let savedScrollY: string | null = null;
-    try {
-      savedScrollY = sessionStorage.getItem(SCROLL_STORAGE_KEY);
-    } catch {}
-
-    if (!targetId && !savedScrollY) return;
-
-    hasRestoredScrollRef.current = true;
-
-    const timer = setTimeout(() => {
-      let scrolled = false;
-
-      if (targetId) {
-        const cardEl = document.getElementById(`test-card-${targetId}`);
-        if (cardEl) {
-          cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          setHighlightedTestId(targetId);
-          scrolled = true;
-          setTimeout(() => {
-            setHighlightedTestId(null);
-          }, 2500);
-        }
-      }
-
-      if (!scrolled && savedScrollY) {
-        const y = parseFloat(savedScrollY);
-        if (!isNaN(y) && y > 0) {
-          window.scrollTo({ top: y, behavior: 'smooth' });
-        }
-      }
-
-      try {
-        sessionStorage.removeItem(TARGET_STORAGE_KEY);
-        sessionStorage.removeItem(SCROLL_STORAGE_KEY);
-      } catch {}
-    }, 180);
-
-    return () => clearTimeout(timer);
-  }, [isLoading, pruebas.length, targetTestId]);
-
-  // Obtener todas las claves de acordeones presentes actualmente en la vista
-  const allCurrentAccordionKeys = useMemo(() => {
-    const keys: string[] = [];
-    parcialSections.forEach((section) => {
-      const weeklyThemeGroups = getWeeklyThemeGroups(section);
-      weeklyThemeGroups.forEach((themeGroup) => {
-        keys.push(`week-${section.key}-${themeGroup.key}`);
-      });
-      const historicalGroups = getHistoricalParcialGroups(section);
-      historicalGroups.forEach((partialGroup) => {
-        keys.push(`hist-partial-${section.key}-${partialGroup.key}`);
-        const groupedByTema = new Map<string, AdminPrueba[]>();
-        partialGroup.items.forEach((prueba) => {
-          const themeKey = prueba.tema_id ?? prueba.tema?.id;
-          if (themeKey == null) return;
-          groupedByTema.set(String(themeKey), []);
-        });
-        groupedByTema.forEach((_, themeKey) => {
-          keys.push(`hist-theme-${section.key}-${partialGroup.key}-${themeKey}`);
-        });
-      });
+  const normalizedQuery = topicQuery.trim().toLowerCase();
+  const filteredTemas = useMemo(() => {
+    return temas.filter(tema => {
+      if (normalizedQuery && !tema.nombre.toLowerCase().includes(normalizedQuery)) return false;
+      const count = bankByTema.get(tema.id)?.total_count ?? 0;
+      if (topicFilter === 'filled') return count > 0;
+      if (topicFilter === 'empty') return count === 0;
+      return true;
     });
-    return keys;
-  }, [parcialSections, getWeeklyThemeGroups, getHistoricalParcialGroups]);
+  }, [temas, normalizedQuery, topicFilter, bankByTema]);
 
-  const handleExpandAll = () => {
-    setAccordionStates((prev) => {
-      const next = { ...prev };
-      allCurrentAccordionKeys.forEach((key) => {
-        next[key] = true;
-      });
-      try {
-        localStorage.setItem(ACCORDION_STORAGE_KEY, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
+  const groupedTemas = useMemo(() => groupTemasByParcial(filteredTemas), [filteredTemas]);
 
-  const handleCollapseAll = () => {
-    setAccordionStates((prev) => {
-      const next = { ...prev };
-      allCurrentAccordionKeys.forEach((key) => {
-        next[key] = false;
-      });
-      try {
-        localStorage.setItem(ACCORDION_STORAGE_KEY, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  // Apertura del modal de reclasificación
-  const handleOpenReclassify = (prueba: AdminPrueba) => {
-    setReclassifyTarget(prueba);
-    setReclassifyScope(prueba.scope);
-    setReclassifyParcial(prueba.parcial_key || 'primer');
-    setReclassifyTemaId(prueba.tema_id ?? prueba.tema?.id ?? null);
-    setReclassifySubtemaId(prueba.subtema_id ?? prueba.subtema?.id ?? null);
-    setReclassifyError('');
-    setShowReclassifyModal(true);
-  };
-
-  // Cargar subtemas en el modal cuando cambia el tema seleccionado
-  useEffect(() => {
-    if (!showReclassifyModal || !reclassifyTemaId || reclassifyScope !== 'subtema') {
-      setModalSubtemas([]);
+  const handleAutoMigrateSubtemas = async () => {
+    if (autoMigrating || busy) return;
+    if (!window.confirm('¿Importar automáticamente todas las preguntas de las pruebas antiguas de subtema hacia su subtema correspondiente en el banco? Esta operación es segura y no duplica preguntas ya migradas.')) {
       return;
     }
-
-    const fetchSubtemas = async () => {
-      setIsLoadingSubtemas(true);
-      const { data } = await supabase
-        .from('subtemas')
-        .select('id, nombre, tema_id, sort_order')
-        .eq('tema_id', reclassifyTemaId)
-        .order('sort_order', { ascending: true });
-
-      if (data) {
-        setModalSubtemas(data as SubtemaOption[]);
-      } else {
-        setModalSubtemas([]);
-      }
-      setIsLoadingSubtemas(false);
-    };
-
-    void fetchSubtemas();
-  }, [showReclassifyModal, reclassifyTemaId, reclassifyScope]);
-
-  // Guardar reclasificación
-  const handleSaveReclassification = async () => {
-    if (!reclassifyTarget) return;
-
-    if (reclassifyScope === 'tema' && !reclassifyTemaId) {
-      setReclassifyError('Debes seleccionar un tema.');
-      return;
-    }
-
-    if (reclassifyScope === 'subtema') {
-      if (!reclassifyTemaId) {
-        setReclassifyError('Debes seleccionar un tema primero.');
-        return;
-      }
-      if (!reclassifySubtemaId) {
-        setReclassifyError('Debes seleccionar un subtema.');
-        return;
-      }
-    }
-
-    setIsSavingReclassification(true);
-    setReclassifyError('');
-
-    const targetTema = reclassifyScope !== 'parcial' && reclassifyTemaId
-      ? allTemas.find((t) => t.id === reclassifyTemaId)
-      : null;
-
-    // Si el tema tiene un parcial asignado, asegurarse de sincronizar el parcial_key
-    const finalParcial: ParcialKey = targetTema ? (targetTema.parcial as ParcialKey) : reclassifyParcial;
-
-    const editorName = user?.nombre?.trim() || user?.username?.trim() || 'Administrador';
-    const nowIso = new Date().toISOString();
-
-    const payload = {
-      scope: reclassifyScope,
-      parcial_key: finalParcial,
-      tema_id: reclassifyScope === 'parcial' ? null : reclassifyTemaId,
-      subtema_id: reclassifyScope === 'subtema' ? reclassifySubtemaId : null,
-      updated_by_id: user?.id ?? null,
-      updated_by_name: editorName,
-      updated_at: nowIso,
-    };
-
-    let { error: updateError } = await supabase
-      .from('pruebas')
-      .update(payload)
-      .eq('id', reclassifyTarget.id);
-
-    // Fallback si aún no existen las columnas de auditoría en la BD
-    if (updateError) {
-      const basePayload = {
-        scope: reclassifyScope,
-        parcial_key: finalParcial,
-        tema_id: reclassifyScope === 'parcial' ? null : reclassifyTemaId,
-        subtema_id: reclassifyScope === 'subtema' ? reclassifySubtemaId : null,
-      };
-      const fallbackResult = await supabase
-        .from('pruebas')
-        .update(basePayload)
-        .eq('id', reclassifyTarget.id);
-      updateError = fallbackResult.error;
-    }
-
-    if (updateError) {
-      setReclassifyError('No se pudo guardar la reclasificación.');
-      setIsSavingReclassification(false);
-      return;
-    }
-
-    void logAuditEvent({
-      entityType: 'prueba',
-      actionType: 'update',
-      entityId: reclassifyTarget.id,
-      entityName: `Prueba: ${reclassifyTarget.nombre}`,
-      actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
-      details: {
-        action_detail: 'Reclasificación de prueba',
-        nuevo_scope: reclassifyScope,
-        nuevo_parcial: finalParcial,
-        tema_id: reclassifyScope === 'parcial' ? null : reclassifyTemaId,
-        subtema_id: reclassifyScope === 'subtema' ? reclassifySubtemaId : null,
-      },
-    });
-
-    // Actualizar estado local
-    const selectedSubtema = modalSubtemas.find((s) => s.id === reclassifySubtemaId);
-
-    setPruebas((prev) =>
-      prev.map((item) =>
-        item.id === reclassifyTarget.id
-          ? {
-              ...item,
-              scope: reclassifyScope,
-              parcial_key: finalParcial,
-              tema_id: payload.tema_id,
-              subtema_id: payload.subtema_id,
-              tema: targetTema ? { id: targetTema.id, nombre: targetTema.nombre } : null,
-              subtema: selectedSubtema ? { id: selectedSubtema.id, nombre: selectedSubtema.nombre } : null,
-              updated_by_id: user?.id ?? null,
-              updated_by_name: editorName,
-              updated_at: nowIso,
-            }
-          : item
-      )
-    );
-
-    setIsSavingReclassification(false);
-    setShowReclassifyModal(false);
-    setReclassifyTarget(null);
-  };
-
-  const requestDeletePrueba = (prueba: AdminPrueba) => {
-    if (updatingTestId) return;
-    setDeleteTarget(prueba);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDeletePrueba = async () => {
-    if (!deleteTarget || updatingTestId) return;
-
-    const prueba = deleteTarget;
-    setUpdatingTestId(prueba.id);
+    setAutoMigrating(true);
     setError('');
-    setShowDeleteModal(false);
-
-    const { data: referenceRows, error: referenceQueryError } = await supabase
-      .from('prueba_preguntas')
-      .select('reference_photo_url')
-      .eq('prueba_id', prueba.id);
-
-    if (referenceQueryError) {
-      setError('No se pudieron comprobar las imágenes exclusivas de la prueba. No se borró nada.');
-      setUpdatingTestId(null);
-      return;
-    }
-
-    const ownedReferenceUrls = (referenceRows ?? [])
-      .map((row) => (row as { reference_photo_url: string | null }).reference_photo_url);
-
-    const { error: deleteError } = await supabase
-      .from('pruebas')
-      .delete()
-      .eq('id', prueba.id);
-
-    if (deleteError) {
-      setError('No se pudo borrar la prueba.');
-      setUpdatingTestId(null);
-      return;
-    }
-
-    if (prueba.image_url) {
+    setMessage('');
+    try {
+      const result = await migrateSubtemaTestsToBank();
       try {
-        await deleteFromCloudinary({ imageUrl: prueba.image_url });
-      } catch (cloudinaryError) {
-        console.warn('No se pudo borrar la imagen asociada a la prueba:', cloudinaryError);
-      }
+        localStorage.setItem(SUBTEMA_MIGRATION_DONE_KEY, '1');
+      } catch {}
+      setSubtemaMigrationDismissed(true);
+      await loadAll();
+      void logAuditEvent({
+        entityType: 'prueba',
+        actionType: 'update',
+        entityId: 'public-bank-auto-migration',
+        entityName: 'Migración automática de subtemas al banco',
+        actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+        details: result as unknown as Record<string, unknown>,
+      });
+      setMessage(
+        result.migrated_questions > 0
+          ? `Migración automática completada: ${result.migrated_questions} preguntas agregadas al banco en ${result.affected_temas} temas (${result.skipped_questions} omitidas o ya migradas).`
+          : `No había preguntas nuevas de subtema por migrar (${result.skipped_questions} ya estaban en el banco).`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo completar la migración automática.');
+    } finally {
+      setAutoMigrating(false);
     }
-
-    const referenceCleanup = await deleteOwnedTestReferenceImages(ownedReferenceUrls, prueba.id);
-    if (referenceCleanup.failed.length > 0) {
-      setError(`La prueba se borró, pero no se pudieron eliminar ${referenceCleanup.failed.length} referencia(s) exclusiva(s).`);
-    }
-
-    void logAuditEvent({
-      entityType: 'prueba',
-      actionType: 'delete',
-      entityId: prueba.id,
-      entityName: `Prueba: ${prueba.nombre}`,
-      actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
-      details: {
-        scope: prueba.scope,
-        parcial_key: prueba.parcial_key,
-        tuvo_imagen_portada: Boolean(prueba.image_url),
-      },
-    });
-
-    setPruebas((prev) => prev.filter((item) => item.id !== prueba.id));
-    setDeleteTarget(null);
-    setUpdatingTestId(null);
   };
 
-  const hasAnyMatchingTest = parcialSections.some(
-    (section) => section.parcialTests.length || section.temaTests.length || section.subtemaTests.length
-  );
+  const handleTogglePublish = async (test: PublicBankTestRow) => {
+    if (busy) return;
+    const nextPublish = test.estado !== 'publicada';
+    const confirmMsg = nextPublish
+      ? `¿Publicar «${test.nombre}» en Evaluaciones? Las pruebas antiguas de subtema de este tema que ya estén migradas al banco se archivarán automáticamente para evitar duplicados.`
+      : `¿Pasar «${test.nombre}» a borrador y ocultarla al público?`;
+    if (!window.confirm(confirmMsg)) return;
 
-  // Temas filtrados por el parcial elegido en el modal
-  const temasForSelectedParcial = useMemo(() => {
-    return allTemas.filter((t) => t.parcial === reclassifyParcial);
-  }, [allTemas, reclassifyParcial]);
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const { test: updated, archived_legacy_count } = await publishPublicBankTest(test.id, nextPublish, true);
+      setTests(prev => prev.map(t => (t.id === updated.id ? updated : t)));
+      if (archived_legacy_count > 0) {
+        await loadAll();
+      }
+      void logAuditEvent({
+        entityType: 'prueba',
+        actionType: nextPublish ? 'publish' : 'unpublish',
+        entityId: updated.id,
+        entityName: `Prueba: ${updated.nombre}`,
+        actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+        details: { mode: 'bank', tema_id: updated.tema_id, archived_legacy_count },
+      });
+      setMessage(
+        nextPublish
+          ? archived_legacy_count > 0
+            ? `«${updated.nombre}» publicada. Se archivaron ${archived_legacy_count} pruebas antiguas de subtema ya migradas.`
+            : `«${updated.nombre}» publicada en Evaluaciones.`
+          : `«${updated.nombre}» pasada a borrador.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo cambiar el estado de publicación.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDeleteTest = async (test: PublicBankTestRow) => {
+    if (busy) return;
+    if (!window.confirm(`¿Eliminar permanentemente la prueba «${test.nombre}»? Las preguntas guardadas en el banco de preguntas NO se eliminarán.`)) {
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      // Si es prueba legacy, proteger imágenes de R2 que ya estén referenciadas en el banco
+      if (test.mode !== 'bank') {
+        const { data: legacyQuestions } = await supabase
+          .from('prueba_preguntas')
+          .select('reference_photo_url')
+          .eq('prueba_id', test.id);
+        const rawUrls = (legacyQuestions ?? [])
+          .map((row: { reference_photo_url?: string | null }) => row.reference_photo_url)
+          .filter((url): url is string => Boolean(url));
+        const protectedUrls = new Set(await checkPublicBankImageRefs(rawUrls));
+        const safeToDelete = rawUrls.filter(url => !protectedUrls.has(url));
+        if (safeToDelete.length > 0) {
+          await deleteOwnedTestReferenceImages(safeToDelete, test.id);
+        }
+      }
+
+      if (test.image_url) {
+        try {
+          await deleteFromCloudinary({ imageUrl: test.image_url });
+        } catch {
+          // no bloquear borrado de fila si falla limpieza de portada
+        }
+      }
+
+      const { error: deleteError } = await supabase.from('pruebas').delete().eq('id', test.id);
+      if (deleteError) throw deleteError;
+
+      setTests(prev => prev.filter(t => t.id !== test.id));
+      void logAuditEvent({
+        entityType: 'prueba',
+        actionType: 'delete',
+        entityId: test.id,
+        entityName: `Prueba: ${test.nombre}`,
+        actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+        details: { mode: test.mode ?? 'legacy', tema_id: test.tema_id },
+      });
+      setMessage(`Prueba «${test.nombre}» eliminada.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar la prueba.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (activeBankTema) {
+    return (
+      <PublicBankTopicEditor
+        tema={activeBankTema}
+        summary={bankByTema.get(activeBankTema.id)}
+        onSummaryUpdated={refreshBankSummary}
+        onClose={() => setActiveBankTema(null)}
+      />
+    );
+  }
+
+  if (configuringTest) {
+    return (
+      <PublicBankTestConfig
+        existingTest={configuringTest.test}
+        defaultTemaId={configuringTest.defaultTemaId}
+        temas={temas}
+        usedTemaIds={usedBankTemaIds}
+        bankSummaryByTema={bankByTema}
+        onSaved={(saved, msg) => {
+          setTests(prev =>
+            prev.some(t => t.id === saved.id)
+              ? prev.map(t => (t.id === saved.id ? saved : t))
+              : [saved, ...prev],
+          );
+          setConfiguringTest(null);
+          setTab('tests');
+          setMessage(msg);
+          void logAuditEvent({
+            entityType: 'prueba',
+            actionType: configuringTest.test ? 'update' : 'create',
+            entityId: saved.id,
+            entityName: `Prueba: ${saved.nombre}`,
+            actor: user ? { id: user.id, username: user.username, name: user.nombre, role: user.rol } : null,
+            details: { mode: 'bank', tema_id: saved.tema_id, bank_config: saved.bank_config },
+          });
+        }}
+        onClose={() => setConfiguringTest(null)}
+      />
+    );
+  }
 
   return (
-    <div style={s.page}>
-      <style>{`
-        .eval-admin-btn {
-          box-sizing: border-box !important;
-          min-width: 0 !important;
-          white-space: nowrap !important;
-          overflow: hidden !important;
-          text-overflow: ellipsis !important;
-          transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease !important;
-        }
-        .eval-admin-btn:hover:not(:disabled) {
-          transform: translateY(-2px) !important;
-          filter: brightness(1.05) !important;
-        }
-        .eval-admin-btn:active:not(:disabled) {
-          transform: translateY(0) !important;
-        }
-        .eval-admin-btn span {
-          overflow: hidden !important;
-          text-overflow: ellipsis !important;
-          white-space: nowrap !important;
-        }
-        @media (max-width: 680px) {
-          .evaluaciones-hero {
-            grid-template-columns: 1fr !important;
-            justify-items: center;
-            text-align: center;
-          }
-          .evaluaciones-hero-stat {
-            width: fit-content;
-            min-width: 0;
-          }
-          .evaluaciones-title {
-            white-space: normal !important;
-            word-break: break-word !important;
-          }
-          .evaluacion-admin-actions {
-            grid-template-columns: 1fr 1fr !important;
-          }
-        }
-        @keyframes testCardHighlightPulse {
-          0% {
-            box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7);
-            transform: scale(1);
-          }
-          50% {
-            box-shadow: 0 0 0 10px rgba(37, 99, 235, 0.25);
-            transform: scale(1.02);
-          }
-          100% {
-            box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
-            transform: scale(1);
-          }
-        }
-        .test-card-highlighted {
-          animation: testCardHighlightPulse 1.8s ease-in-out !important;
-          border-color: #2563eb !important;
-        }
-      `}</style>
-
-      <Header />
-
-      <main style={s.main}>
-        <BackButton onClick={handleGoBack} />
-
-        {/* Hero Banner Principal */}
-        <section className="evaluaciones-hero" style={s.hero}>
-          <div style={s.heroGlow} aria-hidden="true" />
-          <div style={s.heroIcon}>
-            <ClipboardCheck size={30} strokeWidth={2} aria-hidden="true" />
-          </div>
-
-          <div style={s.heroCopy}>
-            <p style={s.kicker}>
-              <Sparkles size={14} aria-hidden="true" /> Panel de administración
-            </p>
-            <h1 className="evaluaciones-title" style={s.title}>
-              Administración de pruebas
-            </h1>
-            <p style={s.text}>
-              Supervisa, publica, ejecuta, edita, reclasifica y organiza las evaluaciones con la misma estructura visual de la vista pública.
-            </p>
-          </div>
-
-          <div style={s.heroRightContainer}>
-            <div className="evaluaciones-hero-stat" style={s.heroStat}>
-              <strong>{pruebas.length}</strong>
-              <span>{pruebas.length === 1 ? 'prueba registrada' : 'pruebas registradas'}</span>
-              <div style={s.statBadgesRow}>
-                <span style={s.statBadgeGreen}>● {publishedCount} publicadas</span>
-                <span style={s.statBadgeAmber}>○ {draftCount} borradores</span>
-              </div>
-            </div>
-
-            <Link to="/pruebas/crear" style={s.heroCreateButton}>
-              <Plus size={18} aria-hidden="true" />
-              <span>Crear nueva prueba</span>
-            </Link>
-          </div>
-        </section>
-
-        {/* Toolbar de búsqueda y filtros rápidos */}
-        <section style={s.toolbar}>
-          <div style={s.searchWrap}>
-            <Search size={18} style={s.searchIcon} aria-hidden="true" />
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nombre, instrucciones, tema o subtema..."
-              style={s.searchInput}
-            />
-            {search && (
-              <button type="button" onClick={() => setSearch('')} style={s.clearSearchButton} title="Limpiar búsqueda">
-                <X size={15} />
-              </button>
-            )}
-          </div>
-
-          <div style={s.filterRow}>
-            {/* Filtros de estado */}
-            <div style={s.filterGroup}>
-              <span style={s.filterLabel}>Estado:</span>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('todos')}
-                style={statusFilter === 'todos' ? s.filterPillActive : s.filterPill}
-              >
-                Todas ({pruebas.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('publicada')}
-                style={statusFilter === 'publicada' ? s.filterPillActive : s.filterPill}
-              >
-                Publicadas ({publishedCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('borrador')}
-                style={statusFilter === 'borrador' ? s.filterPillActive : s.filterPill}
-              >
-                Borradores ({draftCount})
-              </button>
-            </div>
-
-            {/* Filtros de scope */}
-            <div style={s.filterGroup}>
-              <span style={s.filterLabel}>Alcance:</span>
-              <button
-                type="button"
-                onClick={() => setScopeFilter('todos')}
-                style={scopeFilter === 'todos' ? s.filterPillActive : s.filterPill}
-              >
-                Todos
-              </button>
-              <button
-                type="button"
-                onClick={() => setScopeFilter('parcial')}
-                style={scopeFilter === 'parcial' ? s.filterPillActive : s.filterPill}
-              >
-                Parcial
-              </button>
-              <button
-                type="button"
-                onClick={() => setScopeFilter('tema')}
-                style={scopeFilter === 'tema' ? s.filterPillActive : s.filterPill}
-              >
-                Tema
-              </button>
-              <button
-                type="button"
-                onClick={() => setScopeFilter('subtema')}
-                style={scopeFilter === 'subtema' ? s.filterPillActive : s.filterPill}
-              >
-                Subtema
-              </button>
-            </div>
-
-            {/* Controles rápidos de acordeones */}
-            <div style={s.accordionControls}>
-              <button
-                type="button"
-                onClick={handleExpandAll}
-                style={s.accordionCtrlBtn}
-                title="Abrir todos los acordeones"
-              >
-                <ChevronsUpDown size={14} aria-hidden="true" />
-                <span>Expandir todo</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleCollapseAll}
-                style={s.accordionCtrlBtn}
-                title="Cerrar todos los acordeones"
-              >
-                <ChevronsDownUp size={14} aria-hidden="true" />
-                <span>Colapsar todo</span>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* Contenido Principal de Parciales / Tarjetas */}
-        <section style={s.card}>
-          {isLoading ? (
-            <div style={s.statusBox}>
-              <span className="route-loading-spinner" />
-              <div style={s.statusCopy}>
-                <strong>Cargando evaluaciones...</strong>
-                <span>Estamos organizando el catálogo de pruebas para administración.</span>
-              </div>
-            </div>
-          ) : error ? (
-            <div style={{ ...s.statusBox, ...s.errorBox }}>
-              <div style={s.statusCopy}>
-                <strong>No pudimos cargar las evaluaciones</strong>
-                <span>{error}</span>
-              </div>
-            </div>
-          ) : pruebas.length === 0 ? (
-            <div style={s.emptyState}>
-              <BookOpenCheck size={36} color="#2563eb" aria-hidden="true" />
-              <p style={s.emptyTitle}>Aún no hay pruebas creadas</p>
-              <p style={s.emptyText}>Crea tu primera evaluación académica para comenzar.</p>
-              <Link to="/pruebas/crear" style={s.heroCreateButton}>
-                <Plus size={16} aria-hidden="true" /> Crear primera prueba
-              </Link>
-            </div>
-          ) : !hasAnyMatchingTest ? (
-            <div style={s.emptyState}>
-              <Filter size={32} color="#64748b" aria-hidden="true" />
-              <p style={s.emptyTitle}>No hay pruebas que coincidan con los filtros</p>
-              <p style={s.emptyText}>Prueba a cambiar el término de búsqueda o limpia los filtros.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setSearch('');
-                  setStatusFilter('todos');
-                  setScopeFilter('todos');
-                }}
-                style={s.resetFilterBtn}
-              >
-                Limpiar filtros
-              </button>
-            </div>
-          ) : (
-            <div style={s.parcialSections}>
-              {parcialSections
-                .filter((section) => section.parcialTests.length || section.temaTests.length || section.subtemaTests.length)
-                .map((section) => {
-                  const hasTests = section.parcialTests.length || section.temaTests.length || section.subtemaTests.length;
-
-                  return (
-                    <section
-                      className="evaluaciones-parcial"
-                      key={section.key}
-                      id={`evaluaciones-${section.key}`}
-                      style={s.parcialBlock}
-                    >
-                      <header style={s.parcialHeader}>
-                        <h2 style={s.parcialTitle}>{section.title}</h2>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={s.parcialCount}>
-                            {section.parcialTests.length + section.temaTests.length + section.subtemaTests.length} pruebas
-                          </span>
-                        </div>
-                      </header>
-
-                      {!hasTests ? (
-                        <div style={s.innerEmpty}>Sin pruebas coincidentes en este parcial.</div>
-                      ) : (
-                        <>
-                          {/* Contenido actual de la semana */}
-                          {(() => {
-                            const weeklyThemeGroups = getWeeklyThemeGroups(section);
-                            const hasWeeklyTests = weeklyThemeGroups.length > 0;
-
-                            if (!hasWeeklyTests) {
-                              return null;
-                            }
-
-                            return (
-                              <div className="evaluaciones-scope" style={s.scopeBlock}>
-                                <h3 style={s.scopeTitle}>
-                                  {activeExamParcial === section.key
-                                    ? `🎯 Temas del ${section.title} — Semana de Exámenes`
-                                    : weeklyThemeIds.length > 0
-                                    ? 'Contenido actual de la semana'
-                                    : 'Pruebas por parcial'}
-                                </h3>
-                                <div style={{ display: 'grid', gap: '12px' }}>
-                                  {weeklyThemeGroups.map((themeGroup) => {
-                                    const parcialItems = themeGroup.items.filter((prueba) => prueba.scope === 'parcial');
-                                    const temaItems = themeGroup.items.filter((prueba) => prueba.scope === 'tema');
-                                    const subtemaItems = themeGroup.items.filter((prueba) => prueba.scope === 'subtema');
-
-                                    const accKey = `week-${section.key}-${themeGroup.key}`;
-
-                                    return (
-                                      <details
-                                        key={`${section.key}-${themeGroup.key}`}
-                                        style={s.historyAccordion}
-                                        open={isAccordionOpen(accKey, true)}
-                                        onToggle={(e) => {
-                                          handleToggleAccordion(accKey, (e.currentTarget as HTMLDetailsElement).open);
-                                        }}
-                                      >
-                                        <summary
-                                          style={{
-                                            ...s.historySummary,
-                                            background: 'linear-gradient(135deg, rgba(248,250,252,0.96), rgba(239,246,255,0.9))',
-                                          }}
-                                        >
-                                          <span style={s.weekThemeSummary}>
-                                            <span style={s.weekThemeLabelWrap}>
-                                              <WeekThemeThumbnail themeGroup={themeGroup} />
-                                              <span style={s.weekThemeTitle}>{themeGroup.temaNombre}</span>
-                                            </span>
-                                            <span style={s.historySummaryMeta}>
-                                              <span style={s.historySummaryCount}>
-                                                {themeGroup.items.length} {themeGroup.items.length === 1 ? 'prueba' : 'pruebas'}
-                                              </span>
-                                              <span aria-hidden="true" style={s.historySummaryArrow}>
-                                                ▾
-                                              </span>
-                                            </span>
-                                          </span>
-                                        </summary>
-
-                                        <div style={s.historyAccordionBody}>
-                                          {parcialItems.length > 0 && (
-                                            <div style={s.historyGroupBlock}>
-                                              <h4 style={s.historyGroupTitle}>Parcial</h4>
-                                              <div className="evaluaciones-grid" style={s.grid}>
-                                                {parcialItems.map((prueba) => (
-                                                  <AdminTestCard
-                                                    key={`week-${section.key}-${themeGroup.key}-parcial-${prueba.id}`}
-                                                    prueba={prueba}
-                                                    badge="Parcial"
-                                                    isUpdating={updatingTestId === prueba.id}
-                                                    isHighlighted={highlightedTestId === prueba.id}
-                                                    onTogglePublication={handleTogglePublication}
-                                                    onReclassify={handleOpenReclassify}
-                                                    onRunTest={handleRunTest}
-                                                    onEditTest={handleEditTest}
-                                                    onDeleteTest={requestDeletePrueba}
-                                                  />
-                                                ))}
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {temaItems.length > 0 && (
-                                            <div style={s.historyGroupBlock}>
-                                              <h4 style={s.historyGroupTitle}>Tema</h4>
-                                              <div className="evaluaciones-grid" style={s.grid}>
-                                                {temaItems.map((prueba) => (
-                                                  <AdminTestCard
-                                                    key={`week-${section.key}-${themeGroup.key}-tema-${prueba.id}`}
-                                                    prueba={prueba}
-                                                    badge="Tema"
-                                                    badges={[prueba.tema?.nombre ?? 'Tema sin identificar']}
-                                                    isUpdating={updatingTestId === prueba.id}
-                                                    isHighlighted={highlightedTestId === prueba.id}
-                                                    onTogglePublication={handleTogglePublication}
-                                                    onReclassify={handleOpenReclassify}
-                                                    onRunTest={handleRunTest}
-                                                    onEditTest={handleEditTest}
-                                                    onDeleteTest={requestDeletePrueba}
-                                                  />
-                                                ))}
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {subtemaItems.length > 0 && (
-                                            <div style={s.historyGroupBlock}>
-                                              <h4 style={s.historyGroupTitle}>Subtema</h4>
-                                              <div className="evaluaciones-grid" style={s.grid}>
-                                                {subtemaItems.map((prueba) => (
-                                                  <AdminTestCard
-                                                    key={`week-${section.key}-${themeGroup.key}-subtema-${prueba.id}`}
-                                                    prueba={prueba}
-                                                    badge="Subtema"
-                                                    badges={[
-                                                      prueba.tema?.nombre ?? 'Tema sin identificar',
-                                                      prueba.subtema?.nombre ?? 'Subtema sin identificar',
-                                                    ]}
-                                                    isUpdating={updatingTestId === prueba.id}
-                                                    isHighlighted={highlightedTestId === prueba.id}
-                                                    onTogglePublication={handleTogglePublication}
-                                                    onReclassify={handleOpenReclassify}
-                                                    onRunTest={handleRunTest}
-                                                    onEditTest={handleEditTest}
-                                                    onDeleteTest={requestDeletePrueba}
-                                                  />
-                                                ))}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </details>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                          {/* Historial / Pruebas anteriores */}
-                          {(() => {
-                            const historicalGroups = getHistoricalParcialGroups(section);
-                            const hasHistoricalTests = historicalGroups.some((group) => group.items.length > 0);
-                            if (!hasHistoricalTests) return null;
-
-                            return (
-                              <div className="evaluaciones-scope" style={{ ...s.scopeBlock, marginTop: '10px' }}>
-                                <div style={s.historyDivider}>
-                                  <span style={s.historyDividerLabel}>Pruebas anteriores / historial</span>
-                                </div>
-
-                                <div style={{ display: 'grid', gap: '12px' }}>
-                                  {historicalGroups.map((partialGroup) => {
-                                    const groupedByTema = new Map<string, AdminPrueba[]>();
-                                    partialGroup.items.forEach((prueba) => {
-                                      const themeKey = prueba.tema_id ?? prueba.tema?.id;
-                                      if (themeKey == null) return;
-
-                                      const key = String(themeKey);
-                                      const current = groupedByTema.get(key) ?? [];
-                                      current.push(prueba);
-                                      groupedByTema.set(key, current);
-                                    });
-
-                                    const themeGroups = Array.from(groupedByTema.entries())
-                                      .map(([key, items]) => ({
-                                        key,
-                                        temaNombre: items[0]?.tema?.nombre || `Tema ${items[0]?.tema_id ?? key}`,
-                                        items: [...items].sort((a, b) => {
-                                          const scopeDelta = HISTORICAL_SCOPE_ORDER[a.scope] - HISTORICAL_SCOPE_ORDER[b.scope];
-                                          if (scopeDelta !== 0) return scopeDelta;
-                                          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-                                        }),
-                                      }))
-                                      .sort((a, b) => a.temaNombre.localeCompare(b.temaNombre, 'es'));
-
-                                    const partialAccKey = `hist-partial-${section.key}-${partialGroup.key}`;
-
-                                    return (
-                                      <details
-                                        key={`${section.key}-${partialGroup.key}`}
-                                        style={s.historyAccordion}
-                                        open={isAccordionOpen(partialAccKey, false)}
-                                        onToggle={(e) => {
-                                          handleToggleAccordion(partialAccKey, (e.currentTarget as HTMLDetailsElement).open);
-                                        }}
-                                      >
-                                        <summary
-                                          style={{
-                                            ...s.historySummary,
-                                            background: 'linear-gradient(135deg, rgba(248,250,252,0.96), rgba(239,246,255,0.9))',
-                                          }}
-                                        >
-                                          <span style={s.historySummaryLabel}>{partialGroup.title}</span>
-                                          <span style={s.historySummaryMeta}>
-                                            <span style={s.historySummaryCount}>
-                                              {partialGroup.items.length} {partialGroup.items.length === 1 ? 'prueba' : 'pruebas'}
-                                            </span>
-                                            <span aria-hidden="true" style={s.historySummaryArrow}>
-                                              ▾
-                                            </span>
-                                          </span>
-                                        </summary>
-
-                                        <div style={s.historyAccordionBody}>
-                                          {partialGroup.items.filter((prueba) => prueba.scope === 'parcial').length > 0 && (
-                                            <div style={s.historyGroupBlock}>
-                                              <h4 style={s.historyGroupTitle}>Parcial</h4>
-                                              <div className="evaluaciones-grid" style={s.grid}>
-                                                {partialGroup.items
-                                                  .filter((prueba) => prueba.scope === 'parcial')
-                                                  .map((prueba) => (
-                                                    <AdminTestCard
-                                                      key={`history-${section.key}-${partialGroup.key}-${prueba.id}`}
-                                                      prueba={prueba}
-                                                      badge="Parcial"
-                                                      isUpdating={updatingTestId === prueba.id}
-                                                      isHighlighted={highlightedTestId === prueba.id}
-                                                      onTogglePublication={handleTogglePublication}
-                                                      onReclassify={handleOpenReclassify}
-                                                      onRunTest={handleRunTest}
-                                                      onEditTest={handleEditTest}
-                                                      onDeleteTest={requestDeletePrueba}
-                                                    />
-                                                  ))}
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {themeGroups.length > 0 && (
-                                            <div style={s.historyGroupBlock}>
-                                              <h4 style={s.historyGroupTitle}>Temas</h4>
-                                              <div style={{ display: 'grid', gap: '12px' }}>
-                                                {themeGroups.map((themeGroup) => {
-                                                  const partialThemeItems = themeGroup.items.filter((prueba) => prueba.scope === 'parcial');
-                                                  const temaItems = themeGroup.items.filter((prueba) => prueba.scope === 'tema');
-                                                  const subtemaItems = themeGroup.items.filter((prueba) => prueba.scope === 'subtema');
-                                                  const themeAccKey = `hist-theme-${section.key}-${partialGroup.key}-${themeGroup.key}`;
-
-                                                  return (
-                                                    <details
-                                                      key={`${section.key}-${partialGroup.key}-${themeGroup.key}`}
-                                                      style={{ ...s.historyAccordion, borderRadius: '14px' }}
-                                                      open={isAccordionOpen(themeAccKey, false)}
-                                                      onToggle={(e) => {
-                                                        handleToggleAccordion(themeAccKey, (e.currentTarget as HTMLDetailsElement).open);
-                                                      }}
-                                                    >
-                                                      <summary
-                                                        style={{
-                                                          ...s.historySummary,
-                                                          padding: '12px 14px',
-                                                          fontSize: '0.92rem',
-                                                          background:
-                                                            'linear-gradient(135deg, rgba(248,250,252,0.9), rgba(224,242,254,0.8))',
-                                                        }}
-                                                      >
-                                                        <span style={s.historySummaryLabel}>{themeGroup.temaNombre}</span>
-                                                        <span style={s.historySummaryMeta}>
-                                                          <span style={s.historySummaryCount}>
-                                                            {themeGroup.items.length} {themeGroup.items.length === 1 ? 'prueba' : 'pruebas'}
-                                                          </span>
-                                                          <span aria-hidden="true" style={s.historySummaryArrow}>
-                                                            ▾
-                                                          </span>
-                                                        </span>
-                                                      </summary>
-
-                                                      <div style={{ ...s.historyAccordionBody, padding: '0 14px 14px' }}>
-                                                        {partialThemeItems.length > 0 && (
-                                                          <div style={s.historyGroupBlock}>
-                                                            <h5 style={{ ...s.historyGroupTitle, fontSize: '0.68rem' }}>Parcial</h5>
-                                                            <div className="evaluaciones-grid" style={s.grid}>
-                                                              {partialThemeItems.map((prueba) => (
-                                                                <AdminTestCard
-                                                                  key={`history-theme-partial-${section.key}-${prueba.id}`}
-                                                                  prueba={prueba}
-                                                                  badge="Parcial"
-                                                                  isUpdating={updatingTestId === prueba.id}
-                                                                  isHighlighted={highlightedTestId === prueba.id}
-                                                                  onTogglePublication={handleTogglePublication}
-                                                                  onReclassify={handleOpenReclassify}
-                                                                  onRunTest={handleRunTest}
-                                                                  onEditTest={handleEditTest}
-                                                                  onDeleteTest={requestDeletePrueba}
-                                                                />
-                                                              ))}
-                                                            </div>
-                                                          </div>
-                                                        )}
-
-                                                        {temaItems.length > 0 && (
-                                                          <div style={s.historyGroupBlock}>
-                                                            <h5 style={{ ...s.historyGroupTitle, fontSize: '0.68rem' }}>Tema</h5>
-                                                            <div className="evaluaciones-grid" style={s.grid}>
-                                                              {temaItems.map((prueba) => (
-                                                                <AdminTestCard
-                                                                  key={`history-theme-tema-${section.key}-${prueba.id}`}
-                                                                  prueba={prueba}
-                                                                  badge="Tema"
-                                                                  badges={[prueba.tema?.nombre ?? 'Tema sin identificar']}
-                                                                  isUpdating={updatingTestId === prueba.id}
-                                                                  isHighlighted={highlightedTestId === prueba.id}
-                                                                  onTogglePublication={handleTogglePublication}
-                                                                  onReclassify={handleOpenReclassify}
-                                                                  onRunTest={handleRunTest}
-                                                                  onEditTest={handleEditTest}
-                                                                  onDeleteTest={requestDeletePrueba}
-                                                                />
-                                                              ))}
-                                                            </div>
-                                                          </div>
-                                                        )}
-
-                                                        {subtemaItems.length > 0 && (
-                                                          <div style={s.historyGroupBlock}>
-                                                            <h5 style={{ ...s.historyGroupTitle, fontSize: '0.68rem' }}>Subtema</h5>
-                                                            <div className="evaluaciones-grid" style={s.grid}>
-                                                              {subtemaItems.map((prueba) => (
-                                                                <AdminTestCard
-                                                                  key={`history-theme-subtema-${section.key}-${prueba.id}`}
-                                                                  prueba={prueba}
-                                                                  badge="Subtema"
-                                                                  badges={[
-                                                                    prueba.tema?.nombre ?? 'Tema sin identificar',
-                                                                    prueba.subtema?.nombre ?? 'Subtema sin identificar',
-                                                                  ]}
-                                                                  isUpdating={updatingTestId === prueba.id}
-                                                                  isHighlighted={highlightedTestId === prueba.id}
-                                                                  onTogglePublication={handleTogglePublication}
-                                                                  onReclassify={handleOpenReclassify}
-                                                                  onRunTest={handleRunTest}
-                                                                  onEditTest={handleEditTest}
-                                                                  onDeleteTest={requestDeletePrueba}
-                                                                />
-                                                              ))}
-                                                            </div>
-                                                          </div>
-                                                        )}
-                                                      </div>
-                                                    </details>
-                                                  );
-                                                })}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </details>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </>
-                      )}
-                    </section>
-                  );
-                })}
-            </div>
+    <div className="instructor-page instructor-editor-scope public-bank-scope">
+      <Header onBeforeNavigate={proceed => { if (!busy && !autoMigrating) proceed(); }} />
+      <main className="instructor-main">
+        <div className="instructor-row instructor-between" style={{ marginBottom: 14 }}>
+          <button
+            type="button"
+            className="instructor-btn instructor-btn-ghost"
+            disabled={busy || autoMigrating}
+            onClick={handleGoBack}
+          >
+            <ArrowLeft size={16} aria-hidden="true" />
+            Panel de edición
+          </button>
+          {user?.rol === 'Administrador' && (
+            <button
+              type="button"
+              className="instructor-btn"
+              onClick={() => navigate('/historial?entity=prueba')}
+            >
+              <Shield size={15} aria-hidden="true" />
+              Auditoría de pruebas
+            </button>
           )}
+        </div>
 
-          {/* Botón inferior para crear nueva prueba */}
-          <div style={s.footerActions}>
-            <Link to="/pruebas/crear" style={s.secondaryCreateButton}>
-              <Plus size={16} aria-hidden="true" />
-              <span>Crear nueva prueba</span>
-            </Link>
+        <section className="instructor-module-hero" aria-labelledby="gestion-pruebas-title">
+          <span className="instructor-module-icon"><ClipboardCheck size={26} aria-hidden="true" /></span>
+          <div>
+            <p className="instructor-eyebrow">Evaluaciones públicas · Banco en vivo</p>
+            <h1 id="gestion-pruebas-title">Gestión de pruebas y banco de preguntas</h1>
+            <p className="instructor-muted">
+              Administra preguntas generales por tema y específicas por subtema. Configura una única prueba por tema con selección aleatoria en vivo y calificación inmediata.
+            </p>
           </div>
         </section>
-      </main>
 
-      {/* Modal de Reclasificación de Prueba */}
-      {showReclassifyModal && reclassifyTarget && (
-        <div
-          style={s.modalOverlay}
-          onClick={() => {
-            if (isSavingReclassification) return;
-            setShowReclassifyModal(false);
-            setReclassifyTarget(null);
-          }}
-        >
-          <div style={s.reclassifyModal} onClick={(e) => e.stopPropagation()}>
-            <div style={s.modalHeader}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-                <div>
-                  <p style={s.reclassifyKicker}>Reclasificación de evaluación</p>
-                  <h3 style={s.modalTitle}>Cambiar categoría o ubicación</h3>
-                </div>
+        <div className="instructor-overview" aria-label="Resumen del banco público">
+          <div>
+            <span>Preguntas en banco</span>
+            <strong>{loading ? '—' : totalBankQuestions}</strong>
+          </div>
+          <div>
+            <span>Generales / Subtemas</span>
+            <strong>{loading ? '—' : `${totalGeneralQuestions} / ${totalSubtemaQuestions}`}</strong>
+          </div>
+          <div>
+            <span>Pruebas por tema (publicadas)</span>
+            <strong>
+              {loading ? '—' : `${bankTests.length} (${bankTests.filter(t => t.estado === 'publicada').length})`}
+            </strong>
+          </div>
+        </div>
+
+        {error && <p role="alert" className="instructor-error">{error}</p>}
+        {bankWarning && <p role="alert" className="instructor-error">{bankWarning}</p>}
+        {message && <p role="status" className="instructor-success">{message}</p>}
+
+        {/* Banner de migración 100% automática para pruebas antiguas de subtema */}
+        {showAutoMigrationBanner && (
+          <section className="public-bank-auto-banner" aria-label="Migración automática de pruebas de subtema">
+            <div>
+              <h3>
+                Migración automática disponible (
+                {pendingSubtemaMigration
+                  ? `${pendingSubtemaMigration.pending_questions} ${pendingSubtemaMigration.pending_questions === 1 ? 'pregunta' : 'preguntas'} en ${pendingSubtemaMigration.pending_tests} ${pendingSubtemaMigration.pending_tests === 1 ? 'prueba' : 'pruebas'}`
+                  : `${legacySubtemaTests.length} pruebas antiguas de subtema`}
+                )
+              </h3>
+              <p>
+                Suma automáticamente las preguntas pendientes de las pruebas de subtema a su subtema correspondiente en el banco (idempotente: nunca duplica preguntas ya migradas).
+              </p>
+            </div>
+            <button
+              type="button"
+              className="instructor-btn instructor-btn-primary"
+              disabled={autoMigrating || busy}
+              onClick={() => void handleAutoMigrateSubtemas()}
+            >
+              {autoMigrating
+                ? <LoaderCircle size={16} className="instructor-spin" aria-hidden="true" />
+                : <Sparkles size={16} aria-hidden="true" />}
+              {autoMigrating ? 'Migrando preguntas…' : 'Migrar subtemas automáticamente'}
+            </button>
+          </section>
+        )}
+
+        {migratingTest ? (
+          <PublicLegacyMigrator
+            initialTest={migratingTest}
+            temas={temas}
+            onMigrated={loadAll}
+            onClose={() => setMigratingTest(null)}
+          />
+        ) : (
+          <>
+            <div className="instructor-mode-tabs" role="tablist" aria-label="Secciones de gestión de pruebas">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'bank'}
+                className="instructor-btn"
+                onClick={() => setTab('bank')}
+              >
+                <BookOpen size={16} aria-hidden="true" />
+                Banco de preguntas
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'tests'}
+                className="instructor-btn"
+                onClick={() => setTab('tests')}
+              >
+                <Settings2 size={16} aria-hidden="true" />
+                Pruebas por tema ({bankTests.length})
+              </button>
+              {legacyMigrationTests.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setShowReclassifyModal(false)}
-                  style={s.modalCloseBtn}
-                  disabled={isSavingReclassification}
+                  role="tab"
+                  aria-selected={tab === 'migrate'}
+                  className="instructor-btn"
+                  onClick={() => setTab('migrate')}
                 >
-                  <X size={18} />
+                  <ArrowRightLeft size={16} aria-hidden="true" />
+                  Migrar tema/parcial ({legacyMigrationTests.length})
                 </button>
-              </div>
-              <div style={s.modalTargetBadge}>
-                <BookOpenCheck size={14} color="#1d4ed8" />
-                <span style={s.modalTargetName}>{toPlainText(reclassifyTarget.nombre) || 'Prueba seleccionada'}</span>
-              </div>
+              )}
             </div>
 
-            <div style={s.reclassifyBody}>
-              {/* 1. Selector de Alcance (Scope) */}
-              <div style={s.fieldBlock}>
-                <label style={s.fieldLabel}>
-                  <Layers size={14} color="#2563eb" /> Tipo de alcance:
-                </label>
-                <div style={s.scopeCardsRow}>
+            {tab === 'bank' && (
+              <section className="instructor-panel" aria-label="Banco de preguntas por tema">
+                <div className="instructor-row instructor-between instructor-list-heading">
+                  <div>
+                    <h2>Banco de preguntas por tema</h2>
+                    <p className="instructor-muted">
+                      Entra a cualquier tema para gestionar sus preguntas generales y las preguntas específicas de cada subtema.
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setReclassifyScope('parcial');
-                      setReclassifyTemaId(null);
-                      setReclassifySubtemaId(null);
-                    }}
-                    style={reclassifyScope === 'parcial' ? s.scopeOptionActive : s.scopeOption}
+                    className="instructor-btn instructor-btn-ghost"
+                    disabled={busy || loading}
+                    onClick={() => setReload(n => n + 1)}
                   >
-                    <span style={s.scopeOptionTitle}>🎓 Por Parcial</span>
-                    <span style={s.scopeOptionDesc}>Abarca todo el parcial</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReclassifyScope('tema');
-                      setReclassifySubtemaId(null);
-                    }}
-                    style={reclassifyScope === 'tema' ? s.scopeOptionActive : s.scopeOption}
-                  >
-                    <span style={s.scopeOptionTitle}>📖 Por Tema</span>
-                    <span style={s.scopeOptionDesc}>Específica de un tema</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setReclassifyScope('subtema')}
-                    style={reclassifyScope === 'subtema' ? s.scopeOptionActive : s.scopeOption}
-                  >
-                    <span style={s.scopeOptionTitle}>🔬 Por Subtema</span>
-                    <span style={s.scopeOptionDesc}>Específica de un subtema</span>
+                    <RefreshCw size={16} aria-hidden="true" />
+                    Actualizar
                   </button>
                 </div>
-              </div>
 
-              {/* 2. Selector de Parcial */}
-              <div style={s.fieldBlock}>
-                <label style={s.fieldLabel}>Parcial correspondiente:</label>
-                <div style={s.parcialSelectionRow}>
-                  {PARCIALES.map((p) => {
-                    const isSelected = reclassifyParcial === p.key;
-                    return (
+                {!loading && temas.length > 0 && (
+                  <div className="instructor-bank-toolbar" role="search" aria-label="Filtrar temas del banco">
+                    <div className="instructor-bank-search">
+                      <Search size={16} aria-hidden="true" />
+                      <input
+                        type="search"
+                        className="instructor-input"
+                        aria-label="Buscar tema en el banco"
+                        placeholder="Buscar tema por nombre…"
+                        value={topicQuery}
+                        onChange={event => setTopicQuery(event.target.value)}
+                      />
+                      {topicQuery && (
+                        <button
+                          type="button"
+                          className="instructor-bank-clear"
+                          aria-label="Limpiar búsqueda"
+                          onClick={() => setTopicQuery('')}
+                        >
+                          <X size={14} aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="instructor-bank-filters" role="group" aria-label="Filtrar por estado">
                       <button
-                        key={p.key}
                         type="button"
-                        onClick={() => {
-                          setReclassifyParcial(p.key);
-                          setReclassifyTemaId(null);
-                          setReclassifySubtemaId(null);
-                        }}
-                        style={isSelected ? s.parcialPillActive : s.parcialPill}
+                        className="instructor-filter-chip"
+                        aria-pressed={topicFilter === 'all'}
+                        onClick={() => setTopicFilter('all')}
                       >
-                        {isSelected && <Check size={13} style={{ marginRight: '4px' }} />}
-                        {p.title}
+                        Todos ({temas.length})
                       </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 3. Selector de Tema (si scope es tema o subtema) */}
-              {(reclassifyScope === 'tema' || reclassifyScope === 'subtema') && (
-                <div style={s.fieldBlock}>
-                  <label style={s.fieldLabel}>Tema del {reclassifyParcial} parcial:</label>
-                  {temasForSelectedParcial.length === 0 ? (
-                    <div style={s.warningBox}>
-                      No hay temas registrados en el {reclassifyParcial} parcial.
+                      <button
+                        type="button"
+                        className="instructor-filter-chip"
+                        aria-pressed={topicFilter === 'filled'}
+                        onClick={() => setTopicFilter('filled')}
+                      >
+                        Con preguntas ({temas.filter(t => (bankByTema.get(t.id)?.total_count ?? 0) > 0).length})
+                      </button>
+                      <button
+                        type="button"
+                        className="instructor-filter-chip"
+                        aria-pressed={topicFilter === 'empty'}
+                        onClick={() => setTopicFilter('empty')}
+                      >
+                        Sin preguntas ({temas.filter(t => (bankByTema.get(t.id)?.total_count ?? 0) === 0).length})
+                      </button>
                     </div>
-                  ) : (
-                    <select
-                      value={reclassifyTemaId ?? ''}
-                      onChange={(e) => {
-                        const val = e.target.value ? Number(e.target.value) : null;
-                        setReclassifyTemaId(val);
-                        setReclassifySubtemaId(null);
-                      }}
-                      style={s.selectInput}
+                  </div>
+                )}
+
+                {loading ? (
+                  <p role="status" className="instructor-list-loading">
+                    <LoaderCircle size={20} className="instructor-spin" aria-hidden="true" />
+                    Cargando temas y banco…
+                  </p>
+                ) : groupedTemas.length === 0 ? (
+                  <div className="instructor-list-empty">
+                    <span className="instructor-empty-icon"><FolderOpen size={26} aria-hidden="true" /></span>
+                    <h3>No se encontraron temas con este filtro.</h3>
+                    <button
+                      type="button"
+                      className="instructor-btn"
+                      style={{ marginTop: 12 }}
+                      onClick={() => { setTopicQuery(''); setTopicFilter('all'); }}
                     >
-                      <option value="">-- Selecciona un tema --</option>
-                      {temasForSelectedParcial.map((tema) => (
-                        <option key={tema.id} value={tema.id}>
-                          {tema.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              )}
+                      Mostrar todos los temas
+                    </button>
+                  </div>
+                ) : (
+                  <div className="instructor-bank-parciales">
+                    {groupedTemas.map((group, groupIndex) => {
+                      const groupTotal = group.temas.reduce((sum, t) => sum + (bankByTema.get(t.id)?.total_count ?? 0), 0);
+                      return (
+                        <section key={group.parcial} className="instructor-bank-parcial-group" aria-label={group.label}>
+                          <header className="instructor-bank-parcial-header">
+                            <div className="instructor-bank-parcial-title">
+                              <span className="instructor-bank-parcial-num" aria-hidden="true">
+                                {String(groupIndex + 1).padStart(2, '0')}
+                              </span>
+                              <h3>{group.label}</h3>
+                            </div>
+                            <span className="instructor-bank-parcial-meta">
+                              <strong>{groupTotal}</strong> {groupTotal === 1 ? 'pregunta' : 'preguntas'} en banco
+                            </span>
+                          </header>
 
-              {/* 4. Selector de Subtema (si scope es subtema) */}
-              {reclassifyScope === 'subtema' && (
-                <div style={s.fieldBlock}>
-                  <label style={s.fieldLabel}>Subtema correspondiente:</label>
-                  {!reclassifyTemaId ? (
-                    <div style={s.hintBox}>
-                      Selecciona un tema arriba para ver sus subtemas disponibles.
+                          <ul className="instructor-bank-topic-list">
+                            {group.temas.map((tema, idx) => {
+                              const stats = bankByTema.get(tema.id);
+                              const total = stats?.total_count ?? 0;
+                              const gen = stats?.general_count ?? 0;
+                              const sub = stats?.subtema_total_count ?? 0;
+                              const hasLogo = Boolean(tema.logo_url) && !failedLogos[tema.id];
+                              const orderNum = String(idx + 1).padStart(2, '0');
+                              return (
+                                <li key={tema.id} className="instructor-bank-topic-card" data-filled={total > 0 ? 'true' : 'false'}>
+                                  <div className="instructor-bank-topic-head">
+                                    <div className="instructor-bank-topic-thumb" aria-hidden="true">
+                                      {hasLogo ? (
+                                        <img
+                                          src={getCloudinaryImageUrl(tema.logo_url!, 'thumb')}
+                                          alt=""
+                                          loading="lazy"
+                                          onError={() => setFailedLogos(prev => ({ ...prev, [tema.id]: true }))}
+                                        />
+                                      ) : (
+                                        <span>{orderNum}</span>
+                                      )}
+                                    </div>
+                                    <div className="instructor-bank-topic-info">
+                                      <span className="instructor-bank-topic-order">Tema {orderNum}</span>
+                                      <h4>{tema.nombre}</h4>
+                                    </div>
+                                  </div>
+                                  <div className="instructor-bank-topic-foot">
+                                    <span className={`instructor-bank-count${total > 0 ? ' is-filled' : ''}`}>
+                                      {total === 0
+                                        ? 'Sin preguntas'
+                                        : `${gen} generales · ${sub} en subtemas`}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="instructor-btn instructor-bank-open-btn"
+                                      disabled={busy}
+                                      aria-label={`Abrir banco de ${tema.nombre}`}
+                                      onClick={() => setActiveBankTema(tema)}
+                                    >
+                                      {total > 0 ? 'Editar' : 'Agregar'}
+                                      <ArrowRight size={15} aria-hidden="true" />
+                                    </button>
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </section>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {tab === 'tests' && (
+              <section className="instructor-panel" aria-label="Pruebas configuradas por tema">
+                <div className="instructor-row instructor-between instructor-list-heading">
+                  <div>
+                    <h2>Pruebas por tema (1 por tema)</h2>
+                    <p className="instructor-muted">
+                      Temas ordenados por parcial y orden del programa. Configura, prueba o publica la evaluación de cada tema.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="instructor-btn instructor-btn-ghost"
+                    disabled={busy || loading}
+                    onClick={() => setReload(n => n + 1)}
+                  >
+                    <RefreshCw size={16} aria-hidden="true" />
+                    Actualizar
+                  </button>
+                </div>
+
+                {!loading && temas.length > 0 && (
+                  <div className="instructor-bank-toolbar" role="search" aria-label="Filtrar pruebas por tema">
+                    <div className="instructor-bank-search">
+                      <Search size={16} aria-hidden="true" />
+                      <input
+                        type="search"
+                        className="instructor-input"
+                        aria-label="Buscar tema o prueba"
+                        placeholder="Buscar tema o prueba…"
+                        value={testTopicQuery}
+                        onChange={event => setTestTopicQuery(event.target.value)}
+                      />
+                      {testTopicQuery && (
+                        <button
+                          type="button"
+                          className="instructor-bank-clear"
+                          aria-label="Limpiar búsqueda"
+                          onClick={() => setTestTopicQuery('')}
+                        >
+                          <X size={14} aria-hidden="true" />
+                        </button>
+                      )}
                     </div>
-                  ) : isLoadingSubtemas ? (
-                    <div style={s.hintBox}>Cargando subtemas...</div>
-                  ) : modalSubtemas.length === 0 ? (
-                    <div style={s.warningBox}>
-                      El tema seleccionado no tiene subtemas creados.
+                    <div className="instructor-bank-filters" role="group" aria-label="Filtrar por estado de configuración">
+                      <button
+                        type="button"
+                        className="instructor-filter-chip"
+                        aria-pressed={testTopicFilter === 'all'}
+                        onClick={() => setTestTopicFilter('all')}
+                      >
+                        Todos ({temas.length})
+                      </button>
+                      <button
+                        type="button"
+                        className="instructor-filter-chip"
+                        aria-pressed={testTopicFilter === 'configured'}
+                        onClick={() => setTestTopicFilter('configured')}
+                      >
+                        Configuradas ({bankTests.length})
+                      </button>
+                      <button
+                        type="button"
+                        className="instructor-filter-chip"
+                        aria-pressed={testTopicFilter === 'unconfigured'}
+                        onClick={() => setTestTopicFilter('unconfigured')}
+                      >
+                        Sin prueba ({Math.max(0, temas.length - bankTests.length)})
+                      </button>
                     </div>
-                  ) : (
-                    <select
-                      value={reclassifySubtemaId ?? ''}
-                      onChange={(e) => {
-                        const val = e.target.value ? Number(e.target.value) : null;
-                        setReclassifySubtemaId(val);
-                      }}
-                      style={s.selectInput}
+                  </div>
+                )}
+
+                {loading ? (
+                  <p role="status" className="instructor-list-loading">
+                    <LoaderCircle size={20} className="instructor-spin" aria-hidden="true" />
+                    Cargando temas y pruebas…
+                  </p>
+                ) : groupedTestTemas.length === 0 ? (
+                  <div className="instructor-list-empty">
+                    <span className="instructor-empty-icon"><FolderOpen size={26} aria-hidden="true" /></span>
+                    <h3>No se encontraron temas con este filtro.</h3>
+                    <button
+                      type="button"
+                      className="instructor-btn"
+                      style={{ marginTop: 12 }}
+                      onClick={() => { setTestTopicQuery(''); setTestTopicFilter('all'); }}
                     >
-                      <option value="">-- Selecciona un subtema --</option>
-                      {modalSubtemas.map((subtema) => (
-                        <option key={subtema.id} value={subtema.id}>
-                          {subtema.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                      Mostrar todos los temas
+                    </button>
+                  </div>
+                ) : (
+                  <div className="instructor-bank-parciales">
+                    {groupedTestTemas.map((group, groupIndex) => {
+                      const configuredInGroup = group.temas.filter(t => bankTestByTemaId.has(t.id)).length;
+                      const publishedInGroup = group.temas.filter(t => bankTestByTemaId.get(t.id)?.estado === 'publicada').length;
+                      return (
+                        <section key={group.parcial} className="instructor-bank-parcial-group" aria-label={group.label}>
+                          <header className="instructor-bank-parcial-header">
+                            <div className="instructor-bank-parcial-title">
+                              <span className="instructor-bank-parcial-num" aria-hidden="true">
+                                {String(groupIndex + 1).padStart(2, '0')}
+                              </span>
+                              <h3>{group.label}</h3>
+                            </div>
+                            <span className="instructor-bank-parcial-meta">
+                              <strong>{configuredInGroup}</strong> de {group.temas.length} configuradas · {publishedInGroup}{' '}
+                              {publishedInGroup === 1 ? 'publicada' : 'publicadas'}
+                            </span>
+                          </header>
+
+                          <ul className="instructor-bank-topic-list">
+                            {group.temas.map((tema, idx) => {
+                              const test = bankTestByTemaId.get(tema.id) ?? null;
+                              const summary = bankByTema.get(tema.id);
+                              const bankTotal = summary?.total_count ?? 0;
+                              const thumbUrl = test?.image_url || tema.logo_url;
+                              const hasLogo = Boolean(thumbUrl) && !failedLogos[tema.id];
+                              const orderNum = String(idx + 1).padStart(2, '0');
+                              const isPublished = test?.estado === 'publicada';
+                              const counts = test ? calculateExpectedBankTestCount(test.bank_config, summary) : null;
+
+                              return (
+                                <li
+                                  key={tema.id}
+                                  className="instructor-bank-topic-card pb-test-topic-card"
+                                  data-filled={test ? 'true' : 'false'}
+                                >
+                                  <div className="instructor-bank-topic-head">
+                                    <div className="instructor-bank-topic-thumb" aria-hidden="true">
+                                      {hasLogo ? (
+                                        <img
+                                          src={getCloudinaryImageUrl(thumbUrl!, 'thumb')}
+                                          alt=""
+                                          loading="lazy"
+                                          onError={() => setFailedLogos(prev => ({ ...prev, [tema.id]: true }))}
+                                        />
+                                      ) : (
+                                        <span>{orderNum}</span>
+                                      )}
+                                    </div>
+                                    <div className="instructor-bank-topic-info">
+                                      <div className="pb-test-topic-eyebrow-row">
+                                        <span className="instructor-bank-topic-order">Tema {orderNum}</span>
+                                        {test && (
+                                          <span className={`public-bank-status-pill ${isPublished ? 'is-published' : 'is-draft'}`}>
+                                            {isPublished ? '● Publicada' : '○ Borrador'}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <h4>{tema.nombre}</h4>
+                                    </div>
+                                  </div>
+
+                                  {test ? (
+                                    <div className="pb-test-topic-footer">
+                                      <span className="instructor-bank-count is-filled">
+                                        {counts?.available ?? 0} de {counts?.configured ?? 0} preguntas hoy · {test.bank_config?.general_count ?? 0} gen
+                                      </span>
+                                      <div className="pb-test-topic-actions">
+                                        <button
+                                          type="button"
+                                          className={isPublished ? 'instructor-btn pb-mini-btn' : 'instructor-btn instructor-btn-publish pb-mini-btn'}
+                                          disabled={busy}
+                                          title={isPublished ? 'Pasar a borrador' : 'Publicar prueba'}
+                                          onClick={() => void handleTogglePublish(test)}
+                                        >
+                                          {isPublished ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
+                                          <span>{isPublished ? 'Borrador' : 'Publicar'}</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="instructor-btn pb-mini-btn"
+                                          disabled={busy}
+                                          title="Probar sorteo aleatorio"
+                                          onClick={() => navigate(`/pruebas/ejecutar/${test.id}`, { state: { from: '/pruebas?tab=tests' } })}
+                                        >
+                                          <Play size={14} aria-hidden="true" />
+                                          <span>Probar</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="instructor-btn pb-mini-btn"
+                                          disabled={busy}
+                                          title={`Configurar prueba de ${tema.nombre}`}
+                                          onClick={() => setConfiguringTest({ test })}
+                                        >
+                                          <Pencil size={14} aria-hidden="true" />
+                                          <span>Configurar</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="instructor-btn instructor-btn-danger pb-mini-btn pb-mini-icon"
+                                          disabled={busy}
+                                          aria-label={`Eliminar prueba de ${tema.nombre}`}
+                                          onClick={() => void handleDeleteTest(test)}
+                                        >
+                                          <Trash2 size={14} aria-hidden="true" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="instructor-bank-topic-foot">
+                                      <span className="instructor-bank-count">
+                                        {bankTotal > 0 ? `Sin prueba · ${bankTotal} en banco` : 'Sin prueba · Banco vacío'}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="instructor-btn instructor-bank-open-btn"
+                                        disabled={busy}
+                                        aria-label={`Configurar prueba de ${tema.nombre}`}
+                                        onClick={() => setConfiguringTest({ test: null, defaultTemaId: tema.id })}
+                                      >
+                                        <Plus size={15} aria-hidden="true" />
+                                        Configurar
+                                      </button>
+                                    </div>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </section>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {tab === 'migrate' && (
+              <section className="instructor-panel" aria-label="Pruebas antiguas de tema o parcial pendientes de migrar">
+                <div className="instructor-list-heading">
+                  <h2>Migrar pruebas antiguas de tema o parcial</h2>
+                  <p className="instructor-muted">
+                    Estas pruebas antiguas no estaban ligadas a un subtema único. Revisa cada pregunta y decide si va a Generales del tema o a un Subtema específico.
+                  </p>
                 </div>
-              )}
 
-              {reclassifyError && <p style={s.modalErrorText}>{reclassifyError}</p>}
-            </div>
-
-            <div style={s.deleteModalActions}>
-              <button
-                type="button"
-                onClick={() => setShowReclassifyModal(false)}
-                style={s.deleteModalCancelButton}
-                disabled={isSavingReclassification}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSaveReclassification()}
-                style={s.saveReclassifyButton}
-                disabled={isSavingReclassification}
-              >
-                {isSavingReclassification ? 'Guardando...' : 'Guardar reclasificación'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de confirmación para eliminar prueba */}
-      {showDeleteModal && deleteTarget && (
-        <div
-          style={s.modalOverlay}
-          onClick={() => {
-            if (updatingTestId) return;
-            setShowDeleteModal(false);
-            setDeleteTarget(null);
-          }}
-        >
-          <div style={s.deleteModal} onClick={(event) => event.stopPropagation()}>
-            <div style={s.deleteModalHeader}>
-              <p style={s.deleteModalKicker}>Confirmar eliminación</p>
-              <h3 style={s.deleteModalTitle}>Borrar prueba</h3>
-            </div>
-
-            <p style={s.deleteModalText}>
-              Esta acción eliminará permanentemente <strong>{toPlainText(deleteTarget.nombre) || 'esta prueba'}</strong>,
-              sus preguntas, la imagen asociada y todas las referencias exclusivas que se hayan subido.
-              <br />
-              <span style={{ color: '#dc2626', fontWeight: 700, marginTop: '6px', display: 'inline-block' }}>
-                Esta acción no se puede deshacer.
-              </span>
-            </p>
-
-            <div style={s.deleteModalActions}>
-              <button
-                type="button"
-                onClick={() => {
-                  if (updatingTestId) return;
-                  setShowDeleteModal(false);
-                  setDeleteTarget(null);
-                }}
-                style={s.deleteModalCancelButton}
-                disabled={Boolean(updatingTestId)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void confirmDeletePrueba();
-                }}
-                style={s.deleteModalDangerButton}
-                disabled={Boolean(updatingTestId)}
-              >
-                {updatingTestId ? 'Borrando...' : 'Sí, borrar prueba'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+                {legacyMigrationTests.length === 0 ? (
+                  <div className="instructor-list-empty">
+                    <span className="instructor-empty-icon"><Check size={24} aria-hidden="true" /></span>
+                    <h3>No quedan pruebas de tema o parcial pendientes</h3>
+                    <p>Todas las preguntas fueron migradas al banco.</p>
+                  </div>
+                ) : (
+                  <ul className="instructor-test-list">
+                    {legacyMigrationTests.map(item => (
+                      <li key={item.id} className="instructor-test-item">
+                        <div className="instructor-test-info">
+                          <span className="instructor-summary-name">{item.nombre}</span>
+                          <p className="instructor-muted">
+                            Alcance: <strong>{item.scope}</strong> · {PARCIAL_LABELS[item.parcial_key] ?? item.parcial_key} ·{' '}
+                            {item.questions.length} {item.questions.length === 1 ? 'pregunta pendiente' : 'preguntas pendientes'}
+                          </p>
+                        </div>
+                        <div className="instructor-test-actions">
+                          <button
+                            type="button"
+                            className="instructor-btn instructor-btn-primary"
+                            onClick={() => setMigratingTest(item)}
+                          >
+                            <ArrowRightLeft size={15} aria-hidden="true" />
+                            Migrar preguntas
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            )}
+          </>
+        )}
+      </main>
       <Footer />
     </div>
   );
-};
-
-const s: { [key: string]: React.CSSProperties } = {
-  page: {
-    minHeight: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    background:
-      'radial-gradient(circle at 8% 8%, rgba(186,230,253,.55), transparent 28%), radial-gradient(circle at 92% 18%, rgba(219,234,254,.72), transparent 25%), linear-gradient(180deg, #f7fbff 0%, #edf5fc 52%, #f8fbff 100%)',
-    fontFamily: '"Montserrat", "Segoe UI", sans-serif',
-    color: '#0f172a',
-  },
-  main: {
-    width: '100%',
-    maxWidth: '1240px',
-    margin: '0 auto',
-    padding: 'clamp(20px, 4vw, 42px) 16px 58px',
-    boxSizing: 'border-box',
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  hero: {
-    width: '100%',
-    boxSizing: 'border-box',
-    borderRadius: '30px',
-    border: '1px solid rgba(157,210,245,.75)',
-    background: 'linear-gradient(125deg, rgba(255,255,255,.98), rgba(231,246,255,.96) 52%, rgba(218,238,255,.94))',
-    boxShadow: '0 24px 58px rgba(20,72,118,.13)',
-    padding: 'clamp(24px, 4vw, 36px)',
-    display: 'grid',
-    gridTemplateColumns: 'auto minmax(0, 1fr) auto',
-    alignItems: 'center',
-    gap: 'clamp(18px, 3vw, 26px)',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  heroGlow: {
-    position: 'absolute',
-    width: '230px',
-    height: '230px',
-    borderRadius: '50%',
-    right: '-90px',
-    top: '-125px',
-    background: 'radial-gradient(circle, rgba(56,189,248,.22), transparent 68%)',
-    pointerEvents: 'none',
-  },
-  heroIcon: {
-    width: '64px',
-    height: '64px',
-    borderRadius: '20px',
-    display: 'grid',
-    placeItems: 'center',
-    color: '#fff',
-    background: 'linear-gradient(145deg, #1677b8, #2563a9)',
-    boxShadow: '0 14px 30px rgba(22,119,184,.25)',
-  },
-  heroCopy: { minWidth: 0 },
-  heroRightContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    alignItems: 'stretch',
-    minWidth: '190px',
-  },
-  heroStat: {
-    position: 'relative',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '12px 16px',
-    borderRadius: '20px',
-    background: 'rgba(255,255,255,.78)',
-    border: '1px solid rgba(147,197,253,.65)',
-    color: '#315b82',
-    fontSize: '.78rem',
-    fontWeight: 700,
-    textAlign: 'center',
-    boxShadow: '0 4px 14px rgba(20,72,118,.06)',
-  },
-  statBadgesRow: {
-    display: 'flex',
-    gap: '6px',
-    marginTop: '6px',
-    fontSize: '0.72rem',
-    fontWeight: 800,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  statBadgeGreen: {
-    color: '#15803d',
-    background: '#dcfce7',
-    padding: '2px 8px',
-    borderRadius: '999px',
-  },
-  statBadgeAmber: {
-    color: '#b45309',
-    background: '#fef3c7',
-    padding: '2px 8px',
-    borderRadius: '999px',
-  },
-  heroCreateButton: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    padding: '12px 18px',
-    borderRadius: '16px',
-    background: 'linear-gradient(135deg, #10b981, #059669)',
-    color: '#ffffff',
-    fontWeight: 800,
-    fontSize: '0.88rem',
-    textDecoration: 'none',
-    boxShadow: '0 10px 24px rgba(16,185,129,0.28)',
-    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-    textAlign: 'center',
-  },
-  toolbar: {
-    width: '100%',
-    boxSizing: 'border-box',
-    borderRadius: '22px',
-    border: '1px solid rgba(191,219,238,.92)',
-    background: 'rgba(255,255,255,.88)',
-    boxShadow: '0 10px 28px rgba(20,67,112,.06)',
-    padding: '16px 20px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '14px',
-  },
-  searchWrap: {
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    width: '100%',
-  },
-  searchIcon: {
-    position: 'absolute',
-    left: '16px',
-    color: '#64748b',
-    pointerEvents: 'none',
-  },
-  searchInput: {
-    width: '100%',
-    boxSizing: 'border-box',
-    borderRadius: '14px',
-    border: '1.5px solid #cbd5e1',
-    padding: '12px 42px 12px 46px',
-    fontFamily: 'inherit',
-    fontSize: '0.92rem',
-    color: '#0f172a',
-    outline: 'none',
-    background: '#ffffff',
-    boxShadow: 'inset 0 1px 2px rgba(15,23,42,0.03)',
-  },
-  clearSearchButton: {
-    position: 'absolute',
-    right: '14px',
-    background: '#f1f5f9',
-    border: 'none',
-    borderRadius: '999px',
-    padding: '4px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#64748b',
-  },
-  filterRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '16px',
-    flexWrap: 'wrap',
-  },
-  filterGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  filterLabel: {
-    fontSize: '0.82rem',
-    fontWeight: 800,
-    color: '#475569',
-    marginRight: '2px',
-  },
-  filterPill: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '999px',
-    padding: '6px 12px',
-    background: '#ffffff',
-    color: '#475569',
-    fontSize: '0.78rem',
-    fontWeight: 700,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'all 0.15s ease',
-  },
-  filterPillActive: {
-    border: '1px solid #2563eb',
-    borderRadius: '999px',
-    padding: '6px 12px',
-    background: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
-    color: '#1d4ed8',
-    fontSize: '0.78rem',
-    fontWeight: 800,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    boxShadow: '0 4px 10px rgba(37,99,235,0.12)',
-  },
-  accordionControls: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    marginLeft: 'auto',
-    flexWrap: 'wrap' as const,
-  },
-  accordionCtrlBtn: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '5px',
-    border: '1px solid #cbd5e1',
-    borderRadius: '999px',
-    padding: '6px 12px',
-    background: '#ffffff',
-    color: '#475569',
-    fontSize: '0.78rem',
-    fontWeight: 700,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'all 0.15s ease',
-  },
-  kicker: {
-    margin: 0,
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '7px',
-    padding: '5px 11px',
-    borderRadius: '999px',
-    background: 'rgba(219,234,254,.8)',
-    color: '#176aa5',
-    fontSize: '0.74rem',
-    fontWeight: 800,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-  },
-  title: {
-    margin: '8px 0 6px',
-    color: '#0f172a',
-    fontSize: 'clamp(1.4rem, 2.3vw, 1.95rem)',
-    lineHeight: 1.15,
-    fontWeight: 900,
-    maxWidth: '38ch',
-  },
-  text: {
-    margin: 0,
-    maxWidth: '68ch',
-    color: '#475569',
-    fontSize: '0.94rem',
-    lineHeight: 1.6,
-  },
-  card: {
-    width: '100%',
-    boxSizing: 'border-box',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-  },
-  statusBox: {
-    width: '100%',
-    borderRadius: '18px',
-    border: '1px solid #cfe3f4',
-    background: 'rgba(255,255,255,.82)',
-    color: '#475569',
-    padding: '18px 20px',
-    fontWeight: 700,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
-    boxShadow: '0 10px 26px rgba(20,67,112,.07)',
-  },
-  statusCopy: {
-    display: 'grid',
-    gap: '3px',
-  },
-  errorBox: { borderColor: '#fecaca', background: '#fff7f7', color: '#991b1b' },
-  parcialSections: {
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  parcialBlock: {
-    width: '100%',
-    boxSizing: 'border-box',
-    borderRadius: '25px',
-    border: '1px solid rgba(191,219,238,.92)',
-    background: 'rgba(255,255,255,.88)',
-    padding: 'clamp(16px, 2.5vw, 24px)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-    textAlign: 'left',
-    boxShadow: '0 14px 36px rgba(20,67,112,.08)',
-    scrollMarginTop: '24px',
-  },
-  parcialHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '10px',
-    paddingBottom: '8px',
-    borderBottom: '1px solid #e2e8f0',
-  },
-  parcialTitle: {
-    margin: 0,
-    fontSize: '1.3rem',
-    color: '#123b66',
-    fontWeight: 900,
-  },
-  parcialCount: {
-    borderRadius: '999px',
-    padding: '5px 12px',
-    background: '#e7f4fd',
-    color: '#176aa5',
-    fontSize: '0.76rem',
-    fontWeight: 800,
-    whiteSpace: 'nowrap',
-  },
-  scopeBlock: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-  },
-  scopeTitle: {
-    margin: 0,
-    color: '#315b82',
-    fontSize: '0.82rem',
-    textTransform: 'uppercase',
-    letterSpacing: '0.08em',
-    fontWeight: 900,
-  },
-  historyAccordion: {
-    borderRadius: '16px',
-    border: '1px solid rgba(191,219,254,.6)',
-    background: 'linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,252,.94))',
-    boxShadow: '0 8px 18px rgba(59,130,246,.03)',
-    overflow: 'hidden',
-    transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
-  },
-  historySummary: {
-    listStyle: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-    cursor: 'pointer',
-    padding: '12px 14px',
-    color: '#1e293b',
-    fontWeight: 700,
-    fontSize: '0.98rem',
-    userSelect: 'none',
-    WebkitAppearance: 'none',
-  },
-  historySummaryLabel: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    minWidth: 0,
-    fontWeight: 900,
-  },
-  weekThemeSummary: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-    width: '100%',
-  },
-  weekThemeLabelWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    minWidth: 0,
-    gap: '10px',
-    textAlign: 'center',
-  },
-  weekThemeThumb: {
-    width: '50px',
-    height: '50px',
-    borderRadius: '14px',
-    objectFit: 'cover',
-    border: '2px solid rgba(147,197,253,0.9)',
-    boxShadow: '0 8px 20px rgba(59,130,246,0.18)',
-    background: 'linear-gradient(135deg, #e0f2fe, #dbeafe)',
-    flexShrink: 0,
-  },
-  weekThemeThumbFallback: {
-    width: '50px',
-    height: '50px',
-    borderRadius: '14px',
-    display: 'grid',
-    placeItems: 'center',
-    fontSize: '1.05rem',
-    fontWeight: 900,
-    color: '#1d4ed8',
-    background: 'linear-gradient(135deg, #dbeafe, #e0f2fe)',
-    border: '2px solid rgba(147,197,253,0.9)',
-    boxShadow: '0 8px 20px rgba(59,130,246,0.12)',
-    flexShrink: 0,
-  },
-  weekThemeTitle: {
-    margin: 0,
-    fontSize: '1.05rem',
-    lineHeight: 1.2,
-    color: '#0f172a',
-    textAlign: 'center',
-    letterSpacing: '0.01em',
-    fontWeight: 800,
-  },
-  historySummaryMeta: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  historySummaryCount: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: '999px',
-    background: 'rgba(59,130,246,0.08)',
-    color: '#1d4ed8',
-    padding: '4px 10px',
-    fontSize: '0.75rem',
-    fontWeight: 800,
-    minWidth: '80px',
-  },
-  historySummaryArrow: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '26px',
-    height: '26px',
-    borderRadius: '999px',
-    background: 'linear-gradient(135deg, rgba(191,219,254,0.7), rgba(224,242,254,0.9))',
-    color: '#1d4ed8',
-    fontSize: '0.95rem',
-    fontWeight: 900,
-    lineHeight: 1,
-  },
-  historyAccordionBody: {
-    display: 'grid',
-    gap: '14px',
-    padding: '12px 14px 14px',
-    borderTop: '1px solid rgba(191,219,254,.45)',
-    background: 'rgba(255,255,255,.18)',
-  },
-  historyGroupBlock: {
-    display: 'grid',
-    gap: '10px',
-    paddingTop: '10px',
-  },
-  historyGroupTitle: {
-    margin: 0,
-    color: '#2563eb',
-    fontSize: '0.72rem',
-    fontWeight: 800,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-  },
-  historyDivider: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: '14px',
-    paddingTop: '14px',
-    borderTop: '1px solid rgba(191,219,254,0.35)',
-  },
-  historyDividerLabel: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    color: '#475569',
-    fontSize: '0.74rem',
-    fontWeight: 800,
-    textTransform: 'uppercase',
-    letterSpacing: '0.09em',
-    padding: '7px 14px',
-    borderRadius: '999px',
-    background: 'rgba(255,255,255,0.6)',
-    border: '1px solid rgba(191,219,254,0.5)',
-    boxShadow: '0 4px 12px rgba(96,165,250,0.05)',
-    textAlign: 'center',
-  },
-  innerEmpty: {
-    borderRadius: '14px',
-    border: '1px dashed #cbd5e1',
-    background: '#f8fafc',
-    color: '#64748b',
-    padding: '12px 14px',
-    fontWeight: 700,
-    fontSize: '0.88rem',
-  },
-  grid: {
-    width: '100%',
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-    gap: '14px',
-    justifyContent: 'start',
-  },
-  testCard: {
-    borderRadius: '20px',
-    background: '#ffffff',
-    boxShadow: '0 7px 22px rgba(23,61,94,0.07)',
-    border: '1px solid rgba(196,215,230,0.85)',
-    display: 'grid',
-    gridTemplateColumns: '140px minmax(0, 1fr)',
-    padding: '0',
-    minHeight: '210px',
-    overflow: 'hidden',
-  },
-  badge: {
-    borderRadius: '999px',
-    padding: '4px 9px',
-    background: '#dcfce7',
-    color: '#166534',
-    fontSize: '0.72rem',
-    fontWeight: 800,
-  },
-  badgeTema: {
-    borderRadius: '999px',
-    padding: '4px 9px',
-    background: '#dbeafe',
-    color: '#1d4ed8',
-    fontSize: '0.72rem',
-    fontWeight: 800,
-  },
-  badgeSubtema: {
-    borderRadius: '999px',
-    padding: '4px 9px',
-    background: '#ede9fe',
-    color: '#6d28d9',
-    fontSize: '0.72rem',
-    fontWeight: 800,
-  },
-  statePillPublished: {
-    borderRadius: '999px',
-    padding: '4px 8px',
-    background: '#f0fdf4',
-    border: '1px solid #bbf7d0',
-    color: '#15803d',
-    fontSize: '0.7rem',
-    fontWeight: 800,
-    whiteSpace: 'nowrap',
-  },
-  statePillDraft: {
-    borderRadius: '999px',
-    padding: '4px 8px',
-    background: '#fffbeb',
-    border: '1px solid #fde68a',
-    color: '#b45309',
-    fontSize: '0.7rem',
-    fontWeight: 800,
-    whiteSpace: 'nowrap',
-  },
-  meta: {
-    color: '#64748b',
-    fontSize: '0.78rem',
-    fontWeight: 700,
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-  },
-  cardTitle: {
-    margin: 0,
-    color: '#0f172a',
-    fontSize: '1.05rem',
-    lineHeight: 1.35,
-    fontWeight: 800,
-  },
-  cardText: {
-    margin: 0,
-    color: '#475569',
-    lineHeight: 1.55,
-    fontSize: '0.88rem',
-  },
-  scopeTag: {
-    borderRadius: '999px',
-    padding: '4px 8px',
-    background: '#eff6ff',
-    color: '#1d4ed8',
-    fontSize: '0.7rem',
-    fontWeight: 800,
-  },
-  cardActions: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
-    gap: '6px',
-    marginTop: 'auto',
-    paddingTop: '10px',
-    borderTop: '1px solid rgba(226, 232, 240, 0.8)',
-  },
-  auditBox: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '5px',
-    paddingTop: '8px',
-    marginTop: '4px',
-    borderTop: '1px dashed #e2e8f0',
-    fontSize: '0.75rem',
-  },
-  auditRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  auditUserText: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '5px',
-    color: '#334155',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    minWidth: 0,
-    maxWidth: 'calc(100% - 95px)',
-  },
-  auditDateText: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    color: '#64748b',
-    fontWeight: 600,
-    fontSize: '0.72rem',
-    flexShrink: 0,
-    marginLeft: 'auto',
-  },
-  publishButton: {
-    border: 'none',
-    borderRadius: '12px',
-    padding: '8px 10px',
-    background: 'linear-gradient(135deg, #16a34a, #15803d)',
-    color: '#fff',
-    fontWeight: 800,
-    fontSize: '0.78rem',
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '5px',
-    boxShadow: '0 4px 10px rgba(22,163,74,0.18)',
-    lineHeight: 1.2,
-    minHeight: '34px',
-  },
-  unpublishButton: {
-    border: 'none',
-    borderRadius: '12px',
-    padding: '8px 10px',
-    background: 'linear-gradient(135deg, #d97706, #b45309)',
-    color: '#fff',
-    fontWeight: 800,
-    fontSize: '0.78rem',
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '5px',
-    boxShadow: '0 4px 10px rgba(217,119,6,0.18)',
-    lineHeight: 1.2,
-    minHeight: '34px',
-  },
-  reclassifyButton: {
-    border: 'none',
-    borderRadius: '12px',
-    padding: '8px 10px',
-    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-    color: '#fff',
-    fontWeight: 800,
-    fontSize: '0.78rem',
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '5px',
-    boxShadow: '0 4px 10px rgba(2,132,199,0.18)',
-    lineHeight: 1.2,
-    minHeight: '34px',
-  },
-  runButton: {
-    border: 'none',
-    borderRadius: '12px',
-    padding: '8px 10px',
-    background: 'linear-gradient(135deg, #1677b8, #2563a9)',
-    color: '#fff',
-    fontWeight: 800,
-    fontSize: '0.78rem',
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '5px',
-    boxShadow: '0 4px 10px rgba(22,119,184,0.18)',
-    lineHeight: 1.2,
-    minHeight: '34px',
-  },
-  editButton: {
-    border: 'none',
-    borderRadius: '12px',
-    padding: '8px 10px',
-    background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-    color: '#fff',
-    fontWeight: 800,
-    fontSize: '0.78rem',
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '5px',
-    boxShadow: '0 4px 10px rgba(124,58,237,0.18)',
-    lineHeight: 1.2,
-    minHeight: '34px',
-  },
-  deleteButton: {
-    border: 'none',
-    borderRadius: '12px',
-    padding: '8px 10px',
-    background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
-    color: '#fff',
-    fontWeight: 800,
-    fontSize: '0.78rem',
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '5px',
-    boxShadow: '0 4px 10px rgba(220,38,38,0.18)',
-    lineHeight: 1.2,
-    minHeight: '34px',
-  },
-  imageFallback: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '6px',
-    color: '#315b82',
-    padding: '12px',
-    textAlign: 'center',
-  },
-  emptyState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '12px',
-    borderRadius: '24px',
-    padding: '48px 24px',
-    border: '1px dashed #93c5fd',
-    background: 'rgba(255,255,255,0.7)',
-    textAlign: 'center',
-  },
-  emptyTitle: {
-    margin: 0,
-    fontWeight: 900,
-    color: '#0f172a',
-    fontSize: '1.2rem',
-  },
-  emptyText: {
-    margin: 0,
-    color: '#475569',
-    fontSize: '0.94rem',
-    maxWidth: '44ch',
-  },
-  resetFilterBtn: {
-    border: '1px solid #93c5fd',
-    borderRadius: '12px',
-    padding: '9px 18px',
-    background: '#eff6ff',
-    color: '#1d4ed8',
-    fontWeight: 800,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
-  footerActions: {
-    display: 'flex',
-    justifyContent: 'center',
-    paddingTop: '12px',
-  },
-  secondaryCreateButton: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '12px 24px',
-    borderRadius: '16px',
-    background: 'linear-gradient(135deg, #10b981, #059669)',
-    color: '#ffffff',
-    fontWeight: 800,
-    fontSize: '0.92rem',
-    textDecoration: 'none',
-    boxShadow: '0 8px 20px rgba(16,185,129,0.24)',
-  },
-  modalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 2500,
-    background: 'rgba(15, 23, 42, 0.72)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '20px',
-    backdropFilter: 'blur(4px)',
-  },
-  reclassifyModal: {
-    width: 'min(560px, 100%)',
-    maxHeight: '90vh',
-    overflowY: 'auto',
-    borderRadius: '24px',
-    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-    border: '1px solid rgba(191, 219, 254, 0.9)',
-    boxShadow: '0 28px 80px rgba(15, 23, 42, 0.38)',
-    padding: '24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '18px',
-    boxSizing: 'border-box',
-  },
-  modalHeader: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    paddingBottom: '12px',
-    borderBottom: '1px solid #e2e8f0',
-  },
-  reclassifyKicker: {
-    margin: 0,
-    color: '#0284c7',
-    fontWeight: 900,
-    letterSpacing: '0.12em',
-    textTransform: 'uppercase',
-    fontSize: '0.72rem',
-  },
-  modalTitle: {
-    margin: 0,
-    color: '#0f172a',
-    fontSize: '1.35rem',
-    fontWeight: 900,
-  },
-  modalCloseBtn: {
-    background: '#f1f5f9',
-    border: 'none',
-    borderRadius: '999px',
-    width: '32px',
-    height: '32px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    color: '#64748b',
-  },
-  modalTargetBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '6px 12px',
-    borderRadius: '12px',
-    background: '#eff6ff',
-    border: '1px solid #dbeafe',
-    width: 'fit-content',
-    maxWidth: '100%',
-  },
-  modalTargetName: {
-    color: '#1e40af',
-    fontWeight: 700,
-    fontSize: '0.82rem',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  reclassifyBody: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  fieldBlock: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  fieldLabel: {
-    fontSize: '0.86rem',
-    fontWeight: 800,
-    color: '#334155',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  scopeCardsRow: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-    gap: '8px',
-  },
-  scopeOption: {
-    border: '1.5px solid #cbd5e1',
-    borderRadius: '14px',
-    padding: '10px 8px',
-    background: '#ffffff',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '3px',
-    textAlign: 'center',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'all 0.15s ease',
-  },
-  scopeOptionActive: {
-    border: '1.5px solid #2563eb',
-    borderRadius: '14px',
-    padding: '10px 8px',
-    background: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '3px',
-    textAlign: 'center',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    boxShadow: '0 4px 12px rgba(37,99,235,0.15)',
-  },
-  scopeOptionTitle: {
-    fontSize: '0.82rem',
-    fontWeight: 800,
-    color: '#0f172a',
-  },
-  scopeOptionDesc: {
-    fontSize: '0.68rem',
-    color: '#64748b',
-    lineHeight: 1.2,
-  },
-  parcialSelectionRow: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-    gap: '8px',
-  },
-  parcialPill: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '12px',
-    padding: '8px 10px',
-    background: '#fff',
-    color: '#475569',
-    fontSize: '0.8rem',
-    fontWeight: 700,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    textAlign: 'center',
-  },
-  parcialPillActive: {
-    border: '1px solid #2563eb',
-    borderRadius: '12px',
-    padding: '8px 10px',
-    background: '#eff6ff',
-    color: '#1d4ed8',
-    fontSize: '0.8rem',
-    fontWeight: 800,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 2px 8px rgba(37,99,235,0.12)',
-  },
-  selectInput: {
-    width: '100%',
-    boxSizing: 'border-box',
-    borderRadius: '12px',
-    border: '1.5px solid #cbd5e1',
-    padding: '10px 14px',
-    fontFamily: 'inherit',
-    fontSize: '0.88rem',
-    color: '#0f172a',
-    outline: 'none',
-    background: '#ffffff',
-  },
-  warningBox: {
-    padding: '10px 14px',
-    borderRadius: '12px',
-    background: '#fffbeb',
-    border: '1px solid #fde68a',
-    color: '#92400e',
-    fontSize: '0.82rem',
-    fontWeight: 600,
-  },
-  hintBox: {
-    padding: '10px 14px',
-    borderRadius: '12px',
-    background: '#f8fafc',
-    border: '1px dashed #cbd5e1',
-    color: '#64748b',
-    fontSize: '0.82rem',
-    fontStyle: 'italic',
-  },
-  modalErrorText: {
-    margin: 0,
-    color: '#dc2626',
-    fontSize: '0.82rem',
-    fontWeight: 700,
-  },
-  saveReclassifyButton: {
-    border: 'none',
-    borderRadius: '12px',
-    padding: '10px 20px',
-    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-    color: '#fff',
-    fontWeight: 900,
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-    boxShadow: '0 8px 20px rgba(2,132,199,0.25)',
-  },
-  deleteModal: {
-    width: 'min(500px, 100%)',
-    borderRadius: '24px',
-    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-    border: '1px solid rgba(191, 219, 254, 0.9)',
-    boxShadow: '0 28px 80px rgba(15, 23, 42, 0.38)',
-    padding: '24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  deleteModalHeader: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  deleteModalKicker: {
-    margin: 0,
-    color: '#b91c1c',
-    fontWeight: 900,
-    letterSpacing: '0.12em',
-    textTransform: 'uppercase',
-    fontSize: '0.72rem',
-  },
-  deleteModalTitle: {
-    margin: 0,
-    color: '#0f172a',
-    fontSize: '1.35rem',
-    fontWeight: 900,
-  },
-  deleteModalText: {
-    margin: 0,
-    color: '#475569',
-    lineHeight: 1.65,
-    fontSize: '0.94rem',
-  },
-  deleteModalActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '10px',
-    flexWrap: 'wrap',
-    marginTop: '6px',
-  },
-  deleteModalCancelButton: {
-    border: '1px solid #cbd5e1',
-    borderRadius: '12px',
-    padding: '10px 16px',
-    background: '#fff',
-    color: '#334155',
-    fontWeight: 800,
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-  },
-  deleteModalDangerButton: {
-    border: 'none',
-    borderRadius: '12px',
-    padding: '10px 18px',
-    background: 'linear-gradient(135deg, #b91c1c, #ef4444)',
-    color: '#fff',
-    fontWeight: 900,
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-    boxShadow: '0 10px 24px rgba(239,68,68,0.22)',
-  },
-};
-
-export default GestionPruebas;
+}
