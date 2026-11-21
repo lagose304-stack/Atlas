@@ -65,7 +65,6 @@ BEGIN
        OR coalesce(length(q->>'id'),0) NOT BETWEEN 1 AND 80
        OR jsonb_typeof(q->'titulo') IS DISTINCT FROM 'string' OR length(q->>'titulo') > 5000
        OR v_type NOT IN ('single_choice','short_answer','completion','matching','image_point','image_versus') THEN RAISE EXCEPTION 'Pregunta inválida'; END IF;
-    IF p_publish AND v_type <> 'image_versus' AND trim(q->>'titulo') = '' THEN RAISE EXCEPTION 'Completa el enunciado'; END IF;
     IF v_type = 'image_versus' THEN
       IF p_publish AND (NOT (q ? 'image_a') OR NOT (q ? 'image_b')) THEN RAISE EXCEPTION 'El versus de imágenes necesita las dos imágenes antes de publicar'; END IF;
     ELSIF v_type = 'image_point' THEN

@@ -184,4 +184,19 @@ describe('Responder formatos de instructores', () => {
     expect(checkboxes[1]).toBeChecked();
     expect(screen.getByTestId('answer')).toHaveTextContent('["m2"]');
   });
+
+  it('muestra etiqueta de pregunta por defecto cuando el enunciado viene vacio', () => {
+    const emptyTitleQuestion: PublicInstructorQuestion = {
+      id: 'q-empty',
+      type: 'single_choice',
+      titulo: '   ',
+      options: [
+        { id: 'o1', texto: 'Opción 1' },
+        { id: 'o2', texto: 'Opción 2' },
+      ],
+    };
+    render(<Response question={emptyTitleQuestion} />);
+    expect(screen.getByText('Pregunta 1')).toBeInTheDocument();
+    expect(screen.queryByText('1.')).not.toBeInTheDocument();
+  });
 });

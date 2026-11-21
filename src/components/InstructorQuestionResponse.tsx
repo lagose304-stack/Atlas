@@ -23,8 +23,16 @@ export default function InstructorQuestionResponse({ question: q, index, label, 
   const subject = contextLabel ?? `pregunta ${number}`;
   const objectAnswer = typeof answer === 'object' && answer && !Array.isArray(answer) && !isInstructorPointAnswer(answer) ? answer : {};
   const selectedIds = isInstructorMultipleChoiceAnswer(answer) ? answer : [];
+  const promptText = q.titulo.trim();
+  const defaultTitle = q.type === 'completion' ? 'Completa el enunciado'
+    : q.type === 'image_versus' ? 'Comparación de imágenes'
+    : '';
+  const itemTitle = promptText || defaultTitle;
+  const legendLabel = itemTitle
+    ? `${label ?? number}. ${itemTitle}`
+    : (label ? `Inciso ${label}` : `Pregunta ${number}`);
   return <fieldset className="instructor-question">
-    <legend>{label ?? number}. {q.type === 'completion' ? 'Completa el enunciado' : q.type === 'image_versus' ? (q.titulo.trim() || 'Comparación de imágenes') : q.titulo}</legend>
+    <legend>{legendLabel}</legend>
     {q.type === 'image_versus' ? <div className="instructor-versus-grid" aria-label="Comparación de dos imágenes">
       {INSTRUCTOR_VERSUS_PLATES.map(plate => {
         const image = q[`image_${plate}`];
