@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import type { Editor2PublicDoc } from '../services/editor2Api';
+import { useEditor2PreviewDoc } from './previewDoc';
 import { getCachedPublicDoc, loadCachedPublicDoc, type PublicDocLoader } from './publicDocCache';
 
 const LazyEditor2Renderer = lazy(() => import('../render/Editor2Renderer'));
@@ -33,12 +34,14 @@ const Editor2PublicSlot: React.FC<Editor2PublicSlotProps> = ({
   onResolved,
   loadPublicDoc,
 }) => {
+  const previewDoc = useEditor2PreviewDoc(pageKey);
   const [publicDoc, setPublicDoc] = useState<Editor2PublicDoc | null>(() => {
     const cached = getCachedPublicDoc(pageKey);
     return cached ?? null;
   });
 
   useEffect(() => {
+    if (previewDoc) return;
     let active = true;
     const cached = getCachedPublicDoc(pageKey);
     if (cached !== undefined) {
@@ -59,7 +62,22 @@ const Editor2PublicSlot: React.FC<Editor2PublicSlotProps> = ({
     return () => {
       active = false;
     };
-  }, [pageKey, loadPublicDoc, onResolved]);
+  }, [pageKey, loadPublicDoc, onResolved, previewDoc]);
+
+  if (previewDoc) {
+    return (
+      <Suspense fallback={<>{fallback}</>}>
+        <div
+          className={className}
+          aria-label={ariaLabel}
+          data-editor2-public-slot={previewDoc.pageKey}
+          data-editor2-preview=""
+        >
+          <LazyEditor2Renderer doc={previewDoc} variant="public" />
+        </div>
+      </Suspense>
+    );
+  }
 
   if (!publicDoc) {
     return <>{fallback}</>;

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PruebaInstructores from './PruebaInstructores';
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), upload: vi.fn(), temas: vi.fn() }));
@@ -32,6 +32,7 @@ const bankTestSummary = {
   estado: 'borrador',
   revision: 1,
   published_revision: null,
+  can_delete_draft: true,
   mode: 'bank',
   legacy_question_count: 0,
 };
@@ -42,10 +43,13 @@ const bankTestDetail = {
   revision: 1,
   published_revision: null,
   has_code: true,
+  can_delete_draft: true,
   content: { nombre: 'Examen parcial 1', instrucciones: 'Lee bien.', mode: 'bank', questions_per_topic: 2, questions: [], groups: [] },
 };
 
 describe('Banco de preguntas y configuración de pruebas de instructores', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
   beforeEach(() => {
     mocks.upload.mockReset();
     mocks.temas.mockReset().mockResolvedValue(temas);
@@ -59,6 +63,7 @@ describe('Banco de preguntas y configuración de pruebas de instructores', () =>
       if (name === 'atlas_get_instructor_test') return { data: bankTestDetail, error: null };
       if (name === 'atlas_save_instructor_test') return { data: { ...bankTestDetail, content: args?.p_content, revision: 2 }, error: null };
       if (name === 'atlas_publish_instructor_test') return { data: { ...bankTestDetail, estado: args?.p_publish ? 'publicada' : 'borrador', revision: 2, published_revision: args?.p_publish ? 2 : null }, error: null };
+      if (name === 'atlas_delete_instructor_draft') return { data: { ok: true }, error: null };
       return { data: null, error: null };
     });
   });
@@ -100,6 +105,51 @@ describe('Banco de preguntas y configuración de pruebas de instructores', () =>
       p_content: expect.objectContaining({ mode: 'bank', questions_per_topic: 1 }),
     })));
     expect(await screen.findByRole('status')).toHaveTextContent('Configuración y código guardados correctamente');
+  });
+
+  it('sube las dos imágenes una sola vez aunque cambien de posición al cambiar el formato', async () => {
+    const createObjectURL = vi.fn().mockReturnValueOnce('blob:plate-a').mockReturnValueOnce('blob:plate-b');
+    vi.stubGlobal('URL', class extends URL { static createObjectURL = createObjectURL; static revokeObjectURL = vi.fn(); });
+    mocks.upload.mockResolvedValueOnce({ secure_url: 'https://example.test/a.webp' }).mockResolvedValueOnce({ secure_url: 'https://example.test/b.webp' });
+    render(<PruebaInstructores />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir banco de Tejido epitelial' }));
+    const fileA = new File(['a'], 'a.webp', { type: 'image/webp' });
+    const fileB = new File(['b'], 'b.webp', { type: 'image/webp' });
+    fireEvent.change(await screen.findByLabelText('Archivo de imagen de referencia del inciso'), { target: { files: [fileA] } });
+    const change = (value: string) => fireEvent.change(screen.getByLabelText('Formato de inciso a de pregunta 1'), { target: { value } });
+    change('image_versus');
+    fireEvent.change(screen.getByLabelText('Archivo de imagen b del versus'), { target: { files: [fileB] } });
+    change('image_point');
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar banco' }));
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith('atlas_save_instructor_bank_topic', expect.objectContaining({
+      p_content: expect.objectContaining({ questions: [expect.objectContaining({
+        id: 'q1', type: 'image_point', image: { url: 'https://example.test/a.webp', source: 'upload' },
+        alternate_image: { url: 'https://example.test/b.webp', source: 'upload' },
+      })] }),
+    })));
+    expect(mocks.upload.mock.calls.map(([file]) => file)).toEqual([fileA, fileB]);
+    await screen.findByRole('heading', { name: 'Banco de preguntas por tema' });
+  });
+
+  it('confirma la eliminación desde la configuración y retira el borrador del listado', async () => {
+    render(<PruebaInstructores />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Pruebas/ }));
+    const listDelete = await screen.findByRole('button', { name: 'Eliminar borrador Examen parcial 1' });
+    listDelete.focus();
+    fireEvent.click(listDelete);
+    const dialog = () => screen.getByRole('alertdialog', { name: '¿Eliminar este borrador?' });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Cancelar' }));
+    expect(listDelete).toHaveFocus();
+    expect(mocks.rpc).not.toHaveBeenCalledWith('atlas_delete_instructor_draft', expect.anything());
+    fireEvent.click(screen.getByRole('button', { name: 'Configurar Examen parcial 1' }));
+    fireEvent.change(await screen.findByLabelText('Nombre de la prueba'), { target: { value: 'Nombre sin guardar' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar borrador' }));
+    expect(dialog()).toHaveTextContent('Examen parcial 1');
+    expect(dialog()).toHaveTextContent('También se descartarán los cambios sin guardar');
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Eliminar definitivamente' }));
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith('atlas_delete_instructor_draft', { p_id: 'bank-test-1', p_revision: 1 }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Borrador eliminado.');
+    expect(screen.queryByRole('heading', { name: 'Examen parcial 1' })).not.toBeInTheDocument();
   });
 
   it('permite migrar preguntas de una prueba antigua al banco y oculta la sección al quedar vacía', async () => {

@@ -1,4 +1,3 @@
-import { withPageSections } from '../domain/defaults';
 import { create } from 'zustand';
 import {
   canvasDocSchema,
@@ -57,6 +56,7 @@ interface Editor2State {
   setDoc: (doc: CanvasDoc) => void;
   setPageTheme: (theme: PageTheme | undefined) => void;
   appendSection: (section: PlacedBlock) => void;
+  applyBlockMove: (current: CanvasDoc, moved: CanvasDoc) => void;
   copyBlockStyle: (style: BlockStyle | null) => void;
   applyDoc: (doc: CanvasDoc) => void;
   setWorkspaceMeta: (meta: {
@@ -257,7 +257,7 @@ export const useEditor2Store = create<Editor2State>((set, get) => ({
     set((state) =>
       parsed.success
         ? {
-            doc: withPageSections(parsed.data),
+            doc: parsed.data,
             selection: null,
             dirty: false,
             saveState: 'idle',
@@ -282,18 +282,6 @@ export const useEditor2Store = create<Editor2State>((set, get) => ({
     const parsed = canvasDocSchema.safeParse(doc);
     if (!parsed.success) {
       set({ lastError: 'El cambio del lienzo no cumple el contrato y se descartó.' });
-      return;
-    }
-
-    if (
-      parsed.data.root.slots.children.some(
-        ({ block }) => block.type !== 'canvas' && block.type !== 'tabs' && block.type !== 'accordion',
-      )
-    ) {
-      set((state) => ({
-        lastError: 'Coloca el componente dentro de un bloque de página.',
-        puckRevision: state.puckRevision + 1,
-      }));
       return;
     }
 
@@ -360,7 +348,7 @@ export const useEditor2Store = create<Editor2State>((set, get) => ({
       docMutation(state, (doc) => {
         const children = getChildrenForParent(doc, parentId);
         if (!children) return doc;
-        if ((block.block.type === 'canvas') !== (parentId === null)) return doc;
+        if (block.block.type === 'canvas' && parentId !== null) return doc;
         return withChildren(doc, parentId, [...children, block as AnyPlaced]);
       }),
     ),
@@ -392,7 +380,7 @@ export const useEditor2Store = create<Editor2State>((set, get) => ({
         if (currentIndex < 0) return doc;
 
         const moved = sourceChildren[currentIndex];
-        if ((moved.block.type === 'canvas') !== (destinationParent === null)) return doc;
+        if (moved.block.type === 'canvas' && destinationParent !== null) return doc;
 
         if (sourceParent !== destinationParent) {
           const destinationChildren = getChildrenForParent(doc, destinationParent);
@@ -641,6 +629,12 @@ export const useEditor2Store = create<Editor2State>((set, get) => ({
         puckRevision: state.puckRevision + 1,
       };
     }),
+
+  applyBlockMove: (current, moved) => set(state => {
+    if (state.doc !== current) return {};
+    const change = commit(state, moved);
+    return change.doc ? { ...change, puckRevision: state.puckRevision + 1 } : change;
+  }),
 
   appendSection: (section) =>
     set((state) => {

@@ -44,12 +44,6 @@ vi.mock('../components/Editor2Canvas', () => ({
   ),
 }));
 
-vi.mock('../render/Editor2Renderer', () => ({
-  default: ({ doc }: { doc: { pageKey: string } }) => (
-    <div data-testid="preview">Vista previa de {doc.pageKey}</div>
-  ),
-}));
-
 vi.mock('../../components/Header', () => ({ default: () => null }));
 vi.mock('../../components/Footer', () => ({ default: () => null }));
 vi.mock('../../components/BackButton', () => ({ default: () => null }));
@@ -172,24 +166,38 @@ describe('Editor2Workspace', () => {
     expect(await screen.findByTestId('canvas')).toHaveTextContent('Lienzo de home');
     expect(screen.getByRole('button', { name: 'Deshacer' })).toBeDisabled();
     expect(screen.getByRole('status')).toHaveTextContent('Borrador al día');
-    expect(screen.getByText('Borrador en memoria')).toBeInTheDocument();
   });
 
   it('alterna entre edición y vista previa con el mismo documento', async () => {
     renderEditor2('/editor-paginas-v2/p/home');
 
-    const size = screen.getByRole('combobox', { name: 'Pantalla del lienzo' });
-    fireEvent.change(size, { target: { value: '768' } });
+    expect(screen.queryByRole('button', { name: 'Volver a editar' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Vista previa/ }));
+    const exit = screen.getByRole('button', { name: 'Volver a editar' });
+    expect(exit).toHaveFocus();
+    expect(screen.getAllByRole('button')).toEqual([exit]);
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
 
-    expect(screen.getByTestId('preview')).toHaveTextContent('Vista previa de home');
-    expect(screen.getByText('Vista previa en memoria')).toBeInTheDocument();
-    expect(size).toHaveValue('768');
-    for (const width of ['360', '768', '1280']) {
-      fireEvent.change(size, { target: { value: width } });
-      expect(screen.getByTestId('preview').parentElement).toHaveStyle({ width: width + 'px' });
-    }
-    expect(screen.getByRole('button', { name: /Volver a editar/ })).toBeInTheDocument();
+    const previewFrame = screen.getByTitle<HTMLIFrameElement>('Vista previa de la página');
+    const previewWindow = previewFrame.contentWindow!;
+    const sendDocument = vi.spyOn(previewWindow, 'postMessage');
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: previewWindow,
+        origin: window.location.origin,
+        data: 'atlas:editor2-preview-ready',
+      }));
+    });
+    expect(sendDocument).toHaveBeenCalledWith(
+      { type: 'atlas:editor2-preview-document', doc: useEditor2Store.getState().doc },
+      window.location.origin,
+    );
+    fireEvent.click(exit);
+    expect(screen.getByTestId('canvas')).toBeInTheDocument();
+    expect(previewFrame).not.toBeInTheDocument();
+    expect(exit).not.toBeInTheDocument();
   });
 
   it('conserva el borrador en memoria al volver a la misma página', async () => {

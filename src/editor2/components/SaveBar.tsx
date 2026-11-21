@@ -5,7 +5,6 @@ import {
   Eye,
   History,
   Layers,
-  Monitor,
   Palette,
   PenLine,
   Redo2,
@@ -19,8 +18,6 @@ import { useEditor2Store } from '../store/editor2Store';
 export type SaveBarProps = {
   preview: boolean;
   onTogglePreview: () => void;
-  previewSize?: string;
-  onPreviewSizeChange?: (size: string) => void;
   onSave?: () => void;
   onPublish?: () => void;
   onUnpublish?: () => void;
@@ -34,8 +31,6 @@ export type SaveBarProps = {
 const SaveBar: React.FC<SaveBarProps> = ({
   preview,
   onTogglePreview,
-  previewSize,
-  onPreviewSizeChange,
   onSave,
   onPublish,
   onUnpublish,
@@ -107,22 +102,6 @@ const SaveBar: React.FC<SaveBarProps> = ({
         </div>
 
         <div className="e2-save-bar__actions">
-          {previewSize !== undefined && onPreviewSizeChange && (
-            <label className="e2-viewport-control" title="Ancho del lienzo">
-              <Monitor size={14} aria-hidden="true" />
-              <select
-                aria-label="Pantalla del lienzo"
-                value={previewSize}
-                onChange={(event) => onPreviewSizeChange(event.target.value)}
-              >
-                <option value="360">Móvil · 360 px</option>
-                <option value="768">Tableta · 768 px</option>
-                <option value="1280">Escritorio · 1280 px</option>
-                <option value="auto">Todo el ancho disponible</option>
-              </select>
-            </label>
-          )}
-
           {onOpenTemplates && (
             <button
               type="button"

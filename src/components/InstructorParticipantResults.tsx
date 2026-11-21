@@ -3,11 +3,12 @@ import HoldToRevealCodeInput from './HoldToRevealCodeInput';
 import InstructorReferenceImageView from './InstructorReferenceImageView';
 import InstructorSectionScores from './InstructorSectionScores';
 import { getInstructorParticipantResult, isInstructorAccount, isSixDigitCode, type InstructorParticipantResult } from '../services/instructorTests';
-import { formatInstructorPoints, getInstructorPointCoordinates, groupPublicInstructorQuestions, incisoLetter, instructorIncisoWeight, requiresInstructorReview } from '../types/instructorQuestions';
+import { formatInstructorPoints, getInstructorPointCoordinates, groupPublicInstructorQuestions, incisoLetter, instructorChoiceAnswerText, instructorIncisoWeight, instructorVersusParts, requiresInstructorReview } from '../types/instructorQuestions';
 
 export default function InstructorParticipantResults({ testId }: { testId: string }) {
   const [code, setCode] = useState(''), [account, setAccount] = useState('');
   const [data, setData] = useState<InstructorParticipantResult | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const versus = instructorVersusParts(data?.snapshot.questions ?? []);
   return <section className="instructor-panel" aria-label="Consultar mi prueba revisada">
     <h2>Consultar mi prueba revisada</h2><p className="instructor-muted">Consulta tus respuestas y calificación con el código de la prueba y tu número de cuenta. Esta consulta no inicia otro intento.</p>
     {!data && <form onSubmit={async event => {
@@ -29,12 +30,16 @@ export default function InstructorParticipantResults({ testId }: { testId: strin
       <InstructorSectionScores sections={data.result.sections} />
       {groupPublicInstructorQuestions(data.snapshot.questions).map(group => <section className="instructor-public-group" key={group.id}>
         {group.section && <p className="instructor-section-heading">{group.section.nombre}</p>}<h3>Pregunta {group.position}</h3>
-        {group.items.map((question, index) => {
-          const answer = data.answers[question.id]; const values = answer && typeof answer === 'object' ? answer as Record<string, string> : {};
+        {group.items.map(question => {
+          const answer = data.answers[question.id]; const values = answer && typeof answer === 'object' && !Array.isArray(answer) ? answer as Record<string, string> : {};
           const decision = (requiresInstructorReview(data.snapshot, question) ? data.reviews : data.auto_results)[question.id];
-          return <section className="instructor-review-item" key={question.id}><h4>{incisoLetter(index)}. {question.type === 'image_versus' ? (question.titulo.trim() || 'Comparación de imágenes') : question.titulo}</h4>
+          const prompt = versus.byPrompt.get(question.id);
+          const label = prompt
+            ? `Placa ${prompt.plate.toUpperCase()} · Respuesta ${prompt.number}`
+            : incisoLetter(group.items.filter(item => !versus.byPrompt.has(item.id)).findIndex(item => item.id === question.id));
+          return <section className="instructor-review-item" key={question.id}><h4>{label}. {question.type === 'image_versus' ? (question.titulo.trim() || 'Comparación de imágenes') : question.titulo}</h4>
             {question.type === 'image_versus' ? <>
-              <p className="instructor-muted">Referencia comparativa · Sin puntaje</p>
+              {!versus.byQuestion.has(question.id) && <p className="instructor-muted">Referencia comparativa · Sin puntaje</p>}
               <div className="instructor-versus-grid">
                 <div className="instructor-versus-card"><span className="instructor-versus-label">Imagen A</span><InstructorReferenceImageView url={question.image_a.url} annotations={question.image_a.annotations} /></div>
                 <div className="instructor-versus-card"><span className="instructor-versus-label">Imagen B</span><InstructorReferenceImageView url={question.image_b.url} annotations={question.image_b.annotations} /></div>
@@ -54,7 +59,7 @@ export default function InstructorParticipantResults({ testId }: { testId: strin
                   {question.type === 'short_answer' ? <p className="instructor-submitted-answer">{String(answer ?? '')}</p>
                     : question.type === 'completion' ? question.blanks.map((blank, i) => <p key={blank.id}>Hueco {i + 1}: {values[blank.id] ?? ''}</p>)
                       : question.type === 'matching' ? question.terms.map(term => <p key={term.id}>{term.texto}: {question.choices.find(choice => choice.id === values[term.id])?.texto ?? ''}</p>)
-                        : <p className="instructor-submitted-answer">{question.options.find(option => option.id === answer)?.texto ?? ''}</p>}
+                        : <p className="instructor-submitted-answer">{instructorChoiceAnswerText(question.options, answer)}</p>}
                 </>}
             </>}
           </section>;

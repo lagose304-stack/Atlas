@@ -248,7 +248,7 @@ const App: React.FC = () => {
             }
           />
           <Route
-            path="/editor-paginas-v2/p/:pageKey"
+            path="/editor-paginas-v2/p/:pageKey/*"
             element={
               <PrivateRoute allowedRoles={[ROLE_ADMIN, ROLE_MICRO]}>
                 <Editor2Workspace />

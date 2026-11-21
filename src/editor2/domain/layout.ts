@@ -1,4 +1,5 @@
 import { LAYOUT_BREAKPOINTS, type Breakpoint, type LayoutIntent, type SpanIntent } from './types';
+import { toGridLine, toGridSpan } from './gridResolution';
 
 export function spanClass(breakpoint: Breakpoint, span: number): string {
   return `e2-span-${breakpoint}-${span}`;
@@ -9,11 +10,16 @@ export function startClass(breakpoint: Breakpoint, start: number): string {
 }
 
 export function gridColumnValue(intent: SpanIntent): string {
-  return intent.start === undefined ? `span ${intent.span}` : `${intent.start} / span ${intent.span}`;
+  const start = intent.start === undefined ? 'auto' : toGridLine(intent.start);
+  return `${start} / span ${toGridSpan(intent.span)}`;
 }
 
 export function layoutClassList(layout: LayoutIntent): string[] {
-  const classes: string[] = [];
+  const classes: string[] = layout.base.flexSize ? [`e2-flex-${layout.base.flexSize}`] : [];
+
+  if (layout.base.minWidthPx) classes.push('e2-flex-min');
+  if (layout.base.maxWidthPx) classes.push('e2-flex-max');
+  if (layout.base.anchor) classes.push(`e2-anchor-${layout.base.anchor}`);
 
   for (const breakpoint of LAYOUT_BREAKPOINTS) {
     const intent = layout[breakpoint];

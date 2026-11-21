@@ -15,29 +15,79 @@ export type InstructorSectionResult = InstructorSection & { correct: number; tot
 export type InstructorQuestionGroup = { id: string; titulo: string; item_ids: string[]; section_id?: string };
 export type PublicInstructorGroup = { id: string; titulo: string; position: number; section?: InstructorSection };
 type BaseQuestion = { id: string; titulo: string };
+type SingleImageQuestion = BaseQuestion & { image?: InstructorReferenceImage; alternate_image?: InstructorReferenceImage };
 // Las preguntas históricas sin type siguen siendo de selección única.
-export type ChoiceQuestion = BaseQuestion & { type?: 'single_choice'; options: InstructorOption[]; correct_option_id: string; image?: InstructorReferenceImage };
+export type ChoiceQuestion = SingleImageQuestion & { type?: 'single_choice'; options: InstructorOption[]; correct_option_id: string; correct_option_ids?: string[] };
 export type InstructorImageAnnotation = MarkerLocation & { label: string };
 export type InstructorReferenceImage = { url: string; source: 'upload' | 'catalog'; plate_id?: number; annotations?: InstructorImageAnnotation[] };
-export type ShortQuestion = BaseQuestion & { type: 'short_answer'; accepted_answers: string[]; image?: InstructorReferenceImage };
-export type CompletionQuestion = BaseQuestion & { type: 'completion'; blanks: { id: string; accepted_answers: string[] }[]; image?: InstructorReferenceImage };
-export type MatchingQuestion = BaseQuestion & { type: 'matching'; pairs: { id: string; term: string; definition: string; option_id: string }[]; image?: InstructorReferenceImage };
-export type PointQuestion = BaseQuestion & { type: 'image_point'; image?: InstructorReferenceImage };
-export type VersusQuestion = BaseQuestion & { type: 'image_versus'; image_a?: InstructorReferenceImage; image_b?: InstructorReferenceImage };
+export type ShortQuestion = SingleImageQuestion & { type: 'short_answer'; accepted_answers: string[] };
+export type CompletionQuestion = SingleImageQuestion & { type: 'completion'; blanks: { id: string; accepted_answers: string[] }[]; review_reference?: string };
+export type MatchingQuestion = SingleImageQuestion & {
+  type: 'matching';
+  pairs: { id: string; term: string; definition: string; option_id: string }[];
+  distractors?: InstructorOption[];
+};
+export const MAX_INSTRUCTOR_MATCHING_DISTRACTORS = 20;
+export type PointQuestion = SingleImageQuestion & { type: 'image_point' };
+export type InstructorVersusPlate = 'a' | 'b';
+export type InstructorVersusPrompt = { id: string; titulo: string };
+export type VersusQuestion = BaseQuestion & {
+  type: 'image_versus';
+  image_a?: InstructorReferenceImage;
+  image_b?: InstructorReferenceImage;
+  prompts?: Record<InstructorVersusPlate, InstructorVersusPrompt>;
+};
+export const INSTRUCTOR_VERSUS_PLATES = ['a', 'b'] as const;
+export function newInstructorVersusPrompts(): NonNullable<VersusQuestion['prompts']> {
+  const prompt = (plate: InstructorVersusPlate) => ({
+    id: `versus-${plate}1-${crypto.randomUUID()}`, titulo: '',
+  });
+  return { a: prompt('a'), b: prompt('b') };
+}
+
+// Los incisos breves siguen al Versus tanto en el banco como en la entrega.
+export function instructorVersusPrompts<T extends BaseQuestion & { type?: InstructorQuestionType }>(
+  items: T[], index: number,
+): Record<InstructorVersusPlate, [T, ...T[]]> | undefined {
+  if (items[index]?.type !== 'image_versus') return;
+  const [first, second, third, fourth] = items.slice(index + 1, index + 5);
+  const matches = (item: T | undefined, slot: string) => item?.type === 'short_answer' && item.id.startsWith(`versus-${slot}-`);
+  if (!matches(first, 'a1')) return;
+  if (matches(second, 'b1')) return { a: [first], b: [second] };
+  // Conserva el detalle de intentos que ya se hubieran asignado con cuatro incisos.
+  if (matches(second, 'a2') && matches(third, 'b1') && matches(fourth, 'b2')) {
+    return { a: [first, second], b: [third, fourth] };
+  }
+}
+export function instructorVersusParts(items: PublicInstructorQuestion[]) {
+  const byQuestion = new Map<string, NonNullable<ReturnType<typeof instructorVersusPrompts<PublicInstructorQuestion>>>>();
+  const byPrompt = new Map<string, { plate: InstructorVersusPlate; number: number }>();
+  items.forEach((item, index) => {
+    if (item.type !== 'image_versus') return;
+    const prompts = instructorVersusPrompts(items, index);
+    if (!prompts || [...prompts.a, ...prompts.b].some(prompt => prompt.group?.id !== item.group?.id)) return;
+    byQuestion.set(item.id, prompts);
+    INSTRUCTOR_VERSUS_PLATES.forEach(plate => prompts[plate].forEach((prompt, i) => {
+      byPrompt.set(prompt.id, { plate, number: i + 1 });
+    }));
+  });
+  return { byQuestion, byPrompt };
+}
 export type InstructorPointCoordinate = { x: number; y: number; text?: string };
 export type InstructorPointAnswer = InstructorPointCoordinate | InstructorPointCoordinate[];
 export type InstructorQuestion = ChoiceQuestion | ShortQuestion | CompletionQuestion | MatchingQuestion | PointQuestion | VersusQuestion;
 export type PublicInstructorImage = { url: string; annotations?: InstructorImageAnnotation[] };
 export type PublicInstructorQuestion = (
-  | (BaseQuestion & { type?: 'single_choice'; options: InstructorOption[]; image?: PublicInstructorImage })
+  | (BaseQuestion & { type?: 'single_choice'; options: InstructorOption[]; multiple?: boolean; image?: PublicInstructorImage })
   | (BaseQuestion & { type: 'short_answer'; image?: PublicInstructorImage })
   | (BaseQuestion & { type: 'completion'; blanks: { id: string }[]; image?: PublicInstructorImage })
   | (BaseQuestion & { type: 'matching'; terms: InstructorOption[]; choices: InstructorOption[]; image?: PublicInstructorImage })
   | (BaseQuestion & { type: 'image_point'; image: { url: string } })
   | (BaseQuestion & { type: 'image_versus'; image_a: PublicInstructorImage; image_b: PublicInstructorImage })
 ) & { group?: PublicInstructorGroup };
-export type InstructorAnswers = Record<string, string | Record<string, string> | InstructorPointAnswer>;
-export type InstructorSubmissionSnapshot = { nombre: string; scoring_version?: number; review_guides?: Record<string, string[]>; questions: PublicInstructorQuestion[] };
+export type InstructorAnswers = Record<string, string | string[] | Record<string, string> | InstructorPointAnswer>;
+export type InstructorCompletionReviewGuide = { blanks: Record<string, string[]>; reference?: string };
+export type InstructorSubmissionSnapshot = { nombre: string; scoring_version?: number; review_guides?: Record<string, string[] | InstructorCompletionReviewGuide>; questions: PublicInstructorQuestion[] };
 export function isInstructorGradedQuestion(question: { type?: InstructorQuestionType }): boolean {
   return question.type !== 'image_versus';
 }
@@ -88,6 +138,32 @@ export function instructorGroups(content: { questions: InstructorQuestion[]; gro
   return content.groups ?? content.questions.map(q => ({ id: `legacy-${q.id}`, titulo: '', item_ids: [q.id] }));
 }
 
+export function instructorStoredIncisoCount(questions: InstructorQuestion[]): number {
+  return questions.reduce((total, question) => total + (question.type === 'image_versus' && question.prompts ? 3 : 1), 0);
+}
+
+export function expandInstructorVersus<T extends { questions: InstructorQuestion[]; groups?: InstructorQuestionGroup[] }>(content: T): T {
+  const responses = new Map<string, InstructorQuestion[]>();
+  for (const question of content.questions) {
+    if (question.type !== 'image_versus' || !question.prompts) continue;
+    responses.set(question.id, [question.prompts.a, question.prompts.b].map(prompt => ({
+      ...prompt, type: 'short_answer', accepted_answers: [''],
+    })));
+  }
+  if (!responses.size) return content;
+  return {
+    ...content,
+    questions: content.questions.flatMap(question => {
+      if (question.type !== 'image_versus' || !question.prompts) return [question];
+      const { prompts: _prompts, ...versus } = question;
+      return [versus, ...responses.get(question.id)!];
+    }),
+    groups: instructorGroups(content).map(group => ({
+      ...group, item_ids: group.item_ids.flatMap(id => [id, ...(responses.get(id) ?? []).map(response => response.id)]),
+    })),
+  };
+}
+
 export function newInstructorGroup(): InstructorQuestionGroup {
   return { id: crypto.randomUUID(), titulo: '', item_ids: [] };
 }
@@ -99,11 +175,11 @@ export function incisoLetter(index: number): string {
   return text;
 }
 
-export function groupPublicInstructorQuestions(questions: PublicInstructorQuestion[]) {
+export function groupPublicInstructorQuestions(questions: PublicInstructorQuestion[], showTopics = true) {
   const groups = new Map<string, { id: string; titulo: string; position: number; section?: InstructorSection; items: PublicInstructorQuestion[]; grouped: boolean }>();
   questions.forEach((q, index) => {
     const id = q.group?.id ?? `legacy-${q.id}`;
-    if (!groups.has(id)) groups.set(id, { id, titulo: q.group?.titulo ?? '', position: q.group?.position ?? index + 1, section: q.group?.section, items: [], grouped: !!q.group });
+    if (!groups.has(id)) groups.set(id, { id, titulo: q.group?.titulo ?? '', position: q.group?.position ?? index + 1, section: showTopics ? q.group?.section : undefined, items: [], grouped: !!q.group });
     groups.get(id)!.items.push(q);
   });
   return [...groups.values()].sort((a, b) => (a.section?.position ?? 1000) - (b.section?.position ?? 1000) || a.position - b.position);
@@ -113,10 +189,58 @@ export function newInstructorQuestion(type: InstructorQuestionType = 'single_cho
   const base = { id: crypto.randomUUID(), titulo: '' };
   if (type === 'short_answer') return { ...base, type, accepted_answers: [''] };
   if (type === 'image_point') return { ...base, type };
-  if (type === 'image_versus') return { ...base, type };
+  if (type === 'image_versus') return { ...base, type, prompts: newInstructorVersusPrompts() };
   if (type === 'completion') return { ...base, type, titulo: '{{1}}', blanks: [{ id: crypto.randomUUID(), accepted_answers: [''] }] };
   if (type === 'matching') return { ...base, type, pairs: [0, 1].map(() => ({ id: crypto.randomUUID(), option_id: crypto.randomUUID(), term: '', definition: '' })) };
   return { ...base, type, correct_option_id: '', options: [0, 1, 2, 3].map(() => ({ id: crypto.randomUUID(), texto: '' })) };
+}
+
+export function changeInstructorQuestionFormat(question: InstructorQuestion, type: InstructorQuestionType): InstructorQuestion {
+  if ((question.type ?? 'single_choice') === type) return question;
+  const next = newInstructorQuestion(type);
+  const id = question.id;
+  const titulo = question.titulo || next.titulo;
+  if (next.type === 'image_versus') {
+    if (question.type === 'image_versus') return question;
+    return { ...next, id, titulo, image_a: question.image, image_b: question.alternate_image };
+  }
+  if (question.type === 'image_versus') {
+    return { ...next, id, titulo, image: question.image_a ?? question.image_b,
+      alternate_image: question.image_a ? question.image_b : undefined };
+  }
+  return { ...next, id, titulo, image: question.image, alternate_image: question.alternate_image };
+}
+
+export function instructorQuestionImageUrls(question: InstructorQuestion): string[] {
+  const images = question.type === 'image_versus'
+    ? [question.image_a, question.image_b]
+    : [question.image, question.alternate_image];
+  return images.flatMap(image => image ? [image.url] : []);
+}
+
+export function replaceInstructorQuestionImageUrl(question: InstructorQuestion, from: string, to: string): InstructorQuestion {
+  const replace = (image?: InstructorReferenceImage) => image?.url === from ? { ...image, url: to } : image;
+  if (!instructorQuestionImageUrls(question).includes(from)) return question;
+  return question.type === 'image_versus'
+    ? { ...question, image_a: replace(question.image_a), image_b: replace(question.image_b) }
+    : { ...question, image: replace(question.image), alternate_image: replace(question.alternate_image) };
+}
+
+export function isInstructorMultipleChoiceAnswer(answer: unknown): answer is string[] {
+  return Array.isArray(answer) && answer.every(option => typeof option === 'string');
+}
+
+export function instructorChoiceAnswerText(options: InstructorOption[], answer: InstructorAnswers[string] | undefined): string {
+  const ids = typeof answer === 'string' ? [answer] : isInstructorMultipleChoiceAnswer(answer) ? answer : [];
+  return options
+    .map((option, index) => {
+      const letter = incisoLetter(index).toUpperCase();
+      const text = option.texto.replace(/^[A-Za-z][.)]\s*/, '');
+      return { id: option.id, label: `${letter}. ${text}` };
+    })
+    .filter(item => ids.includes(item.id))
+    .map(item => item.label)
+    .join(' · ');
 }
 
 export function isInstructorAnswerComplete(question: PublicInstructorQuestion, answer: InstructorAnswers[string] | undefined): boolean {
@@ -126,20 +250,25 @@ export function isInstructorAnswerComplete(question: PublicInstructorQuestion, a
     return points.length > 0 && points.every(point => typeof point.text === 'string' && point.text.trim().length > 0);
   }
   if (question.type === 'completion' || question.type === 'matching') {
-    if (!answer || typeof answer !== 'object' || isInstructorPointAnswer(answer)) return false;
+    if (!answer || typeof answer !== 'object' || Array.isArray(answer) || isInstructorPointAnswer(answer)) return false;
     return question.type === 'completion'
       ? question.blanks.every(blank => typeof answer[blank.id] === 'string' && !!answer[blank.id].trim())
-      : question.terms.every(term => question.choices.some(choice => choice.id === answer[term.id]))
-        && new Set(question.terms.map(term => answer[term.id])).size === question.terms.length;
+      : question.terms.every(term => question.choices.some(choice => choice.id === answer[term.id]));
+  }
+  if ((!question.type || question.type === 'single_choice') && question.multiple) {
+    return isInstructorMultipleChoiceAnswer(answer) && answer.length > 0 && new Set(answer).size === answer.length
+      && answer.every(id => question.options.some(option => option.id === id));
   }
   return typeof answer === 'string' && !!answer.trim();
 }
 
 export function hasInstructorQuestionResponses(question: InstructorQuestion): boolean {
-  if (question.type === 'image_versus') return !!question.image_a || !!question.image_b;
-  if (question.type === 'image_point') return !!question.image;
-  if (question.type === 'short_answer') return !!question.image || question.accepted_answers.some(s => !!s.trim());
-  if (question.type === 'completion') return !!question.image || question.blanks.some(b => b.accepted_answers.some(s => !!s.trim()));
-  if (question.type === 'matching') return !!question.image || question.pairs.some(p => !!p.term.trim() || !!p.definition.trim());
-  return !!question.image || !!question.correct_option_id || question.options.some(o => !!o.texto.trim());
+  if (question.type === 'image_versus') return !!question.prompts && Object.values(question.prompts).some(prompt => !!prompt.titulo.trim());
+  if (question.type === 'image_point') return false;
+  if (question.type === 'short_answer') return question.accepted_answers.some(s => !!s.trim());
+  if (question.type === 'completion') return !!question.review_reference?.trim()
+    || question.blanks.some(b => b.accepted_answers.some(s => !!s.trim()));
+  if (question.type === 'matching') return question.pairs.some(p => !!p.term.trim() || !!p.definition.trim())
+    || !!question.distractors?.some(option => option.texto.trim());
+  return !!question.correct_option_id || !!question.correct_option_ids?.length || question.options.some(o => !!o.texto.trim());
 }

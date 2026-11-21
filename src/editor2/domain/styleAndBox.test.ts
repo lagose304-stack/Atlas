@@ -10,6 +10,7 @@ import {
   createTabsBlock,
   createTextBlock,
 } from './defaults';
+import { patchResponsiveOverride, responsiveValues, screenForWidth } from './responsive';
 import { canvasDocSchema } from './schema';
 import { DEFAULT_BOX_STYLE, blockStyleSchema, sanitizeBlockStyle } from './styleSchema';
 import { blockStyleToCss, hasVisualStyle, mergeBlockStyle } from './styleToCss';
@@ -187,6 +188,50 @@ describe('Editor 2.0 Fase 2 — Tarjeta / Caja (box) y retrocompatibilidad', () 
     expect(rtTabs.type).toBe('tabs');
     if (rtTabs.type !== 'tabs') return;
     const tabSection = rtTabs.props.items[0].children?.[0].block;
-    expect(tabSection?.slots.children[0].block.type).toBe('box');
+    expect(tabSection?.type).toBe('canvas');
+    if (tabSection?.type === 'canvas') {
+      expect(tabSection.slots.children[0].block.type).toBe('box');
+    }
+  });
+});
+
+describe('Editor 2.0 Fase 5 — ajustes por ancho de página', () => {
+  it('selecciona el rango del lienzo y conserva los valores base cuando no hay ajuste', () => {
+    const style = blockStyleSchema.parse({
+      flow: { direction: 'row', align: 'end' },
+      textSize: 26,
+      responsive: {
+        mobile: { direction: 'column', gap: 'sm', textSize: 'theme' },
+        tablet: { direction: 'grid' },
+      },
+    });
+    expect([639, 640, 1023, 1024].map(screenForWidth)).toEqual(['mobile', 'tablet', 'tablet', 'desktop']);
+    expect(responsiveValues(style, 'mobile', 'lg')).toEqual({
+      direction: 'column', gap: 'sm', align: 'end', textSize: 'theme',
+    });
+    expect(responsiveValues(style, 'tablet', 'lg')).toEqual({
+      direction: 'grid', gap: 'lg', align: 'end', textSize: 26,
+    });
+    expect(responsiveValues(style, 'desktop', 'lg')).toEqual({
+      direction: 'row', gap: 'lg', align: 'end', textSize: 26,
+    });
+  });
+
+  it('persiste los ajustes en el documento y restablece cada propiedad de forma independiente', () => {
+    const section = createNestedCanvasNode({
+      children: [createLeafPlacedBlock(createHeadingBlock({ text: 'Corteza cerebelosa' }))],
+    });
+    section.props.style = {
+      flow: { direction: 'row' },
+      responsive: { mobile: { direction: 'column', gap: 'sm' }, tablet: { align: 'center' } },
+    };
+    const doc = createEmptyCanvasDoc('ficha-adaptable', { children: [createPlacedBlock(section)] });
+    const restored = fromPuckData(toPuckData(doc));
+    expect(restored.root.slots.children[0].block.props.style).toEqual(section.props.style);
+
+    const responsive = patchResponsiveOverride(section.props.style.responsive, 'mobile', 'gap', undefined);
+    expect(responsive).toEqual({ mobile: { direction: 'column' }, tablet: { align: 'center' } });
+    expect(patchResponsiveOverride({ mobile: { textSize: 18 } }, 'mobile', 'textSize', undefined))
+      .toBeUndefined();
   });
 });

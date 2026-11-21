@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Check, Circle, Eye, Info, LoaderCircle, Save, ShieldCheck, Shuffle } from 'lucide-react';
+import { ArrowLeft, Check, Circle, Eye, Info, LoaderCircle, Save, ShieldCheck, Shuffle, Trash2 } from 'lucide-react';
 import type { CatalogTema } from '../services/catalogService';
 import {
   getInstructorBankTopic,
@@ -10,19 +10,10 @@ import {
   type InstructorEditor,
 } from '../services/instructorTests';
 import { instructorGroups, type InstructorQuestion, type InstructorQuestionGroup, type InstructorSection } from '../types/instructorQuestions';
-import { groupTemasByParcial, sortInstructorTemas } from '../utils/instructorTopics';
+import { groupTemasByParcial, shuffleInstructorItems, sortInstructorTemas } from '../utils/instructorTopics';
 import HoldToRevealCodeInput from './HoldToRevealCodeInput';
 import InstructorScheduleEditor from './InstructorScheduleEditor';
 import InstructorTestPreview from './InstructorTestPreview';
-
-function shuffleArray<T>(items: T[]): T[] {
-  const copy = [...items];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
 
 export default function InstructorBankTestConfig({
   editor,
@@ -30,12 +21,14 @@ export default function InstructorBankTestConfig({
   bankSummary,
   onSaved,
   onClose,
+  onDeleteDraft,
 }: {
   editor: InstructorEditor | null;
   temas: CatalogTema[];
   bankSummary: InstructorBankSummary[];
   onSaved: (saved: InstructorEditor, message: string) => void;
   onClose: () => void;
+  onDeleteDraft?: (dirty: boolean) => void;
 }) {
   const initialContent: InstructorContent = editor?.content
     ? { ...editor.content, mode: 'bank', questions_per_topic: editor.content.questions_per_topic ?? 1, questions: [], groups: [] }
@@ -77,7 +70,7 @@ export default function InstructorBankTestConfig({
         if (!topicGroups.length) return;
         const sectionId = `sec-tema-${tema.id}`;
         sections.push({ id: sectionId, tema_id: tema.id, nombre: tema.nombre });
-        const picked = shuffleArray(topicGroups).slice(0, perTopic);
+        const picked = shuffleInstructorItems(topicGroups).slice(0, perTopic);
         const byId = new Map(topicData.content.questions.map(q => [q.id, q]));
         picked.forEach(g => {
           groups.push({ ...g, section_id: sectionId });
@@ -259,6 +252,10 @@ export default function InstructorBankTestConfig({
               </section>
 
               <InstructorScheduleEditor content={content} onChange={setContent} />
+              {onDeleteDraft && <div className="instructor-row">
+                <button type="button" className="instructor-btn instructor-btn-danger"
+                  onClick={() => onDeleteDraft(dirty)}><Trash2 size={16} aria-hidden="true" />Eliminar borrador</button>
+              </div>}
             </div>
           </fieldset>
         </form>

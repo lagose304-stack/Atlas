@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowLeft, ArrowRight, ArrowRightLeft, BookOpen, Check, ClipboardCheck, FilePenLine, FileText,
-  FolderOpen, LoaderCircle, Plus, RefreshCw, Search, Settings2, Upload, X,
+  FolderOpen, LoaderCircle, Plus, RefreshCw, Search, Settings2, Trash2, Upload, X,
 } from 'lucide-react';
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { getCachedTemas, type CatalogTema } from '../services/catalogService';
 import {
-  getInstructorBankTopic, getInstructorTest, listInstructorBank, listInstructorTests,
+  deleteInstructorDraft, getInstructorBankTopic, getInstructorTest, listInstructorBank, listInstructorTests,
   publishInstructorTest, type InstructorBankSummary, type InstructorBankTopic,
   type InstructorEditor, type InstructorSummary,
 } from '../services/instructorTests';
 import { groupTemasByParcial } from '../utils/instructorTopics';
-import { instructorGroups } from '../types/instructorQuestions';
+import { instructorGroups, instructorStoredIncisoCount } from '../types/instructorQuestions';
 import InstructorBankTopicEditor from '../components/InstructorBankTopicEditor';
 import InstructorBankTestConfig from '../components/InstructorBankTestConfig';
+import InstructorDeleteConfirmation from '../components/InstructorDeleteConfirmation';
 import InstructorLegacyMigrator from '../components/InstructorLegacyMigrator';
 import InstructorSubmissionReview from '../components/InstructorSubmissionReview';
 import Footer from '../components/Footer';
@@ -38,6 +39,8 @@ export default function PruebaInstructores() {
 
   const [activeBankTopic, setActiveBankTopic] = useState<{ tema: CatalogTema; topic: InstructorBankTopic } | null>(null);
   const [configuringTest, setConfiguringTest] = useState<{ editor: InstructorEditor | null } | null>(null);
+  const [deletingDraft, setDeletingDraft] = useState<{ id: string; revision: number; name: string; dirty: boolean } | null>(null);
+  const [deleteError, setDeleteError] = useState('');
   const [migratingTest, setMigratingTest] = useState<InstructorEditor | null>(null);
   const [reviewTest, setReviewTest] = useState<InstructorSummary | null>(null);
   const [topicQuery, setTopicQuery] = useState('');
@@ -84,6 +87,7 @@ export default function PruebaInstructores() {
       estado: saved.estado,
       revision: saved.revision,
       published_revision: saved.published_revision,
+      can_delete_draft: saved.can_delete_draft,
       mode: isBank ? 'bank' : 'legacy',
       legacy_question_count: isBank ? 0 : instructorGroups(saved.content).length,
     };
@@ -97,7 +101,7 @@ export default function PruebaInstructores() {
     const item: InstructorBankSummary = {
       tema_id: saved.tema_id,
       question_count: groups.length,
-      inciso_count: saved.content.questions.length,
+      inciso_count: instructorStoredIncisoCount(saved.content.questions),
       revision: saved.revision,
     };
     setBankSummary(previous => previous.some(b => b.tema_id === saved.tema_id)
@@ -158,6 +162,30 @@ export default function PruebaInstructores() {
     }
   };
 
+  const requestDraftDeletion = (test: Pick<InstructorSummary, 'id' | 'revision'>, name: string, dirty = false) => {
+    setDeleteError('');
+    setDeletingDraft({ id: test.id, revision: test.revision, name, dirty });
+  };
+  const removeDraft = async () => {
+    if (busy || !deletingDraft) return;
+    setBusy(true); setDeleteError('');
+    try {
+      await deleteInstructorDraft(deletingDraft);
+      setTests(previous => previous.filter(test => test.id !== deletingDraft.id));
+      setConfiguringTest(null);
+      setDeletingDraft(null);
+      setError('');
+      setMessage('Borrador eliminado.');
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'No se pudo eliminar el borrador.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const deleteDialog = deletingDraft && <InstructorDeleteConfirmation kind="draft" name={deletingDraft.name}
+    dirty={deletingDraft.dirty} busy={busy} error={deleteError}
+    onCancel={() => setDeletingDraft(null)} onConfirm={() => void removeDraft()} />;
+
   if (activeBankTopic) {
     return (
       <InstructorBankTopicEditor
@@ -173,9 +201,10 @@ export default function PruebaInstructores() {
   }
 
   if (configuringTest) {
-    return (
+    const { editor } = configuringTest;
+    return <>
       <InstructorBankTestConfig
-        editor={configuringTest.editor}
+        editor={editor}
         temas={temas}
         bankSummary={bankSummary}
         onSaved={(saved, msg) => {
@@ -185,8 +214,11 @@ export default function PruebaInstructores() {
           setMessage(msg);
         }}
         onClose={() => setConfiguringTest(null)}
+        onDeleteDraft={editor?.estado === 'borrador' && editor.can_delete_draft
+          ? dirty => requestDraftDeletion(editor, editor.content.nombre, dirty) : undefined}
       />
-    );
+      {deleteDialog}
+    </>;
   }
 
   return (
@@ -437,6 +469,10 @@ export default function PruebaInstructores() {
                         <button type="button" className="instructor-btn" disabled={busy} aria-label={`Configurar ${test.nombre}`} onClick={() => void openTestConfig(test.id)}>
                           <Settings2 size={16} aria-hidden="true" />Configurar
                         </button>
+                        {test.estado === 'borrador' && test.can_delete_draft && <button type="button" className="instructor-btn instructor-btn-danger" disabled={busy}
+                          aria-label={`Eliminar borrador ${test.nombre}`} onClick={() => requestDraftDeletion(test, test.nombre)}>
+                          <Trash2 size={16} aria-hidden="true" />Eliminar borrador
+                        </button>}
                       </div>
                     </li>
                   ))}
@@ -469,6 +505,7 @@ export default function PruebaInstructores() {
         </>}
       </main>
       <Footer />
+      {deleteDialog}
     </div>
   );
 }

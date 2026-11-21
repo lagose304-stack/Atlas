@@ -79,7 +79,8 @@ body[data-atlas-instructor-exam="active"] > #root { display: none !important; }
 .instructor-public-scope .instructor-question legend { font-size: .88rem; line-height: 1.7; padding: 0 7px; color: #24495e; font-weight: 700; }
 .instructor-public-scope .instructor-question .instructor-option { padding: 12px; background: #f5f9fc; border: 1px solid #d9e6ee; border-radius: 10px; font-size: .86rem; cursor: pointer; }
 .instructor-public-scope .instructor-question .instructor-option:has(input:checked) { background: #e8f6f3; border-color: #73bcaf; }
-.instructor-public-scope .instructor-question input[type=radio] { accent-color: #087f8c; }
+.instructor-public-scope .instructor-question input:is([type=radio], [type=checkbox]) { accent-color: var(--exam-teal, #087f8c); }
+.instructor-public-scope .instructor-option-prefix { font-weight: 700; margin-right: 6px; color: var(--exam-ink, #16344c); }
 .instructor-exam-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 22px; border-top: 1px solid #dae7ee; }
 .instructor-exam-pagination > span { font-size: .75rem; color: #6f8795; font-variant-numeric: tabular-nums; }
 .instructor-exam-delivery { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 26px; background: #e8f3f5; border: 1px solid #bcdadf; border-radius: 17px; }

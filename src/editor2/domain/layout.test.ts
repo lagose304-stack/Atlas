@@ -31,10 +31,17 @@ describe('layout', () => {
   });
 
   it('informa auto-placement cuando no hay start', () => {
-    expect(gridColumnValue(createSpanIntent(6))).toBe('span 6');
+    expect(gridColumnValue(createSpanIntent(6))).toBe('auto / span 12');
+  });
+
+  it('conserva la posición de cuadrícula junto al anclaje de la capa', () => {
+    expect(layoutClassList({ base: { span: 8, start: 3, anchor: 'bottom-right' } })).toEqual([
+      'e2-anchor-bottom-right', 'e2-span-base-8', 'e2-start-base-3',
+    ]);
   });
 
   it('informa columna inicial cuando hay start', () => {
-    expect(gridColumnValue(createSpanIntent(6, 3))).toBe('3 / span 6');
+    expect(gridColumnValue(createSpanIntent(6, 3))).toBe('5 / span 12');
+    expect(gridColumnValue({ start: 3.5, span: 6.5 })).toBe('6 / span 13');
   });
 });

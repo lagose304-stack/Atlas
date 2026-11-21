@@ -120,7 +120,7 @@ describe('editor2Store', () => {
     expect(topLevelIds(getEditor2Doc())).toEqual([TEXT_B, TEXT_A]);
   });
 
-  it('impide mover un componente a la raíz', () => {
+  it('mueve un componente de una sección guardada al lienzo', () => {
     const doc = docWithNestedCanvas();
     (doc.root.slots.children[0].block as ReturnType<typeof createNestedCanvasNode>).slots.children.push(
       createLeafPlacedBlock(createTextBlock({ id: TEXT_A }), 6),
@@ -129,8 +129,7 @@ describe('editor2Store', () => {
 
     useEditor2Store.getState().moveBlock(TEXT_A, 0, null);
 
-    expect(nestedChildren(getEditor2Doc()!).map(item => item.block.id)).toEqual([TEXT_A]);
-    expect(topLevelIds(getEditor2Doc())).toEqual([CANVAS_ID]);
+    expect(topLevelIds(getEditor2Doc())).toEqual([TEXT_A, CANVAS_ID]);
   });
 
   it('actualiza props y layout de un bloque', () => {
@@ -145,7 +144,7 @@ describe('editor2Store', () => {
     );
     useEditor2Store.getState().updateLayout(TEXT_A, () => ({ base: { span: 6 } }));
 
-    const placed = nestedChildren(getEditor2Doc()!)[0];
+    const placed = getEditor2Doc()!.root.slots.children[0];
     expect(placed.layout).toEqual({ base: { span: 6 } });
     expect(
       placed.block.type === 'text' &&

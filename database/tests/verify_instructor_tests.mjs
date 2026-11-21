@@ -8,7 +8,8 @@ import { pathToFileURL } from 'node:url';
 if (!process.argv[2]) throw new Error('Indica la ruta del módulo PGlite instalado fuera del proyecto.');
 const { PGlite } = await import(pathToFileURL(process.argv[2]).href);
 const db = new PGlite();
-const withUniqueAccount = process.argv.includes('--unique-account');
+const withBankVersus = process.argv.includes('--bank-versus');
+const withUniqueAccount = process.argv.includes('--unique-account') || withBankVersus;
 const withDeletion = process.argv.includes('--deletion') || withUniqueAccount;
 const withSchedule = process.argv.includes('--schedule') || withDeletion;
 const withResume = process.argv.includes('--resume') || withSchedule;
@@ -668,6 +669,169 @@ try {
     check((await db.query('select answers from public.instructor_test_progress where test_id=$1',[other.id])).rows[0].answers.q1==='b','Cambio de contenido conserva progreso anterior');
     await db.exec(await readFile(new URL('../rollback_unique_instructor_attempt_per_account.sql',import.meta.url),'utf8'));
     check((await call('atlas_get_instructor_submission',[delivered.submission_id])).answers.q1==='a','Rollback conserva entrega y calificacion');
+  }
+  if (withBankVersus) {
+    const apply = name => readFile(new URL(`../${name}.sql`, import.meta.url), 'utf8').then(sql => db.exec(sql));
+    await db.exec("ALTER TABLE public.temas ADD COLUMN parcial text DEFAULT 'primer', ADD COLUMN sort_order integer");
+    await apply('add_instructor_image_versus');
+    await apply('add_instructor_question_images');
+    await apply('add_instructor_multi_point_answers');
+    await apply('unique_instructor_attempt_per_account');
+    await apply('setup_instructor_question_bank');
+    await apply('update_instructor_bank_exam');
+    await apply('delete_instructor_test_drafts');
+    await apply('preserve_instructor_question_images');
+    await actor(4);
+
+    const slots = ['a1', 'b1'];
+    const prompts = slots.map(slot => ({ id: `versus-${slot}-test`, type: 'short_answer', titulo: `Describe ${slot}`, accepted_answers: [''] }));
+    const image = slot => ({ url: `https://pub-49025e2296604f9db7de3c958d1fdd8e.r2.dev/test-${slot}.webp`, source: 'upload' });
+    const privateImage = { ...image('point'), annotations: [{ label: 'Señalado privado', x: 0.4, y: 0.6 }] };
+    const point = { id: 'point-with-private-markers', type: 'image_point', titulo: 'Señala la estructura',
+      image: privateImage, alternate_image: { ...image('extra-plate'), annotations: privateImage.annotations },
+    };
+    const pointWithBackup = { nombre: 'Conversión de formato', instrucciones: '', questions: [point] };
+    await reject(() => call('atlas_save_instructor_test', [null, null, {
+      ...pointWithBackup, questions: [{ ...point, alternate_image: { ...point.alternate_image, url: 'blob:pending' } }],
+    }, '001122']), /referencia válida de R2/);
+    const pointDraft = await call('atlas_save_instructor_test', [null, null, pointWithBackup, '001122']);
+    assert.deepEqual(pointDraft.content.questions[0], point);
+    const pointPublished = await call('atlas_publish_instructor_test', [pointDraft.id, pointDraft.revision, true]);
+    await actor(null);
+    const pointAccess = await call('atlas_unlock_instructor_test', [pointPublished.id, '001122']);
+    check(pointAccess.test.questions[0].image.url === privateImage.url
+      && !('annotations' in pointAccess.test.questions[0].image) && !('alternate_image' in pointAccess.test.questions[0]),
+    'Las marcas y la segunda placa se conservan en el borrador sin aparecer en la prueba de señalado');
+    await actor(4);
+    const question = { id: 'comparison', type: 'image_versus', titulo: 'Compara', image_a: image('a'), image_b: image('b') };
+    const topic = {
+      groups: [{ id: 'comparison-group', titulo: '', item_ids: [question.id, ...prompts.map(prompt => prompt.id)] }],
+      questions: [question, ...prompts],
+    };
+    await call('atlas_save_instructor_bank_topic', [1, 0, topic]);
+    let bank = await call('atlas_save_instructor_test', [null, null, {
+      nombre: 'Versus del banco', instrucciones: '', mode: 'bank', questions_per_topic: 1,
+    }, '001122']);
+    bank = await call('atlas_publish_instructor_test', [bank.id, bank.revision, true]);
+    await actor(null);
+    const unlock = () => call('atlas_unlock_instructor_test', [bank.id, '001122']);
+    const { token } = await unlock();
+    const started = await call('atlas_begin_instructor_test', [bank.id, token, 'Ejemplo', '0123456789']);
+    assert.deepEqual(started.questions.map(item => item.id), topic.groups[0].item_ids);
+    check(started.questions.every(item => !('accepted_answers' in item)), 'Las consignas públicas conservan su orden y ocultan las guías');
+    check(started.questions.every(item => !item.group.section), 'El examen no recibe el tema de las preguntas asignadas');
+    const answers = Object.fromEntries(prompts.map(prompt => [prompt.id, prompt.titulo]));
+    const partial = { [prompts[0].id]: answers[prompts[0].id] };
+    await reject(() => call('atlas_save_instructor_progress', [bank.id, token, started.progress_revision, { ajena: 'texto' }, 'comparison-group']), /Respuesta ajena/);
+    const savedProgress = await call('atlas_save_instructor_progress', [bank.id, token, started.progress_revision, partial, 'comparison-group']);
+    check(savedProgress.ok, 'Guardar respuestas de Versus contra el contenido asignado');
+    const next = await unlock();
+    const recovery = await call('atlas_resume_instructor_test', [bank.id, next.token, '0123456789']);
+    assert.deepEqual(recovery.answers, partial);
+    assert.deepEqual(recovery.questions, started.questions);
+    check(recovery.current_question_id === 'comparison-group', 'Recuperar el borrador del Versus en la pregunta asignada');
+    await reject(() => call('atlas_grade_instructor_test', [bank.id, next.token, partial]), /Responde todas|Respuesta/);
+    const grade = await call('atlas_grade_instructor_test', [bank.id, next.token, answers]);
+    check(grade.total === 1 && grade.pending_review === 2, 'Versus vale un punto y genera una respuesta por placa');
+    await actor(4);
+    const submission = await call('atlas_get_instructor_submission', [grade.submission_id]);
+    assert.deepEqual(submission.answers, answers);
+    const reviews = Object.fromEntries(prompts.map((prompt, index) => [prompt.id, index === 0]));
+    await call('atlas_review_instructor_submission', [submission.id, submission.revision, reviews]);
+    await actor(null);
+    const result = await call('atlas_instructor_participant_result', [bank.id, '001122', '0123456789']);
+    check(result.ok && result.result.correct === 0.5, 'Cada campo se califica de manera independiente');
+
+    // Distractores guardados y publicados, sin exponer qué opciones son las correctas.
+    await actor(4);
+    const matching = {
+      id: 'matching-bank', type: 'matching', titulo: 'Relaciona términos',
+      pairs: [
+        { id: 'term-a', term: 'Término A', option_id: 'choice-a', definition: 'Opción A' },
+        { id: 'term-b', term: 'Término B', option_id: 'choice-b', definition: 'Opción B' },
+      ],
+      distractors: [{ id: 'extra-a', texto: 'Extra A' }, { id: 'extra-b', texto: 'Extra B' }],
+    };
+    const completion = { id: 'completion-bank', type: 'completion', titulo: 'El tejido contiene {{1}}',
+      blanks: [{ id: 'blank-a', accepted_answers: ['Estructura esperada', 'Variante esperada'] }],
+      review_reference: 'Nota privada de completación',
+    };
+    const matchingTopic = {
+      groups: [{ id: 'matching-group', titulo: '', item_ids: [matching.id, completion.id] }],
+      questions: [matching, completion],
+    };
+    await reject(() => call('atlas_save_instructor_bank_topic', [2, 0, {
+      ...matchingTopic, questions: [{ ...matching, distractors: [{ id: 'choice-a', texto: 'Repetida' }] }],
+    }]), /identificadores/);
+    await reject(() => call('atlas_save_instructor_bank_topic', [2, 0, {
+      ...matchingTopic, questions: [matching, { ...completion, review_reference: ['Inválida'] }],
+    }]), /referencia para revisión/);
+    const savedTopic = await call('atlas_save_instructor_bank_topic', [2, 0, matchingTopic]);
+    let matchingTest = await call('atlas_save_instructor_test', [null, null, {
+      nombre: 'Pareados del banco', instrucciones: '', mode: 'bank', questions_per_topic: 1,
+    }, '001122']);
+    matchingTest = await call('atlas_publish_instructor_test', [matchingTest.id, matchingTest.revision, true]);
+    await actor(null);
+    const access = await call('atlas_unlock_instructor_test', [matchingTest.id, '001122']);
+    const attempt = await call('atlas_begin_instructor_test', [matchingTest.id, access.token, 'Ejemplo', '0123456789']);
+    const publicMatching = attempt.questions.find(item => item.id === matching.id);
+    check(publicMatching.terms.length === 2 && publicMatching.choices.length === 4
+      && !publicMatching.pairs && !publicMatching.distractors && !publicMatching.group.section, 'El alumno recibe las cuatro opciones mezcladas sin sus claves ni su tema');
+    check(!JSON.stringify(attempt.questions).includes(completion.review_reference)
+      && !JSON.stringify(attempt.questions).includes('Variante esperada'), 'La prueba oculta las claves y referencias privadas de completación');
+    const repeated = { 'term-a': 'extra-a', 'term-b': 'extra-a' };
+    const mixedAnswers = { ...answers, [matching.id]: repeated, [completion.id]: { 'blank-a': 'Otro tejido' } };
+    await reject(() => call('atlas_save_instructor_progress', [matchingTest.id, access.token, attempt.progress_revision,
+      { [matching.id]: { 'term-a': 'opcion-ajena' } }, 'matching-group']), /Pareja ajena/);
+    check((await call('atlas_save_instructor_progress', [matchingTest.id, access.token, attempt.progress_revision, mixedAnswers, 'matching-group'])).ok,
+      'El guardado acepta distractores repetidos');
+    const repeatedGrade = await call('atlas_grade_instructor_test', [matchingTest.id, access.token, mixedAnswers]);
+    check(repeatedGrade.total === 2 && repeatedGrade.correct === 0, 'Las opciones repetidas se entregan pero se califican con la clave real');
+    await actor(4);
+    const mixedSubmission = await call('atlas_get_instructor_submission', [repeatedGrade.submission_id]);
+    assert.deepEqual(mixedSubmission.snapshot.review_guides[completion.id], {
+      blanks: { 'blank-a': completion.blanks[0].accepted_answers }, reference: completion.review_reference,
+    });
+    await call('atlas_review_instructor_submission', [mixedSubmission.id, mixedSubmission.revision, reviews]);
+    await actor(null);
+    const reviewedResult = await call('atlas_instructor_participant_result', [matchingTest.id, '001122', '0123456789']);
+    check(reviewedResult.ok && !('review_guides' in reviewedResult.snapshot)
+      && !JSON.stringify(reviewedResult).includes('Variante esperada'), 'El resultado del estudiante excluye las referencias privadas');
+
+    await actor(4);
+    const config = { nombre: 'Borrador por eliminar', instrucciones: '', mode: 'bank', questions_per_topic: 1 };
+    const draft = await call('atlas_save_instructor_test', [null, null, config, '001122']);
+    check(draft.can_delete_draft && (await call('atlas_get_instructor_test', [draft.id])).can_delete_draft
+      && (await call('atlas_list_instructor_tests')).find(test => test.id === draft.id).can_delete_draft, 'La configuración y el listado reconocen un borrador nuevo');
+    await actor(null);
+    await reject(() => call('atlas_delete_instructor_draft', [draft.id, draft.revision]), /No autorizado/);
+    await actor(4);
+    await reject(() => call('atlas_delete_instructor_draft', [draft.id, draft.revision + 1]), /Otra persona/);
+    await reject(() => call('atlas_delete_instructor_draft', [matchingTest.id, matchingTest.revision]), /sin historial/);
+    const retired = await call('atlas_publish_instructor_test', [matchingTest.id, matchingTest.revision, false]);
+    check(retired.estado === 'borrador' && !retired.can_delete_draft, 'Una prueba retirada sigue protegida');
+    await reject(() => call('atlas_delete_instructor_draft', [retired.id, retired.revision]), /sin historial/);
+    check((await call('atlas_delete_instructor_draft', [draft.id, draft.revision])).ok
+      && (await call('atlas_delete_instructor_draft', [draft.id, draft.revision])).ok, 'El borrador se elimina de manera idempotente');
+    check(!(await call('atlas_list_instructor_tests')).some(test => test.id === draft.id)
+      && (await call('atlas_get_instructor_bank_topic', [2])).revision === savedTopic.revision
+      && (await call('atlas_get_instructor_submission', [mixedSubmission.id])).id === mixedSubmission.id,
+    'Borrar un borrador no afecta las preguntas del banco ni las entregas de otras pruebas');
+
+    const bank_topics = [1, 2].map(tema_id => ({
+      tema_id, nombre: `Tema ${tema_id}`,
+      groups: [1, 2, 3].map(n => ({ id: `group-${tema_id}-${n}`, titulo: '', item_ids: [`q-${tema_id}-${n}`] })),
+      questions: [1, 2, 3].map(n => ({ ...content.questions[0], id: `q-${tema_id}-${n}` })),
+    }));
+    const draws = await db.query(`
+      SELECT public.atlas_draw_instructor_bank_content($1::jsonb)->'groups' AS groups
+      FROM generate_series(1,24)
+    `, [{ questions_per_topic: 2, bank_topics }]);
+    check(draws.rows.every(({ groups }) => groups.length === 4 && new Set(groups.map(group => group.id)).size === 4
+      && groups.filter(group => group.section_id === 'bank-sec-1').length === 2), 'Cada sorteo conserva dos preguntas distintas por tema');
+    check(new Set(draws.rows.map(({ groups }) => groups.map(group => group.id).sort().join())).size > 1
+      && draws.rows.some(({ groups }) => groups[0].section_id !== groups[1].section_id),
+    'El sorteo varía la selección y mezcla el orden entre temas');
   }
   await db.exec('SET ROLE anon');
   await reject(() => db.query('select * from public.instructor_tests'), /permission denied/);

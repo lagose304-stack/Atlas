@@ -5,6 +5,7 @@ import Highlight from '@tiptap/extension-highlight';
 import Link from '@tiptap/extension-link';
 import { TextStyle } from '@tiptap/extension-text-style';
 import Underline from '@tiptap/extension-underline';
+import { INLINE_EDIT_MODE } from './inlineEditMode';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import {
@@ -55,6 +56,7 @@ const SuperscriptMark = Mark.create({
 export type InlineRichTextProps = {
   value: RichTextValue | string;
   editing: boolean;
+  onDemand?: boolean;
   placeholder?: string;
   singleLine?: boolean;
   className?: string;
@@ -66,6 +68,7 @@ export type InlineRichTextProps = {
 const InlineRichText: React.FC<InlineRichTextProps> = ({
   value,
   editing,
+  onDemand = false,
   placeholder = 'Escribe aquí…',
   singleLine = false,
   className,
@@ -84,7 +87,7 @@ const InlineRichText: React.FC<InlineRichTextProps> = ({
   const editor = useEditor(
     {
       immediatelyRender: false,
-      editable: editing,
+      editable: editing && !onDemand,
       extensions: [
         StarterKit.configure({
           heading: false,
@@ -114,6 +117,7 @@ const InlineRichText: React.FC<InlineRichTextProps> = ({
         attributes: {
           class: `e2-rich-editor${className ? ` ${className}` : ''}`,
           'data-e2-editable': editableTag,
+          ...(onDemand ? { 'data-e2-rich-on-demand': '' } : {}),
           'data-puck-overlay-portal': 'true',
           'data-placeholder': placeholder,
         },
@@ -156,8 +160,23 @@ const InlineRichText: React.FC<InlineRichTextProps> = ({
         onChangeRef.current(plain, rich, hostRef.current);
       },
     },
-    [editing],
+    [editing, onDemand],
   );
+
+  useEffect(() => {
+    if (!editor || !editing || !onDemand) return;
+    const field = editor.view.dom;
+    const changeMode = (event: Event) => {
+      const active = (event as CustomEvent<boolean>).detail;
+      editor.setEditable(active, false);
+      if (!active) {
+        setHasSelection(false);
+        setLinkOpen(false);
+      }
+    };
+    field.addEventListener(INLINE_EDIT_MODE, changeMode);
+    return () => field.removeEventListener(INLINE_EDIT_MODE, changeMode);
+  }, [editor, editing, onDemand]);
 
   useEffect(() => {
     if (!editor || !editing) return;

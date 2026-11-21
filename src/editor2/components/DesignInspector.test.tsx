@@ -10,6 +10,7 @@ let mockSelectedItem: Record<string, unknown> | null = null;
 
 vi.mock('@puckeditor/core', () => ({
   usePuck: () => ({
+    getParentById: () => undefined,
     selectedItem: mockSelectedItem,
     dispatch: mockDispatch,
     getSelectorForId: mockGetSelectorForId,
@@ -32,6 +33,20 @@ describe('DesignInspector (Fase 2 — Parte 2)', () => {
         },
       },
     };
+  });
+
+  it('activa la distribución en fila sin perder el diseño de la tarjeta', () => {
+    render(<DesignInspector />);
+    const distribution = screen.getByLabelText('Distribución');
+    expect(distribution).toHaveValue('grid');
+    fireEvent.change(distribution, { target: { value: 'row' } });
+    expect(mockDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        props: expect.objectContaining({
+          style: expect.objectContaining({ flow: { direction: 'row' }, shadow: 'soft' }),
+        }),
+      }),
+    }));
   });
 
   it('cambia el color de fondo rápido y despacha el estilo actualizado', () => {

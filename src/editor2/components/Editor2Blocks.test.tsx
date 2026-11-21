@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { EDITOR2_DEFAULT_IMAGE_SRC } from '../domain/defaults';
+import { setInlineEditMode } from './inlineEditMode';
 import {
   AccordionBlockView,
   ButtonBlockView,
@@ -82,6 +83,8 @@ describe('vistas de bloques', () => {
     );
 
     const heading = screen.getByRole('heading', { level: 2 });
+    expect(heading).toHaveAttribute('contenteditable', 'false');
+    setInlineEditMode(heading, true);
     expect(heading).toHaveAttribute('contenteditable', 'true');
     fireEvent.focus(heading);
     heading.textContent = 'Epitelio cilíndrico';
@@ -299,9 +302,8 @@ describe('configuración de Puck', () => {
     }
   });
 
-  it('limita el slot del lienzo y coloca Pestañas y Acordeón como estructura para anidar bloques de página', () => {
+  it('limita los destinos y permite contenido directo en las pestañas y el acordeón', () => {
     expect(config.components.canvas.fields).toMatchObject({
-      gap: { type: 'select' },
       content: {
         type: 'slot',
         allow: [
@@ -334,7 +336,7 @@ describe('configuración de Puck', () => {
           title: { type: 'text' },
           content: {
             type: 'slot',
-            allow: ['canvas'],
+            allow: expect.arrayContaining(['text', 'image', 'box']),
           },
         },
       },
@@ -347,7 +349,7 @@ describe('configuración de Puck', () => {
           title: { type: 'text' },
           content: {
             type: 'slot',
-            allow: ['canvas'],
+            allow: expect.arrayContaining(['text', 'image', 'box']),
           },
         },
       },
@@ -369,8 +371,8 @@ describe('configuración de Puck', () => {
     expect(EDITOR2_DEFAULT_IMAGE_SRC).toMatch(/^https:\/\/.+\/placas\/.+\.webp$/);
   });
 
-  it('permite editar la separación de la rejilla raíz', () => {
-    expect(config.root.fields.gap).toMatchObject({ type: 'select' });
+  it('mantiene fija la separación de la rejilla raíz', () => {
+    expect(config.root.fields?.gap).toBeUndefined();
   });
 
   it('pinta la raíz como contenedor de consulta de la rejilla', () => {
@@ -398,15 +400,17 @@ describe('configuración de Puck', () => {
     });
     render(element);
 
-    fireEvent.change(screen.getByLabelText('Columnas en base'), { target: { value: '4' } });
-    expect(onChange).toHaveBeenLastCalledWith({ base: { span: 4 } });
+    fireEvent.change(screen.getByLabelText('Columnas en base'), { target: { value: '9' } });
+    expect(onChange).toHaveBeenLastCalledWith({ base: { span: 4.5 } });
+    fireEvent.change(screen.getByLabelText('Fila inicial en base'), { target: { value: '2' } });
+    expect(onChange).toHaveBeenLastCalledWith({ base: { span: 6, row: 1.5 } });
 
     fireEvent.change(screen.getByLabelText('Pantalla'), { target: { value: 'md' } });
     fireEvent.click(screen.getByLabelText('Usar distribución mediano'));
     expect(onChange).toHaveBeenLastCalledWith({ base: { span: 6 }, md: { span: 6 } });
   });
 
-  it('no permite un inicio que desborde las 24 columnas', () => {
+  it('no permite un inicio que desborde las 48 columnas', () => {
     const onChange = vi.fn();
     const field = config.components.heading.fields.layout as {
       render: (props: Record<string, unknown>) => ReactElement;
@@ -440,7 +444,7 @@ describe('configuración de Puck', () => {
       }),
     );
 
-    fireEvent.change(screen.getByLabelText('Columnas en base'), { target: { value: '12' } });
+    fireEvent.change(screen.getByLabelText('Columnas en base'), { target: { value: '24' } });
     expect(onChange).toHaveBeenLastCalledWith({
       base: { span: 12, start: 1, row: 1 },
       lg: { span: 12, start: 1, row: 1 },

@@ -3,15 +3,17 @@ import { Crosshair, X } from 'lucide-react';
 import { useGetPuck, usePuck, type ComponentData } from '@puckeditor/core';
 import {
   editor2PuckConfig,
-  getActiveAccordionIndex,
-  getActiveTabIndex,
   setActiveAccordionIndex,
   setActiveTabIndex,
 } from './Editor2Blocks';
 import type { LayoutIntent, SpanIntent } from '../domain/schema';
+import { GRID_COLUMNS, GRID_MAX_ROW, fromGridLine, fromGridSpan, toGridSpan } from '../domain/gridResolution';
 import { useEditor2Store } from '../store/editor2Store';
+import { readGridTracks } from './gridTracks';
+import { useGridGuides } from './useGridGuides';
+import { EDITABLE_FIELD, EDIT_TEXT_REQUEST, setInlineEditMode } from './inlineEditMode';
 
-type Leaf =
+type PlaceableBlock =
   | 'heading'
   | 'text'
   | 'image'
@@ -25,7 +27,8 @@ type Leaf =
   | 'carousel'
   | 'badge'
   | 'icon'
-  | 'examCarousel';
+  | 'examCarousel'
+  | 'box';
 type ResizeDir = 'n' | 's' | 'e' | 'w' | 'nw' | 'sw' | 'se';
 
 type GridBox = {
@@ -35,18 +38,7 @@ type GridBox = {
   rowSpan: number;
 };
 
-type GridMetrics = {
-  rect: DOMRect;
-  clientWidth: number;
-  clientHeight: number;
-  colWidth: number;
-  gap: number;
-  pitch: number;
-  rowHeight: (index: number) => number;
-  rowOffset: (row: number) => number;
-};
-
-const COMPACT_SIZES: Record<Leaf, { span: number; rowSpan: number }> = {
+const COMPACT_SIZES: Record<PlaceableBlock, { span: number; rowSpan: number }> = {
   heading: { span: 8, rowSpan: 1 },
   text: { span: 10, rowSpan: 2 },
   image: { span: 6, rowSpan: 4 },
@@ -61,9 +53,10 @@ const COMPACT_SIZES: Record<Leaf, { span: number; rowSpan: number }> = {
   badge: { span: 6, rowSpan: 1 },
   icon: { span: 3, rowSpan: 2 },
   examCarousel: { span: 24, rowSpan: 5 },
+  box: { span: 12, rowSpan: 4 },
 };
 
-function isLeaf(name: string | undefined): name is Leaf {
+function isPlaceableBlock(name: string | undefined): name is PlaceableBlock {
   return (
     name === 'heading' ||
     name === 'text' ||
@@ -78,12 +71,13 @@ function isLeaf(name: string | undefined): name is Leaf {
     name === 'carousel' ||
     name === 'badge' ||
     name === 'icon' ||
-    name === 'examCarousel'
+    name === 'examCarousel' ||
+    name === 'box'
   );
 }
 
 function isGridBlock(name: string | undefined): boolean {
-  return isLeaf(name) || name === 'box' || name === 'tabs' || name === 'accordion';
+  return isPlaceableBlock(name) || name === 'tabs' || name === 'accordion';
 }
 
 function isResizeDir(value: string | undefined): value is ResizeDir {
@@ -123,72 +117,57 @@ function getEffectiveIntent(grid: HTMLElement, layout: LayoutIntent): SpanIntent
   return (key === 'lg' ? layout.md : undefined) ?? layout.base;
 }
 
-function getGridMetrics(grid: HTMLElement): GridMetrics | undefined {
+function getGridMetrics(grid: HTMLElement) {
+  const tracks = readGridTracks(grid);
   const rect = grid.getBoundingClientRect();
-  const style = getComputedStyle(grid);
-  const columns = style.gridTemplateColumns
-    .split(' ')
-    .map(parseFloat)
-    .filter((value) => Number.isFinite(value) && value > 0);
-  const colWidth = columns[0] || grid.clientWidth / 24;
-  const gap =
-    columns.length >= 24
-      ? Math.max(0, (grid.clientWidth - columns.slice(0, 24).reduce((sum, value) => sum + value, 0)) / 23)
-      : 0;
-  const pitch = colWidth + gap;
-  if (!(pitch > 0) || !(rect.width > 0) || !(rect.height > 0)) return undefined;
-  const rowHeight = () => colWidth;
-  const rowOffset = (targetRow: number) => Math.max(0, targetRow - 1) * pitch;
-  return {
-    rect,
-    clientWidth: grid.clientWidth,
-    clientHeight: grid.clientHeight,
-    colWidth,
-    gap,
-    pitch,
-    rowHeight,
-    rowOffset,
-  };
+  if (!tracks || !rect.width || !rect.height) return;
+  return { ...tracks, rect, grid };
 }
 
+type GridMetrics = NonNullable<ReturnType<typeof getGridMetrics>>;
+
 function pointToGridCell(metrics: GridMetrics, clientX: number, clientY: number): { col: number; row: number } {
-  const { rect, clientWidth, clientHeight, gap, pitch } = metrics;
-  const left = ((clientX - rect.left) * clientWidth) / rect.width;
-  const top = ((clientY - rect.top) * clientHeight) / rect.height;
-  const col = clamp(1 + Math.floor((left + gap / 2) / pitch), 1, 24);
-  const row = clamp(1 + Math.floor((top + gap / 2) / pitch), 1, 1000);
+  const { rect, grid, columns, rows } = metrics;
+  const left = (clientX - rect.left) * grid.offsetWidth / rect.width - grid.clientLeft;
+  const top = (clientY - rect.top) * grid.offsetHeight / rect.height - grid.clientTop;
+  const col = clamp(columns.cellAt(left), 1, GRID_COLUMNS);
+  const row = clamp(rows.cellAt(top), 1, GRID_MAX_ROW);
   return { col, row };
 }
 
-function getBlockBox(metrics: GridMetrics, blockEl: HTMLElement, intent: SpanIntent): GridBox {
+function getBlockBox(metrics: GridMetrics, blockEl: HTMLElement): GridBox {
   const blockRect = blockEl.getBoundingClientRect();
-  const topLeft = pointToGridCell(metrics, blockRect.left + 4, blockRect.top + 4);
+  const style = getComputedStyle(blockEl);
+  const topLeft = pointToGridCell(metrics, blockRect.left + 0.5, blockRect.top + 0.5);
   const bottomRight = pointToGridCell(
     metrics,
-    Math.max(blockRect.left + 4, blockRect.right - 4),
-    Math.max(blockRect.top + 4, blockRect.bottom - 4),
+    Math.max(blockRect.left + 0.5, blockRect.right - 0.5),
+    Math.max(blockRect.top + 0.5, blockRect.bottom - 0.5),
   );
-  const span = clamp(intent.span || bottomRight.col - topLeft.col + 1, 1, 24);
-  const start = clamp(intent.start ?? topLeft.col, 1, 25 - span);
-  const row = Math.max(1, intent.row ?? topLeft.row);
+  const columnSpan = Number(style.gridColumnEnd.match(/^span (\d+)$/)?.[1]);
+  const span = clamp(columnSpan || bottomRight.col - topLeft.col + 1, 1, GRID_COLUMNS);
+  const start = clamp(Number(style.gridColumnStart) || topLeft.col, 1, GRID_COLUMNS + 1 - span);
+  const row = Number(style.gridRowStart) || topLeft.row;
   const measuredRowSpan = Math.max(1, bottomRight.row - row + 1);
-  const rowSpan = Math.max(1, intent.rowSpan ?? measuredRowSpan);
+  const rowSpan = clamp(Number(style.gridRowEnd.match(/^span (\d+)$/)?.[1]) || measuredRowSpan, 1, GRID_COLUMNS);
   return { start, span, row, rowSpan };
 }
 
 function applyBoxToLayout(grid: HTMLElement, layout: LayoutIntent, box: GridBox): LayoutIntent {
   const key = getActiveBreakpoint(grid, layout);
   const intent = getEffectiveIntent(grid, layout);
-  const start = clamp(box.start, 1, 24);
-  const span = clamp(box.span, 1, 25 - start);
-  const row = Math.max(1, box.row);
-  const rowSpan = Math.max(1, box.rowSpan);
-  const next: SpanIntent = { ...intent, start, span, row, rowSpan };
+  const placement = {
+    start: fromGridLine(box.start),
+    span: fromGridSpan(box.span),
+    row: fromGridLine(box.row),
+    rowSpan: fromGridSpan(box.rowSpan),
+  };
+  const next: SpanIntent = { ...intent, ...placement };
   if (key === 'base') {
     return {
       base: next,
-      ...(layout.md ? { md: { ...layout.md, start, span, row, rowSpan } } : {}),
-      ...(layout.lg ? { lg: { ...layout.lg, start, span, row, rowSpan } } : {}),
+      ...(layout.md ? { md: { ...layout.md, ...placement } } : {}),
+      ...(layout.lg ? { lg: { ...layout.lg, ...placement } } : {}),
     };
   }
   return { ...layout, [key]: next };
@@ -201,18 +180,16 @@ function computeDropArea(
   box: GridBox,
   prefix?: string,
 ) {
-  const start = clamp(box.start, 1, 24);
-  const span = clamp(box.span, 1, 25 - start);
-  const row = Math.max(1, box.row);
-  const rowSpan = Math.max(1, box.rowSpan);
+  const start = clamp(box.start, 1, GRID_COLUMNS);
+  const span = clamp(box.span, 1, GRID_COLUMNS + 1 - start);
+  const row = clamp(box.row, 1, GRID_MAX_ROW);
+  const rowSpan = clamp(box.rowSpan, 1, GRID_COLUMNS);
   const nextLayout = applyBoxToLayout(grid, layout, { start, span, row, rowSpan });
-  const left = (start - 1) * metrics.pitch;
-  const top = metrics.rowOffset(row);
-  const width = span * metrics.pitch - metrics.gap;
-  const height = Array.from({ length: rowSpan }, (_, index) => metrics.rowHeight(row - 1 + index) + metrics.gap).reduce(
-    (sum, value) => sum + value,
-    -metrics.gap,
-  );
+  const { columns, rows } = metrics;
+  const left = columns.padding + columns.start(start - 1);
+  const top = rows.padding + rows.start(row - 1);
+  const width = columns.end(start + span - 2) - columns.start(start - 1);
+  const height = rows.end(row + rowSpan - 2) - rows.start(row - 1);
   const colText = span > 1 ? `Col ${start}–${start + span - 1}` : `Col ${start}`;
   const rowText = rowSpan > 1 ? `Fila ${row}–${row + rowSpan - 1}` : `Fila ${row}`;
   const label = `${prefix ? `${prefix} · ` : ''}${span}×${rowSpan} (${colText}, ${rowText})`;
@@ -227,17 +204,6 @@ function computeDropArea(
   };
 }
 
-function createCanvasComponentData(): ComponentData {
-  return {
-    type: 'canvas',
-    props: {
-      ...editor2PuckConfig.components.canvas.defaultProps,
-      id: `canvas-${crypto.randomUUID()}`,
-      content: [],
-    },
-  };
-}
-
 function createTabsComponentData(): ComponentData {
   return {
     type: 'tabs',
@@ -247,11 +213,11 @@ function createTabsComponentData(): ComponentData {
       items: [
         {
           title: 'Sección 1',
-          content: [createCanvasComponentData()],
+          content: [],
         },
         {
           title: 'Sección 2',
-          content: [createCanvasComponentData()],
+          content: [],
         },
       ],
     },
@@ -268,38 +234,23 @@ function createAccordionComponentData(): ComponentData {
         {
           title: 'Sección desplegable 1',
           openByDefault: true,
-          content: [createCanvasComponentData()],
+          content: [],
         },
         {
           title: 'Sección desplegable 2',
           openByDefault: false,
-          content: [createCanvasComponentData()],
+          content: [],
         },
       ],
     },
   };
 }
 
-function hasCanvasInSections(sections: ComponentData[]): boolean {
-  for (const section of sections) {
-    if (section.type === 'canvas') return true;
-    if ((section.type === 'tabs' || section.type === 'accordion') && Array.isArray(section.props.items)) {
-      for (const tab of section.props.items as Array<{ content?: ComponentData[] }>) {
-        if (Array.isArray(tab?.content) && hasCanvasInSections(tab.content)) {
-          return true;
-        }
-      }
-    }
-  }
-  return false;
-}
-
 function findExistingLeaf(sections: ComponentData[], leafId: string): ComponentData | undefined {
   for (const section of sections) {
+    if (section.props.id === leafId) return section;
     if ((section.type === 'canvas' || section.type === 'box') && Array.isArray(section.props.content)) {
       const children = section.props.content as ComponentData[];
-      const found = children.find((child) => child.props.id === leafId);
-      if (found) return found;
       const nested = findExistingLeaf(children, leafId);
       if (nested) return nested;
     } else if ((section.type === 'tabs' || section.type === 'accordion') && Array.isArray(section.props.items)) {
@@ -314,50 +265,75 @@ function findExistingLeaf(sections: ComponentData[], leafId: string): ComponentD
   return undefined;
 }
 
+function canPlaceBlock(item: ComponentData, grid: HTMLElement): boolean {
+  if (grid.closest(`[data-puck-component="${item.props.id}"]`)) return false;
+  const parentBox = grid.closest('[data-e2-block="box"]');
+  if (item.type === 'tabs' || item.type === 'accordion') {
+    return !parentBox && !grid.closest('.e2-tabs-slot');
+  }
+  if (item.type === 'box' && parentBox) {
+    return !parentBox.parentElement?.closest('[data-e2-block="box"]') &&
+      !item.props.content?.some((child: ComponentData) => child.type === 'box');
+  }
+  return true;
+}
+
+const ROOT_GRID_ID = 'root';
+
+function panelGridId(blockId: string, index: number | string): string {
+  return `${blockId}:panel:${index}`;
+}
+
+function getGridParent(grid: HTMLElement): string | undefined {
+  const parent = grid.parentElement;
+  if (parent?.hasAttribute('data-e2-canvas-root')) return ROOT_GRID_ID;
+  const panel = parent?.dataset.e2PanelIndex;
+  if (panel !== undefined) {
+    const id = parent?.closest<HTMLElement>('[data-puck-component]')?.dataset.puckComponent;
+    return id ? panelGridId(id, panel) : undefined;
+  }
+  return grid.closest<HTMLElement>('[data-e2-block="box"], [data-e2-block="canvas"]')?.dataset.puckComponent;
+}
+
 function updateCanvasChildren(
   sections: ComponentData[],
   parentId: string,
   leafId: string,
   placed: ComponentData,
+  gridId = ROOT_GRID_ID,
 ): ComponentData[] {
-  return sections.map((section) => {
+  const destination = gridId === parentId;
+  let replaced = false;
+  const next = sections.flatMap((section) => {
+    if (section.props.id === leafId) {
+      if (!destination) return [];
+      replaced = true;
+      return [placed];
+    }
     if (section.type === 'canvas' || section.type === 'box') {
       const children: ComponentData[] = Array.isArray(section.props.content) ? section.props.content : [];
-      const destination = section.props.id === parentId;
-      const hasDirect = children.some((child) => child.props.id === leafId);
-      let nextChildren = children.map((child) =>
-        child.type === 'box' || child.type === 'tabs' || child.type === 'accordion'
-          ? updateCanvasChildren([child], parentId, leafId, placed)[0]
-          : child,
-      );
-      if (destination || hasDirect) {
-        const previousIndex = nextChildren.findIndex((child) => child.props.id === leafId);
-        nextChildren = nextChildren.filter((child) => child.props.id !== leafId);
-        if (destination) {
-          nextChildren.splice(previousIndex < 0 ? nextChildren.length : previousIndex, 0, placed);
-        }
-      }
-      return { ...section, props: { ...section.props, content: nextChildren } };
+      return [{ ...section, props: {
+        ...section.props,
+        content: updateCanvasChildren(children, parentId, leafId, placed, section.props.id),
+      } }];
     }
     if ((section.type === 'tabs' || section.type === 'accordion') && Array.isArray(section.props.items)) {
-      return {
-        ...section,
-        props: {
-          ...section.props,
-          items: (section.props.items as Array<{ title: string; openByDefault?: boolean; content?: ComponentData[] }>).map((tab) => ({
-            ...tab,
-            content: updateCanvasChildren(
-              Array.isArray(tab?.content) ? tab.content : [],
-              parentId,
-              leafId,
-              placed,
-            ),
-          })),
-        },
-      };
+      const items = section.props.items as Array<{ content?: ComponentData[] }>;
+      return [{ ...section, props: {
+        ...section.props,
+        items: items.map((panel, index) => ({
+          ...panel,
+          content: updateCanvasChildren(
+            Array.isArray(panel.content) ? panel.content : [],
+            parentId, leafId, placed, panelGridId(section.props.id, index),
+          ),
+        })),
+      } }];
     }
-    return section;
+    return [section];
   });
+  if (destination && !replaced) next.push(placed);
+  return next;
 }
 
 function patchLeafInSections(
@@ -485,7 +461,7 @@ function appendStructureItem(
   });
 }
 
-function createLeafComponentData(leaf: Leaf): ComponentData {
+function createPlaceableComponentData(leaf: PlaceableBlock): ComponentData {
   const compact = COMPACT_SIZES[leaf];
   return {
     type: leaf,
@@ -504,7 +480,7 @@ type DragSession =
       x: number;
       y: number;
       moved: boolean;
-      leaf: Leaf;
+      leaf: PlaceableBlock;
       item: ComponentData;
     }
   | {
@@ -521,7 +497,7 @@ type DragSession =
       x: number;
       y: number;
       moved: boolean;
-      leaf: Leaf;
+      leaf: PlaceableBlock;
       item: ComponentData;
       grid: HTMLElement;
       parent: string;
@@ -534,9 +510,12 @@ type DragSession =
       y: number;
       moved: boolean;
       item: ComponentData;
+      block: HTMLElement;
       box: GridBox;
       grabCol: number;
       grabRow: number;
+      offsetX: number;
+      offsetY: number;
     }
   | {
       kind: 'resize';
@@ -551,28 +530,26 @@ type DragSession =
       initialBox: GridBox;
     };
 
+function markSelectedBlock(shell: HTMLElement, id: string | null) {
+  for (const block of shell.querySelectorAll<HTMLElement>('[data-e2-selected]')) {
+    if (block.dataset.puckComponent !== id) block.removeAttribute('data-e2-selected');
+  }
+  if (id) shell.querySelector(`.e2-slot-grid > [data-puck-component="${id}"]`)?.setAttribute('data-e2-selected', 'true');
+}
+
 export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) {
+  useGridGuides(host);
   const getPuck = useGetPuck();
   const { selectedItem } = usePuck();
   const selectedId = typeof selectedItem?.props?.id === 'string' ? selectedItem.props.id : null;
-  const [placing, setPlacing] = useState<Leaf | null>(null);
-  const placingRef = useRef<Leaf | null>(null);
+  const [placing, setPlacing] = useState<PlaceableBlock | null>(null);
+  const placingRef = useRef<PlaceableBlock | null>(null);
   placingRef.current = placing;
 
   useEffect(() => {
     const shell = host.current?.closest<HTMLElement>('.e2-puck-shell');
     if (!shell) return;
-    shell.querySelectorAll<HTMLElement>('[data-e2-selected="true"]').forEach((el) => {
-      if (el.dataset.puckComponent !== selectedId) {
-        el.removeAttribute('data-e2-selected');
-      }
-    });
-    if (selectedId) {
-      const activeEl = shell.querySelector<HTMLElement>(`[data-puck-component="${selectedId}"]`);
-      if (activeEl) {
-        activeEl.setAttribute('data-e2-selected', 'true');
-      }
-    }
+    markSelectedBlock(shell, selectedId);
   }, [host, selectedId]);
 
   useEffect(() => {
@@ -580,17 +557,6 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
     if (!shell) return;
     if (placing) {
       shell.setAttribute('data-placing-tool', placing);
-      const api = getPuck();
-      const hasCanvas = hasCanvasInSections(api.appState.data.content);
-      if (!hasCanvas) {
-        api.dispatch({
-          type: 'setData',
-          data: (previous) => ({
-            ...previous,
-            content: [...previous.content, createCanvasComponentData()],
-          }),
-        });
-      }
     } else {
       shell.removeAttribute('data-placing-tool');
     }
@@ -614,6 +580,50 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
     let scrollFrame = 0;
     let highlighted: HTMLElement | undefined;
     let highlightedRoot: HTMLElement | undefined;
+    let textSelectionFrame = 0;
+    let textEdit: { block: HTMLElement; field: HTMLElement; focusScope: HTMLElement } | null = null;
+    const editObserver = new MutationObserver(() => {
+      if (textEdit && !textEdit.field.isConnected) stopTextEditing(textEdit.block.isConnected);
+    });
+
+    function focusBlock(block: HTMLElement) {
+      block.tabIndex = -1;
+      block.focus({ preventScroll: true });
+    }
+
+    function selectBlock(block: HTMLElement, moveFocus = false, keepPosition = false) {
+      const blockId = block.dataset.puckComponent;
+      const api = getPuck();
+      const selector = blockId && api.getSelectorForId(blockId);
+      const current = api.appState.ui.itemSelector;
+      if (selector && (current?.index !== selector.index || current.zone !== selector.zone)) {
+        const top = keepPosition ? block.getBoundingClientRect().top : undefined;
+        api.dispatch({ type: 'setUi', ui: { itemSelector: selector } });
+        if (top !== undefined) {
+          cancelAnimationFrame(textSelectionFrame);
+          textSelectionFrame = requestAnimationFrame(() => {
+            if (!block.isConnected || getPuck().selectedItem?.props.id !== blockId) return;
+            markSelectedBlock(shell!, blockId ?? null);
+            const shift = block.getBoundingClientRect().top - top;
+            if (Math.abs(shift) > 0.5) window.scrollBy({ top: shift, behavior: 'instant' });
+          });
+        }
+      }
+      if (selector) markSelectedBlock(shell!, blockId ?? null);
+      if (moveFocus) focusBlock(block);
+    }
+
+    function stopTextEditing(restoreFocus = false) {
+      if (!textEdit) return;
+      const { block, field, focusScope } = textEdit;
+      textEdit = null;
+      editObserver.disconnect();
+      block.removeAttribute('data-e2-text-editing');
+      shell?.removeAttribute('data-e2-text-editing');
+      if (restoreFocus) focusBlock(block);
+      else if (focusScope.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
+      setInlineEditMode(field, false);
+    }
 
     function clearHighlight() {
       highlighted?.removeAttribute('data-grid-target');
@@ -684,76 +694,65 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
       highlighted = grid;
     }
 
-    function findGridAtPoint(clientX: number, clientY: number) {
-      const grid = document
+    function slotAtPoint(clientX: number, clientY: number, movingBlock?: HTMLElement) {
+      return document
         .elementsFromPoint(clientX, clientY)
         .map((el) => el.closest<HTMLElement>('.e2-slot-grid'))
-        .find((el): el is HTMLElement => Boolean(el && shell?.contains(el)));
+        .find((slot): slot is HTMLElement => Boolean(
+          slot && shell?.contains(slot) && !movingBlock?.contains(slot),
+        ));
+    }
+
+    function flowTargetAtPoint(x: number, y: number, item: ComponentData) {
+      const slot = slotAtPoint(x, y);
+      if (!slot?.parentElement?.dataset.flow || !canPlaceBlock(item, slot)) return;
+      return slot.closest<HTMLElement>('[data-puck-component]')?.dataset.puckComponent;
+    }
+
+    function findGridAtPoint(clientX: number, clientY: number, movingBlock?: HTMLElement) {
+      const grid = slotAtPoint(clientX, clientY, movingBlock);
       if (!grid) return undefined;
-      const parent = grid.closest<HTMLElement>('[data-e2-block="box"], [data-e2-block="canvas"]')?.dataset.puckComponent;
+      const parent = getGridParent(grid);
       const metrics = getGridMetrics(grid);
       if (!parent || !metrics) return undefined;
       return { grid, parent, metrics };
     }
 
-    function focusBlockEditable(
-      blockId: string,
-      options: { selectAll?: boolean; clientX?: number; clientY?: number } = {},
-    ) {
-      const blockEl = shell?.querySelector<HTMLElement>(`[data-puck-component="${blockId}"]`);
-      if (!blockEl) return;
-      const pointEditable =
-        typeof options.clientX === 'number' && typeof options.clientY === 'number'
-          ? document
-              .elementsFromPoint(options.clientX, options.clientY)
-              .map((el) => el.closest<HTMLElement>('[data-e2-editable]'))
-              .find((el): el is HTMLElement => Boolean(el && blockEl.contains(el)))
-          : undefined;
-      const editable = pointEditable ?? blockEl.querySelector<HTMLElement>('[data-e2-editable]');
-      if (!editable) return;
-      if (document.activeElement !== editable) {
-        editable.focus();
-      }
-      if (typeof window.getSelection !== 'function' || typeof document.createRange !== 'function') return;
+    function startTextEditing(block: HTMLElement, point?: MouseEvent) {
+      const pointedField = point?.target instanceof Element ? point.target.closest<HTMLElement>(EDITABLE_FIELD) : null;
+      const field = pointedField ?? Array.from(block.querySelectorAll<HTMLElement>(EDITABLE_FIELD))
+        .find(candidate => candidate.closest('[data-puck-component]') === block);
+      if (!field || !block.contains(field)) return false;
+      if (textEdit?.field === field) return true;
+      stopTextEditing();
+      selectBlock(block, false, Boolean(point));
+      const focusScope = field.closest<HTMLElement>('.e2-rich-host') ?? field;
+      textEdit = { block, field, focusScope };
+      editObserver.observe(shell!, { childList: true, subtree: true });
+      block.setAttribute('data-e2-text-editing', '');
+      shell?.setAttribute('data-e2-text-editing', '');
+      setInlineEditMode(field, true);
+      field.focus({ preventScroll: Boolean(point) });
       const selection = window.getSelection();
-      if (!selection) return;
-
-      if (options.selectAll && editable.textContent) {
-        const range = document.createRange();
-        range.selectNodeContents(editable);
-        selection.removeAllRanges();
-        selection.addRange(range);
-        return;
-      }
-
-      if (typeof options.clientX === 'number' && typeof options.clientY === 'number') {
-        const docWithCaret = document as Document & {
-          caretRangeFromPoint?: (x: number, y: number) => Range | null;
-        };
-        if (typeof docWithCaret.caretRangeFromPoint === 'function') {
-          const caretRange = docWithCaret.caretRangeFromPoint(options.clientX, options.clientY);
-          if (caretRange && editable.contains(caretRange.startContainer)) {
-            selection.removeAllRanges();
-            selection.addRange(caretRange);
-            return;
-          }
-        }
-      }
-
-      if (editable.textContent) {
-        const range = document.createRange();
-        range.selectNodeContents(editable);
+      if (!selection) return true;
+      const docWithCaret = document as Document & {
+        caretRangeFromPoint?: (x: number, y: number) => Range | null;
+      };
+      const clickedRange = point && docWithCaret.caretRangeFromPoint?.(point.clientX, point.clientY);
+      const range = clickedRange && field.contains(clickedRange.startContainer) ? clickedRange : document.createRange();
+      if (range !== clickedRange) {
+        range.selectNodeContents(field);
         range.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(range);
       }
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return true;
     }
 
     function commitPlacement(
       item: ComponentData,
       parentId: string,
       layout: LayoutIntent,
-      focusNewText = false,
       extraProps?: Record<string, unknown>,
     ) {
       const api = getPuck();
@@ -776,9 +775,6 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
       selectionFrame = requestAnimationFrame(() => {
         const selector = getPuck().getSelectorForId(item.props.id);
         if (selector) api.dispatch({ type: 'setUi', ui: { itemSelector: selector } });
-        if (focusNewText) {
-          focusBlockEditable(item.props.id, { selectAll: true });
-        }
       });
     }
 
@@ -789,6 +785,8 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
         const metrics = getGridMetrics(drag.grid);
         if (!metrics) return undefined;
         const curr = pointToGridCell(metrics, e.clientX, e.clientY);
+        const compact = COMPACT_SIZES[drag.leaf];
+        const compactSpan = toGridSpan(compact.span);
         const box: GridBox = drag.moved
           ? {
               start: Math.min(drag.anchor.col, curr.col),
@@ -797,10 +795,10 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
               rowSpan: Math.abs(curr.row - drag.anchor.row) + 1,
             }
           : {
-              start: clamp(drag.anchor.col, 1, 25 - COMPACT_SIZES[drag.leaf].span),
-              span: COMPACT_SIZES[drag.leaf].span,
+              start: clamp(drag.anchor.col, 1, GRID_COLUMNS + 1 - compactSpan),
+              span: compactSpan,
               row: drag.anchor.row,
-              rowSpan: COMPACT_SIZES[drag.leaf].rowSpan,
+              rowSpan: toGridSpan(compact.rowSpan),
             };
         const labelPrefix = editor2PuckConfig.components[drag.leaf]?.label ?? drag.leaf;
         const area = computeDropArea(drag.grid, metrics, drag.item.props.layout, box, labelPrefix);
@@ -816,10 +814,10 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
         let startRow = drag.initialBox.row;
         let endRow = drag.initialBox.row + drag.initialBox.rowSpan - 1;
 
-        if (drag.dir.includes('e')) endCol = clamp(curr.col, startCol, 24);
+        if (drag.dir.includes('e')) endCol = clamp(curr.col, startCol, GRID_COLUMNS);
         if (drag.dir.includes('w')) startCol = clamp(curr.col, 1, endCol);
-        if (drag.dir.includes('s')) endRow = Math.max(startRow, curr.row);
-        if (drag.dir.includes('n')) startRow = clamp(curr.row, 1, endRow);
+        if (drag.dir.includes('s')) endRow = clamp(curr.row, startRow, startRow + GRID_COLUMNS - 1);
+        if (drag.dir.includes('n')) startRow = clamp(curr.row, Math.max(1, endRow - GRID_COLUMNS + 1), endRow);
 
         const box: GridBox = {
           start: startCol,
@@ -831,19 +829,23 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
         return { grid: drag.grid, parent: drag.parent, area };
       }
 
-      const found = findGridAtPoint(e.clientX, e.clientY);
+      const x = e.clientX + (drag.kind === 'move' ? drag.offsetX : 0);
+      const y = e.clientY + (drag.kind === 'move' ? drag.offsetY : 0);
+      const found = findGridAtPoint(x, y, drag.kind === 'move' ? drag.block : undefined);
       if (!found) return undefined;
       const { grid, parent, metrics } = found;
-      const curr = pointToGridCell(metrics, e.clientX, e.clientY);
+      const curr = pointToGridCell(metrics, x, y);
 
       if (drag.kind === 'drawer') {
+        if (!canPlaceBlock(drag.item, grid)) return undefined;
         const compact = COMPACT_SIZES[drag.leaf];
-        const start = clamp(curr.col, 1, 25 - compact.span);
+        const span = toGridSpan(compact.span);
+        const start = clamp(curr.col, 1, GRID_COLUMNS + 1 - span);
         const box: GridBox = {
           start,
-          span: compact.span,
+          span,
           row: curr.row,
-          rowSpan: compact.rowSpan,
+          rowSpan: toGridSpan(compact.rowSpan),
         };
         const labelPrefix = editor2PuckConfig.components[drag.leaf]?.label ?? drag.leaf;
         const area = computeDropArea(grid, metrics, drag.item.props.layout, box, labelPrefix);
@@ -851,11 +853,9 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
       }
 
       if (drag.kind === 'move') {
-        if (drag.item.type === 'box' && grid.closest(`[data-puck-component="${drag.item.props.id}"]`)) {
-          return undefined;
-        }
-        const span = clamp(drag.box.span, 1, 24);
-        const start = clamp(curr.col - drag.grabCol, 1, 25 - span);
+        if (!canPlaceBlock(drag.item, grid)) return undefined;
+        const span = clamp(drag.box.span, 1, GRID_COLUMNS);
+        const start = clamp(curr.col - drag.grabCol, 1, GRID_COLUMNS + 1 - span);
         const row = Math.max(1, curr.row - drag.grabRow);
         const box: GridBox = {
           start,
@@ -875,7 +875,7 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
       if (!e.isPrimary || e.button !== 0 || !(e.target instanceof Element) || !shell?.contains(e.target)) return;
 
       const drawer = e.target.closest('[data-puck-drawer-item]')?.getAttribute('data-testid')?.split(':')[1];
-      if (isLeaf(drawer)) {
+      if (isPlaceableBlock(drawer)) {
         e.stopImmediatePropagation();
         e.preventDefault();
         drag = {
@@ -885,7 +885,7 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
           y: e.clientY,
           moved: false,
           leaf: drawer,
-          item: createLeafComponentData(drawer),
+          item: createPlaceableComponentData(drawer),
         };
         return;
       }
@@ -906,13 +906,23 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
       }
 
       if (placingRef.current) {
+        const item = createPlaceableComponentData(placingRef.current);
+        const flowTarget = flowTargetAtPoint(e.clientX, e.clientY, item);
+        if (flowTarget) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          ignoreClick = true;
+          setPlacing(null);
+          clearHighlight();
+          commitPlacement(item, flowTarget, item.props.layout);
+          return;
+        }
         const found = findGridAtPoint(e.clientX, e.clientY);
-        if (found) {
+        if (found && canPlaceBlock(item, found.grid)) {
           e.stopImmediatePropagation();
           e.preventDefault();
           const leaf = placingRef.current;
           const anchor = pointToGridCell(found.metrics, e.clientX, e.clientY);
-          const item = createLeafComponentData(leaf);
           drag = {
             kind: 'draw',
             pointer: e.pointerId,
@@ -940,14 +950,10 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
 
       const resizeHandle = e.target.closest<HTMLElement>('[data-e2-resize]');
       const moveHandle = e.target.closest<HTMLElement>('[data-e2-move-handle], [data-puck-drag-handle]');
-      const editable = e.target.closest<HTMLElement>('[data-e2-editable]');
-
-      const activeEditable =
-        document.activeElement instanceof HTMLElement && document.activeElement.hasAttribute('data-e2-editable')
-          ? document.activeElement
-          : null;
-      if (activeEditable && (resizeHandle || moveHandle || activeEditable !== editable)) {
-        activeEditable.blur();
+      const editable = e.target.closest<HTMLElement>(EDITABLE_FIELD);
+      if (textEdit) {
+        if (textEdit.focusScope.contains(e.target) && !resizeHandle && !moveHandle) return;
+        stopTextEditing();
       }
 
       if (e.target.closest('[data-puck-overlay]') && !moveHandle) {
@@ -962,50 +968,36 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
         return;
       }
 
-      let block = e.target.closest<HTMLElement>('.e2-slot-grid > [data-puck-component]');
-      if (!block) {
-        if (moveHandle) {
-          const selected = getPuck().selectedItem;
-          if (!selected || !isGridBlock(selected.type)) return;
-          block =
-            shell?.querySelector<HTMLElement>(
-              `.e2-slot-grid > [data-puck-component="${selected.props.id}"]`,
-            ) ?? null;
-        } else {
-          const hitBlock = document
-            .elementsFromPoint(e.clientX, e.clientY)
-            .map((el) => el.closest<HTMLElement>('.e2-slot-grid > [data-puck-component]'))
-            .find((el): el is HTMLElement => Boolean(el && shell?.contains(el)));
-          if (hitBlock) {
-            block = hitBlock;
-          }
-        }
+      const blockSelector = '.e2-slot-grid > [data-puck-component]';
+      let block: HTMLElement | null | undefined;
+      if (moveHandle) {
+        const selected = getPuck().selectedItem;
+        if (!selected || !isGridBlock(selected.type)) return;
+        block = shell.querySelector<HTMLElement>(
+          `${blockSelector}[data-puck-component="${CSS.escape(selected.props.id)}"]`,
+        );
+      } else {
+        block = e.target.closest<HTMLElement>(blockSelector) ?? document
+          .elementsFromPoint(e.clientX, e.clientY)
+          .map((el) => el.closest<HTMLElement>(blockSelector))
+          .find((el): el is HTMLElement => Boolean(el && shell.contains(el)));
       }
       if (!block?.dataset.puckComponent || !isGridBlock(block.dataset.e2Block)) return;
-
-      if (!resizeHandle && !moveHandle && editable) {
-        e.stopImmediatePropagation();
-        const blockId = block.dataset.puckComponent;
-        const api = getPuck();
-        const selector = api.getSelectorForId(blockId);
-        if (selector) {
-          const current = api.appState.ui.itemSelector;
-          if (!current || current.index !== selector.index || current.zone !== selector.zone) {
-            api.dispatch({ type: 'setUi', ui: { itemSelector: selector } });
-          }
-        }
-        return;
-      }
 
       const existing = getPuck().getItemById(block.dataset.puckComponent);
       if (!existing) return;
       const grid = block.closest<HTMLElement>('.e2-slot-grid');
-      const parent = grid?.closest<HTMLElement>('[data-e2-block="box"], [data-e2-block="canvas"]')?.dataset.puckComponent;
+      const parent = grid ? getGridParent(grid) : undefined;
       const metrics = grid ? getGridMetrics(grid) : undefined;
-      if (!grid || !parent || !metrics) return;
+      if (!grid || !parent || !metrics) {
+        if (editable && !resizeHandle && !moveHandle) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+        return;
+      }
 
-      const intent = getEffectiveIntent(grid, existing.props.layout);
-      const box = getBlockBox(metrics, block, intent);
+      const box = getBlockBox(metrics, block);
 
       if (resizeHandle && isResizeDir(resizeHandle.dataset.e2Resize)) {
         e.stopImmediatePropagation();
@@ -1027,7 +1019,10 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
         return;
       }
 
-      const pointerCell = pointToGridCell(metrics, e.clientX, e.clientY);
+      const rect = block.getBoundingClientRect();
+      const grabX = moveHandle ? clamp(e.clientX, rect.left + 0.5, rect.right - 0.5) : e.clientX;
+      const grabY = moveHandle ? clamp(e.clientY, rect.top + 0.5, rect.bottom - 0.5) : e.clientY;
+      const pointerCell = pointToGridCell(metrics, grabX, grabY);
       const grabCol = clamp(pointerCell.col - box.start, 0, box.span - 1);
       const grabRow = clamp(pointerCell.row - box.row, 0, box.rowSpan - 1);
 
@@ -1040,9 +1035,12 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
         y: e.clientY,
         moved: false,
         item: existing,
+        block,
         box,
         grabCol,
         grabRow,
+        offsetX: grabX - e.clientX,
+        offsetY: grabY - e.clientY,
       };
     }
 
@@ -1100,19 +1098,19 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
         const gridHit = findGridAtPoint(e.clientX, e.clientY);
         const insideGridBody =
           gridHit &&
-          !gridHit.grid.closest('.e2-block--tabs, .e2-block--accordion') &&
+          !gridHit.grid.closest('.e2-tabs-slot, [data-e2-block="box"]') &&
           e.clientY > gridHit.metrics.rect.top + 22 &&
           e.clientY < gridHit.metrics.rect.bottom - 28;
         if (insideGridBody && gridHit) {
           const curr = pointToGridCell(gridHit.metrics, e.clientX, e.clientY);
           const span = 12;
           const rowSpan = 6;
-          const start = clamp(curr.col, 1, 25 - span);
+          const start = clamp(curr.col, 1, GRID_COLUMNS + 1 - toGridSpan(span));
           const area = computeDropArea(
             gridHit.grid,
             gridHit.metrics,
             { base: { span, rowSpan } },
-            { start, span, row: curr.row, rowSpan },
+            { start, span: toGridSpan(span), row: curr.row, rowSpan: toGridSpan(rowSpan) },
             `${structureLabel} (dentro)`,
           );
           paintArea(gridHit.grid, area);
@@ -1147,19 +1145,19 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
         const gridHit = findGridAtPoint(e.clientX, e.clientY);
         const insideGridBody =
           gridHit &&
-          !gridHit.grid.closest('.e2-block--tabs, .e2-block--accordion') &&
+          !gridHit.grid.closest('.e2-tabs-slot, [data-e2-block="box"]') &&
           e.clientY > gridHit.metrics.rect.top + 22 &&
           e.clientY < gridHit.metrics.rect.bottom - 28;
         if (insideGridBody && gridHit) {
           const curr = pointToGridCell(gridHit.metrics, e.clientX, e.clientY);
           const span = 12;
           const rowSpan = 6;
-          const start = clamp(curr.col, 1, 25 - span);
+          const start = clamp(curr.col, 1, GRID_COLUMNS + 1 - toGridSpan(span));
           const area = computeDropArea(
             gridHit.grid,
             gridHit.metrics,
             { base: { span, rowSpan } },
-            { start, span, row: curr.row, rowSpan },
+            { start, span: toGridSpan(span), row: curr.row, rowSpan: toGridSpan(rowSpan) },
           );
           structureGridHit = { parent: gridHit.parent, layout: area.layout };
         }
@@ -1207,9 +1205,13 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
       }
 
       if (session.kind === 'drawer') {
-        if (session.moved && hit) {
+        const flowTarget = session.moved && flowTargetAtPoint(e.clientX, e.clientY, session.item);
+        if (flowTarget) {
           setPlacing(null);
-          commitPlacement(session.item, hit.parent, hit.area.layout, true);
+          commitPlacement(session.item, flowTarget, session.item.props.layout);
+        } else if (session.moved && hit) {
+          setPlacing(null);
+          commitPlacement(session.item, hit.parent, hit.area.layout);
         } else {
           setPlacing((previous) => (previous === session.leaf ? null : session.leaf));
         }
@@ -1223,7 +1225,7 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
             session.leaf === 'divider' && hit.area.box.rowSpan > hit.area.box.span
               ? { ...session.item, props: { ...session.item.props, orientation: 'vertical' } }
               : session.item;
-          commitPlacement(nextItem, hit.parent, hit.area.layout, true);
+          commitPlacement(nextItem, hit.parent, hit.area.layout);
         }
         return;
       }
@@ -1272,7 +1274,7 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
             }
           }
 
-          commitPlacement(session.item, hit.parent, nextLayout, false, extraProps);
+          commitPlacement(session.item, hit.parent, nextLayout, extraProps);
         }
         return;
       }
@@ -1281,19 +1283,8 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
         if (session.moved && hit) {
           commitPlacement(session.item, hit.parent, hit.area.layout);
         } else {
-          const api = getPuck();
-          const clickX = e.clientX;
-          const clickY = e.clientY;
-          const clickedMoveHandle =
-            e.target instanceof Element && Boolean(e.target.closest('[data-e2-move-handle], [data-puck-drag-handle]'));
-          cancelAnimationFrame(selectionFrame);
-          selectionFrame = requestAnimationFrame(() => {
-            const selector = getPuck().getSelectorForId(session.item.props.id);
-            if (selector) api.dispatch({ type: 'setUi', ui: { itemSelector: selector } });
-            if (!clickedMoveHandle) {
-              focusBlockEditable(session.item.props.id, { clientX: clickX, clientY: clickY });
-            }
-          });
+          const block = shell?.querySelector<HTMLElement>(`[data-puck-component="${session.item.props.id}"]`);
+          if (block) selectBlock(block, true, true);
         }
       }
     }
@@ -1347,7 +1338,7 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
             'tabs',
             tabsId,
             10,
-            (count) => ({ title: `Sección ${count + 1}`, content: [createCanvasComponentData()] }),
+            (count) => ({ title: `Sección ${count + 1}`, content: [] }),
             (idx) => {
               newTabIndex = idx;
             },
@@ -1377,7 +1368,7 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
             (count) => ({
               title: `Sección desplegable ${count + 1}`,
               openByDefault: false,
-              content: [createCanvasComponentData()],
+              content: [],
             }),
             (idx) => {
               newIndex = idx;
@@ -1409,6 +1400,25 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
 
     const events = new AbortController();
     const options = { capture: true, signal: events.signal };
+    shell.addEventListener('dblclick', (event) => {
+      if (!(event.target instanceof Element) || textEdit?.focusScope.contains(event.target)) return;
+      if (event.target.closest('button, input, select, textarea, .e2-resize-handles, .e2-puck-actionbar')) return;
+      const block = event.target.closest<HTMLElement>('.e2-slot-grid > [data-puck-component]');
+      if (!block || !startTextEditing(block, event)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, options);
+    shell.addEventListener(EDIT_TEXT_REQUEST, () => {
+      const id = getPuck().selectedItem?.props.id;
+      const block = id && shell.querySelector<HTMLElement>(`[data-puck-component="${id}"]`);
+      if (block) startTextEditing(block);
+    }, { signal: events.signal });
+    shell.addEventListener('focusout', () => {
+      const current = textEdit;
+      queueMicrotask(() => {
+        if (current && textEdit === current && !current.focusScope.contains(document.activeElement)) stopTextEditing();
+      });
+    }, { signal: events.signal });
     shell.addEventListener('e2:text-change', onInlineTextChange, { signal: events.signal });
     shell.addEventListener('e2:block-patch', onInlineBlockPatch, { signal: events.signal });
     window.addEventListener('e2:tabs-add', onTabsAdd, { signal: events.signal });
@@ -1423,48 +1433,25 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
           return;
         }
         if (!(e.target instanceof Element) || !shell?.contains(e.target)) return;
-        const drawer = e.target.closest('[data-puck-drawer-item]')?.getAttribute('data-testid')?.split(':')[1];
-        if (drawer === 'canvas') {
+        const editable = e.target.closest(EDITABLE_FIELD);
+        if (editable && !textEdit?.focusScope.contains(editable)) {
+          const textBlock = editable.closest<HTMLElement>('.e2-slot-grid > [data-puck-component]');
+          if (textBlock) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            selectBlock(textBlock, true, true);
+            return;
+          }
+        }
+        const layer = e.target.closest<HTMLElement>('.e2-slot-grid > [data-puck-component]');
+        if (layer?.parentElement?.parentElement?.dataset.flow === 'overlay' &&
+          !e.target.closest('button, a, input, select, textarea')) {
           const api = getPuck();
-          const selected = api.selectedItem;
-          const newCanvas = createCanvasComponentData();
-          if (selected?.type === 'tabs' || selected?.type === 'accordion') {
-            const activeIdx =
-              selected.type === 'tabs'
-                ? getActiveTabIndex(selected.props.id)
-                : getActiveAccordionIndex(selected.props.id);
-            api.dispatch({
-              type: 'setData',
-              data: (previous) => ({
-                ...previous,
-                content: previous.content.map((section) => {
-                  if (section.type !== selected.type || section.props.id !== selected.props.id) return section;
-                  const items = Array.isArray(section.props.items)
-                    ? (section.props.items as Array<{ title: string; openByDefault?: boolean; content: ComponentData[] }>)
-                    : [];
-                  const safeIdx = Math.min(activeIdx, Math.max(0, items.length - 1));
-                  return {
-                    ...section,
-                    props: {
-                      ...section.props,
-                      items: items.map((tab, idx) =>
-                        idx === safeIdx
-                          ? { ...tab, content: [...(Array.isArray(tab.content) ? tab.content : []), newCanvas] }
-                          : tab,
-                      ),
-                    },
-                  };
-                }),
-              }),
-            });
-          } else {
-            api.dispatch({
-              type: 'setData',
-              data: (previous) => ({
-                ...previous,
-                content: [...previous.content, newCanvas],
-              }),
-            });
+          const selector = api.getSelectorForId(layer.dataset.puckComponent!);
+          if (selector) {
+            e.stopImmediatePropagation();
+            api.dispatch({ type: 'setUi', ui: { itemSelector: selector } });
+            return;
           }
         }
       },
@@ -1473,12 +1460,21 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
     window.addEventListener('pointerdown', down, options);
     window.addEventListener('pointermove', move, options);
     window.addEventListener('pointerup', up, options);
-    window.addEventListener('pointercancel', cancel, options);
-    window.addEventListener('blur', cancel, options);
+    window.addEventListener('pointercancel', (event) => {
+      if (drag?.pointer === event.pointerId) cancel();
+    }, options);
+    // Blurring a focused block at the start of a drag must not cancel the gesture.
+    window.addEventListener('blur', cancel, { signal: events.signal });
     window.addEventListener(
       'keydown',
       (e) => {
         if (e.key === 'Escape') {
+          if (textEdit) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            stopTextEditing(true);
+            return;
+          }
           cancel();
           setPlacing(null);
           return;
@@ -1491,6 +1487,13 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
             active.tagName === 'TEXTAREA' ||
             active.tagName === 'SELECT');
         if (isTyping) return;
+        if ((e.key === 'Enter' || e.key === 'F2') && active instanceof HTMLElement && shell.contains(active) &&
+            active.dataset.puckComponent && active.dataset.puckComponent === getPuck().selectedItem?.props.id &&
+            startTextEditing(active)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
 
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
           e.preventDefault();
@@ -1531,6 +1534,8 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
     );
     return () => {
       events.abort();
+      stopTextEditing();
+      cancelAnimationFrame(textSelectionFrame);
       cancelAnimationFrame(selectionFrame);
       cancel();
     };

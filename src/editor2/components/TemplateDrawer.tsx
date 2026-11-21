@@ -11,6 +11,7 @@ import { useEditor2Store } from '../store/editor2Store';
 
 export type TemplateDrawerProps = {
   open: boolean;
+  initialSectionId?: string;
   onClose: () => void;
 };
 
@@ -34,7 +35,7 @@ function rekeySectionIds(section: PlacedBlock): PlacedBlock {
   return clone as unknown as PlacedBlock;
 }
 
-const TemplateDrawer: React.FC<TemplateDrawerProps> = ({ open, onClose }) => {
+const TemplateDrawer: React.FC<TemplateDrawerProps> = ({ open, onClose, initialSectionId }) => {
   const [tab, setTab] = useState<'templates' | 'presets'>('templates');
   const [savedTemplates, setSavedTemplates] = useState<Editor2SectionTemplateRecord[]>([]);
   const [savedPresets, setSavedPresets] = useState<Editor2StylePresetRecord[]>([]);
@@ -44,12 +45,17 @@ const TemplateDrawer: React.FC<TemplateDrawerProps> = ({ open, onClose }) => {
   const [busy, setBusy] = useState(false);
 
   const doc = useEditor2Store((state) => state.doc);
+  const [sectionId, setSectionId] = useState('');
+  const sections = doc?.root.slots.children ?? [];
+  const selectedSection = sections.find(({ block }) => block.id === sectionId);
   const copiedStyle = useEditor2Store((state) => state.copiedStyle);
   const appendSection = useEditor2Store((state) => state.appendSection);
   const copyBlockStyle = useEditor2Store((state) => state.copyBlockStyle);
 
   useEffect(() => {
     if (!open) return;
+    setSectionId(initialSectionId ?? '');
+    if (initialSectionId) setTab('templates');
     let active = true;
     setFeedback(null);
     editor2Api
@@ -71,7 +77,7 @@ const TemplateDrawer: React.FC<TemplateDrawerProps> = ({ open, onClose }) => {
     return () => {
       active = false;
     };
-  }, [open]);
+  }, [open, initialSectionId]);
 
   if (!open) return null;
 
@@ -85,10 +91,8 @@ const TemplateDrawer: React.FC<TemplateDrawerProps> = ({ open, onClose }) => {
     setFeedback(`Plantilla «${record.name}» añadida al final de la página.`);
   };
 
-  const handleSaveLastSection = async () => {
-    const sections = doc?.root.slots.children ?? [];
-    const lastSection = sections[sections.length - 1];
-    if (!lastSection || !newTemplateName.trim()) return;
+  const handleSaveSection = async () => {
+    if (!selectedSection || !newTemplateName.trim()) return;
     setBusy(true);
     setFeedback(null);
     try {
@@ -96,7 +100,7 @@ const TemplateDrawer: React.FC<TemplateDrawerProps> = ({ open, onClose }) => {
         name: newTemplateName.trim(),
         category: 'Personalizada',
         description: 'Sección guardada desde Editor 2.0',
-        section: lastSection,
+        section: selectedSection,
       });
       setSavedTemplates((prev) => [saved, ...prev]);
       setNewTemplateName('');
@@ -215,7 +219,13 @@ const TemplateDrawer: React.FC<TemplateDrawerProps> = ({ open, onClose }) => {
               </div>
 
               <div className="e2-template-save-box">
-                <strong className="e2-design-label">Guardar última sección como plantilla</strong>
+                <strong className="e2-design-label">Guardar sección como plantilla</strong>
+                <select aria-label="Sección para guardar" value={selectedSection?.block.id ?? ''} onChange={(event) => setSectionId(event.target.value)}>
+                  <option value="">Elige una sección</option>
+                  {sections.map(({ block }, index) => (
+                    <option key={block.id} value={block.id}>Sección {index + 1}</option>
+                  ))}
+                </select>
                 <div className="e2-version-drawer__create">
                   <input
                     type="text"
@@ -227,8 +237,8 @@ const TemplateDrawer: React.FC<TemplateDrawerProps> = ({ open, onClose }) => {
                   <button
                     type="button"
                     className="e2-button e2-button--quiet"
-                    disabled={busy || !newTemplateName.trim() || !(doc?.root.slots.children.length)}
-                    onClick={() => void handleSaveLastSection()}
+                    disabled={busy || !newTemplateName.trim() || !selectedSection}
+                    onClick={() => void handleSaveSection()}
                   >
                     <BookmarkPlus size={14} aria-hidden="true" />
                     <span>Guardar</span>

@@ -45,6 +45,19 @@ type SessionResponse = {
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const publicPreviewAuth: AuthContextType = {
+  isAuthenticated: false,
+  isLoading: false,
+  user: null,
+  login: async () => ({ ok: false, status: 'backend_unavailable', message: 'Acceso no disponible en la vista previa.' }),
+  logout: () => {},
+  refreshSession: async () => false,
+};
+
+export function PublicPreviewAuthProvider({ children }: { children: ReactNode }) {
+  return <AuthContext.Provider value={publicPreviewAuth}>{children}</AuthContext.Provider>;
+}
 const USER_KEY = 'atlas_user';
 const SESSION_VALIDATION_ATTEMPTS = 3;
 const SESSION_VALIDATION_RETRY_MS = 750;

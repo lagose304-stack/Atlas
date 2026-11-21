@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { richTextSchema, richTextV1Schema } from './richText';
-import { blockStyleSchema, mediaAppearanceSchema, pageThemeSchema } from './styleSchema';
+import { GRID_COLUMNS, GRID_MAX_ROW, GRID_STEP, fromGridLine, fromGridSpan } from './gridResolution';
+import { blockStyleSchema, mediaAppearanceSchema, pageThemeSchema, responsiveGapSchema } from './styleSchema';
 
 export { richTextSchema, richTextV1Schema };
 export type { RichTextV1, RichTextV2, RichTextValue, TextRun } from './richText';
@@ -9,8 +10,8 @@ export const EDITOR2_SCHEMA_VERSION = 2 as const;
 export const LAYOUT_BREAKPOINTS = ['base', 'md', 'lg'] as const;
 
 const uuidSchema = z.uuid();
-const spanSchema = z.number().int().min(1).max(24);
-const startSchema = z.number().int().min(1).max(24);
+const spanSchema = z.number().multipleOf(GRID_STEP).min(GRID_STEP).max(fromGridSpan(GRID_COLUMNS));
+const startSchema = z.number().multipleOf(GRID_STEP).min(1).max(fromGridLine(GRID_COLUMNS));
 
 const imageSrcSchema = z.url().refine((value) => {
   try {
@@ -23,13 +24,22 @@ const imageSrcSchema = z.url().refine((value) => {
 export const spanIntentSchema = z
   .strictObject({
     span: spanSchema,
+    anchor: z.enum(['stretch', 'top-left', 'top-right', 'center', 'bottom-left', 'bottom-right']).optional(),
+    flexSize: z.enum(['fit', 'fill', 'fixed']).optional(),
+    widthPx: z.number().int().positive().max(4096).optional(),
+    minWidthPx: z.number().int().positive().max(4096).optional(),
+    maxWidthPx: z.number().int().positive().max(4096).optional(),
     start: startSchema.optional(),
-    row: z.number().int().positive().max(1000).optional(),
+    row: z.number().multipleOf(GRID_STEP).min(1).max(fromGridLine(GRID_MAX_ROW)).optional(),
     rowSpan: spanSchema.optional(),
     verticalAlign: z.enum(['start', 'center', 'end']).optional(),
   })
-  .refine(({ span, start }) => start === undefined || start + span - 1 <= 24, {
-    message: 'El bloque no puede exceder las 24 columnas',
+  .refine(({ minWidthPx, maxWidthPx }) => !minWidthPx || !maxWidthPx || minWidthPx <= maxWidthPx, {
+    message: 'El ancho mínimo debe ser menor o igual al máximo',
+    path: ['minWidthPx'],
+  })
+  .refine(({ span, start }) => start === undefined || start + span <= fromGridLine(GRID_COLUMNS + 1), {
+    message: 'El bloque no puede exceder las 48 columnas',
     path: ['start'],
   });
 
@@ -40,7 +50,7 @@ export const layoutIntentSchema = z.strictObject({
 });
 
 const headingLevelSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
-export const gapSchema = z.enum(['sm', 'md', 'lg']);
+export const gapSchema = responsiveGapSchema;
 
 export const EDITOR_FONTS = ['Montserrat', 'Playfair Display', 'Fraunces', 'IBM Plex Mono'] as const;
 
@@ -342,10 +352,12 @@ export const nestedCanvasPlacedSchema = z.strictObject({
   layout: layoutIntentSchema,
 });
 
+export const panelChildPlacedBlockSchema = z.union([nestedCanvasPlacedSchema, innerCanvasChildPlacedBlockSchema]);
+
 export const tabItemSchema = z.strictObject({
   title: z.string().min(1).max(120),
   subtitle: z.string().max(160).optional(),
-  children: z.array(nestedCanvasPlacedSchema).optional(),
+  children: z.array(panelChildPlacedBlockSchema).optional(),
   content: z.string().optional(),
   imageSrc: imageSrcSchema.optional(),
   imageCaption: z.string().optional(),
@@ -365,7 +377,7 @@ export const tabsBlockSchema = z.strictObject({
 export const accordionItemSchema = z.strictObject({
   title: z.string().min(1).max(160),
   openByDefault: z.boolean().optional(),
-  children: z.array(nestedCanvasPlacedSchema).optional(),
+  children: z.array(panelChildPlacedBlockSchema).optional(),
 });
 
 export const accordionBlockSchema = z.strictObject({
@@ -398,7 +410,7 @@ export const nestedCanvasNodeSchema = z.strictObject({
 });
 
 export const rootPlacedBlockSchema = z.strictObject({
-  block: z.union([leafBlockUnionSchema, nestedCanvasNodeSchema, tabsBlockSchema, accordionBlockSchema]),
+  block: z.union([leafBlockUnionSchema, boxNodeSchema, nestedCanvasNodeSchema, tabsBlockSchema, accordionBlockSchema]),
   layout: layoutIntentSchema,
 });
 
@@ -408,6 +420,7 @@ export const rootCanvasNodeSchema = z.strictObject({
   props: z.strictObject({
     gap: gapSchema,
     depth: z.literal(0),
+    minRows: z.number().int().min(1).max(GRID_MAX_ROW).optional(),
     style: blockStyleSchema.optional(),
   }),
   slots: z.strictObject({
@@ -445,7 +458,7 @@ const legacyDocSchema = currentDocSchema.extend({ schemaVersion: z.literal(1) })
       block.props.items.forEach(sectionItem => {
         sectionItem.children?.forEach(section => {
           doubleGrid(section.layout);
-          section.block.slots.children.forEach(child => doubleGrid(child.layout));
+          if (section.block.type === 'canvas') section.block.slots.children.forEach(child => doubleGrid(child.layout));
         });
       });
     }

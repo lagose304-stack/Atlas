@@ -3,12 +3,14 @@ import { ArrowLeft, CheckCheck, Eye, RotateCcw, Send } from 'lucide-react';
 import InstructorExamNavigator from './InstructorExamNavigator';
 import type { InstructorContent } from '../services/instructorTests';
 import {
-  groupPublicInstructorQuestions, instructorGroups, isInstructorAnswerComplete,
+  expandInstructorVersus, groupPublicInstructorQuestions, instructorGroups, isInstructorAnswerComplete,
   type InstructorAnswers, type PublicInstructorQuestion,
 } from '../types/instructorQuestions';
 import '../styles/instructorPublic.css';
+import { shuffleInstructorItems } from '../utils/instructorTopics';
 
 export function buildInstructorPreviewQuestions(content: InstructorContent): PublicInstructorQuestion[] {
+  content = expandInstructorVersus(content);
   const byId = new Map(content.questions.map(q => [q.id, q]));
   const sectionsById = new Map((content.sections ?? []).map((sec, idx) => [sec.id, { ...sec, position: idx + 1 }]));
   const groups = instructorGroups(content);
@@ -43,18 +45,21 @@ export function buildInstructorPreviewQuestions(content: InstructorContent): Pub
           group: publicGroup,
         });
       } else if (q.type === 'matching') {
-        // Rotación determinista para simular las opciones mezcladas sin cambiar en cada render.
-        const rotated = q.pairs.length > 1 ? [...q.pairs.slice(1), q.pairs[0]] : q.pairs;
+        const choices = [
+          ...q.pairs.map(pair => ({ id: pair.option_id, texto: pair.definition || 'Sin pareja' })),
+          ...(q.distractors ?? []).map(option => ({ ...option, texto: option.texto || 'Sin texto' })),
+        ];
         result.push({
           id: q.id, titulo: q.titulo, type: 'matching',
           terms: q.pairs.map(p => ({ id: p.id, texto: p.term || 'Sin término' })),
-          choices: rotated.map(p => ({ id: p.option_id, texto: p.definition || 'Sin pareja' })),
+          choices: shuffleInstructorItems(choices),
           ...(q.image ? { image: publicImage(q.image) } : {}),
           group: publicGroup,
         });
       } else {
         result.push({
           id: q.id, titulo: q.titulo, type: 'single_choice',
+          ...(q.correct_option_ids ? { multiple: true } : {}),
           options: q.options.map((o, i) => ({ id: o.id, texto: o.texto || `Opción ${i + 1}` })),
           ...(q.image ? { image: publicImage(q.image) } : {}),
           group: publicGroup,
@@ -83,7 +88,7 @@ export default function InstructorTestPreview({ content, onClose }: { content: I
     if (questions.some(q => !isInstructorAnswerComplete(q, answers[q.id]))) {
       const missing = groupPublicInstructorQuestions(questions).find(group => group.items.some(q => !isInstructorAnswerComplete(q, answers[q.id])));
       if (missing) setCurrentQuestion(missing.id);
-      setNotice({ kind: 'error', text: 'Responde todas las preguntas evaluables y relaciona cada término con una opción distinta para completar la simulación.' });
+      setNotice({ kind: 'error', text: 'Responde todas las preguntas evaluables para completar la simulación.' });
       return;
     }
     setNotice({ kind: 'success', text: 'Simulación completada: todas las preguntas evaluables fueron respondidas. En vista previa no se envía ni se guarda nada en la base de datos.' });
@@ -138,6 +143,7 @@ export default function InstructorTestPreview({ content, onClose }: { content: I
               questions={questions}
               answers={answers}
               currentId={currentQuestion}
+              showTopics
               disabled={false}
               onSelect={id => { setCurrentQuestion(id); setNotice(null); }}
               onAnswer={(questionId, value) => {

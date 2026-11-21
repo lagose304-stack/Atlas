@@ -44,6 +44,7 @@ export type Editor2PuckRootProps = {
   rootId: string;
   pageKey: string;
   gap: Gap;
+  minRows?: number;
   pageTheme?: PageTheme;
 };
 
@@ -250,7 +251,7 @@ export type PuckExamCarouselData = {
 export type PuckTabItem = {
   title: string;
   subtitle?: string;
-  content: PuckCanvasData[];
+  content: PuckBlockData[];
 };
 
 export type PuckTabsData = {
@@ -268,7 +269,7 @@ export type PuckTabsData = {
 export type PuckAccordionItem = {
   title: string;
   openByDefault?: boolean;
-  content: PuckCanvasData[];
+  content: PuckBlockData[];
 };
 
 export type PuckAccordionData = {
@@ -521,11 +522,11 @@ function expectedUuidLength(value: string): boolean {
  * Puck exige ids con el prefijo del tipo (`heading-<uuid>`) para su árbol
  * interno. El documento de Atlas conserva solo el UUID.
  */
-function toPuckId(type: Editor2PuckType, id: string): string {
+export function toPuckId(type: Editor2PuckType, id: string): string {
   return `${type}-${id}`;
 }
 
-function toAtlasId(type: Editor2PuckType, puckId: string): string {
+export function toAtlasId(type: Editor2PuckType, puckId: string): string {
   const prefix = `${type}-`;
   if (!puckId.startsWith(prefix)) return puckId;
   const candidate = puckId.slice(prefix.length);
@@ -788,7 +789,7 @@ function puckFromPlaced(item: AnyPlacedLike): PuckBlockData {
             title: tab.title,
             ...(tab.subtitle ? { subtitle: tab.subtitle } : {}),
             content: Array.isArray(tab.children)
-              ? (tab.children.map((child) => puckFromPlaced(child as unknown as AnyPlacedLike)) as PuckCanvasData[])
+              ? tab.children.map(puckFromPlaced)
               : [],
           })),
           ...(item.block.props.accentColor ? { accentColor: item.block.props.accentColor } : {}),
@@ -806,9 +807,7 @@ function puckFromPlaced(item: AnyPlacedLike): PuckBlockData {
             title: sectionItem.title,
             ...(sectionItem.openByDefault !== undefined ? { openByDefault: sectionItem.openByDefault } : {}),
             content: Array.isArray(sectionItem.children)
-              ? (sectionItem.children.map((child) =>
-                  puckFromPlaced(child as unknown as AnyPlacedLike),
-                ) as PuckCanvasData[])
+              ? sectionItem.children.map(puckFromPlaced)
               : [],
           })),
           ...(item.block.props.accentColor ? { accentColor: item.block.props.accentColor } : {}),
@@ -1213,7 +1212,7 @@ function placedFromPuck(item: PuckBlockData, insideBox = false): AnyPlacedLike {
                 ? { subtitle: tab.subtitle.trim().slice(0, 160) }
                 : {}),
               children: (Array.isArray(tab?.content) ? tab.content : [])
-                .filter((child): child is PuckCanvasData => Boolean(child && child.type === 'canvas'))
+                .filter((child) => child && child.type !== 'tabs' && child.type !== 'accordion')
                 .map((child) => placedFromPuck(child, false) as unknown as NonNullable<TabItem['children']>[number]),
             })),
             ...(accentColor ? { accentColor } : {}),
@@ -1246,7 +1245,7 @@ function placedFromPuck(item: PuckBlockData, insideBox = false): AnyPlacedLike {
                     : `Sección ${idx + 1}`,
                 ...(openByDefault !== undefined ? { openByDefault } : {}),
                 children: (Array.isArray(sectionItem?.content) ? sectionItem.content : [])
-                  .filter((child): child is PuckCanvasData => Boolean(child && child.type === 'canvas'))
+                  .filter((child) => child && child.type !== 'tabs' && child.type !== 'accordion')
                   .map(
                     (child) =>
                       placedFromPuck(child, false) as unknown as NonNullable<AccordionItem['children']>[number],
@@ -1314,6 +1313,7 @@ export function toPuckData(doc: CanvasDoc): Editor2PuckData {
         rootId: validDoc.root.id,
         pageKey: validDoc.pageKey,
         gap: validDoc.root.props.gap,
+        ...(validDoc.root.props.minRows !== undefined ? { minRows: validDoc.root.props.minRows } : {}),
         ...(validDoc.pageTheme ? { pageTheme: validDoc.pageTheme } : {}),
       },
     },
@@ -1342,6 +1342,7 @@ export function fromPuckData(data: Editor2PuckData): CanvasDoc {
       props: {
         gap: rootProps.gap,
         depth: 0,
+        ...(rootProps.minRows !== undefined ? { minRows: rootProps.minRows } : {}),
       },
       slots: {
         children: (data.content ?? []).map((item) => placedFromPuck(item, false)),

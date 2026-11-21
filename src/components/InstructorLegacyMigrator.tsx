@@ -35,12 +35,14 @@ function LegacyItemDetails({ item }: { item: InstructorQuestion }) {
       )}
       {(item.type === 'single_choice' || !item.type) && (
         <ul className="instructor-legacy-options">
-          {item.options.map(opt => (
-            <li key={opt.id} className={opt.id === item.correct_option_id ? 'is-correct' : undefined}>
-              {opt.id === item.correct_option_id && <Check size={14} aria-hidden="true" />}
-              <span>{opt.texto || 'Sin texto'}</span>
-            </li>
-          ))}
+          {item.options.map((opt, optIndex) => {
+            const correct = item.correct_option_ids?.includes(opt.id) ?? opt.id === item.correct_option_id;
+            const letter = incisoLetter(optIndex).toUpperCase();
+            return <li key={opt.id} className={correct ? 'is-correct' : undefined}>
+              {correct && <Check size={14} aria-hidden="true" />}
+              <span><strong>{letter}.</strong> {opt.texto || 'Sin texto'}</span>
+            </li>;
+          })}
         </ul>
       )}
       {item.type === 'short_answer' && item.accepted_answers.some(a => a.trim()) && (
@@ -140,7 +142,9 @@ export default function InstructorLegacyMigrator({
                   {group.titulo.trim() && <p className="instructor-muted" style={{ margin: '6px 0 0' }}>{group.titulo}</p>}
                   <div className="instructor-legacy-incisos">
                     {items.map((item, itemIdx) => {
-                      const label = INSTRUCTOR_QUESTION_TYPES.find(t => t.value === (item.type ?? 'single_choice'))?.label ?? 'Selección única';
+                      const label = (!item.type || item.type === 'single_choice') && item.correct_option_ids
+                        ? 'Selección múltiple'
+                        : INSTRUCTOR_QUESTION_TYPES.find(t => t.value === (item.type ?? 'single_choice'))?.label ?? 'Selección única';
                       return (
                         <article key={item.id} className="instructor-legacy-inciso">
                           <header className="instructor-legacy-inciso-head">

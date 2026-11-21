@@ -47,17 +47,17 @@ describe('Responder formatos de instructores', () => {
     expect(screen.getByTestId('complete')).toHaveTextContent('true');
   });
 
-  it('impide reutilizar una opción pareada y conserva asociaciones por ID', () => {
-    const question: PublicInstructorQuestion = { id: 'q', type: 'matching', titulo: 'Relaciona', terms: [{ id: 't1', texto: 'Epitelio' }, { id: 't2', texto: 'Músculo' }], choices: [{ id: 'c2', texto: 'Contracción' }, { id: 'c1', texto: 'Revestimiento' }] };
+  it('permite repetir cualquier opción de la lista ampliada', () => {
+    const question: PublicInstructorQuestion = { id: 'q', type: 'matching', titulo: 'Relaciona', terms: [{ id: 't1', texto: 'Epitelio' }, { id: 't2', texto: 'Músculo' }], choices: [{ id: 'c2', texto: 'Contracción' }, { id: 'c1', texto: 'Revestimiento' }, { id: 'c3', texto: 'Conducción' }] };
     render(<Response question={question} />);
-    fireEvent.change(screen.getByLabelText('Pareja del término 1 de pregunta 1'), { target: { value: 'c1' } });
+    fireEvent.change(screen.getByLabelText('Pareja del término 1 de pregunta 1'), { target: { value: 'c3' } });
     const second = screen.getByLabelText('Pareja del término 2 de pregunta 1');
-    expect(within(second).getByRole('option', { name: 'Revestimiento' })).toBeDisabled();
+    expect(within(second).getByRole('option', { name: 'Conducción' })).toBeEnabled();
     expect(screen.getByTestId('complete')).toHaveTextContent('false');
-    fireEvent.change(second, { target: { value: 'c2' } });
+    fireEvent.change(second, { target: { value: 'c3' } });
     expect(screen.getByTestId('complete')).toHaveTextContent('true');
-    expect(JSON.parse(screen.getByTestId('answer').textContent || '{}')).toEqual({ t1: 'c1', t2: 'c2' });
-    expect(isInstructorAnswerComplete(question, { t1: 'c1', t2: 'c1' })).toBe(false);
+    expect(JSON.parse(screen.getByTestId('answer').textContent || '{}')).toEqual({ t1: 'c3', t2: 'c3' });
+    expect(isInstructorAnswerComplete(question, { t1: 'c3', t2: 'ajena' })).toBe(false);
   });
   it('muestra una imagen opcional ampliable y mantiene el campo de respuesta', async () => {
     render(<Response question={{ id: 'q', type: 'short_answer', titulo: 'Identifica', image: { url: 'https://example.test/plate.webp' } }} />);
@@ -132,4 +132,56 @@ describe('Responder formatos de instructores', () => {
     expect(container.innerHTML).not.toContain('#facc15');
   });
 
+  it('muestra las opciones en formato A. B. C. D. tanto en selección única como múltiple', () => {
+    const single: PublicInstructorQuestion = {
+      id: 'q-single',
+      type: 'single_choice',
+      titulo: '¿Cuál es el tejido?',
+      options: [
+        { id: 'o1', texto: 'Epitelio' },
+        { id: 'o2', texto: 'A. Músculo' }, // con prefijo redundante preexistente
+        { id: 'o3', texto: 'Conectivo' },
+      ],
+    };
+    const { unmount } = render(<Response question={single} />);
+    expect(screen.getByText('A.')).toBeInTheDocument();
+    expect(screen.getByText('B.')).toBeInTheDocument();
+    expect(screen.getByText('C.')).toBeInTheDocument();
+    // Limpia el prefijo repetido para no mostrar "B. A. Músculo"
+    expect(screen.getByText(/Músculo/)).toBeInTheDocument();
+    expect(screen.queryByText('A. Músculo')).not.toBeInTheDocument();
+    unmount();
+  });
+
+  it('permite marcar múltiples respuestas con cuadradito (checkbox) en selección múltiple', () => {
+    const multi: PublicInstructorQuestion = {
+      id: 'q-multi-choice',
+      type: 'single_choice',
+      multiple: true,
+      titulo: 'Marca las estructuras presentes',
+      options: [
+        { id: 'm1', texto: 'Mitocondria' },
+        { id: 'm2', texto: 'Ribosoma' },
+        { id: 'm3', texto: 'Cloroplasto' },
+      ],
+    };
+    render(<Response question={multi} />);
+    expect(screen.getByText('Marca todas las opciones que consideres correctas.')).toBeInTheDocument();
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes).toHaveLength(3);
+
+    fireEvent.click(checkboxes[0]);
+    expect(checkboxes[0]).toBeChecked();
+    expect(screen.getByTestId('answer')).toHaveTextContent('["m1"]');
+
+    fireEvent.click(checkboxes[1]);
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+    expect(screen.getByTestId('answer')).toHaveTextContent('["m1","m2"]');
+
+    fireEvent.click(checkboxes[0]);
+    expect(checkboxes[0]).not.toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+    expect(screen.getByTestId('answer')).toHaveTextContent('["m2"]');
+  });
 });

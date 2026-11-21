@@ -61,7 +61,31 @@ export const motionStyleSchema = z.strictObject({
   hover: z.enum(['none', 'lift', 'glow', 'scale']).optional(),
 });
 
+export const flowDirectionSchema = z.enum(['row', 'column', 'overlay']);
+export const flowAlignmentSchema = z.enum(['stretch', 'start', 'center', 'end']);
+export const responsiveGapSchema = z.enum(['sm', 'md', 'lg']);
+const responsiveTextSizeSchema = z.union([z.literal('theme'), z.number().int().min(12).max(72)]);
+const responsiveOverridesSchema = z.strictObject({
+  direction: z.union([z.literal('grid'), flowDirectionSchema]).optional(),
+  align: flowAlignmentSchema.optional(),
+  gap: responsiveGapSchema.optional(),
+  textSize: responsiveTextSizeSchema.optional(),
+});
+
+export type ResponsiveOverrides = z.infer<typeof responsiveOverridesSchema>;
+
 export const blockStyleSchema = z.strictObject({
+  textSize: responsiveTextSizeSchema.optional(),
+  responsive: z.strictObject({
+    mobile: responsiveOverridesSchema.optional(),
+    tablet: responsiveOverridesSchema.optional(),
+  }).optional(),
+  flow: z.strictObject({
+    direction: flowDirectionSchema,
+    justify: z.enum(['start', 'center', 'end', 'space-between', 'space-evenly']).optional(),
+    align: flowAlignmentSchema.optional(),
+    wrap: z.boolean().optional(),
+  }).optional(),
   background: backgroundStyleSchema.optional(),
   border: borderStyleSchema.optional(),
   radius: radiusStyleSchema.optional(),

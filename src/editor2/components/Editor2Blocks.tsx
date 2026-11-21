@@ -14,10 +14,11 @@ import {
 } from 'lucide-react';
 import InspectorDialog from './InspectorDialog';
 import { GridAreaPicker } from './GridAreaPicker';
-import React, { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import React, { cloneElement, isValidElement, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Config, CustomField, CustomFieldRender, SlotComponent } from '@puckeditor/core';
 import { EDITOR2_DEFAULT_IMAGE_SRC, createLayoutIntent } from '../domain/defaults';
-import { layoutClasses } from '../domain/layout';
+import { gridColumnValue, layoutClasses } from '../domain/layout';
+import { GRID_COLUMNS, GRID_MAX_ROW, fromGridLine, fromGridSpan, toGridLine, toGridSpan } from '../domain/gridResolution';
 import { renderRichTextContent, type RichTextV2 } from '../domain/richText';
 import type { BlockStyle, CarouselItem, Gap, LayoutIntent, MediaAppearance, PageTheme, SpanIntent, TextAppearance } from '../domain/schema';
 import { DEFAULT_BOX_STYLE } from '../domain/styleSchema';
@@ -27,12 +28,13 @@ import {
   mediaImageStyle,
   mediaStageStyle,
   mergeBlockStyle,
-  pageThemeToCssVars,
 } from '../domain/styleToCss';
 import Editor2Lightbox from './Editor2Lightbox';
 import ExamCarouselBlockView from './ExamCarouselBlockView';
 import { renderAtlasIcon } from './IconPickerModal';
 import InlineRichText from './InlineRichText';
+import { CanvasScreen, ResponsiveCanvas } from './ResponsiveCanvas';
+import { responsiveValues } from '../domain/responsive';
 
 type DragRef = ((element: Element | null) => void) | null;
 
@@ -45,20 +47,20 @@ const BREAKPOINT_LABELS: Record<BreakpointKey, string> = {
   lg: 'Grande',
 };
 
-const COLUMN_OPTIONS = Array.from({ length: 24 }, (_, index) => index + 1);
-
-const GAP_OPTIONS = [
-  { label: 'Compacta', value: 'sm' },
-  { label: 'Normal', value: 'md' },
-  { label: 'Amplia', value: 'lg' },
-];
+const COLUMN_OPTIONS = Array.from({ length: GRID_COLUMNS }, (_, index) => index + 1);
 
 function rowStyle(layout: LayoutIntent): CSSProperties {
   const styles: Record<string, string> = {};
+  if (layout.base.flexSize === 'fixed') styles['--e2-fixed-width'] = `${layout.base.widthPx ?? 240}px`;
+  if (layout.base.minWidthPx) styles['--e2-min-width'] = `${layout.base.minWidthPx}px`;
+  if (layout.base.maxWidthPx) styles['--e2-max-width'] = `${layout.base.maxWidthPx}px`;
   let effective = layout.base;
   for (const breakpoint of BREAKPOINTS) {
     effective = layout[breakpoint] ?? effective;
-    styles[`--e2-row-${breakpoint}`] = `${effective.row ?? 'auto'} / span ${effective.rowSpan ?? 1}`;
+    styles[`--e2-column-${breakpoint}`] = gridColumnValue(effective);
+    const row = effective.row === undefined ? 'auto' : toGridLine(effective.row);
+    const rowSpan = effective.rowSpan === undefined ? 1 : toGridSpan(effective.rowSpan);
+    styles[`--e2-row-${breakpoint}`] = `${row} / span ${rowSpan}`;
     styles[`--e2-align-${breakpoint}`] = effective.verticalAlign ?? (effective.rowSpan ? 'stretch' : 'start');
     styles[`--e2-overflow-${breakpoint}`] = effective.rowSpan ? 'auto' : 'visible';
   }
@@ -137,6 +139,8 @@ export function HeadingBlockView({
   dragRef,
   onTextChange,
 }: HeadingBlockViewProps) {
+  const { textSize } = responsiveValues(blockStyle, useContext(CanvasScreen));
+  const sizeStyle = typeof textSize === 'number' ? { '--e2-responsive-text-size': `${textSize}px` } : undefined;
   const Tag = `h${level}` as 'h1' | 'h2' | 'h3';
   const editableRef = useRef<HTMLHeadingElement>(null);
   const [focused, setFocused] = useState(false);
@@ -160,7 +164,8 @@ export function HeadingBlockView({
     <div
       ref={dragRef ?? undefined}
       className={`e2-block e2-block--heading ${layoutClasses(layout)}`.trim()}
-      style={mergeBlockStyle(rowStyle(layout), blockStyle)}
+      style={{ ...mergeBlockStyle(rowStyle(layout), blockStyle), ...sizeStyle }}
+      data-e2-text-size={sizeStyle ? '' : undefined}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="heading"
     >
@@ -169,6 +174,7 @@ export function HeadingBlockView({
           <InlineRichText
             value={richText}
             editing
+            onDemand
             singleLine
             placeholder="Escribe un título"
             editableTag="heading"
@@ -183,7 +189,7 @@ export function HeadingBlockView({
           ref={editableRef}
           style={typography(appearance)}
           className={headingClasses || undefined}
-          contentEditable={editing || undefined}
+          contentEditable={editing ? false : undefined}
           suppressContentEditableWarning={editing || undefined}
           data-puck-overlay-portal={editing ? 'true' : undefined}
           data-e2-editable={editing ? 'heading' : undefined}
@@ -251,6 +257,8 @@ export function TextBlockView({
   dragRef,
   onTextChange,
 }: TextBlockViewProps) {
+  const { textSize } = responsiveValues(blockStyle, useContext(CanvasScreen));
+  const sizeStyle = typeof textSize === 'number' ? { '--e2-responsive-text-size': `${textSize}px` } : undefined;
   const editableRef = useRef<HTMLElement | null>(null);
   const [focused, setFocused] = useState(false);
   const lastEmittedRef = useRef(text);
@@ -289,7 +297,7 @@ export function TextBlockView({
 
   const sharedEditableProps = editing
     ? {
-      contentEditable: true as const,
+      contentEditable: false as const,
       suppressContentEditableWarning: true as const,
       'data-puck-overlay-portal': 'true',
       'data-e2-editable': 'text',
@@ -344,7 +352,8 @@ export function TextBlockView({
     <div
       ref={dragRef ?? undefined}
       className={`e2-block e2-block--text ${layoutClasses(layout)}`.trim()}
-      style={mergeBlockStyle(rowStyle(layout), blockStyle)}
+      style={{ ...mergeBlockStyle(rowStyle(layout), blockStyle), ...sizeStyle }}
+      data-e2-text-size={sizeStyle ? '' : undefined}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="text"
     >
@@ -368,6 +377,7 @@ export function TextBlockView({
           <InlineRichText
             value={richText}
             editing
+            onDemand
             placeholder="Escribe un párrafo"
             editableTag="text"
             onChange={(nextPlain, nextRich, el) => {
@@ -613,7 +623,7 @@ export function ButtonBlockView({
         {icon && renderAtlasIcon(icon, 15)}
         <span
           ref={editableRef}
-          contentEditable={editing || undefined}
+          contentEditable={editing ? false : undefined}
           suppressContentEditableWarning={editing || undefined}
           data-puck-overlay-portal={editing ? 'true' : undefined}
           data-e2-editable={editing ? 'button' : undefined}
@@ -697,7 +707,7 @@ function EditableCell({
   return (
     <CellTag
       ref={cellRef}
-      contentEditable={editing || undefined}
+      contentEditable={editing ? false : undefined}
       suppressContentEditableWarning={editing || undefined}
       data-puck-overlay-portal={editing ? 'true' : undefined}
       data-e2-editable={editing ? 'table-cell' : undefined}
@@ -1134,11 +1144,11 @@ export function TabsBlockView({
           </div>
         )}
       </div>
-      <div className="e2-tabs-panel" role="tabpanel">
+      <div className="e2-tabs-panel" role="tabpanel" data-e2-panel-index={currentIdx}>
         {typeof current.content === 'function' ? (
           (current.content as SlotComponent)({
-            className: 'e2-tabs-slot',
-            allow: ['canvas'],
+            className: 'e2-tabs-slot e2-slot-grid',
+            allow: PANEL_COMPONENT_NAMES,
           })
         ) : (
           <>
@@ -1390,7 +1400,7 @@ export function CalloutBlockView({
         <div
           ref={titleRef}
           className={`e2-callout__title ${editing ? 'e2-inline-editable' : ''}`.trim()}
-          contentEditable={editing || undefined}
+          contentEditable={editing ? false : undefined}
           suppressContentEditableWarning={editing || undefined}
           data-puck-overlay-portal={editing ? 'true' : undefined}
           data-e2-editable={editing ? 'callout-title' : undefined}
@@ -1424,7 +1434,7 @@ export function CalloutBlockView({
       <div
         ref={bodyRef}
         className={`e2-callout__body ${editing ? 'e2-inline-editable' : ''}`.trim()}
-        contentEditable={editing || undefined}
+        contentEditable={editing ? false : undefined}
         suppressContentEditableWarning={editing || undefined}
         data-puck-overlay-portal={editing ? 'true' : undefined}
         data-e2-editable={editing ? 'callout-text' : undefined}
@@ -1612,7 +1622,7 @@ export function BadgeBlockView({
         {icon && renderAtlasIcon(icon, size === 'lg' ? 15 : size === 'sm' ? 11 : 13)}
         <span
           ref={editableRef}
-          contentEditable={editing || undefined}
+          contentEditable={editing ? false : undefined}
           suppressContentEditableWarning={editing || undefined}
           data-puck-overlay-portal={editing ? 'true' : undefined}
           data-e2-editable={editing ? 'badge' : undefined}
@@ -1806,11 +1816,11 @@ export function AccordionBlockView({
               <ChevronDown size={16} className="e2-accordion-chevron" aria-hidden="true" />
             </button>
             {isOpen && (
-              <div className="e2-accordion-panel">
+              <div className="e2-accordion-panel" data-e2-panel-index={idx}>
                 {typeof sectionItem.content === 'function' ? (
                   (sectionItem.content as SlotComponent)({
-                    className: 'e2-tabs-slot',
-                    allow: ['canvas'],
+                    className: 'e2-tabs-slot e2-slot-grid',
+                    allow: PANEL_COMPONENT_NAMES,
                   })
                 ) : (
                   <div className="e2-tabs-panel__text">{sectionItem.content as ReactNode}</div>
@@ -1883,6 +1893,8 @@ export function BoxBlockView({
   dragRef,
   editing = false,
 }: BoxBlockViewProps) {
+  const responsive = responsiveValues(blockStyle, useContext(CanvasScreen), gap);
+  const flow = responsive.direction === 'grid' ? undefined : responsive.direction;
   const rootRef = useRef<HTMLDivElement | null>(null);
   return (
     <div
@@ -1895,7 +1907,11 @@ export function BoxBlockView({
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="box"
     >
-      <div className={`e2-box__surface e2-gap-${gap}`} style={blockStyleToCss(blockStyle)}>
+      <div data-flow={flow}
+        data-flow-justify={blockStyle?.flow?.justify}
+        data-flow-align={flow ? responsive.align : undefined}
+        data-flow-wrap={blockStyle?.flow?.wrap === false ? 'off' : undefined}
+        className={`e2-box__surface e2-gap-${responsive.gap}`} style={blockStyleToCss(blockStyle, true)}>
         {editing && (
           <div className="e2-box__header">
             <span className="e2-box__label">Tarjeta / Caja</span>
@@ -1936,6 +1952,8 @@ export type CanvasBlockViewProps = {
 };
 
 export function CanvasBlockView({ id, gap, blockStyle, children, dragRef, editing }: CanvasBlockViewProps) {
+  const responsive = responsiveValues(blockStyle, useContext(CanvasScreen), gap);
+  const flow = responsive.direction === 'grid' ? undefined : responsive.direction;
   const rootRef = useRef<HTMLDivElement | null>(null);
   return (
     <div
@@ -1943,18 +1961,22 @@ export function CanvasBlockView({ id, gap, blockStyle, children, dragRef, editin
         rootRef.current = node;
         if (typeof dragRef === 'function') dragRef(node);
       }}
-      className={`e2-block e2-block--canvas e2-gap-${gap} ${blockMotionClasses(blockStyle, editing)}`.trim()}
+      className={`e2-block e2-block--canvas e2-gap-${responsive.gap} ${blockMotionClasses(blockStyle, editing)}`.trim()}
       style={blockStyleToCss(blockStyle)}
-      data-e2-block="canvas"
+      data-flow={flow}
+        data-flow-justify={blockStyle?.flow?.justify}
+        data-flow-align={flow ? responsive.align : undefined}
+        data-flow-wrap={blockStyle?.flow?.wrap === false ? 'off' : undefined}
+        data-e2-block="canvas"
     >
       {editing && (
         <div className="e2-section-header">
-          <span className="e2-section-label">Bloque de página</span>
+          <span className="e2-section-label">Sección guardada</span>
           <button
             type="button"
             className="e2-section-delete"
-            aria-label="Eliminar bloque de página"
-            title="Eliminar bloque de página"
+            aria-label="Eliminar sección guardada"
+            title="Eliminar sección guardada"
             data-puck-overlay-portal="true"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
@@ -2055,12 +2077,14 @@ const LayoutControls: CustomFieldRender<LayoutIntent> = ({ value, onChange, id }
                   <span>Ancho</span>
                   <select
                     id={`${id}-${breakpoint}-span`}
-                    value={intent.span}
+                    value={toGridSpan(intent.span)}
                     aria-label={`Columnas en ${label.toLowerCase()}`}
                     onChange={(event) =>
                       onChange(updateBreakpoint(layout, breakpoint, {
-                        ...intent, span: Number(event.target.value),
-                        ...(intent.start ? { start: Math.min(intent.start, 25 - Number(event.target.value)) } : {}),
+                        ...intent, span: fromGridSpan(Number(event.target.value)),
+                        ...(intent.start === undefined ? {} : {
+                          start: Math.min(intent.start, fromGridLine(GRID_COLUMNS + 1 - Number(event.target.value))),
+                        }),
                       }))
                     }
                   >
@@ -2076,20 +2100,20 @@ const LayoutControls: CustomFieldRender<LayoutIntent> = ({ value, onChange, id }
                   <span>Columna</span>
                   <select
                     id={`${id}-${breakpoint}-start`}
-                    value={intent.start ?? ''}
+                    value={intent.start === undefined ? '' : toGridLine(intent.start)}
                     aria-label={`Columna inicial en ${label.toLowerCase()}`}
                     onChange={(event) =>
                       onChange(
                         updateBreakpoint(
                           layout,
                           breakpoint,
-                          { ...intent, start: Number(event.target.value) || undefined },
+                          { ...intent, start: event.target.value === '' ? undefined : fromGridLine(Number(event.target.value)) },
                         ),
                       )
                     }
                   >
                     <option value="">Auto</option>
-                    {COLUMN_OPTIONS.slice(0, 25 - intent.span).map((column) => (
+                    {COLUMN_OPTIONS.slice(0, GRID_COLUMNS + 1 - toGridSpan(intent.span)).map((column) => (
                       <option key={column} value={column}>
                         {column}
                       </option>
@@ -2098,21 +2122,22 @@ const LayoutControls: CustomFieldRender<LayoutIntent> = ({ value, onChange, id }
                 </label>
                 <label className="e2-layout-field__control">
                   <span>Fila</span>
-                  <input type="number" min={1} max={1000} placeholder="Auto" value={intent.row ?? ''}
+                  <input type="number" min={1} max={GRID_MAX_ROW} placeholder="Auto"
+                    value={intent.row === undefined ? '' : toGridLine(intent.row)}
                     aria-label={`Fila inicial en ${label.toLowerCase()}`}
                     onChange={(event) => {
                       const row = Number(event.target.value);
-                      if (event.target.value === '' || (Number.isInteger(row) && row >= 1 && row <= 1000)) {
-                        onChange(updateBreakpoint(layout, breakpoint, { ...intent, row: event.target.value === '' ? undefined : row }));
+                      if (event.target.value === '' || (Number.isInteger(row) && row >= 1 && row <= GRID_MAX_ROW)) {
+                        onChange(updateBreakpoint(layout, breakpoint, { ...intent, row: event.target.value === '' ? undefined : fromGridLine(row) }));
                       }
                     }}
                   />
                 </label>
                 <label className="e2-layout-field__control">
                   <span>Alto</span>
-                  <select value={intent.rowSpan ?? ''} aria-label={`Alto en ${label.toLowerCase()}`}
+                  <select value={intent.rowSpan === undefined ? '' : toGridSpan(intent.rowSpan)} aria-label={`Alto en ${label.toLowerCase()}`}
                     onChange={(event) => onChange(updateBreakpoint(layout, breakpoint, {
-                      ...intent, rowSpan: Number(event.target.value) || undefined,
+                      ...intent, rowSpan: event.target.value === '' ? undefined : fromGridSpan(Number(event.target.value)),
                     }))}
                   >
                     <option value="">Auto</option>
@@ -2199,6 +2224,9 @@ const LEAF_COMPONENT_NAMES = [
   'examCarousel',
 ];
 
+const PANEL_COMPONENT_NAMES = [...LEAF_COMPONENT_NAMES, 'box'];
+const ROOT_COMPONENT_NAMES = [...PANEL_COMPONENT_NAMES, 'tabs', 'accordion'];
+
 export type Editor2CanvasProps = {
   layout: LayoutIntent;
   gap: Gap;
@@ -2208,7 +2236,8 @@ export type Editor2CanvasProps = {
 
 export const editor2PuckConfig: Config = {
   categories: {
-    estructura: { title: 'Estructura', components: ['canvas', 'box', 'tabs', 'accordion'] },
+    estructura: { title: 'Estructura', components: ['box', 'tabs', 'accordion'] },
+    seccionesGuardadas: { components: ['canvas'], visible: false },
     contenido: {
       title: 'Contenido',
       components: ['heading', 'text', 'badge', 'icon', 'callout', 'table', 'button', 'divider', 'examCarousel'],
@@ -2806,11 +2835,6 @@ export const editor2PuckConfig: Config = {
         content: [],
       },
       fields: {
-        gap: {
-          type: 'select',
-          label: 'Separación interna',
-          options: GAP_OPTIONS,
-        },
         layout: layoutField,
         content: {
           type: 'slot',
@@ -2849,32 +2873,6 @@ export const editor2PuckConfig: Config = {
         ],
         accentColor: '#0284c7',
       },
-      resolveData: (data, { trigger }) => {
-        if (trigger !== 'insert' && trigger !== 'force') return {};
-        const items = Array.isArray(data.props?.items) ? data.props.items : [];
-        let changed = false;
-        const nextItems = items.map((tab: { title?: string; content?: unknown }) => {
-          if (Array.isArray(tab?.content) && tab.content.length === 0) {
-            changed = true;
-            return {
-              ...tab,
-              content: [
-                {
-                  type: 'canvas',
-                  props: {
-                    layout: defaultLayout,
-                    gap: 'md',
-                    id: `canvas-${crypto.randomUUID()}`,
-                    content: [],
-                  },
-                },
-              ],
-            };
-          }
-          return tab;
-        });
-        return changed ? { props: { ...data.props, items: nextItems } } : {};
-      },
       fields: {
         items: {
           type: 'array',
@@ -2883,7 +2881,7 @@ export const editor2PuckConfig: Config = {
             title: { type: 'text' },
             content: {
               type: 'slot',
-              allow: ['canvas'],
+              allow: PANEL_COMPONENT_NAMES,
             },
           },
         },
@@ -2921,32 +2919,6 @@ export const editor2PuckConfig: Config = {
         ],
         accentColor: '#0284c7',
       },
-      resolveData: (data, { trigger }) => {
-        if (trigger !== 'insert' && trigger !== 'force') return {};
-        const items = Array.isArray(data.props?.items) ? data.props.items : [];
-        let changed = false;
-        const nextItems = items.map((sectionItem: { title?: string; openByDefault?: boolean; content?: unknown }) => {
-          if (Array.isArray(sectionItem?.content) && sectionItem.content.length === 0) {
-            changed = true;
-            return {
-              ...sectionItem,
-              content: [
-                {
-                  type: 'canvas',
-                  props: {
-                    layout: defaultLayout,
-                    gap: 'md',
-                    id: `canvas-${crypto.randomUUID()}`,
-                    content: [],
-                  },
-                },
-              ],
-            };
-          }
-          return sectionItem;
-        });
-        return changed ? { props: { ...data.props, items: nextItems } } : {};
-      },
       fields: {
         items: {
           type: 'array',
@@ -2955,7 +2927,7 @@ export const editor2PuckConfig: Config = {
             title: { type: 'text' },
             content: {
               type: 'slot',
-              allow: ['canvas'],
+              allow: PANEL_COMPONENT_NAMES,
             },
           },
         },
@@ -3031,7 +3003,7 @@ export const editor2PuckConfig: Config = {
       ),
     },
     canvas: {
-      label: 'Bloque de página',
+      label: 'Sección guardada',
       inline: true,
       defaultProps: {
         layout: defaultLayout,
@@ -3039,11 +3011,6 @@ export const editor2PuckConfig: Config = {
         content: [],
       },
       fields: {
-        gap: {
-          type: 'select',
-          label: 'Separación interna',
-          options: GAP_OPTIONS,
-        },
         content: {
           type: 'slot',
           allow: [...LEAF_COMPONENT_NAMES, 'box', 'tabs', 'accordion'],
@@ -3070,34 +3037,34 @@ export const editor2PuckConfig: Config = {
       pageKey: '',
       gap: 'md',
     },
-    fields: {
-      gap: {
-        type: 'select',
-        label: 'Separación de la rejilla',
-        options: GAP_OPTIONS,
-      },
-    },
     render: ({
       gap = 'md',
+      minRows,
       pageTheme,
       children,
       puck,
     }: {
       gap?: Gap;
+      minRows?: number;
       pageTheme?: PageTheme;
       children?: ReactNode;
       puck?: { isEditing?: boolean };
     }) => (
-      <div
+      <ResponsiveCanvas
         className={`e2-canvas-root e2-gap-${gap}${pageTheme ? ' has-page-theme' : ''}`}
-        style={pageThemeToCssVars(pageTheme)}
+        theme={pageTheme}
         data-e2-canvas-root=""
+        data-e2-min-rows={minRows}
+        style={minRows === undefined ? undefined : { ['--e2-min-rows' as string]: minRows }}
         data-e2-theme={pageTheme?.presetId ?? (pageTheme ? 'custom' : undefined)}
       >
-        {puck?.isEditing && isValidElement<{ allow?: string[] }>(children)
-          ? cloneElement(children, { allow: ['canvas', 'tabs', 'accordion'] })
+        {isValidElement<{ allow?: string[]; className?: string }>(children)
+          ? cloneElement(children, {
+              className: [children.props.className, 'e2-slot-grid'].filter(Boolean).join(' '),
+              ...(puck?.isEditing ? { allow: ROOT_COMPONENT_NAMES } : {}),
+            })
           : children}
-      </div>
+      </ResponsiveCanvas>
     ),
   },
 };

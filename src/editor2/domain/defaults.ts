@@ -1,4 +1,5 @@
 import { DEFAULT_BOX_STYLE } from './styleSchema';
+import { GRID_COLUMNS, GRID_STEP, fromGridLine, fromGridSpan } from './gridResolution';
 import type {
   AccordionBlock,
   AccordionItem,
@@ -23,8 +24,6 @@ import type {
   InnerCanvasNode,
   LayoutIntent,
   LeafPlacedBlock,
-  NestedCanvasNode,
-  NestedCanvasPlaced,
   PlacedBlock,
   RichTextV1,
   SpanIntent,
@@ -53,22 +52,20 @@ function createId(): string {
   return `00000000-0000-4000-8000-${String(fallbackIdCounter).padStart(12, '0')}`;
 }
 
-function clampColumn(value: number): number {
-  return Math.min(24, Math.max(1, Math.round(value)));
-}
+const FULL_GRID_SPAN = fromGridSpan(GRID_COLUMNS);
 
 export function createRichText(value = ''): RichTextV1 {
   return { format: 'plain', value };
 }
 
-export function createSpanIntent(span = 24, start?: number): SpanIntent {
-  const safeSpan = clampColumn(span);
+export function createSpanIntent(span = FULL_GRID_SPAN, start?: number): SpanIntent {
+  const safeSpan = Math.min(FULL_GRID_SPAN, Math.max(GRID_STEP, Math.round(span / GRID_STEP) * GRID_STEP));
   if (start === undefined) return { span: safeSpan };
-  const safeStart = clampColumn(start);
-  return safeStart + safeSpan - 1 <= 24 ? { span: safeSpan, start: safeStart } : { span: safeSpan };
+  const safeStart = Math.min(fromGridLine(GRID_COLUMNS), Math.max(1, Math.round(start / GRID_STEP) * GRID_STEP));
+  return safeStart + safeSpan <= fromGridLine(GRID_COLUMNS + 1) ? { span: safeSpan, start: safeStart } : { span: safeSpan };
 }
 
-export function createLayoutIntent(span = 24): LayoutIntent {
+export function createLayoutIntent(span = FULL_GRID_SPAN): LayoutIntent {
   return { base: createSpanIntent(span) };
 }
 
@@ -217,15 +214,6 @@ export function createTabsBlock(
     accentColor?: string;
   } = {},
 ): TabsBlock {
-  const createInnerSection = (): NestedCanvasPlaced => ({
-    block: {
-      id: createId(),
-      type: 'canvas',
-      props: { gap: 'md', depth: 1 },
-      slots: { children: [] },
-    },
-    layout: createLayoutIntent(24),
-  });
   return {
     id: options.id ?? createId(),
     type: 'tabs',
@@ -233,11 +221,11 @@ export function createTabsBlock(
       items: options.items ?? [
         {
           title: 'Sección 1',
-          children: [createInnerSection()],
+          children: [],
         },
         {
           title: 'Sección 2',
-          children: [createInnerSection()],
+          children: [],
         },
       ],
       ...(options.accentColor ? { accentColor: options.accentColor } : {}),
@@ -332,15 +320,6 @@ export function createAccordionBlock(
     accentColor?: string;
   } = {},
 ): AccordionBlock {
-  const createInnerSection = (): NestedCanvasPlaced => ({
-    block: {
-      id: createId(),
-      type: 'canvas',
-      props: { gap: 'md', depth: 1 },
-      slots: { children: [] },
-    },
-    layout: createLayoutIntent(24),
-  });
   return {
     id: options.id ?? createId(),
     type: 'accordion',
@@ -349,12 +328,12 @@ export function createAccordionBlock(
         {
           title: 'Sección desplegable 1',
           openByDefault: true,
-          children: [createInnerSection()],
+          children: [],
         },
         {
           title: 'Sección desplegable 2',
           openByDefault: false,
-          children: [createInnerSection()],
+          children: [],
         },
       ],
       ...(options.accentColor ? { accentColor: options.accentColor } : {}),
@@ -362,11 +341,11 @@ export function createAccordionBlock(
   };
 }
 
-export function createLeafPlacedBlock(block: LeafPlacedBlock['block'], span = 24): LeafPlacedBlock {
+export function createLeafPlacedBlock(block: LeafPlacedBlock['block'], span = FULL_GRID_SPAN): LeafPlacedBlock {
   return { block, layout: createLayoutIntent(span) };
 }
 
-export function createPlacedBlock(block: PlacedBlock['block'], span = 24): PlacedBlock {
+export function createPlacedBlock(block: PlacedBlock['block'], span = FULL_GRID_SPAN): PlacedBlock {
   return { block, layout: createLayoutIntent(span) };
 }
 
@@ -500,27 +479,4 @@ export function createEmptyCanvasDoc(
       },
     },
   };
-}
-
-/** Agrupa componentes de documentos anteriores conservando su orden y distribución. */
-export function withPageSections(doc: CanvasDoc): CanvasDoc {
-  const items = doc.root.slots.children;
-  if (items.every(({ block }) => block.type === 'canvas' || block.type === 'tabs' || block.type === 'accordion')) {
-    return doc;
-  }
-  const children: PlacedBlock[] = [];
-  let section: NestedCanvasNode | undefined;
-  for (const { block, layout } of items) {
-    if (block.type === 'canvas' || block.type === 'tabs' || block.type === 'accordion') {
-      children.push({ block, layout });
-      section = undefined;
-    } else {
-      if (!section) {
-        section = createNestedCanvasNode({ gap: doc.root.props.gap });
-        children.push(createPlacedBlock(section));
-      }
-      section.slots.children.push({ block, layout });
-    }
-  }
-  return { ...doc, root: { ...doc.root, slots: { children } } };
 }

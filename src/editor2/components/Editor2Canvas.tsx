@@ -1,4 +1,5 @@
-import React, { useCallback, useRef } from 'react';
+import '@puckeditor/core/puck.css';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Box,
@@ -16,6 +17,7 @@ import {
   Microscope,
   Minus,
   MousePointerClick,
+  PenLine,
   Sparkles,
   Table2,
   Tag,
@@ -23,16 +25,21 @@ import {
   Type,
 } from 'lucide-react';
 import { Puck, usePuck, type Data } from '@puckeditor/core';
-import { fromPuckData, toPuckCompatibleData, type Editor2PuckData } from '../adapters/puck';
+import { fromPuckData, toAtlasId, toPuckId, toPuckCompatibleData, type Editor2PuckData, type Editor2PuckType } from '../adapters/puck';
 import { EDITOR2_SCHEMA_VERSION, type CanvasDoc } from '../domain/schema';
 import { workspacePath } from '../services/pageIndex';
 import { useEditor2Store } from '../store/editor2Store';
+import BlockBreadcrumb from './BlockBreadcrumb';
 import BlockComponentTools from './BlockComponentTools';
+import CanvasRowControls from './CanvasRowControls';
 import DesignInspector from './DesignInspector';
 import { editor2PuckConfig } from './Editor2Blocks';
 import GridDrag from './GridDrag';
-import PageFrame from './PageFrame';
+import { CanvasScreen, ReportCanvasScreen } from './ResponsiveCanvas';
+import type { ScreenSize } from '../domain/responsive';
+import MoveBlockDialog from './MoveBlockDialog';
 import TextToolbar from './TextToolbar';
+import { EDIT_TEXT_REQUEST, hasInlineText } from './inlineEditMode';
 
 const COMPONENT_ICONS: Record<string, React.ReactNode> = {
   canvas: <LayoutGrid size={14} aria-hidden="true" />,
@@ -128,12 +135,15 @@ const fieldOverrides = {
   },
 };
 
-function BlockTools() {
+function BlockTools({
+  doc, onSaveSection, editScreen, onEditScreenChange,
+}: Editor2CanvasProps) {
   const { selectedItem, dispatch, getSelectorForId } = usePuck();
   if (!selectedItem) return (
     <section className="e2-palette" aria-label="Insertar bloques"><Puck.Components /></section>
   );
 
+  const section = onSaveSection && doc.root.slots.children.find(({ block }) => toPuckId(block.type, block.id) === selectedItem.props.id);
   const handleDuplicate = () => {
     const position = getSelectorForId(selectedItem.props.id);
     if (!position) return;
@@ -171,9 +181,48 @@ function BlockTools() {
           <ArrowLeft size={14} aria-hidden="true" />
           <span>Componentes</span>
         </button>
-        <strong className="e2-settings__title">
-          {editor2PuckConfig.components[selectedItem.type]?.label ?? 'Configuración'}
-        </strong>
+        <BlockBreadcrumb />
+        <div className="e2-settings__actions" role="group" aria-label="Acciones del bloque">
+          {hasInlineText(selectedItem.type) && (
+            <button
+              type="button"
+              className="e2-button e2-button--quiet"
+              title="También puedes hacer doble clic sobre el texto"
+              onClick={(event) => event.currentTarget.dispatchEvent(new CustomEvent(EDIT_TEXT_REQUEST, { bubbles: true }))}
+            >
+              <PenLine size={14} aria-hidden="true" />
+              Editar texto
+            </button>
+          )}
+          <MoveBlockDialog key={selectedItem.props.id} doc={doc}
+            sourceId={toAtlasId(selectedItem.type as Editor2PuckType, selectedItem.props.id)}
+            puckId={selectedItem.props.id}
+            labelFor={type => editor2PuckConfig.components[type]?.label ?? type} />
+          {onSaveSection && section && (
+            <button type="button" className="e2-button e2-button--quiet" onClick={() => onSaveSection(section.block.id)}>
+              Guardar como plantilla
+            </button>
+          )}
+          <button
+            type="button"
+            className="e2-button e2-button--quiet"
+            aria-label="Duplicar bloque"
+            title="Duplicar bloque"
+            onClick={handleDuplicate}
+          >
+            <Copy size={13} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="e2-button e2-button--quiet e2-button--danger"
+            aria-label="Eliminar bloque"
+            title="Eliminar bloque"
+            onClick={handleRemove}
+          >
+            <Trash2 size={13} aria-hidden="true" />
+            <span>Eliminar</span>
+          </button>
+        </div>
       </div>
       <div className="e2-settings__fields"><Puck.Fields wrapFields={false} /></div>
       {['text', 'heading'].includes(selectedItem.type) && (
@@ -182,42 +231,24 @@ function BlockTools() {
       {['image', 'gif', 'compare', 'button', 'table', 'carousel', 'badge', 'icon', 'tabs', 'accordion'].includes(selectedItem.type) && (
         <BlockComponentTools key={`tools-${selectedItem.props.id}`} />
       )}
-      <DesignInspector key={`design-${selectedItem.props.id}`} />
-      <div className="e2-settings__actions" role="group" aria-label="Acciones del bloque">
-        <button
-          type="button"
-          className="e2-button e2-button--quiet"
-          aria-label="Duplicar bloque"
-          title="Duplicar bloque"
-          onClick={handleDuplicate}
-        >
-          <Copy size={13} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="e2-button e2-button--quiet e2-button--danger"
-          aria-label="Eliminar bloque"
-          title="Eliminar bloque"
-          onClick={handleRemove}
-        >
-          <Trash2 size={13} aria-hidden="true" />
-          <span>Eliminar</span>
-        </button>
-      </div>
+      <DesignInspector key={`design-${selectedItem.props.id}`} editScreen={editScreen} onEditScreenChange={onEditScreenChange} />
     </section>
   );
 }
 
 export type Editor2CanvasProps = {
   doc: CanvasDoc;
-  width?: number;
+  editScreen?: ScreenSize;
+  onEditScreenChange?: (screen?: ScreenSize) => void;
+  onSaveSection?: (id: string) => void;
 };
 
 /**
  * Lienzo editable. Puck solo aporta interacción: el documento que se conserva
  * es siempre `CanvasDoc`, validado antes de entrar en el store.
  */
-const Editor2Canvas: React.FC<Editor2CanvasProps> = ({ doc, width }) => {
+const Editor2Canvas: React.FC<Editor2CanvasProps> = ({ doc, onSaveSection, editScreen, onEditScreenChange }) => {
+  const [screen, setScreen] = useState<ScreenSize>('desktop');
   const toolbar = useRef<HTMLDivElement>(null);
   const applyDoc = useEditor2Store((state) => state.applyDoc);
   const markSaveError = useEditor2Store((state) => state.markSaveError);
@@ -246,11 +277,16 @@ const Editor2Canvas: React.FC<Editor2CanvasProps> = ({ doc, width }) => {
         headerTitle="Editor 2.0"
         headerPath={workspacePath(doc.pageKey)}
       >
-        <BlockTools />
+        <CanvasScreen.Provider value={screen}>
+          <BlockTools doc={doc} onSaveSection={onSaveSection} editScreen={editScreen} onEditScreenChange={onEditScreenChange} />
+        </CanvasScreen.Provider>
         <GridDrag host={toolbar} />
-        <div className="e2-canvas-stage">
-          <PageFrame width={width}><Puck.Preview /></PageFrame>
+        <div className="e2-canvas-stage e2-canvas-stage--editing">
+          <ReportCanvasScreen.Provider value={setScreen}>
+            <Puck.Preview />
+          </ReportCanvasScreen.Provider>
         </div>
+        <CanvasRowControls host={toolbar} minRows={doc.root.props.minRows} />
         <details className="e2-outline"><summary>Árbol de la página</summary><Puck.Outline /></details>
       </Puck>
     </div>

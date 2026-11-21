@@ -47,7 +47,7 @@ export function hasVisualStyle(style?: BlockStyle): boolean {
  * Traduce un `BlockStyle` validado a propiedades CSS deterministas, compartidas
  * 1:1 entre el lienzo del editor y el renderizador público `Editor2Renderer`.
  */
-export function blockStyleToCss(style?: BlockStyle): CSSProperties {
+export function blockStyleToCss(style?: BlockStyle, fitInlinePadding = false): CSSProperties {
   if (!style) return {};
   const css: CSSProperties = {};
 
@@ -99,16 +99,18 @@ export function blockStyleToCss(style?: BlockStyle): CSSProperties {
   }
 
   if (style.padding) {
+    const inlinePadding = (value = 0) => fitInlinePadding ? `min(${value}px, 18%)` : `${value}px`;
     if (style.padding.mode === 'uniform') {
-      css.padding = `${style.padding.value ?? 0}px`;
+      const value = style.padding.value ?? 0;
+      css.padding = fitInlinePadding ? `${value}px ${inlinePadding(value)}` : `${value}px`;
     } else if (style.padding.mode === 'axis') {
-      css.padding = `${style.padding.y ?? 0}px ${style.padding.x ?? 0}px`;
+      css.padding = `${style.padding.y ?? 0}px ${inlinePadding(style.padding.x)}`;
     } else {
       const t = style.padding.t ?? 0;
       const r = style.padding.r ?? 0;
       const b = style.padding.b ?? 0;
       const l = style.padding.l ?? 0;
-      css.padding = `${t}px ${r}px ${b}px ${l}px`;
+      css.padding = `${t}px ${inlinePadding(r)} ${b}px ${inlinePadding(l)}`;
     }
   }
 
@@ -138,7 +140,7 @@ export function blockStyleToCss(style?: BlockStyle): CSSProperties {
 
 export function mergeBlockStyle(layoutStyle: CSSProperties, blockStyle?: BlockStyle): CSSProperties {
   if (!blockStyle) return layoutStyle;
-  return { ...layoutStyle, ...blockStyleToCss(blockStyle) };
+  return { ...layoutStyle, ...blockStyleToCss(blockStyle, true) };
 }
 
 const RADIUS_SCALE_PX: Record<PageTheme['radiusScale'], string> = {
@@ -165,7 +167,7 @@ const TYPO_SCALE_FACTOR: Record<PageTheme['typography']['scale'], string> = {
  * Traduce un `PageTheme` a variables CSS acotadas (`--e2-page-*`) y fondo de página
  * para `.e2-canvas-root`, compartido entre el editor y el renderizador público.
  */
-export function pageThemeToCssVars(theme?: PageTheme): CSSProperties {
+export function pageThemeToCssVars(theme?: PageTheme, showBackground = true): CSSProperties {
   if (!theme) return {};
   const vars: Record<string, string> = {
     '--e2-page-primary': theme.palette.primary,
@@ -185,12 +187,12 @@ export function pageThemeToCssVars(theme?: PageTheme): CSSProperties {
 
   const css: CSSProperties = {
     ...(vars as unknown as CSSProperties),
-    backgroundColor: theme.palette.pageBg,
+    backgroundColor: showBackground ? theme.palette.pageBg : undefined,
     color: theme.palette.text,
     fontFamily: `"${theme.typography.bodyFont}", "Montserrat", sans-serif`,
   };
 
-  if (theme.pageBgGradient && theme.pageBgGradient.stops.length >= 2) {
+  if (showBackground && theme.pageBgGradient && theme.pageBgGradient.stops.length >= 2) {
     const stops = theme.pageBgGradient.stops.join(', ');
     css.backgroundImage =
       theme.pageBgGradient.kind === 'radial'

@@ -126,7 +126,7 @@ function InstructorRunner({ id }: { id: string }) {
 
   const submit = async () => {
     if (!access || !started || busy || result || availability !== 'open') return;
-    if (access.test.questions.some(q => !isInstructorAnswerComplete(q, answers[q.id]))) { const missing = groupPublicInstructorQuestions(access.test.questions).find(group => group.items.some(q => !isInstructorAnswerComplete(q, answers[q.id]))); if (missing) setCurrentQuestion(missing.id); setError('Responde todas las preguntas y relaciona cada término con una opción distinta antes de finalizar.'); return; }
+    if (access.test.questions.some(q => !isInstructorAnswerComplete(q, answers[q.id]))) { const missing = groupPublicInstructorQuestions(access.test.questions, false).find(group => group.items.some(q => !isInstructorAnswerComplete(q, answers[q.id]))); if (missing) setCurrentQuestion(missing.id); setError('Responde todas las preguntas antes de finalizar.'); return; }
     if (!window.confirm('¿Finalizar y entregar tus respuestas? Después de enviarlas no podrás modificarlas.')) return;
     setBusy(true); setError('');
     try {

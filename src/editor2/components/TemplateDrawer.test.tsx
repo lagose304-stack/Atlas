@@ -7,6 +7,7 @@ import { blockMotionClasses } from '../domain/styleToCss';
 import { ATLAS_SECTION_TEMPLATES } from '../domain/templates';
 import { useEditor2Store } from '../store/editor2Store';
 import TemplateDrawer from './TemplateDrawer';
+import { editor2Api } from '../services/editor2Api';
 
 vi.mock('../services/editor2Api', () => ({
   editor2Api: {
@@ -52,6 +53,22 @@ describe('Plantillas de sección, Presets y Animaciones (Fase 2 — Parte 6)', (
 
     useEditor2Store.getState().undo();
     expect(useEditor2Store.getState().doc?.root.slots.children).toHaveLength(1);
+  });
+
+  it('guarda la sección seleccionada del lienzo aunque no sea la última', async () => {
+    const first = ATLAS_SECTION_TEMPLATES[0].build();
+    const second = ATLAS_SECTION_TEMPLATES[1].build();
+    vi.mocked(editor2Api.saveTemplate).mockResolvedValueOnce({
+      id: crypto.randomUUID(), name: 'Mi ficha', category: 'Personalizada',
+      description: '', section: first, created_at: new Date().toISOString(),
+    });
+    useEditor2Store.getState().setDoc(createEmptyCanvasDoc('plantillas-test', { children: [first, second] }));
+    render(<TemplateDrawer open initialSectionId={first.block.id} onClose={() => {}} />);
+    expect(screen.getByLabelText('Sección para guardar')).toHaveValue(first.block.id);
+    fireEvent.change(screen.getByLabelText('Nombre de la nueva plantilla'), { target: { value: 'Mi ficha' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    expect(editor2Api.saveTemplate).toHaveBeenCalledWith(expect.objectContaining({ name: 'Mi ficha', section: first }));
+    expect(await screen.findByText('Plantilla «Mi ficha» guardada en Supabase.')).toBeInTheDocument();
   });
 
   it('genera clases de animación de entrada solo fuera del modo edición y mantiene hover', () => {

@@ -53,6 +53,22 @@ describe('Revisión manual de señalados', () => {
     expect(screen.getByText('Puntaje: 1/1 (100%)')).toBeInTheDocument();
     expect(screen.queryByRole('button', {name:'Correcto'})).not.toBeInTheDocument();
   });
+  it('muestra la clave histórica de completación y la referencia junto a la entrega automática', async () => {
+    mocks.get.mockResolvedValue({
+      ...detail, total: 1, auto_correct: 0,
+      snapshot: { nombre: 'Prueba', scoring_version: 2, questions: [
+        { id: 'completion', type: 'completion', titulo: 'El {{1}} contiene {{2}}', blanks: [{ id: 'one' }, { id: 'two' }] },
+      ], review_guides: { completion: { blanks: { one: ['Epitelio'], two: ['Células', 'Células epiteliales'] }, reference: 'Referencia del Atlas.' } } },
+      answers: { completion: { one: 'Tejido', two: 'Células' } },
+    });
+    render(<InstructorSubmissionReview testId="test" name="Prueba" onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Entrega submissi/ }));
+    expect(await screen.findByText('Hueco 1: Tejido')).toBeInTheDocument();
+    expect(screen.getByText('Referencias para revisión').closest('details')).toHaveAttribute('open');
+    expect(screen.getByText(/Células \/ Células epiteliales/)).toBeInTheDocument();
+    expect(screen.getByText('Referencia del Atlas.')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Correcto' })).not.toBeInTheDocument();
+  });
   it('revisa texto y posición con pesos iguales dentro de su pregunta y conserva decisiones parciales', async () => {
     const group = { id: 'g', titulo: '', position: 1 };
     const weighted = { ...detail, total: 1, auto_correct: 0, snapshot: { nombre: 'Prueba', scoring_version: 2, review_guides: { brief: ['Núcleo celular'] }, questions: [

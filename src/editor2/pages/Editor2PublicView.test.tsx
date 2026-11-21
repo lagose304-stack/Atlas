@@ -13,9 +13,9 @@ import Editor2PublicView, { clearEditor2PublicCache } from './Editor2PublicView'
 vi.mock('../../components/Header', () => ({ default: () => <header>Header</header> }));
 vi.mock('../../components/Footer', () => ({ default: () => <footer>Footer</footer> }));
 vi.mock('../render/Editor2Renderer', () => ({
-  default: ({ doc }: { doc: { pageKey: string; root: { slots: { children: Array<{ block: { slots?: { children?: Array<{ block: { props?: { text?: { value?: string } } } }> } } }> } } } }) => {
+  default: ({ doc, variant }: { variant?: string; doc: { pageKey: string; root: { slots: { children: Array<{ block: { slots?: { children?: Array<{ block: { props?: { text?: { value?: string } } } }> } } }> } } } }) => {
     const firstText = doc.root.slots.children[0]?.block.slots?.children?.[0]?.block.props?.text?.value;
-    return <div data-testid="public-renderer"><h1>{firstText ?? doc.pageKey}</h1></div>;
+    return <div data-testid="public-renderer" data-variant={variant}><h1>{firstText ?? doc.pageKey}</h1></div>;
   },
 }));
 
@@ -61,6 +61,7 @@ describe('Editor2PublicView', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Atlas Publicado' })).toBeInTheDocument();
     expect(loadPublicDoc).toHaveBeenCalledWith('home');
+    expect(screen.getByTestId('public-renderer')).toHaveAttribute('data-variant', 'public');
   });
 
   it('muestra estado vacío explícito cuando no existe publicación y nunca hace fallback a borrador', async () => {

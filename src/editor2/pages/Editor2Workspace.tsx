@@ -1,20 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ExternalLink, Layers } from 'lucide-react';
+import { AlertTriangle, ExternalLink } from 'lucide-react';
 import BackButton from '../../components/BackButton';
 import Footer from '../../components/Footer';
 import Header from '../../components/Header';
 import { useSmartBackNavigation } from '../../hooks/useSmartBackNavigation';
 import Editor2Canvas from '../components/Editor2Canvas';
-import PageFrame from '../components/PageFrame';
+import Editor2PreviewScreen from '../components/Editor2PreviewScreen';
+import type { ScreenSize } from '../domain/responsive';
 import SaveBar from '../components/SaveBar';
 import TemplateDrawer from '../components/TemplateDrawer';
 import ThemeDrawer from '../components/ThemeDrawer';
 import VersionDrawer from '../components/VersionDrawer';
-import { createEmptyCanvasDoc, createNestedCanvasNode, createPlacedBlock } from '../domain/defaults';
-import { pageKeySchema, type CanvasDoc } from '../domain/schema';
+import { createEmptyCanvasDoc } from '../domain/defaults';
+import { pageKeySchema } from '../domain/schema';
 import PageBreadcrumb from '../navigation/PageBreadcrumb';
-import Editor2Renderer from '../render/Editor2Renderer';
 import { editor2Api } from '../services/editor2Api';
 import {
   EDITOR2_HOME_PATH,
@@ -37,32 +37,6 @@ const kindLabelFor = (page: Editor2PageSummary | undefined): string => {
   return 'Página';
 };
 
-type PlacedLike = {
-  block: {
-    type: string;
-    slots?: { children: PlacedLike[] };
-    props?: { items?: Array<{ children?: PlacedLike[] }> };
-  };
-};
-
-function countBlocks(doc: CanvasDoc | null): number {
-  if (!doc) return 0;
-
-  const walk = (items: readonly PlacedLike[]): number =>
-    items.reduce((total, item) => {
-      const slotChildren = item.block.slots ? walk(item.block.slots.children) : 0;
-      const tabChildren = Array.isArray(item.block.props?.items)
-        ? item.block.props.items.reduce(
-            (sum, tab) => sum + (Array.isArray(tab.children) ? walk(tab.children) : 0),
-            0,
-          )
-        : 0;
-      return total + 1 + slotChildren + tabChildren;
-    }, 0);
-
-  return walk(doc.root.slots.children as unknown as readonly PlacedLike[]);
-}
-
 const Editor2Workspace: React.FC = () => {
   const { pageKey } = useParams<{ pageKey: string }>();
   const [searchParams] = useSearchParams();
@@ -70,12 +44,27 @@ const Editor2Workspace: React.FC = () => {
   const handleGoBack = useSmartBackNavigation(EDITOR2_HOME_PATH);
   const [pages, setPages] = useState<Editor2PageSummary[]>([]);
   const [preview, setPreview] = useState(false);
+  const [editScreen, setEditScreen] = useState<ScreenSize>();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
+  const [templateSectionId, setTemplateSectionId] = useState<string>();
   const [templatesOpen, setTemplatesOpen] = useState(false);
-  const [previewSize, setPreviewSize] = useState('auto');
-  const pageWidth = previewSize === 'auto' ? undefined : Number(previewSize);
-  const togglePreview = () => setPreview(!preview);
+  const editorScroll = useRef(0);
+  const previewTrigger = useRef<HTMLElement | null>(null);
+  const togglePreview = () => {
+    if (preview) {
+      setPreview(false);
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: editorScroll.current });
+        previewTrigger.current?.focus({ preventScroll: true });
+      });
+      return;
+    }
+    editorScroll.current = window.scrollY;
+    previewTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPreview(true);
+    requestAnimationFrame(() => window.scrollTo({ top: 0 }));
+  };
 
   const doc = useEditor2Store((state) => state.doc);
   const dirty = useEditor2Store((state) => state.dirty);
@@ -101,14 +90,13 @@ const Editor2Workspace: React.FC = () => {
 
   useEffect(() => {
     setPreview(false);
+    setEditScreen(undefined);
     setHistoryOpen(false);
     if (!parsedPageKey) return;
 
     const state = useEditor2Store.getState();
     if (state.doc?.pageKey !== parsedPageKey) {
-      state.setDoc(readEditor2Draft(parsedPageKey) ?? createEmptyCanvasDoc(parsedPageKey, {
-        children: [createPlacedBlock(createNestedCanvasNode())],
-      }));
+      state.setDoc(readEditor2Draft(parsedPageKey) ?? createEmptyCanvasDoc(parsedPageKey));
       state.setWorkspaceMeta({ versions: [], publication: null, baseVersionId: null, updatedAt: null });
       const loaded = useEditor2Store.getState().doc;
       if (loaded) writeEditor2Draft(loaded);
@@ -188,12 +176,16 @@ const Editor2Workspace: React.FC = () => {
   const kindLabel = kindLabelFor(page);
 
   const activeDoc = doc && doc.pageKey === parsedPageKey ? doc : null;
-  const blockCount = useMemo(() => countBlocks(activeDoc), [activeDoc]);
 
   return (
-    <div className="editor2-scope">
+    <>
+      {preview && activeDoc && <Editor2PreviewScreen doc={activeDoc} onExit={togglePreview} />}
+    <div
+      className="editor2-scope"
+      style={preview && activeDoc ? { display: 'none' } : undefined}
+    >
       <Header />
-      <main className="e2-main">
+      <main className="e2-main e2-workspace-main">
         <div className="e2-workspace-page">
           <header className="e2-studio-header">
             <div className="e2-studio-header__left">
@@ -258,24 +250,22 @@ const Editor2Workspace: React.FC = () => {
               )}
 
               <div className="e2-workspace-grid">
-                <section className="e2-canvas-shell" aria-label="Lienzo de la página">
+                <section className="e2-canvas-shell e2-workspace-shell" aria-label="Lienzo de la página">
                   {activeDoc ? (
                     <>
                       <SaveBar
                         preview={preview}
                         onTogglePreview={togglePreview}
-                        previewSize={previewSize}
-                        onPreviewSizeChange={setPreviewSize}
                         onSave={() => void saveDraftNow()}
                         onPublish={() => void publishDraftNow()}
                         onUnpublish={() => void unpublishNow()}
-                        onOpenTemplates={() => setTemplatesOpen(true)}
+                        onOpenTemplates={() => { setTemplateSectionId(undefined); setTemplatesOpen(true); }}
                         onOpenTheme={() => setThemeOpen(true)}
                         onOpenHistory={() => setHistoryOpen(true)}
                         publicViewPath={parsedPageKey ? `/vista-v2/${encodeURIComponent(parsedPageKey)}` : undefined}
                         publicSitePath={page?.publicPath}
                       />
-                      <TemplateDrawer open={templatesOpen} onClose={() => setTemplatesOpen(false)} />
+                      <TemplateDrawer initialSectionId={templateSectionId} open={templatesOpen} onClose={() => setTemplatesOpen(false)} />
                       <ThemeDrawer open={themeOpen} onClose={() => setThemeOpen(false)} />
                       {parsedPageKey && (
                         <VersionDrawer
@@ -284,16 +274,11 @@ const Editor2Workspace: React.FC = () => {
                           onClose={() => setHistoryOpen(false)}
                         />
                       )}
-                      <div
-                        className={`e2-canvas-shell__body${preview ? ' e2-canvas-shell__body--preview' : ''}`}
-                      >
-                        {preview ? (
-                          <div className="e2-canvas-stage">
-                            <PageFrame width={pageWidth}><Editor2Renderer doc={activeDoc} /></PageFrame>
-                          </div>
-                        ) : (
-                          <Editor2Canvas doc={activeDoc} width={pageWidth} />
-                        )}
+                      <div className="e2-canvas-shell__body">
+                        <Editor2Canvas doc={activeDoc} editScreen={editScreen} onEditScreenChange={setEditScreen} onSaveSection={(id) => {
+                          setTemplateSectionId(id);
+                          setTemplatesOpen(true);
+                        }} />
                       </div>
                     </>
                   ) : (
@@ -302,62 +287,14 @@ const Editor2Workspace: React.FC = () => {
                     </div>
                   )}
                 </section>
-
-                <details className="e2-inspector">
-                  <summary>Detalles de la página</summary>
-                  <dl>
-                    <div>
-                      <dt>Clave</dt>
-                      <dd className="e2-mono">{parsedKey.data}</dd>
-                    </div>
-                    <div>
-                      <dt>Ruta pública</dt>
-                      <dd className="e2-mono">{page?.publicPath ?? 'No disponible'}</dd>
-                    </div>
-                    <div>
-                      <dt>Tipo</dt>
-                      <dd>{kindLabel}</dd>
-                    </div>
-                    {page?.parcial && (
-                      <div>
-                        <dt>Parcial</dt>
-                        <dd>{page.parcial}</dd>
-                      </div>
-                    )}
-                    <div>
-                      <dt>Revisión</dt>
-                      <dd>
-                        {versionInfo.version !== null
-                          ? `n.º ${versionInfo.version}`
-                          : 'Sin revisión'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Bloques</dt>
-                      <dd>
-                        <span className="e2-inspector__count">
-                          <Layers size={13} aria-hidden="true" />
-                          {blockCount}
-                        </span>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Estado</dt>
-                      <dd>{preview ? 'Vista previa en memoria' : 'Borrador en memoria'}</dd>
-                    </div>
-                  </dl>
-                  <p className="e2-inspector__note">
-                    El lienzo, el historial y las versiones viven solo en esta pestaña hasta la
-                    Parte 6. Este espacio no modifica el editor actual.
-                  </p>
-                </details>
               </div>
             </>
           )}
         </div>
       </main>
       <Footer />
-    </div>
+      </div>
+    </>
   );
 };
 

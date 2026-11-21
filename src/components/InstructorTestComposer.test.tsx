@@ -144,7 +144,7 @@ describe('Editor por preguntas e incisos', () => {
     const add = screen.getByRole('button', { name: 'Agregar inciso' });
     fireEvent.click(add);
     expect(screen.getByRole('region', { name: 'Elegir formato del nuevo inciso' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /Agregar inciso de/ })).toHaveLength(6);
+    expect(screen.getAllByRole('button', { name: /Agregar inciso de/ })).toHaveLength(7);
     expect(current()).toEqual(initial);
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar selección de formato' }));
     expect(screen.queryByRole('region', { name: 'Elegir formato del nuevo inciso' })).not.toBeInTheDocument();
@@ -173,12 +173,14 @@ describe('Editor por preguntas e incisos', () => {
     expect(incisoLetter(0)).toBe('a'); expect(incisoLetter(26)).toBe('aa');
   });
 
-  it('permite agregar un versus de imágenes sin contar como inciso con puntaje', () => {
+  it('cuenta las dos respuestas breves de un Versus y conserva el modo de referencia', () => {
     render(<Composer />);
     fireEvent.click(screen.getByRole('button', { name: 'Agregar inciso' }));
     fireEvent.click(screen.getByRole('button', { name: 'Agregar inciso de versus de imágenes' }));
     expect(screen.getByRole('region', { name: 'Imagen A del versus' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Imagen B del versus' })).toBeInTheDocument();
+    expect(screen.getByText(/5 incisos \(4 con puntaje\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Pedir una respuesta breve por placa' }));
     expect(screen.getByText(/3 incisos \(2 con puntaje\)/)).toBeInTheDocument();
   });
 });

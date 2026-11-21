@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { isEditor2PreviewFrame } from '../editor2/public/previewFrame';
 
 export type SupabaseQueryError = {
 	name?: string | null;
@@ -52,6 +53,7 @@ export const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as stri
 export const ATLAS_SESSION_TOKEN_KEY = 'atlas_session_token';
 
 export const getAtlasSessionToken = (): string => {
+	if (isEditor2PreviewFrame()) return '';
 	if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') return '';
 	return localStorage.getItem(ATLAS_SESSION_TOKEN_KEY) || '';
 };

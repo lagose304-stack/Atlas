@@ -79,7 +79,7 @@ describe('canvasDocSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rechaza spans fuera de 1..24 y starts que exceden la rejilla', () => {
+  it('rechaza spans y posiciones que exceden la rejilla', () => {
     const invalidSpan = createEmptyCanvasDoc('home', {
       id: ROOT_ID,
       children: [{ ...createPlacedBlock(createTextBlock({ id: TEXT_ID })), layout: { base: { span: 25 } } }],
@@ -91,6 +91,18 @@ describe('canvasDocSchema', () => {
 
     expect(canvasDocSchema.safeParse(invalidSpan).success).toBe(false);
     expect(canvasDocSchema.safeParse(invalidStart).success).toBe(false);
+  });
+
+  it('conserva las medias celdas al guardar y volver a leer el documento', () => {
+    const block = createTextBlock({ id: TEXT_ID });
+    const doc = createEmptyCanvasDoc('home', {
+      children: [{
+        block, layout: { base: { start: 24.5, span: 0.5, row: 1000.5, rowSpan: 0.5 } },
+      }],
+    });
+    expect(canvasDocSchema.parse(JSON.parse(JSON.stringify(doc)))).toEqual(doc);
+    doc.root.slots.children[0].layout.base.start = 24.25;
+    expect(canvasDocSchema.safeParse(doc).success).toBe(false);
   });
 
   it('rechaza un lienzo anidado dentro de otro lienzo anidado', () => {

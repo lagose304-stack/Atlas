@@ -16,7 +16,7 @@ export type ThemeDrawerProps = {
 const PALETTE_FIELDS: Array<{ key: keyof PageThemePalette; label: string }> = [
   { key: 'primary', label: 'Primario' },
   { key: 'accent', label: 'Acento' },
-  { key: 'pageBg', label: 'Fondo página' },
+  { key: 'pageBg', label: 'Fondo del lienzo (edición)' },
   { key: 'surface', label: 'Superficie' },
   { key: 'text', label: 'Texto' },
   { key: 'border', label: 'Bordes' },

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { isEditor2PreviewFrame } from '../editor2/public/previewFrame';
 
 export type AnalyticsEventType = 'site_visit' | 'tema_view' | 'subtema_view' | 'placa_view';
 export type AnalyticsRangePreset = 'all' | 'year' | 'month' | 'week' | 'day';
@@ -112,7 +113,7 @@ export const logSiteVisitOncePerSession = async (): Promise<void> => {
 };
 
 export const logTemaView = async (temaId: number): Promise<void> => {
-  if (shouldSkipRecentEvent(`tema_view:${temaId}`)) {
+  if (isEditor2PreviewFrame() || shouldSkipRecentEvent(`tema_view:${temaId}`)) {
     return;
   }
 
@@ -124,7 +125,7 @@ export const logTemaView = async (temaId: number): Promise<void> => {
 };
 
 export const logSubtemaView = async (subtemaId: number): Promise<void> => {
-  if (shouldSkipRecentEvent(`subtema_view:${subtemaId}`)) {
+  if (isEditor2PreviewFrame() || shouldSkipRecentEvent(`subtema_view:${subtemaId}`)) {
     return;
   }
 
@@ -136,6 +137,7 @@ export const logSubtemaView = async (subtemaId: number): Promise<void> => {
 };
 
 export const logPlacaView = async (placaId: number, subtemaId?: number): Promise<void> => {
+  if (isEditor2PreviewFrame()) return;
   if (shouldSkipRecentEvent(`placa_view:${placaId}`)) {
     return;
   }

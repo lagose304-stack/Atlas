@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEmptyCanvasDoc } from '../domain/defaults';
 import type { Editor2PublicDoc } from '../services/editor2Api';
 import Editor2PublicSlot from './Editor2PublicSlot';
+import { Editor2PreviewDocProvider } from './previewDoc';
 import { invalidatePublicDocCache } from './publicDocCache';
 
 vi.mock('../render/Editor2Renderer', () => ({
@@ -130,5 +131,26 @@ describe('Editor2PublicSlot y caché pública (Fase 3 — Parte 1)', () => {
       expect(loader).toHaveBeenCalledTimes(2);
     });
     expect(screen.getByTestId('v1-fallback')).toBeInTheDocument();
+  });
+
+  it('muestra el borrador en memoria durante la vista previa real sin consultar publicación', async () => {
+    const loader = vi.fn().mockResolvedValue(null);
+    const draft = createEmptyCanvasDoc('home');
+
+    render(
+      <Editor2PreviewDocProvider value={{ pageKey: 'home', doc: draft }}>
+        <Editor2PublicSlot
+          pageKey="home"
+          fallback={<div data-testid="v1-fallback">Contenido v1</div>}
+          loadPublicDoc={loader}
+        />
+      </Editor2PreviewDocProvider>,
+    );
+
+    const renderer = await screen.findByTestId('mock-editor2-renderer');
+    expect(renderer).toHaveTextContent('Render v2: home');
+    expect(renderer).toHaveAttribute('data-variant', 'public');
+    expect(screen.queryByTestId('v1-fallback')).not.toBeInTheDocument();
+    expect(loader).not.toHaveBeenCalled();
   });
 });

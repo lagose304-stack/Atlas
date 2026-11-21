@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
-import type { InstructorQuestion, PublicInstructorQuestion, InstructorAnswers, InstructorQuestionGroup, InstructorSubmissionSnapshot, InstructorSection, InstructorSectionResult } from '../types/instructorQuestions';
+import { expandInstructorVersus, instructorGroups, instructorVersusPrompts } from '../types/instructorQuestions';
+import type { InstructorQuestion, PublicInstructorQuestion, InstructorAnswers, InstructorQuestionGroup, InstructorSubmissionSnapshot, InstructorSection, InstructorSectionResult, VersusQuestion } from '../types/instructorQuestions';
 export { newInstructorQuestion } from '../types/instructorQuestions';
 export type { InstructorQuestion, InstructorOption } from '../types/instructorQuestions';
 
@@ -19,12 +20,40 @@ export type InstructorSummary = {
   estado: 'borrador' | 'publicada';
   revision: number;
   published_revision: number | null;
+  can_delete_draft?: boolean;
   mode?: 'bank' | 'legacy';
   legacy_question_count?: number;
 };
 export type InstructorBankContent = { groups: InstructorQuestionGroup[]; questions: InstructorQuestion[] };
 export type InstructorBankSummary = { tema_id: number; question_count: number; inciso_count: number; revision: number; updated_at?: string | null };
 export type InstructorBankTopic = { tema_id: number; content: InstructorBankContent; revision: number };
+function collapseInstructorVersus<T extends InstructorContent | InstructorBankContent>(content: T): T {
+  const byId = new Map(content.questions.map(question => [question.id, question]));
+  const nestedIds = new Set<string>();
+  const versusById = new Map<string, VersusQuestion>();
+  for (const group of instructorGroups(content)) {
+    const items = group.item_ids.flatMap(id => byId.get(id) ?? []);
+    items.forEach((item, index) => {
+      if (item.type !== 'image_versus') return;
+      const prompts = instructorVersusPrompts(items, index);
+      if (!prompts) return;
+      [...prompts.a, ...prompts.b].forEach(prompt => nestedIds.add(prompt.id));
+      const extract = ({ id, titulo }: InstructorQuestion) => ({ id, titulo });
+      versusById.set(item.id, {
+        ...item, prompts: {
+          a: extract(prompts.a[0]),
+          b: extract(prompts.b[0]),
+        },
+      });
+    });
+  }
+  if (!nestedIds.size) return content;
+  return {
+    ...content,
+    questions: content.questions.filter(question => !nestedIds.has(question.id)).map(question => versusById.get(question.id) ?? question),
+    groups: content.groups?.map(group => ({ ...group, item_ids: group.item_ids.filter(id => !nestedIds.has(id)) })),
+  };
+}
 export type InstructorEditor = Omit<InstructorSummary, 'nombre'> & { content: InstructorContent; has_code: boolean };
 export type PublicInstructorSummary = { id: string; nombre: string; instrucciones: string; question_count: number; inciso_count?: number | null; opens_at?: string | null; closes_at?: string | null; server_time?: string; availability?: 'open' | 'scheduled' | 'closed' };
 export type PublicInstructorContent = Omit<InstructorContent, 'questions'> & {
@@ -53,15 +82,21 @@ async function rpc<T>(name: string, args?: Record<string, unknown>): Promise<T> 
 }
 
 export const listInstructorTests = () => rpc<InstructorSummary[]>('atlas_list_instructor_tests');
-export const getInstructorTest = (id: string) => rpc<InstructorEditor>('atlas_get_instructor_test', { p_id: id });
+export const getInstructorTest = async (id: string) => {
+  const test = await rpc<InstructorEditor>('atlas_get_instructor_test', { p_id: id });
+  return { ...test, content: collapseInstructorVersus(test.content) };
+};
 export const saveInstructorTest = (test: InstructorEditor | null, content: InstructorContent, code: string) => {
   if (code && !isSixDigitCode(code)) return Promise.reject(new Error('El código debe tener exactamente 6 dígitos.'));
   return rpc<InstructorEditor>('atlas_save_instructor_test', {
-    p_id: test?.id ?? null, p_revision: test?.revision ?? null, p_content: content, p_code: code || null,
-  });
+    p_id: test?.id ?? null, p_revision: test?.revision ?? null, p_content: expandInstructorVersus(content), p_code: code || null,
+  }).then(saved => ({ ...saved, content: collapseInstructorVersus(saved.content) }));
 };
 export const publishInstructorTest = (test: Pick<InstructorSummary, 'id' | 'revision'>, publish: boolean) => rpc<InstructorEditor>(
   'atlas_publish_instructor_test', { p_id: test.id, p_revision: test.revision, p_publish: publish },
+).then(saved => ({ ...saved, content: collapseInstructorVersus(saved.content) }));
+export const deleteInstructorDraft = (test: Pick<InstructorSummary, 'id' | 'revision'>) => rpc<{ ok: true }>(
+  'atlas_delete_instructor_draft', { p_id: test.id, p_revision: test.revision },
 );
 export const publicInstructorTests = () => rpc<PublicInstructorSummary[]>('atlas_public_instructor_tests');
 export const unlockInstructorTest = (id: string, code: string) => {
@@ -89,6 +124,9 @@ export type InstructorParticipantResult = { ok: true; participant_name: string; 
 export const getInstructorParticipantResult = (id: string, code: string, account: string) => rpc<InstructorParticipantResult | { ok: false; status: 'unavailable' | 'locked' | 'pending' }>('atlas_instructor_participant_result', { p_id: id, p_code: code, p_account: account });
 
 export const listInstructorBank = () => rpc<InstructorBankSummary[]>('atlas_list_instructor_bank');
-export const getInstructorBankTopic = (temaId: number) => rpc<InstructorBankTopic>('atlas_get_instructor_bank_topic', { p_tema_id: temaId });
-export const saveInstructorBankTopic = (temaId: number, revision: number | null, content: InstructorBankContent) => rpc<InstructorBankTopic>('atlas_save_instructor_bank_topic', { p_tema_id: temaId, p_revision: revision, p_content: content });
-export const migrateInstructorQuestionToBank = (testId: string, testRevision: number, groupId: string, temaId: number) => rpc<{ test: InstructorEditor; bank: InstructorBankTopic }>('atlas_migrate_instructor_question_to_bank', { p_test_id: testId, p_test_revision: testRevision, p_group_id: groupId, p_tema_id: temaId });
+export const getInstructorBankTopic = (temaId: number) => rpc<InstructorBankTopic>('atlas_get_instructor_bank_topic', { p_tema_id: temaId })
+  .then(topic => ({ ...topic, content: collapseInstructorVersus(topic.content) }));
+export const saveInstructorBankTopic = (temaId: number, revision: number | null, content: InstructorBankContent) => rpc<InstructorBankTopic>('atlas_save_instructor_bank_topic', { p_tema_id: temaId, p_revision: revision, p_content: expandInstructorVersus(content) })
+  .then(topic => ({ ...topic, content: collapseInstructorVersus(topic.content) }));
+export const migrateInstructorQuestionToBank = (testId: string, testRevision: number, groupId: string, temaId: number) => rpc<{ test: InstructorEditor; bank: InstructorBankTopic }>('atlas_migrate_instructor_question_to_bank', { p_test_id: testId, p_test_revision: testRevision, p_group_id: groupId, p_tema_id: temaId })
+  .then(({ test, bank }) => ({ test: { ...test, content: collapseInstructorVersus(test.content) }, bank: { ...bank, content: collapseInstructorVersus(bank.content) } }));

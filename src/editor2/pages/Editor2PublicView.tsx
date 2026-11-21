@@ -119,7 +119,7 @@ const Editor2PublicView: React.FC<Editor2PublicViewProps> = ({
 
         {status === 'ready' && doc && (
           <div className="e2-public-page" data-e2-public-version={doc.versionId}>
-            <Editor2Renderer doc={doc.doc} />
+            <Editor2Renderer doc={doc.doc} variant="public" />
           </div>
         )}
       </main>

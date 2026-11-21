@@ -6,8 +6,8 @@ import InstructorFormatIcon from './InstructorFormatIcon';
 import InstructorScheduleEditor from './InstructorScheduleEditor';
 import type { InstructorContent } from '../services/instructorTests';
 import {
-  INSTRUCTOR_QUESTION_TYPES, incisoLetter, instructorGroups, isInstructorGradedQuestion, newInstructorGroup, newInstructorQuestion,
-  type InstructorQuestion, type InstructorQuestionGroup, type InstructorQuestionType,
+  INSTRUCTOR_QUESTION_TYPES, incisoLetter, instructorGroups, instructorStoredIncisoCount, isInstructorGradedQuestion, newInstructorGroup, newInstructorQuestion,
+  type ChoiceQuestion, type InstructorQuestion, type InstructorQuestionGroup, type InstructorQuestionType,
 } from '../types/instructorQuestions';
 
 const InstructorSectionsEditor = lazy(() => import('./InstructorSectionsEditor'));
@@ -35,6 +35,8 @@ export default function InstructorTestComposer({ content, code, hasCode, existin
   const items = group?.item_ids.map(id => content.questions.find(q => q.id === id)).filter((q): q is InstructorQuestion => !!q) ?? [];
   const itemIndex = Math.max(0, items.findIndex(q => q.id === selectedItems[group?.id]));
   const item = items[itemIndex];
+  const totalIncisos = instructorStoredIncisoCount(content.questions);
+  const fits = (type: InstructorQuestionType) => totalIncisos + (type === 'image_versus' ? 3 : 1) <= 100;
 
   const apply = (nextGroups: InstructorQuestionGroup[], nextItems = content.questions): InstructorContent => {
     const byId = new Map(nextItems.map(q => [q.id, q]));
@@ -59,20 +61,27 @@ export default function InstructorTestComposer({ content, code, hasCode, existin
   const selectItem = (id: string) => {
     if (group) setSelectedItems(previous => ({ ...previous, [group.id]: id }));
   };
-  const addItem = (type: InstructorQuestionType) => {
-    if (!group || content.questions.length >= 100) return;
+  const addItem = (type: InstructorQuestionType, multiple = false) => {
+    if (!group || !fits(type)) return;
     const next = newInstructorQuestion(type);
+    if (type === 'single_choice' && multiple) {
+      (next as ChoiceQuestion).correct_option_ids = [];
+    }
     const nextContent = apply(groups.map(g => g.id === group.id ? { ...g, item_ids: [...g.item_ids, next.id] } : g), [...content.questions, next]);
     selectItem(next.id); setAddingItem(false);
     onMilestoneAction?.(nextContent);
   };
-  const formatDescriptions: Record<InstructorQuestionType, string> = {
-    single_choice: 'Varias opciones, una correcta', short_answer: 'Texto libre · Revisión manual',
-    completion: 'Enunciado con espacios por completar', matching: 'Relacionar términos y conceptos',
-    image_point: 'Colocar un señalado · Revisión manual',
-    image_versus: 'Dos imágenes lado a lado · Sin puntaje',
-  };
-  const gradedItemsCount = items.filter(isInstructorGradedQuestion).length;
+  const composerFormats: { value: InstructorQuestionType; label: string; desc: string; multiple?: boolean }[] = [
+    { value: 'single_choice', label: 'Selección única', desc: 'Una respuesta correcta (círculo)', multiple: false },
+    { value: 'single_choice', label: 'Selección múltiple', desc: 'Varias respuestas correctas (cuadradito)', multiple: true },
+    { value: 'short_answer', label: 'Respuesta breve', desc: 'Texto libre · Revisión manual' },
+    { value: 'completion', label: 'Completación', desc: 'Enunciado con espacios por completar' },
+    { value: 'matching', label: 'Términos pareados', desc: 'Relacionar términos y conceptos' },
+    { value: 'image_point', label: 'Señalar en imagen', desc: 'Colocar un señalado · Revisión manual' },
+    { value: 'image_versus', label: 'Versus de imágenes', desc: 'Dos placas con respuestas breves opcionales' },
+  ];
+  const itemCount = instructorStoredIncisoCount(items);
+  const gradedItemsCount = itemCount - items.filter(q => !isInstructorGradedQuestion(q)).length;
 
   return <div className="instructor-composer">
     <aside className="instructor-question-nav" aria-label="Navegación del editor">
@@ -99,7 +108,7 @@ export default function InstructorTestComposer({ content, code, hasCode, existin
         </li>)}
       </ol>
       <button type="button" className="instructor-btn instructor-btn-primary" aria-label="Agregar nueva pregunta" disabled={groups.length >= 100} onClick={addGroup}><Plus size={17} aria-hidden="true" />Nueva pregunta</button>
-      <div className="instructor-nav-foot"><Layers3 size={15} aria-hidden="true" /><span>{content.questions.length} incisos en total<small>Cada pregunta vale 1 punto, dividido entre sus incisos</small></span></div>
+      <div className="instructor-nav-foot"><Layers3 size={15} aria-hidden="true" /><span>{totalIncisos} incisos en total<small>Cada pregunta vale 1 punto, dividido entre sus incisos</small></span></div>
     </aside>
 
     <section id={workspaceId} className="instructor-question-workspace" aria-label="Área de edición">
@@ -124,9 +133,9 @@ export default function InstructorTestComposer({ content, code, hasCode, existin
         <button type="button" className="instructor-btn" onClick={() => groups.length ? selectGroup(groups[0].id) : addGroup()}>Continuar a preguntas<ArrowRight size={17} aria-hidden="true" /></button>
       </> : group ? <>
         <div className="instructor-row instructor-between instructor-active-question-heading">
-          <div><span className="instructor-eyebrow">Edición de preguntas</span><h3>Pregunta {groupIndex + 1} de {groups.length}</h3><p>{gradedItemsCount !== items.length ? `${items.length} ${items.length === 1 ? 'inciso' : 'incisos'} (${gradedItemsCount} con puntaje) · 1 punto repartido entre los incisos evaluables.` : `${items.length} ${items.length === 1 ? 'inciso' : 'incisos'} · 1 punto repartido entre sus incisos.`}</p></div>
+          <div><span className="instructor-eyebrow">Edición de preguntas</span><h3>Pregunta {groupIndex + 1} de {groups.length}</h3><p>{gradedItemsCount !== itemCount ? `${itemCount} ${itemCount === 1 ? 'inciso' : 'incisos'} (${gradedItemsCount} con puntaje) · 1 punto repartido entre los incisos evaluables.` : `${itemCount} ${itemCount === 1 ? 'inciso' : 'incisos'} · 1 punto repartido entre sus incisos.`}</p></div>
           <div className="instructor-row">
-          {!!items.length && <button type="button" className="instructor-btn" aria-expanded={addingItem} aria-controls={`${workspaceId}-formats`} disabled={content.questions.length >= 100} onClick={() => setAddingItem(value => !value)}><Plus size={17} aria-hidden="true" />Agregar inciso</button>}
+          {!!items.length && <button type="button" className="instructor-btn" aria-expanded={addingItem} aria-controls={`${workspaceId}-formats`} disabled={totalIncisos >= 100} onClick={() => setAddingItem(value => !value)}><Plus size={17} aria-hidden="true" />Agregar inciso</button>}
           <button type="button" className="instructor-btn instructor-btn-danger instructor-btn-icon" aria-label={`Eliminar pregunta ${groupIndex + 1}`} title={`Eliminar pregunta ${groupIndex + 1}`} onClick={() => {
             if (!window.confirm(`¿Eliminar la pregunta ${groupIndex + 1} y sus ${items.length} incisos?`)) return;
             const next = groups.filter(g => g.id !== group.id);
@@ -148,9 +157,10 @@ export default function InstructorTestComposer({ content, code, hasCode, existin
           <div className="instructor-row instructor-between"><div><h4>{items.length ? 'Elige el formato' : 'Agrega el primer inciso'}</h4><p>Selecciona un formato para empezar a escribir.</p></div>
             {!!items.length && <button type="button" className="instructor-btn instructor-btn-ghost instructor-btn-icon" aria-label="Cerrar selección de formato" onClick={() => setAddingItem(false)}><X size={17} aria-hidden="true" /></button>}
           </div>
-          <div className="instructor-format-grid">{INSTRUCTOR_QUESTION_TYPES.map(type => <button type="button" className="instructor-format-card" key={type.value}
-            disabled={content.questions.length >= 100} aria-label={`Agregar inciso de ${type.label.toLowerCase()}`} onClick={() => addItem(type.value)}>
-            <span className="instructor-format-symbol"><InstructorFormatIcon type={type.value} /></span><strong>{type.label}</strong><span>{formatDescriptions[type.value]}</span><Plus size={15} aria-hidden="true" className="instructor-format-plus" />
+          <div className="instructor-format-grid">{composerFormats.map(fmt => <button type="button" className="instructor-format-card" key={`${fmt.value}-${fmt.multiple ? 'm' : 's'}`}
+            disabled={!fits(fmt.value)} aria-label={`Agregar inciso de ${fmt.label.toLowerCase()}`} onClick={() => addItem(fmt.value, fmt.multiple)}>
+            <span className="instructor-format-symbol"><InstructorFormatIcon type={fmt.value} multiple={fmt.multiple} /></span>
+            <strong>{fmt.label}</strong><span>{fmt.desc}</span><Plus size={15} aria-hidden="true" className="instructor-format-plus" />
           </button>)}</div>
         </section>}
         {items.length ? <>
@@ -166,7 +176,9 @@ export default function InstructorTestComposer({ content, code, hasCode, existin
               }}>
               <span className="instructor-inciso-letter" aria-hidden="true">{incisoLetter(i).toUpperCase()}</span>
               <span><strong>Inciso {incisoLetter(i)}</strong>
-                <small><InstructorFormatIcon type={q.type} />{INSTRUCTOR_QUESTION_TYPES.find(type => type.value === (q.type ?? 'single_choice'))?.label}</small></span>
+                <small><InstructorFormatIcon type={q.type} multiple={(!q.type || q.type === 'single_choice') && !!q.correct_option_ids} />{(!q.type || q.type === 'single_choice') && q.correct_option_ids
+                  ? 'Selección múltiple'
+                  : INSTRUCTOR_QUESTION_TYPES.find(type => type.value === (q.type ?? 'single_choice'))?.label}</small></span>
             </button>)}
           </div>
           {item && <div role="tabpanel" id={incisoPanelId} aria-labelledby={`${incisoPanelId}-${item.id}`}>

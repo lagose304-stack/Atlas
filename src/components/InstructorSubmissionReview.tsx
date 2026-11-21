@@ -1,10 +1,24 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Check, ClipboardCheck, LoaderCircle, Save, Trash2, X } from 'lucide-react';
 import { deleteInstructorSubmission, getInstructorSubmission, listInstructorSubmissions, reviewInstructorSubmission, type InstructorSubmission, type InstructorSubmissionSummary } from '../services/instructorTests';
-import { formatInstructorPoints, getInstructorPointCoordinates, incisoLetter, instructorIncisoWeight, instructorReviewPoints, instructorSectionResults, requiresInstructorReview, type PublicInstructorQuestion } from '../types/instructorQuestions';
+import { formatInstructorPoints, getInstructorPointCoordinates, incisoLetter, instructorChoiceAnswerText, instructorIncisoWeight, instructorReviewPoints, instructorSectionResults, instructorVersusParts, requiresInstructorReview, type InstructorCompletionReviewGuide, type PublicInstructorQuestion } from '../types/instructorQuestions';
 import InstructorReferenceImageView from './InstructorReferenceImageView';
 import InstructorSectionScores from './InstructorSectionScores';
 import InstructorDeleteConfirmation from './InstructorDeleteConfirmation';
+
+function InstructorReviewReferences({ question, guide }: { question: PublicInstructorQuestion; guide?: string[] | InstructorCompletionReviewGuide }) {
+  if (question.type === 'short_answer' && Array.isArray(guide) && guide.some(value => value.trim())) {
+    return <details><summary>Referencias del autor para revisar</summary><p>{guide.filter(value => value.trim()).join(' · ')}</p></details>;
+  }
+  if (question.type !== 'completion' || !guide || Array.isArray(guide)) return null;
+  return <details open>
+    <summary>Referencias para revisión</summary>
+    <ol>
+      {question.blanks.map((blank, index) => <li key={blank.id}><strong>Hueco {index + 1}</strong> · {guide.blanks[blank.id]?.filter(value => value.trim()).join(' / ')}</li>)}
+    </ol>
+    {guide.reference?.trim() && <p className="instructor-review-reference">{guide.reference}</p>}
+  </details>;
+}
 
 export default function InstructorSubmissionReview({ testId, name, onClose }: { testId: string; name: string; onClose: () => void }) {
   const [rows, setRows] = useState<InstructorSubmissionSummary[]>([]);
@@ -70,8 +84,11 @@ export default function InstructorSubmissionReview({ testId, name, onClose }: { 
   const manual = selected?.snapshot.questions.filter(q => requiresInstructorReview(selected.snapshot, q)) ?? [];
   const pending = manual.filter(q => !(q.id in reviews)).length;
   const correct = (selected?.auto_correct ?? 0) + (selected ? instructorReviewPoints(selected.snapshot, reviews) : 0);
+  const versus = instructorVersusParts(selected?.snapshot.questions ?? []);
   const questionTitle = (question: PublicInstructorQuestion) => {
-    const siblings = selected?.snapshot.questions.filter(q => q.group?.id === question.group?.id) ?? [];
+    const prompt = versus.byPrompt.get(question.id);
+    if (prompt && question.group) return `Pregunta ${question.group.position} · Placa ${prompt.plate.toUpperCase()} · Respuesta ${prompt.number}`;
+    const siblings = selected?.snapshot.questions.filter(q => q.group?.id === question.group?.id && !versus.byPrompt.has(q.id)) ?? [];
     return question.group ? `Pregunta ${question.group.position} · Inciso ${incisoLetter(siblings.findIndex(q => q.id === question.id))}`
       : `${(selected?.snapshot.questions.findIndex(q => q.id === question.id) ?? 0) + 1}.`;
   };
@@ -104,7 +121,7 @@ export default function InstructorSubmissionReview({ testId, name, onClose }: { 
       {!manual.length && <p className="instructor-success">Esta entrega se calificó automáticamente. No tiene respuestas pendientes de revisión.</p>}
       {selected.snapshot.questions.filter(q => !requiresInstructorReview(selected.snapshot, q)).map(q => <section className="instructor-review-item" key={q.id}><h3>{questionTitle(q)} {q.type === 'image_versus' ? (q.titulo.trim() || 'Comparación de imágenes') : q.titulo}</h3>
         {q.type === 'image_versus' ? <>
-          <p className="instructor-muted">Referencia comparativa · Sin puntaje</p>
+          <p className="instructor-muted">{versus.byQuestion.has(q.id) ? 'Revisa las respuestas de cada placa más abajo.' : 'Referencia comparativa · Sin puntaje'}</p>
           <div className="instructor-versus-grid">
             <div className="instructor-versus-card"><span className="instructor-versus-label">Imagen A</span><InstructorReferenceImageView key={`${selected.id}-${q.id}-a`} url={q.image_a.url} annotations={q.image_a.annotations} /></div>
             <div className="instructor-versus-card"><span className="instructor-versus-label">Imagen B</span><InstructorReferenceImageView key={`${selected.id}-${q.id}-b`} url={q.image_b.url} annotations={q.image_b.annotations} /></div>
@@ -112,10 +129,12 @@ export default function InstructorSubmissionReview({ testId, name, onClose }: { 
         </> : <>
           <p className="instructor-muted">Valor del inciso: {formatInstructorPoints(instructorIncisoWeight(selected.snapshot, q))} puntos · Calificación automática</p>
           {q.type !== 'image_point' && q.image && <div className="instructor-question-image"><InstructorReferenceImageView key={`${selected.id}-${q.id}`} url={q.image.url} annotations={q.image.annotations} /></div>}
-          <p className="instructor-muted">Respuesta enviada:</p><div className="instructor-submitted-answer">{typeof selected.answers[q.id] === 'string'
-            ? q.type === 'single_choice' || !q.type ? q.options.find(option => option.id === selected.answers[q.id])?.texto ?? String(selected.answers[q.id]) : String(selected.answers[q.id])
+          <p className="instructor-muted">Respuesta enviada:</p><div className="instructor-submitted-answer">{q.type === 'single_choice' || !q.type
+            ? instructorChoiceAnswerText(q.options, selected.answers[q.id])
+            : typeof selected.answers[q.id] === 'string' ? String(selected.answers[q.id])
             : q.type === 'completion' ? q.blanks.map((blank, i) => <p key={blank.id}>Hueco {i + 1}: {String((selected.answers[q.id] as Record<string, string>)?.[blank.id] ?? '')}</p>)
             : q.type === 'matching' ? q.terms.map(term => <p key={term.id}>{term.texto}: {q.choices.find(choice => choice.id === (selected.answers[q.id] as Record<string, string>)?.[term.id])?.texto ?? ''}</p>) : ''}</div>
+          <InstructorReviewReferences question={q} guide={selected.snapshot.review_guides?.[q.id]} />
         </>}
       </section>)}
       {manual.map((q, index) => {
@@ -132,7 +151,7 @@ export default function InstructorSubmissionReview({ testId, name, onClose }: { 
             </>;
           })()
             : <>{q.image && <InstructorReferenceImageView key={`${selected.id}-${q.id}`} url={q.image.url} annotations={q.image.annotations} />}<p className="instructor-submitted-answer">{typeof point === 'string' ? point : ''}</p></>}
-          {q.type === 'short_answer' && selected.snapshot.review_guides?.[q.id]?.some(guide => guide.trim()) && <details><summary>Referencias del autor para revisar</summary><p>{selected.snapshot.review_guides[q.id].filter(guide => guide.trim()).join(' · ')}</p></details>}
+          <InstructorReviewReferences question={q} guide={selected.snapshot.review_guides?.[q.id]} />
           <div className="instructor-row" role="group" aria-label={`Calificar respuesta abierta ${index + 1}`}>
             <button type="button" className="instructor-btn instructor-review-correct" aria-pressed={reviews[q.id] === true} onClick={() => { setReviews(old => ({ ...old, [q.id]: true })); setDirty(true); setMessage(''); }}><Check size={16} />Correcto</button>
             <button type="button" className="instructor-btn instructor-btn-danger" aria-pressed={reviews[q.id] === false} onClick={() => { setReviews(old => ({ ...old, [q.id]: false })); setDirty(true); setMessage(''); }}><X size={16} />Incorrecto</button>

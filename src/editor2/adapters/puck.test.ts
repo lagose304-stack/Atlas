@@ -54,6 +54,16 @@ describe('adaptador Puck', () => {
     expect(fromPuckData(puck)).toEqual(doc);
   });
 
+  it('conserva las filas mínimas y los bloques al convertir el documento', () => {
+    const doc = createEmptyCanvasDoc('home', {
+      children: [createPlacedBlock(createTextBlock({ text: 'Conservar este bloque' }))],
+    });
+    doc.root.props.minRows = 48;
+    const data = toPuckData(doc);
+    expect(data.root.props.minRows).toBe(48);
+    expect(fromPuckData(data)).toEqual(doc);
+  });
+
   it('conserva primitivos, layout y un canvas anidado en la ida y vuelta', () => {
     const doc = createEmptyCanvasDoc('tema-1', {
       id: ROOT_ID,

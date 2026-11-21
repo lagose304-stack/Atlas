@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useContext, useEffect } from 'react';
 import { usePuck } from '@puckeditor/core';
 import {
   AlignVerticalJustifyCenter,
@@ -9,7 +9,7 @@ import {
   Palette,
   RotateCcw,
 } from 'lucide-react';
-import type { BlockStyle, LayoutIntent, SpanIntent } from '../domain/schema';
+import type { BlockStyle, Gap, LayoutIntent, SpanIntent } from '../domain/schema';
 import {
   type BackgroundStyle,
   type BorderStyle,
@@ -17,9 +17,14 @@ import {
   type PaddingStyle,
   type RadiusStyle,
   type ShadowPreset,
+  type ResponsiveOverrides,
 } from '../domain/styleSchema';
+import { patchResponsiveOverride, responsiveValues, SCREEN_LABELS, type ScreenSize } from '../domain/responsive';
+import { CanvasScreen } from './ResponsiveCanvas';
+import { ResponsiveField } from './ResponsiveField';
 import { hasVisualStyle } from '../domain/styleToCss';
 import { useEditor2Store } from '../store/editor2Store';
+import FlexSizeControls from './FlexSizeControls';
 import GradientPicker from './GradientPicker';
 import InspectorDialog from './InspectorDialog';
 
@@ -71,8 +76,16 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
-export default function DesignInspector() {
-  const { selectedItem, dispatch, getSelectorForId } = usePuck();
+export default function DesignInspector({
+  editScreen,
+  onEditScreenChange,
+}: {
+  editScreen?: ScreenSize;
+  onEditScreenChange?: (screen?: ScreenSize) => void;
+}) {
+  const canvasScreen = useContext(CanvasScreen);
+  const screen = editScreen ?? canvasScreen;
+  const { selectedItem, dispatch, getSelectorForId, getParentById } = usePuck();
   const copiedStyle = useEditor2Store((state) => state.copiedStyle);
   const copyBlockStyle = useEditor2Store((state) => state.copyBlockStyle);
   const pageTheme = useEditor2Store((state) => state.doc?.pageTheme);
@@ -98,11 +111,11 @@ export default function DesignInspector() {
   const showVerticalAlign = Boolean(item && item.type !== 'canvas' && !['text', 'heading'].includes(item.type) && layout);
   const showMaxWidth = Boolean(item && (item.type === 'canvas' || item.type === 'box'));
 
-  const commitStyle = (nextStyle: BlockStyle | undefined) => {
+  const commitStyle = (nextStyle: BlockStyle | undefined, props?: { gap: Gap }) => {
     if (!item) return;
     const position = getSelectorForId(item.props.id);
     if (!position) return;
-    const nextProps = { ...item.props };
+    const nextProps = { ...item.props, ...props };
     if (nextStyle && Object.keys(nextStyle).length > 0) {
       nextProps.style = nextStyle;
     } else {
@@ -153,6 +166,18 @@ export default function DesignInspector() {
 
   if (!item) return null;
 
+  const parent = getParentById(item.props.id);
+  const parentDirection = responsiveValues(parent?.props.style as BlockStyle | undefined, canvasScreen).direction;
+  const flow = style.flow;
+  const responsive = responsiveValues(style, screen, item.props.gap as Gap | undefined);
+  const overrides = screen === 'desktop' ? undefined : style.responsive?.[screen];
+  const showTextSize = item.type === 'heading' || item.type === 'text';
+
+  function editOverride<K extends keyof ResponsiveOverrides>(key: K, value: ResponsiveOverrides[K]) {
+    if (screen !== 'desktop') {
+      patchStyle({ responsive: patchResponsiveOverride(style.responsive, screen, key, value) });
+    }
+  }
   const currentBg: BackgroundStyle = style.background ?? { type: 'none' };
   const currentBorder: BorderStyle = style.border ?? {
     width: 1,
@@ -173,6 +198,7 @@ export default function DesignInspector() {
     const position = getSelectorForId(item.props.id);
     if (!position) return;
     const nextLayout: LayoutIntent = {
+      ...layout,
       base: { ...layout.base, verticalAlign },
       ...(layout.md ? { md: { ...layout.md, verticalAlign } } : {}),
       ...(layout.lg ? { lg: { ...layout.lg, verticalAlign } } : {}),
@@ -215,6 +241,134 @@ export default function DesignInspector() {
 
   return (
     <div className="e2-design-bar" role="group" aria-label="Herramientas de diseño del bloque">
+      {(showMaxWidth || showTextSize) && (
+        <div className="e2-responsive-fields" role="group" aria-label={`Ajustes por pantalla · ${SCREEN_LABELS[screen]}`}>
+          <div className="e2-responsive-fields__scope">
+            <span>{screen === 'desktop' ? 'Escritorio · valores base' : SCREEN_LABELS[screen]}</span>
+            {onEditScreenChange && (
+              <label>
+                Editar ajustes de
+                <select value={editScreen ?? ''} onChange={({ target }) =>
+                  onEditScreenChange((target.value || undefined) as ScreenSize | undefined)
+                }>
+                  <option value="">Pantalla actual</option>
+                  <option value="mobile">Móvil</option>
+                  <option value="tablet">Tableta</option>
+                  <option value="desktop">Escritorio</option>
+                </select>
+              </label>
+            )}
+          </div>
+          {showMaxWidth && (
+            <>
+              <ResponsiveField label="Distribución" screen={screen} customized={overrides?.direction !== undefined}
+                onReset={() => editOverride('direction', undefined)}>
+                <select value={responsive.direction} onChange={({ target }) => {
+                  const direction = target.value as typeof responsive.direction;
+                  if (screen === 'desktop') {
+                    patchStyle({ flow: direction === 'grid' ? undefined : { ...style.flow, direction } });
+                  } else editOverride('direction', direction);
+                }}>
+                  <option value="grid">Cuadrícula</option>
+                  <option value="row">Fila</option>
+                  <option value="column">Columna</option>
+                  <option value="overlay">Superposición</option>
+                </select>
+              </ResponsiveField>
+              <ResponsiveField label="Separación interna" screen={screen} customized={overrides?.gap !== undefined}
+                onReset={() => editOverride('gap', undefined)}>
+                <select value={responsive.gap} onChange={({ target }) => {
+                  const gap = target.value as Gap;
+                  if (screen === 'desktop') commitStyle(style, { gap });
+                  else editOverride('gap', gap);
+                }}>
+                  <option value="sm">Compacta</option>
+                  <option value="md">Normal</option>
+                  <option value="lg">Amplia</option>
+                </select>
+              </ResponsiveField>
+              {(responsive.direction === 'row' || responsive.direction === 'column') && (
+                <ResponsiveField label="Alineación del contenido" screen={screen} customized={overrides?.align !== undefined}
+                  onReset={() => editOverride('align', undefined)}>
+                  <select value={responsive.align} onChange={({ target }) => {
+                    const align = target.value as typeof responsive.align;
+                    if (screen === 'desktop' && style.flow) patchStyle({ flow: { ...style.flow, align } });
+                    else editOverride('align', align);
+                  }}>
+                    <option value="stretch">Estirar</option>
+                    <option value="start">Inicio</option>
+                    <option value="center">Centro</option>
+                    <option value="end">Final</option>
+                  </select>
+                </ResponsiveField>
+              )}
+            </>
+          )}
+          {showTextSize && (
+            <ResponsiveField label="Tamaño del texto" screen={screen} customized={overrides?.textSize !== undefined}
+              onReset={() => editOverride('textSize', undefined)}>
+              <select value={responsive.textSize} onChange={({ target }) => {
+                const textSize = target.value === 'theme' ? 'theme' : Number(target.value);
+                if (screen === 'desktop') patchStyle({ textSize: textSize === 'theme' ? undefined : textSize });
+                else editOverride('textSize', textSize);
+              }}>
+                <option value="theme">Del tema</option>
+                {Array.from({ length: 61 }, (_, index) => index + 12).map(size => (
+                  <option key={size} value={size}>{size} px</option>
+                ))}
+              </select>
+            </ResponsiveField>
+          )}
+        </div>
+      )}
+      {screen === 'desktop' && showMaxWidth && flow && flow.direction !== 'overlay' && (
+        <label>Reparto del espacio
+          <select value={flow.justify ?? 'start'} onChange={({ target }) =>
+            patchStyle({ flow: { ...flow, justify: target.value as typeof flow.justify } })}>
+            <option value="start">Al inicio</option>
+            <option value="center">Centrado</option>
+            <option value="end">Al final</option>
+            <option value="space-between">Entre los elementos</option>
+            <option value="space-evenly">Espacio uniforme</option>
+          </select>
+        </label>
+      )}
+      {screen === 'desktop' && showMaxWidth && flow?.direction === 'row' && (
+        <label><input type="checkbox" checked={flow.wrap !== false} onChange={({ target }) =>
+          patchStyle({ flow: { ...flow, wrap: target.checked } })} />Pasar a otra línea</label>
+      )}
+      {parentDirection === 'overlay' && layout && (
+        <label>Posición en la superposición
+          <select value={layout.base.anchor ?? 'auto'} onChange={({ target }) => {
+            const position = getSelectorForId(item.props.id);
+            if (!position) return;
+            const base = { ...layout.base };
+            if (target.value === 'auto') delete base.anchor;
+            else base.anchor = target.value as NonNullable<SpanIntent['anchor']>;
+            dispatch({
+              type: 'replace', destinationIndex: position.index, destinationZone: position.zone,
+              data: { ...item, props: { ...item.props, layout: { ...layout, base } } },
+            });
+          }}>
+            <option value="auto">Automática</option>
+            <option value="stretch">Cubrir el área</option>
+            <option value="top-left">Arriba a la izquierda</option>
+            <option value="top-right">Arriba a la derecha</option>
+            <option value="center">Centro</option>
+            <option value="bottom-left">Abajo a la izquierda</option>
+            <option value="bottom-right">Abajo a la derecha</option>
+          </select>
+        </label>
+      )}
+      {(parentDirection === 'row' || parentDirection === 'column') && layout && (
+        <FlexSizeControls base={layout.base} onChange={base => {
+          const position = getSelectorForId(item.props.id);
+          if (position) dispatch({
+            type: 'replace', destinationIndex: position.index, destinationZone: position.zone,
+            data: { ...item, props: { ...item.props, layout: { ...layout, base } } },
+          });
+        }} />
+      )}
       {/* Nivel 1: acceso rápido en 1 clic */}
       <label className="e2-design-quick-color" title="Color de fondo rápido">
         <span className="e2-design-quick-color__label">Fondo</span>
@@ -232,6 +386,7 @@ export default function DesignInspector() {
             <button
               key={value}
               type="button"
+              className="e2-button e2-button--quiet e2-settings__icon-button"
               aria-label={label}
               title={label}
               aria-pressed={currentVerticalAlign === value}
@@ -246,6 +401,7 @@ export default function DesignInspector() {
       <span className="e2-text-toolbar__group" role="group" aria-label="Copiar o pegar estilo">
         <button
           type="button"
+          className="e2-button e2-button--quiet e2-settings__icon-button"
           aria-label="Copiar estilo (Ctrl+Alt+C)"
           title="Copiar estilo (Ctrl+Alt+C)"
           onClick={handleCopyStyle}
@@ -254,6 +410,7 @@ export default function DesignInspector() {
         </button>
         <button
           type="button"
+          className="e2-button e2-button--quiet e2-settings__icon-button"
           aria-label="Pegar estilo (Ctrl+Alt+V)"
           title={copiedStyle ? 'Pegar estilo copiado (Ctrl+Alt+V)' : 'Copia primero un estilo'}
           disabled={!copiedStyle}

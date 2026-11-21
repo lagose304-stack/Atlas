@@ -8,10 +8,14 @@ import {
   type InstructorBankTopic,
   type InstructorContent,
 } from '../services/instructorTests';
-import { instructorGroups } from '../types/instructorQuestions';
+import { instructorGroups, instructorQuestionImageUrls, replaceInstructorQuestionImageUrl } from '../types/instructorQuestions';
 import InstructorTestComposer from './InstructorTestComposer';
 import InstructorTestPreview from './InstructorTestPreview';
 import { PARCIAL_LABELS } from '../utils/instructorTopics';
+
+function replaceDraftImageUrl(draft: InstructorContent, from: string, to: string): InstructorContent {
+  return { ...draft, questions: draft.questions.map(question => replaceInstructorQuestionImageUrl(question, from, to)) };
+}
 
 export default function InstructorBankTopicEditor({
   tema,
@@ -38,7 +42,7 @@ export default function InstructorBankTopicEditor({
   const [lastAutoSavedAt, setLastAutoSavedAt] = useState('');
   const [previewing, setPreviewing] = useState(false);
 
-  const pendingImages = useRef(new Map<string, { file: File; preview: string }>());
+  const pendingImages = useRef(new Map<string, { file: File; uploadedUrl?: string }>());
   const savedSnapshotRef = useRef(JSON.stringify({ groups: initialTopic.content.groups ?? [], questions: initialTopic.content.questions ?? [] }));
   const saveInFlightRef = useRef(false);
   const autoSavePausedRef = useRef(false);
@@ -51,10 +55,20 @@ export default function InstructorBankTopicEditor({
   const dirty = currentSnapshot !== savedSnapshotRef.current;
 
   const clearPendingImages = () => {
-    pendingImages.current.forEach(img => URL.revokeObjectURL(img.preview));
+    pendingImages.current.forEach((_, url) => URL.revokeObjectURL(url));
     pendingImages.current.clear();
   };
   useEffect(() => () => clearPendingImages(), []);
+
+  useEffect(() => {
+    if (busy || autoSaving || !pendingImages.current.size) return;
+    const currentUrls = new Set(content.questions.flatMap(instructorQuestionImageUrls));
+    for (const url of pendingImages.current.keys()) {
+      if (currentUrls.has(url)) continue;
+      URL.revokeObjectURL(url);
+      pendingImages.current.delete(url);
+    }
+  }, [content.questions, busy, autoSaving]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -67,7 +81,11 @@ export default function InstructorBankTopicEditor({
     autoSavePausedRef.current = false;
     setAutoSaveError('');
     setError('');
-    setContent(next);
+    let draft = next;
+    for (const [url, pending] of pendingImages.current) {
+      if (pending.uploadedUrl) draft = replaceDraftImageUrl(draft, url, pending.uploadedUrl);
+    }
+    setContent(draft);
   };
 
   const persist = async (mode: 'manual' | 'auto', overrideContent?: InstructorContent) => {
@@ -79,49 +97,17 @@ export default function InstructorBankTopicEditor({
     saveInFlightRef.current = true;
     try {
       let prepared = target;
-      const replaceBlob = (questionId: string, slot: 'image' | 'image_a' | 'image_b', blobUrl: string, secureUrl: string) => {
-        setContent(prev => ({
-          ...prev,
-          questions: prev.questions.map(q => {
-            if (q.id !== questionId) return q;
-            if (slot === 'image' && q.type !== 'image_versus' && q.image?.url === blobUrl) {
-              return { ...q, image: { ...q.image, url: secureUrl, source: 'upload' as const } };
-            }
-            if (q.type === 'image_versus' && (slot === 'image_a' || slot === 'image_b') && q[slot]?.url === blobUrl) {
-              return { ...q, [slot]: { ...q[slot]!, url: secureUrl, source: 'upload' as const } };
-            }
-            return q;
-          }),
-        }));
-      };
-      const uploadSlot = async (questionId: string, url: string, slot: 'image' | 'image_a' | 'image_b') => {
-        const key = slot === 'image' ? questionId : `${questionId}:${slot}`;
-        const pending = pendingImages.current.get(key);
-        if (!pending || pending.preview !== url) throw new Error('Vuelve a seleccionar la imagen antes de guardar.');
-        const upload = await uploadToCloudinary(pending.file, { folder: `pruebas/instructores/banco/tema-${tema.id}`, optimizeImage: true });
-        if (typeof upload.secure_url !== 'string' || !upload.secure_url.startsWith('https://')) throw new Error('No se pudo confirmar la imagen subida.');
-        pendingImages.current.delete(key); URL.revokeObjectURL(pending.preview);
-        replaceBlob(questionId, slot, url, upload.secure_url);
-        return upload.secure_url;
-      };
-      for (const question of target.questions) {
-        if (question.type !== 'image_versus' && question.image?.url.startsWith('blob:')) {
-          const secureUrl = await uploadSlot(question.id, question.image.url, 'image');
-          prepared = { ...prepared, questions: prepared.questions.map(q => q.id === question.id ? { ...question, image: { ...question.image!, url: secureUrl, source: 'upload' as const } } : q) };
-        } else if (question.type === 'image_versus') {
-          let next = question;
-          if (next.image_a?.url.startsWith('blob:')) {
-            const secureUrl = await uploadSlot(question.id, next.image_a.url, 'image_a');
-            next = { ...next, image_a: { ...next.image_a, url: secureUrl, source: 'upload' as const } };
-          }
-          if (next.image_b?.url.startsWith('blob:')) {
-            const secureUrl = await uploadSlot(question.id, next.image_b.url, 'image_b');
-            next = { ...next, image_b: { ...next.image_b, url: secureUrl, source: 'upload' as const } };
-          }
-          if (next !== question) {
-            prepared = { ...prepared, questions: prepared.questions.map(q => q.id === question.id ? next : q) };
-          }
-        }
+      const pendingUrls = new Set(target.questions.flatMap(instructorQuestionImageUrls).filter(url => url.startsWith('blob:')));
+      for (const url of pendingUrls) {
+        const pending = pendingImages.current.get(url);
+        if (!pending) throw new Error('Vuelve a seleccionar la imagen antes de guardar.');
+        const secureUrl = pending.uploadedUrl ?? (await uploadToCloudinary(pending.file, {
+          folder: `pruebas/instructores/banco/tema-${tema.id}`, optimizeImage: true,
+        })).secure_url;
+        if (typeof secureUrl !== 'string' || !secureUrl.startsWith('https://')) throw new Error('No se pudo confirmar la imagen subida.');
+        pending.uploadedUrl = secureUrl;
+        prepared = replaceDraftImageUrl(prepared, url, secureUrl);
+        setContent(draft => replaceDraftImageUrl(draft, url, secureUrl));
       }
       const bankPayload = serializeBank(prepared);
       const saved = await saveInstructorBankTopic(tema.id, revision, bankPayload);
@@ -215,9 +201,8 @@ export default function InstructorBankTopicEditor({
                 bankTopicName={tema.nombre}
                 onMilestoneAction={handleMilestoneAutoSave}
                 onSelectImageFile={(id, file, slot = 'image') => {
-                  const key = slot === 'image' ? id : `${id}:${slot}`;
-                  const old = pendingImages.current.get(key); if (old) URL.revokeObjectURL(old.preview);
-                  const preview = URL.createObjectURL(file); pendingImages.current.set(key, { file, preview });
+                  const preview = URL.createObjectURL(file);
+                  pendingImages.current.set(preview, { file });
                   edit({
                     ...content,
                     questions: content.questions.map(q => {

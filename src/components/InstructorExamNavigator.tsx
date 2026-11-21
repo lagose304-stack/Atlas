@@ -1,13 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { ArrowLeft, ArrowRight, Check, Circle, CircleDot, Layers3, ListChecks } from 'lucide-react';
 import InstructorQuestionResponse from './InstructorQuestionResponse';
-import { groupPublicInstructorQuestions, incisoLetter, isInstructorAnswerComplete, isInstructorGradedQuestion, isInstructorPointAnswer, type InstructorAnswers, type PublicInstructorQuestion } from '../types/instructorQuestions';
+import { groupPublicInstructorQuestions, incisoLetter, instructorVersusParts, isInstructorAnswerComplete, isInstructorGradedQuestion, isInstructorPointAnswer, type InstructorAnswers, type PublicInstructorQuestion } from '../types/instructorQuestions';
 
-export default function InstructorExamNavigator({ questions, answers, currentId, onSelect, onAnswer, disabled, saveState }: {
+export default function InstructorExamNavigator({ questions, answers, currentId, onSelect, onAnswer, disabled, saveState, showTopics = false }: {
   questions: PublicInstructorQuestion[]; answers: InstructorAnswers; currentId: string | null;
   onSelect: (id: string) => void; onAnswer: (id: string, answer: InstructorAnswers[string]) => void; disabled: boolean; saveState?: 'saved' | 'pending' | 'saving' | 'error';
+  showTopics?: boolean;
 }) {
-  const groups = groupPublicInstructorQuestions(questions);
+  const groups = groupPublicInstructorQuestions(questions, showTopics);
   const index = Math.max(0, groups.findIndex(group => group.id === currentId));
   const active = groups[index];
   const heading = useRef<HTMLHeadingElement>(null);
@@ -33,6 +34,8 @@ export default function InstructorExamNavigator({ questions, answers, currentId,
   };
   const sections = [...new Map(groups.filter(group => group.section).map(group => [group.section!.id, group.section!])).values()];
   if (!active) return null;
+  const versus = instructorVersusParts(active.items);
+  const visibleItems = active.items.filter(question => !versus.byPrompt.has(question.id));
   return <div className="instructor-exam-layout">
     <aside className="instructor-exam-map" aria-label="Navegación de la prueba">
       <div className="instructor-exam-map-title"><ListChecks size={20} /><strong>Tu recorrido</strong><span>{done}/{groups.length}</span></div>
@@ -59,9 +62,13 @@ export default function InstructorExamNavigator({ questions, answers, currentId,
             : `${active.items.length} ${active.items.length === 1 ? 'inciso' : 'incisos'} · 1 punto en total`;
         })()}</p></div><span className="instructor-state-pill" data-state={complete(active) ? 'open' : 'scheduled'}>{complete(active) ? <Check size={14} /> : <Circle size={13} />}{complete(active) ? 'Respondida' : 'Por completar'}</span></div>
       {active.titulo && <p className="instructor-exam-context">{active.titulo}</p>}
-      {active.items.map((question, i) => <InstructorQuestionResponse key={question.id} question={question} index={active.grouped ? i : active.position - 1}
-        label={active.grouped ? incisoLetter(i) : undefined} contextLabel={active.grouped ? `inciso ${incisoLetter(i)} de pregunta ${active.position}` : undefined}
-        answer={answers[question.id]} disabled={disabled} onChange={answer => onAnswer(question.id, answer)} />)}
+      {visibleItems.map((question, i) => {
+        const prompts = versus.byQuestion.get(question.id);
+        return <InstructorQuestionResponse key={question.id} question={question} index={active.grouped ? i : active.position - 1}
+          label={active.grouped ? incisoLetter(i) : undefined} contextLabel={active.grouped ? `inciso ${incisoLetter(i)} de pregunta ${active.position}` : undefined}
+          answer={answers[question.id]} disabled={disabled} onChange={answer => onAnswer(question.id, answer)}
+          versusResponses={prompts ? { prompts, answers, onAnswer } : undefined} />;
+      })}
       <div className="instructor-exam-pagination"><button type="button" className="instructor-btn" disabled={disabled || index === 0} onClick={() => select(groups[index - 1].id)}><ArrowLeft size={16} />Anterior</button>
         <span>{index + 1} de {groups.length}</span>
         <button type="button" className="instructor-btn instructor-btn-primary" disabled={disabled || index === groups.length - 1} onClick={() => select(groups[index + 1].id)}>Siguiente<ArrowRight size={16} /></button></div>

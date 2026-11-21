@@ -40,3 +40,9 @@ TEMP_*_PRIVATE.txt
 
 # Screenshots locales de inspección
 *_screenshot.png
+
+# Local QA and tool scratch files
+.serena/
+sizing-phase-qa.*
+strip-check.*
+

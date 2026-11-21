@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { usePuck } from '@puckeditor/core';
-import { Images, LayoutGrid, Microscope, Minus, Plus, SlidersHorizontal, Trash2, Upload } from 'lucide-react';
+import { Images, Microscope, Minus, Plus, SlidersHorizontal, Trash2, Upload } from 'lucide-react';
 import { uploadToCloudinary } from '../../services/cloudinary';
 import { supabase } from '../../services/supabase';
-import type { PuckAccordionItem, PuckCanvasData, PuckTabItem } from '../adapters/puck';
-import { EDITOR2_DEFAULT_IMAGE_SRC, createLayoutIntent } from '../domain/defaults';
+import type { PuckAccordionItem, PuckTabItem } from '../adapters/puck';
+import { EDITOR2_DEFAULT_IMAGE_SRC } from '../domain/defaults';
 import type { CarouselItem, MediaAppearance } from '../domain/schema';
 import { loadCatalog, type Editor2CatalogSnapshot } from '../services/catalogIndex';
 import { loadPageIndex, type Editor2PageSummary } from '../services/pageIndex';
@@ -729,20 +729,10 @@ export default function BlockComponentTools() {
   }
 
   if (item.type === 'tabs') {
-    const createCanvasSection = (): PuckCanvasData => ({
-      type: 'canvas',
-      props: {
-        id: `canvas-${crypto.randomUUID()}`,
-        layout: createLayoutIntent(24),
-        gap: 'md',
-        content: [],
-      },
-    });
-
     const items: PuckTabItem[] =
       Array.isArray(item.props.items) && item.props.items.length > 0
         ? (item.props.items as PuckTabItem[])
-        : [{ title: 'Sección 1', content: [createCanvasSection()] }];
+        : [{ title: 'Sección 1', content: [] }];
     const safeIdx = Math.min(tabIndex, items.length - 1);
     const currentTab = items[safeIdx];
 
@@ -763,7 +753,7 @@ export default function BlockComponentTools() {
         ...items,
         {
           title: `Sección ${items.length + 1}`,
-          content: [createCanvasSection()],
+          content: [],
         },
       ];
       const nextIdx = next.length - 1;
@@ -773,10 +763,7 @@ export default function BlockComponentTools() {
       window.dispatchEvent(new CustomEvent('e2:tabs-select', { detail: { id: item.props.id, index: nextIdx } }));
     };
 
-    const addCanvasToActiveTab = () => {
-      const existingContent = Array.isArray(currentTab?.content) ? currentTab.content : [];
-      updateTab({ content: [...existingContent, createCanvasSection()] });
-    };
+
 
     const removeTab = () => {
       if (items.length <= 1) return;
@@ -838,15 +825,6 @@ export default function BlockComponentTools() {
         <button type="button" className="e2-button e2-button--quiet" onClick={addTab} title="Añadir pestaña">
           <Plus size={13} aria-hidden="true" />
           <span>Pestaña</span>
-        </button>
-        <button
-          type="button"
-          className="e2-button e2-button--quiet"
-          onClick={addCanvasToActiveTab}
-          title="Añadir bloque de página en la pestaña activa"
-        >
-          <LayoutGrid size={13} aria-hidden="true" />
-          <span>+ Bloque de página</span>
         </button>
         <label className="e2-layout-field__control">
           <span>Acento</span>
@@ -1073,20 +1051,10 @@ export default function BlockComponentTools() {
   }
 
   if (item.type === 'accordion') {
-    const createCanvasSection = (): PuckCanvasData => ({
-      type: 'canvas',
-      props: {
-        id: `canvas-${crypto.randomUUID()}`,
-        layout: createLayoutIntent(24),
-        gap: 'md',
-        content: [],
-      },
-    });
-
     const items: PuckAccordionItem[] =
       Array.isArray(item.props.items) && item.props.items.length > 0
         ? (item.props.items as PuckAccordionItem[])
-        : [{ title: 'Sección desplegable 1', openByDefault: true, content: [createCanvasSection()] }];
+        : [{ title: 'Sección desplegable 1', openByDefault: true, content: [] }];
     const safeIdx = Math.min(accordionIndex, items.length - 1);
     const currentSection = items[safeIdx];
 
@@ -1108,7 +1076,7 @@ export default function BlockComponentTools() {
         {
           title: `Sección desplegable ${items.length + 1}`,
           openByDefault: false,
-          content: [createCanvasSection()],
+          content: [],
         },
       ];
       const nextIdx = next.length - 1;
@@ -1118,10 +1086,7 @@ export default function BlockComponentTools() {
       window.dispatchEvent(new CustomEvent('e2:accordion-select', { detail: { id: item.props.id, index: nextIdx } }));
     };
 
-    const addCanvasToActiveSection = () => {
-      const existingContent = Array.isArray(currentSection?.content) ? currentSection.content : [];
-      updateSection({ content: [...existingContent, createCanvasSection()] });
-    };
+
 
     const removeSection = () => {
       if (items.length <= 1) return;
@@ -1172,15 +1137,6 @@ export default function BlockComponentTools() {
         <button type="button" className="e2-button e2-button--quiet" onClick={addSection} title="Añadir sección">
           <Plus size={13} aria-hidden="true" />
           <span>Sección</span>
-        </button>
-        <button
-          type="button"
-          className="e2-button e2-button--quiet"
-          onClick={addCanvasToActiveSection}
-          title="Añadir bloque de página en la sección activa"
-        >
-          <LayoutGrid size={13} aria-hidden="true" />
-          <span>+ Bloque de página</span>
         </button>
         <label className="e2-layout-field__control">
           <span>Acento</span>
