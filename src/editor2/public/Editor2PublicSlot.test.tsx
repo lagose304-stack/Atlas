@@ -4,7 +4,7 @@ import { createEmptyCanvasDoc } from '../domain/defaults';
 import type { Editor2PublicDoc } from '../services/editor2Api';
 import Editor2PublicSlot from './Editor2PublicSlot';
 import { Editor2PreviewDocProvider } from './previewDoc';
-import { invalidatePublicDocCache } from './publicDocCache';
+import { getCachedPublicDoc, invalidatePublicDocCache, loadCachedPublicDoc } from './publicDocCache';
 
 vi.mock('../render/Editor2Renderer', () => ({
   default: ({ doc, variant }: { doc: { pageKey: string }; variant?: string }) => (
@@ -89,6 +89,32 @@ describe('Editor2PublicSlot y caché pública (Fase 3 — Parte 1)', () => {
     });
     expect(screen.getByTestId('v1-fallback')).toBeInTheDocument();
     expect(screen.queryByTestId('mock-editor2-renderer')).not.toBeInTheDocument();
+  });
+
+  it('al cambiar de página muestra v1 hasta resolver la publicación de esa página', async () => {
+    let resolveSecond!: (doc: Editor2PublicDoc | null) => void;
+    const loader = vi.fn()
+      .mockResolvedValueOnce(makePublicDoc('tema-4'))
+      .mockReturnValueOnce(new Promise(resolve => { resolveSecond = resolve; }));
+    const { rerender } = render(<Editor2PublicSlot pageKey="tema-4" loadPublicDoc={loader} />);
+    await screen.findByText('Render v2: tema-4');
+
+    rerender(<Editor2PublicSlot pageKey="tema-5" fallback={<p>Publicación original del tema 5</p>} loadPublicDoc={loader} />);
+    expect(screen.getByText('Publicación original del tema 5')).toBeInTheDocument();
+    expect(screen.queryByText('Render v2: tema-4')).not.toBeInTheDocument();
+    resolveSecond(null);
+    await waitFor(() => expect(getCachedPublicDoc('tema-5')).toBeNull());
+  });
+
+  it('una consulta anterior no vuelve a cachear v2 después de despublicar', async () => {
+    let resolvePrevious!: (doc: Editor2PublicDoc | null) => void;
+    const first = loadCachedPublicDoc('home', () => new Promise(resolve => { resolvePrevious = resolve; }));
+    await Promise.resolve();
+    invalidatePublicDocCache('home');
+    await loadCachedPublicDoc('home', async () => null);
+    resolvePrevious(makePublicDoc('home'));
+    await first;
+    expect(getCachedPublicDoc('home')).toBeNull();
   });
 
   it('reutiliza la caché en memoria y permite invalidarla tras publicar o despublicar', async () => {

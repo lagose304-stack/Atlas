@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type { ContentBlock, PageEntityType } from '../types/contentBlocks';
 import { normalizeBlockContent } from '../components/blocks/blockRegistry';
 import { logAuditEvent } from './unifiedAuditService';
+import { clearRenderableBlocksCache } from './contentPublication';
 
 export interface PageVersionRow {
   id: number;
@@ -287,7 +288,10 @@ export const publishPageVersion = async (
     p_user_name: userName,
   });
 
-  if (!rpcError) return;
+  if (!rpcError) {
+    clearRenderableBlocksCache();
+    return;
+  }
 
   // Fallback si la función RPC aún no fue ejecutada en Supabase
   console.warn('RPC publish_page_version no disponible, ejecutando fallback cliente:', rpcError);
@@ -314,7 +318,7 @@ export const publishPageVersion = async (
     .eq('id', versionId);
 
   // 3. Sincronizar content_page_publications
-  await supabase.from('content_page_publications').upsert({
+  const { error: publicationError } = await supabase.from('content_page_publications').upsert({
     entity_type: version.entity_type,
     entity_id: version.entity_id,
     status: 'published',
@@ -324,6 +328,8 @@ export const publishPageVersion = async (
   }, {
     onConflict: 'entity_type,entity_id',
   });
+  if (publicationError) throw publicationError;
+  clearRenderableBlocksCache(version.entity_type, version.entity_id);
 
   void logAuditEvent({
     entityType: 'pagina',

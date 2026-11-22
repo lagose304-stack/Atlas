@@ -33,4 +33,13 @@ describe('Datos histológicos publicados en el inicio', () => {
     render(<MemoryRouter><Home /></MemoryRouter>);
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Datos histológicos de la semana' })).not.toBeInTheDocument());
   });
+
+  it('muestra los demás bloques publicados por el editor original cuando no hay v2', async () => {
+    mocks.getBlocks.mockResolvedValue([
+      { id: 'p1', entity_type: 'home_page', entity_id: 0, block_type: 'paragraph', sort_order: 0,
+        content: { ...createDefaultBlockContent('paragraph'), text: 'Párrafo publicado desde el editor original' } },
+    ]);
+    render(<MemoryRouter><Home /></MemoryRouter>);
+    expect(await screen.findByText('Párrafo publicado desde el editor original')).toBeInTheDocument();
+  });
 });

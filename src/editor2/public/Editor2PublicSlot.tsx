@@ -79,7 +79,7 @@ const Editor2PublicSlot: React.FC<Editor2PublicSlotProps> = ({
     );
   }
 
-  if (!publicDoc) {
+  if (!publicDoc || publicDoc.pageKey !== pageKey || publicDoc.doc.pageKey !== pageKey) {
     return <>{fallback}</>;
   }
 

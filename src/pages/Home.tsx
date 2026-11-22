@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -97,11 +97,10 @@ const Home: React.FC = () => {
     };
   }, [showDeviceTip]);
 
-  const featuredPublication = useMemo(() => {
-    const examBlock = contentBlocks.find(b => b.block_type === 'exam_week');
-    if (examBlock) return [examBlock];
-    return contentBlocks.filter(b => b.block_type === 'weekly_publication').slice(0, 1);
-  }, [contentBlocks]);
+  const featuredPublication = contentBlocks.find(block => block.block_type === 'exam_week') ??
+    contentBlocks.find(block => block.block_type === 'weekly_publication');
+  const weeklyFacts = contentBlocks.filter(block => block.block_type === 'weekly_histology_facts');
+  const otherBlocks = contentBlocks.filter(block => block !== featuredPublication && block.block_type !== 'weekly_histology_facts');
 
   return (
     <div className="atlas-home-page">
@@ -159,15 +158,20 @@ const Home: React.FC = () => {
           ariaLabel="Contenido principal"
           fallback={
             <>
-              {featuredPublication.length > 0 && (
+              {featuredPublication && (
                 <section className="home-weekly-publication home-reveal" aria-label="Publicación destacada">
-                  <ContentBlockRenderer blocks={featuredPublication} />
+                  <ContentBlockRenderer blocks={[featuredPublication]} />
                 </section>
               )}
 
-              {contentBlocks.some(block => block.block_type === 'weekly_histology_facts')
-                ? <ContentBlockRenderer blocks={contentBlocks.filter(block => block.block_type === 'weekly_histology_facts')} />
+              {weeklyFacts.length > 0
+                ? <ContentBlockRenderer blocks={weeklyFacts} />
                 : <WeeklyHistologyFacts />}
+              {otherBlocks.length > 0 && (
+                <section className="public-editor-content public-editor-content-before-system" aria-label="Contenido editorial">
+                  <ContentBlockRenderer blocks={otherBlocks} />
+                </section>
+              )}
             </>
           }
         />

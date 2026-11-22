@@ -62,18 +62,22 @@ export async function loadCachedPublicDoc(
   const request = Promise.resolve()
     .then(() => loader(key))
     .then((result) => {
-      const normalized = result ?? null;
-      cache.set(key, { doc: normalized, expiresAt: Date.now() + ttlMs });
+      const normalized = result?.pageKey === key && result.doc.pageKey === key ? result : null;
+      if (inFlight.get(key) === request) {
+        cache.set(key, { doc: normalized, expiresAt: Date.now() + ttlMs });
+      }
       return normalized;
     })
     .catch(() => {
       // Fallback silencioso: si la RPC aún no existe o hay error transitorio,
       // no cacheamos por mucho tiempo y devolvemos null para mostrar v1.
-      cache.set(key, { doc: null, expiresAt: Date.now() + Math.min(ttlMs, 5_000) });
+      if (inFlight.get(key) === request) {
+        cache.set(key, { doc: null, expiresAt: Date.now() + Math.min(ttlMs, 5_000) });
+      }
       return null;
     })
     .finally(() => {
-      inFlight.delete(key);
+      if (inFlight.get(key) === request) inFlight.delete(key);
     });
 
   inFlight.set(key, request);

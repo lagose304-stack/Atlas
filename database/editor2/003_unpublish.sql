@@ -23,7 +23,7 @@ BEGIN
     RAISE EXCEPTION 'editor2_invalid_page_key: La clave de página es obligatoria.';
   END IF;
 
-  DELETE FROM editor2.page_publications
+  DELETE FROM editor2.publications
   WHERE page_key = p_page_key;
 
   GET DIAGNOSTICS v_deleted = ROW_COUNT;
