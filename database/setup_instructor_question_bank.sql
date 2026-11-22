@@ -149,6 +149,21 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.atlas_is_instructor_bank_incomplete(p_content jsonb)
+RETURNS boolean LANGUAGE plpgsql STABLE SET search_path = public AS $$
+BEGIN
+  BEGIN
+    PERFORM public.atlas_validate_instructor_content(
+      jsonb_build_object('nombre', 'Banco', 'instrucciones', '', 'groups', p_content->'groups', 'questions', p_content->'questions'),
+      true
+    );
+    RETURN false;
+  EXCEPTION WHEN OTHERS THEN
+    RETURN true;
+  END;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.atlas_list_instructor_bank()
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
@@ -157,6 +172,11 @@ BEGIN
     SELECT tema_id,
       CASE WHEN jsonb_typeof(content->'groups') = 'array' THEN jsonb_array_length(content->'groups') ELSE 0 END AS question_count,
       CASE WHEN jsonb_typeof(content->'questions') = 'array' THEN jsonb_array_length(content->'questions') ELSE 0 END AS inciso_count,
+      CASE
+        WHEN jsonb_typeof(content->'questions') = 'array' AND jsonb_array_length(content->'questions') > 0
+        THEN public.atlas_is_instructor_bank_incomplete(content)
+        ELSE false
+      END AS has_incomplete,
       revision, updated_at
     FROM public.instructor_question_bank
     ORDER BY tema_id
@@ -268,8 +288,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.atlas_list_instructor_bank(), public.atlas_get_instructor_bank_topic(integer), public.atlas_save_instructor_bank_topic(integer,integer,jsonb), public.atlas_migrate_instructor_question_to_bank(uuid,integer,text,integer) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.atlas_list_instructor_bank(), public.atlas_get_instructor_bank_topic(integer), public.atlas_save_instructor_bank_topic(integer,integer,jsonb), public.atlas_migrate_instructor_question_to_bank(uuid,integer,text,integer) TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.atlas_list_instructor_bank(), public.atlas_is_instructor_bank_incomplete(jsonb), public.atlas_get_instructor_bank_topic(integer), public.atlas_save_instructor_bank_topic(integer,integer,jsonb), public.atlas_migrate_instructor_question_to_bank(uuid,integer,text,integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.atlas_list_instructor_bank(), public.atlas_is_instructor_bank_incomplete(jsonb), public.atlas_get_instructor_bank_topic(integer), public.atlas_save_instructor_bank_topic(integer,integer,jsonb), public.atlas_migrate_instructor_question_to_bank(uuid,integer,text,integer) TO anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.atlas_draw_instructor_bank_content(p_published jsonb)
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SET search_path = public, extensions AS $$

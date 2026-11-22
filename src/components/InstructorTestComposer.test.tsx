@@ -183,4 +183,28 @@ describe('Editor por preguntas e incisos', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pedir una respuesta breve por placa' }));
     expect(screen.getByText(/3 incisos \(2 con puntaje\)/)).toBeInTheDocument();
   });
+
+  it('muestra indicadores de advertencia cuando una pregunta o inciso está incompleto', () => {
+    const withIncomplete: InstructorContent = {
+      nombre: 'Examen con faltantes',
+      instrucciones: '',
+      groups: [
+        { id: 'g1', titulo: 'Pregunta 1', item_ids: ['q1'] },
+        { id: 'g2', titulo: 'Pregunta 2', item_ids: ['q2'] },
+      ],
+      questions: [
+        { id: 'q1', type: 'single_choice', titulo: 'Pregunta 1', options: [{ id: 'o1', texto: 'A' }, { id: 'o2', texto: 'B' }], correct_option_id: 'o1' },
+        { id: 'q2', type: 'single_choice', titulo: 'Pregunta 2', options: [{ id: 'o1', texto: 'A' }, { id: 'o2', texto: 'B' }], correct_option_id: '' },
+      ],
+    };
+    render(<Composer start={withIncomplete} />);
+    const tile2 = screen.getByLabelText('Ir a pregunta 2 (con incisos incompletos)');
+    expect(tile2).toBeInTheDocument();
+    expect(tile2.querySelector('.instructor-tile-warning-dot')).toBeInTheDocument();
+
+    fireEvent.click(tile2);
+    expect(screen.getByText('Incompleto')).toBeInTheDocument();
+    expect(screen.getByText(/Faltan campos por completar en este inciso para poder publicar/)).toBeInTheDocument();
+    expect(screen.getByText('Selecciona la respuesta correcta')).toBeInTheDocument();
+  });
 });

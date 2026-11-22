@@ -28,7 +28,7 @@ textarea.instructor-input { min-height: 96px; resize: vertical; }
 .instructor-btn-primary { background: #6d28d9; border-color: #6d28d9; color: #fff; }
 .instructor-btn:disabled { opacity: .5; cursor: default; }
 .instructor-editor-scope .instructor-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 15px; border: 1px solid #d8deea; border-radius: 10px; background: #fff; color: #334155; font-size: .84rem; font-weight: 650; line-height: 1.4; box-shadow: 0 1px 2px #0f172a06; transition: background .16s, border-color .16s, box-shadow .16s, transform .16s; }
-.instructor-editor-scope { --instructor-ink: #17233b; --instructor-accent: #6d28d9; }
+.instructor-editor-scope { --instructor-ink: #17233b; --instructor-accent: #6d28d9; --instructor-warn: #f59e0b; --instructor-warn-bg: #fffbeb; --instructor-warn-border: #fde68a; --instructor-warn-ink: #92400e; }
 .instructor-editor-scope .instructor-main { max-width: 1240px; }
 .instructor-editor-scope h2, .instructor-editor-scope h3, .instructor-editor-scope h4 { color: var(--instructor-ink); }
 .instructor-eyebrow { display: block; margin: 0 0 8px; font-size: .65rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: #7c6b9b; }
@@ -260,9 +260,13 @@ textarea.instructor-input { min-height: 96px; resize: vertical; }
 .instructor-bank-topic-thumb { flex-shrink: 0; width: 52px; height: 52px; border-radius: 12px; overflow: hidden; display: grid; place-items: center; background: #f3effc; border: 1px solid #e3ddf8; color: #5b21b6; font-size: .88rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .instructor-bank-topic-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .instructor-bank-topic-info { min-width: 0; }
-.instructor-bank-topic-order { display: block; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-variant-numeric: tabular-nums; margin-bottom: 3px; }
+.instructor-bank-topic-order-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.instructor-bank-topic-order { display: block; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-variant-numeric: tabular-nums; }
+.instructor-topic-warning-dot { display: inline-block; width: 8px; height: 8px; border-radius: 9999px; background: #f59e0b; box-shadow: 0 0 0 2px #fff, 0 1px 3px rgba(245, 158, 11, 0.4); flex-shrink: 0; }
 .instructor-bank-topic-info h4 { margin: 0; font-size: .95rem; line-height: 1.3; color: var(--instructor-ink); overflow-wrap: anywhere; }
 .instructor-bank-topic-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 12px; border-top: 1px solid #f1f3f8; }
+.instructor-bank-topic-counts { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.instructor-topic-incomplete-badge { display: inline-flex; align-items: center; font-size: .67rem; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; line-height: 1.2; }
 .instructor-bank-count { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: .74rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .instructor-bank-count.is-filled { background: #ecfdf5; color: #047857; }
 .instructor-bank-open-btn { min-height: 38px; padding: 7px 12px; font-size: .8rem; }
@@ -334,7 +338,9 @@ textarea.instructor-input { min-height: 96px; resize: vertical; }
 .instructor-composer { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 24px; margin-top: 24px; align-items: start; }
 .instructor-question-nav { position: sticky; top: 84px; background: linear-gradient(180deg, #f8f9fd, #fff); border: 1px solid #e2e6ef; border-radius: 16px; padding: 14px; min-width: 0; box-shadow: 0 2px 6px #0f172a03; }
 .instructor-question-nav-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px; list-style: none; padding: 4px; margin: 8px -4px 16px; max-height: 300px; overflow-y: auto; scrollbar-width: thin; }
-.instructor-question-tile { display: grid; place-items: center; width: 100%; aspect-ratio: 1; min-height: 44px; padding: 0; border: 1px solid #dce1ec; border-radius: 9px; background: #fff; color: #64748b; font: inherit; font-size: .85rem; font-weight: 700; cursor: pointer; box-shadow: 0 1px 2px #0f172a04; scroll-margin-top: 100px; transition: background .15s, border-color .15s, box-shadow .15s; }
+.instructor-question-tile { position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 1; min-height: 44px; padding: 0; border: 1px solid #dce1ec; border-radius: 9px; background: #fff; color: #64748b; font: inherit; font-size: .85rem; font-weight: 700; cursor: pointer; box-shadow: 0 1px 2px #0f172a04; scroll-margin-top: 100px; transition: background .15s, border-color .15s, box-shadow .15s; }
+.instructor-tile-warning-dot { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 9999px; background: #f59e0b; box-shadow: 0 0 0 1.5px #fff; pointer-events: none; }
+.instructor-question-tile[aria-current=page] .instructor-tile-warning-dot { box-shadow: 0 0 0 1.5px #6d28d9; }
 .instructor-question-tile[data-empty=true]:not([aria-current=page]) { border-style: dashed; }
 .instructor-question-tile[aria-current=page] { background: linear-gradient(145deg, #7c3aed, #5b21b6); color: #fff; border-color: #6d28d9; box-shadow: 0 3px 8px #6d28d92b; }
 .instructor-nav-entry { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; cursor: pointer; padding: 11px 10px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: #475569; font: inherit; font-size: .82rem; font-weight: 600; margin-bottom: 12px; }
@@ -352,11 +358,19 @@ textarea.instructor-input { min-height: 96px; resize: vertical; }
 .instructor-add-inciso .instructor-label { flex: 1; min-width: min(100%, 180px); margin: 0; }
 .instructor-inciso-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px; }
 .instructor-inciso-tabs button { display: flex; gap: 10px; align-items: center; text-align: left; border: 1px solid #e2e6ef; border-radius: 11px; background: #fff; color: #64748b; padding: 10px 13px; cursor: pointer; flex-shrink: 0; font: inherit; transition: background .15s, border-color .15s; }
+.instructor-inciso-tabs button.has-incomplete-warning:not([aria-selected=true]) { border-color: #fde68a; background: #fffdf5; }
+.instructor-inciso-tabs button.has-incomplete-warning[aria-selected=true] { border-color: #f59e0b; }
 .instructor-inciso-tabs button[aria-selected=true] { border-color: #c4b5fd; color: #5b21b6; background: #f5f3ff; box-shadow: inset 0 -2px 0 #8b5cf6; }
 .instructor-inciso-tabs strong { display: block; font-size: .78rem; }
 .instructor-inciso-tabs small { display: flex; align-items: center; gap: 5px; margin-top: 4px; font-size: .68rem; }
 .instructor-inciso-tabs small svg { width: 12px; height: 12px; }
-.instructor-inciso-letter { display: grid; place-items: center; min-width: 28px; height: 28px; border-radius: 8px; background: #f1f5f9; color: #64748b; font-weight: 700; font-size: .75rem; }
+.instructor-inciso-letter { position: relative; display: grid; place-items: center; min-width: 28px; height: 28px; border-radius: 8px; background: #f1f5f9; color: #64748b; font-weight: 700; font-size: .75rem; }
+.instructor-inciso-warning-dot { position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border-radius: 9999px; background: #f59e0b; box-shadow: 0 0 0 1.5px #fff; }
+.instructor-inciso-warning-badge { display: inline-block; font-size: .65rem; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; margin-left: 6px; vertical-align: middle; }
+.instructor-inciso-incomplete-alert { display: flex; align-items: flex-start; gap: 10px; padding: 11px 14px; margin-bottom: 16px; border-radius: 10px; background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: .83rem; line-height: 1.45; }
+.instructor-inciso-incomplete-alert svg { flex-shrink: 0; color: #d97706; margin-top: 2px; }
+.instructor-inciso-incomplete-alert ul { margin: 6px 0 0; padding-left: 18px; }
+.instructor-inciso-incomplete-alert li { margin: 2px 0; }
 .instructor-inciso-tabs button[aria-selected=true] .instructor-inciso-letter { background: #ede9fe; color: #6d28d9; }
 .instructor-composer-empty { padding: 28px 18px; text-align: center; border: 1px dashed #c4b5fd; border-radius: 14px; color: #64748b; }
 .instructor-question-pager { padding-top: 16px; border-top: 1px solid #e2e8f0; }

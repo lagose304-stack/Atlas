@@ -25,7 +25,7 @@ export type InstructorSummary = {
   legacy_question_count?: number;
 };
 export type InstructorBankContent = { groups: InstructorQuestionGroup[]; questions: InstructorQuestion[] };
-export type InstructorBankSummary = { tema_id: number; question_count: number; inciso_count: number; revision: number; updated_at?: string | null };
+export type InstructorBankSummary = { tema_id: number; question_count: number; inciso_count: number; has_incomplete?: boolean; revision: number; updated_at?: string | null };
 export type InstructorBankTopic = { tema_id: number; content: InstructorBankContent; revision: number };
 function collapseInstructorVersus<T extends InstructorContent | InstructorBankContent>(content: T): T {
   const byId = new Map(content.questions.map(question => [question.id, question]));
@@ -61,7 +61,7 @@ export type PublicInstructorContent = Omit<InstructorContent, 'questions'> & {
 };
 export type InstructorResult = { ok: true; correct: number; total: number; percentage: number | null; pending_review?: number; submission_id?: string; sections?: InstructorSectionResult[] };
 export type InstructorUnlock = { ok: true; token: string; test: PublicInstructorContent } |
-  { ok: false; status: 'invalid_code' | 'locked' | 'unavailable' | 'outside_schedule' };
+{ ok: false; status: 'invalid_code' | 'locked' | 'unavailable' | 'outside_schedule' };
 export type InstructorGrade = InstructorResult | { ok: false; status: 'expired' | 'unavailable' };
 
 export const isSixDigitCode = (value: string) => /^[0-9]{6}$/.test(value);
@@ -114,8 +114,10 @@ export const resumeInstructorTest = (id: string, token: string, account: string)
 export const saveInstructorProgress = (id: string, token: string, revision: number, answers: InstructorAnswers, questionId: string | null) => rpc<{ ok: true; progress_revision: number }>('atlas_save_instructor_progress', { p_id: id, p_token: token, p_revision: revision, p_answers: answers, p_current_question_id: questionId });
 
 export type InstructorSubmissionSummary = { id: string; participant_name: string | null; account_number?: string | null; created_at: string; test_revision: number; total: number; pending_review: number; revision: number; correct: number; percentage: number | null };
-export type InstructorSubmission = { id: string; participant_name: string | null; account_number?: string | null; test_id: string; test_revision: number; snapshot: InstructorSubmissionSnapshot;
-  answers: InstructorAnswers; reviews: Record<string, boolean>; auto_results?: Record<string, boolean>; revision: number; created_at: string; auto_correct: number; total: number };
+export type InstructorSubmission = {
+  id: string; participant_name: string | null; account_number?: string | null; test_id: string; test_revision: number; snapshot: InstructorSubmissionSnapshot;
+  answers: InstructorAnswers; reviews: Record<string, boolean>; auto_results?: Record<string, boolean>; revision: number; created_at: string; auto_correct: number; total: number
+};
 export const listInstructorSubmissions = (testId: string, offset = 0) => rpc<InstructorSubmissionSummary[]>('atlas_list_instructor_submissions', { p_test_id: testId, p_offset: offset });
 export const getInstructorSubmission = (id: string) => rpc<InstructorSubmission>('atlas_get_instructor_submission', { p_id: id });
 export const reviewInstructorSubmission = (submission: InstructorSubmission, reviews: Record<string, boolean>) => rpc<InstructorSubmission>('atlas_review_instructor_submission', { p_id: submission.id, p_revision: submission.revision, p_reviews: reviews });

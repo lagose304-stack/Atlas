@@ -1,12 +1,13 @@
 import { lazy, Suspense, useId, useState } from 'react';
-import { ArrowRight, ChevronLeft, ChevronRight, Layers3, Plus, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
+import { AlertCircle, ArrowRight, ChevronLeft, ChevronRight, Layers3, Plus, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
 import HoldToRevealCodeInput from './HoldToRevealCodeInput';
 import InstructorQuestionEditor from './InstructorQuestionEditor';
 import InstructorFormatIcon from './InstructorFormatIcon';
 import InstructorScheduleEditor from './InstructorScheduleEditor';
 import type { InstructorContent } from '../services/instructorTests';
 import {
-  INSTRUCTOR_QUESTION_TYPES, incisoLetter, instructorGroups, instructorStoredIncisoCount, isInstructorGradedQuestion, newInstructorGroup, newInstructorQuestion,
+  INSTRUCTOR_QUESTION_TYPES, getInstructorQuestionMissingReasons, incisoLetter, instructorGroups, instructorStoredIncisoCount,
+  isInstructorGradedQuestion, isInstructorGroupIncomplete, isInstructorQuestionIncomplete, newInstructorGroup, newInstructorQuestion,
   type ChoiceQuestion, type InstructorQuestion, type InstructorQuestionGroup, type InstructorQuestionType,
 } from '../types/instructorQuestions';
 
@@ -96,16 +97,21 @@ export default function InstructorTestComposer({ content, code, hasCode, existin
       {isBankMode && <div className="instructor-bank-topic-pill"><Layers3 size={16} aria-hidden="true" /><span>Tema asignado<strong>{bankTopicName}</strong></span></div>}
       <div className="instructor-row instructor-between instructor-nav-heading"><h3>Preguntas</h3><span className="instructor-badge">{groups.length}</span></div>
       <ol className="instructor-question-nav-list" aria-label="Preguntas de la prueba">
-        {groups.map((g, index) => <li key={g.id}>
-          {!!content.sections?.length && (index === 0 || groups[index - 1].section_id !== g.section_id) && <span className="instructor-nav-section-label">{content.sections.find(section => section.id === g.section_id)?.nombre ?? 'Sin sección'}</span>}
-          <button type="button" className="instructor-question-tile" aria-current={!showSettings && g.id === group?.id ? 'page' : undefined}
-            data-empty={g.item_ids.length === 0 ? true : undefined}
-            title={`Pregunta ${index + 1} · ${g.item_ids.length} ${g.item_ids.length === 1 ? 'inciso' : 'incisos'}${g.titulo.trim() ? ` · ${g.titulo.trim()}` : ''}`}
-            aria-controls={workspaceId} aria-label={`Ir a pregunta ${index + 1}`} onClick={() => selectGroup(g.id)}>
-            {index + 1}
-            {g.section_id && <span className="instructor-tile-section" title={content.sections?.find(s => s.id === g.section_id)?.nombre}>{(content.sections?.findIndex(s => s.id === g.section_id) ?? -1) + 1}</span>}
-          </button>
-        </li>)}
+        {groups.map((g, index) => {
+          const isGroupIncomplete = isInstructorGroupIncomplete(g, content.questions);
+          return <li key={g.id}>
+            {!!content.sections?.length && (index === 0 || groups[index - 1].section_id !== g.section_id) && <span className="instructor-nav-section-label">{content.sections.find(section => section.id === g.section_id)?.nombre ?? 'Sin sección'}</span>}
+            <button type="button" className="instructor-question-tile" aria-current={!showSettings && g.id === group?.id ? 'page' : undefined}
+              data-empty={g.item_ids.length === 0 ? true : undefined}
+              data-incomplete={isGroupIncomplete ? true : undefined}
+              title={`Pregunta ${index + 1} · ${g.item_ids.length} ${g.item_ids.length === 1 ? 'inciso' : 'incisos'}${isGroupIncomplete ? ' · Incompleta' : ''}${g.titulo.trim() ? ` · ${g.titulo.trim()}` : ''}`}
+              aria-controls={workspaceId} aria-label={`Ir a pregunta ${index + 1}${isGroupIncomplete ? ' (con incisos incompletos)' : ''}`} onClick={() => selectGroup(g.id)}>
+              {index + 1}
+              {isGroupIncomplete && <span className="instructor-tile-warning-dot" aria-hidden="true" title="Esta pregunta tiene incisos incompletos" />}
+              {g.section_id && <span className="instructor-tile-section" title={content.sections?.find(s => s.id === g.section_id)?.nombre}>{(content.sections?.findIndex(s => s.id === g.section_id) ?? -1) + 1}</span>}
+            </button>
+          </li>;
+        })}
       </ol>
       <button type="button" className="instructor-btn instructor-btn-primary" aria-label="Agregar nueva pregunta" disabled={groups.length >= 100} onClick={addGroup}><Plus size={17} aria-hidden="true" />Nueva pregunta</button>
       <div className="instructor-nav-foot"><Layers3 size={15} aria-hidden="true" /><span>{totalIncisos} incisos en total<small>Cada pregunta vale 1 punto, dividido entre sus incisos</small></span></div>
@@ -165,23 +171,41 @@ export default function InstructorTestComposer({ content, code, hasCode, existin
         </section>}
         {items.length ? <>
           <div role="tablist" aria-label={`Incisos de pregunta ${groupIndex + 1}`} className="instructor-inciso-tabs">
-            {items.map((q, i) => <button key={q.id} id={`${incisoPanelId}-${q.id}`} type="button" role="tab" aria-selected={i === itemIndex}
-              tabIndex={i === itemIndex ? 0 : -1} aria-controls={incisoPanelId} onClick={() => { selectItem(q.id); setAddingItem(false); }}
-              onKeyDown={event => {
-                const next = event.key === 'ArrowRight' ? (i + 1) % items.length : event.key === 'ArrowLeft' ? (i - 1 + items.length) % items.length
-                  : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : null;
-                if (next === null) return;
-                event.preventDefault(); selectItem(items[next].id);
-                (event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[next])?.focus();
-              }}>
-              <span className="instructor-inciso-letter" aria-hidden="true">{incisoLetter(i).toUpperCase()}</span>
-              <span><strong>Inciso {incisoLetter(i)}</strong>
-                <small><InstructorFormatIcon type={q.type} multiple={(!q.type || q.type === 'single_choice') && !!q.correct_option_ids} />{(!q.type || q.type === 'single_choice') && q.correct_option_ids
-                  ? 'Selección múltiple'
-                  : INSTRUCTOR_QUESTION_TYPES.find(type => type.value === (q.type ?? 'single_choice'))?.label}</small></span>
-            </button>)}
+            {items.map((q, i) => {
+              const isIncomplete = isInstructorQuestionIncomplete(q);
+              return <button key={q.id} id={`${incisoPanelId}-${q.id}`} type="button" role="tab" aria-selected={i === itemIndex}
+                tabIndex={i === itemIndex ? 0 : -1} aria-controls={incisoPanelId}
+                className={isIncomplete ? 'has-incomplete-warning' : undefined}
+                title={isIncomplete ? `Inciso ${incisoLetter(i)}: ${getInstructorQuestionMissingReasons(q).join(' · ')}` : undefined}
+                onClick={() => { selectItem(q.id); setAddingItem(false); }}
+                onKeyDown={event => {
+                  const next = event.key === 'ArrowRight' ? (i + 1) % items.length : event.key === 'ArrowLeft' ? (i - 1 + items.length) % items.length
+                    : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : null;
+                  if (next === null) return;
+                  event.preventDefault(); selectItem(items[next].id);
+                  (event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[next])?.focus();
+                }}>
+                <span className="instructor-inciso-letter" aria-hidden="true">
+                  {incisoLetter(i).toUpperCase()}
+                  {isIncomplete && <span className="instructor-inciso-warning-dot" aria-hidden="true" />}
+                </span>
+                <span><strong>Inciso {incisoLetter(i)}{isIncomplete && <span className="instructor-inciso-warning-badge">Incompleto</span>}</strong>
+                  <small><InstructorFormatIcon type={q.type} multiple={(!q.type || q.type === 'single_choice') && !!q.correct_option_ids} />{(!q.type || q.type === 'single_choice') && q.correct_option_ids
+                    ? 'Selección múltiple'
+                    : INSTRUCTOR_QUESTION_TYPES.find(type => type.value === (q.type ?? 'single_choice'))?.label}</small></span>
+              </button>;
+            })}
           </div>
           {item && <div role="tabpanel" id={incisoPanelId} aria-labelledby={`${incisoPanelId}-${item.id}`}>
+            {isInstructorQuestionIncomplete(item) && <div className="instructor-inciso-incomplete-alert" role="status" aria-label={`Aviso: Inciso ${incisoLetter(itemIndex)} incompleto`}>
+              <AlertCircle size={17} aria-hidden="true" />
+              <div>
+                <strong>Faltan campos por completar en este inciso para poder publicar:</strong>
+                <ul>
+                  {getInstructorQuestionMissingReasons(item).map((reason, idx) => <li key={idx}>{reason}</li>)}
+                </ul>
+              </div>
+            </div>}
             <InstructorQuestionEditor key={item.id} question={item} index={itemIndex} label={`Inciso ${incisoLetter(itemIndex)}`}
               onSelectImageFile={onSelectImageFile ? (file, slot) => onSelectImageFile(item.id, file, slot) : undefined}
               contextLabel={`inciso ${incisoLetter(itemIndex)} de pregunta ${groupIndex + 1}`}

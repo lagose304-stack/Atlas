@@ -11,7 +11,7 @@ import {
   type InstructorEditor, type InstructorSummary,
 } from '../services/instructorTests';
 import { groupTemasByParcial } from '../utils/instructorTopics';
-import { instructorGroups, instructorStoredIncisoCount } from '../types/instructorQuestions';
+import { instructorGroups, instructorStoredIncisoCount, isInstructorContentIncomplete } from '../types/instructorQuestions';
 import InstructorBankTopicEditor from '../components/InstructorBankTopicEditor';
 import InstructorBankTestConfig from '../components/InstructorBankTestConfig';
 import InstructorDeleteConfirmation from '../components/InstructorDeleteConfirmation';
@@ -102,6 +102,7 @@ export default function PruebaInstructores() {
       tema_id: saved.tema_id,
       question_count: groups.length,
       inciso_count: instructorStoredIncisoCount(saved.content.questions),
+      has_incomplete: isInstructorContentIncomplete(saved.content),
       revision: saved.revision,
     };
     setBankSummary(previous => previous.some(b => b.tema_id === saved.tema_id)
@@ -363,16 +364,32 @@ export default function PruebaInstructores() {
                                     )}
                                   </div>
                                   <div className="instructor-bank-topic-info">
-                                    <span className="instructor-bank-topic-order">Tema {orderNum}</span>
+                                    <div className="instructor-bank-topic-order-row">
+                                      <span className="instructor-bank-topic-order">Tema {orderNum}</span>
+                                      {stats?.has_incomplete && (
+                                        <span
+                                          className="instructor-topic-warning-dot"
+                                          title="Este tema tiene preguntas con incisos incompletos"
+                                          aria-label="Tiene preguntas con incisos incompletos"
+                                        />
+                                      )}
+                                    </div>
                                     <h4>{tema.nombre}</h4>
                                   </div>
                                 </div>
                                 <div className="instructor-bank-topic-foot">
-                                  <span className={`instructor-bank-count${qCount > 0 ? ' is-filled' : ''}`}>
-                                    {qCount === 0
-                                      ? 'Sin preguntas'
-                                      : `${qCount} ${qCount === 1 ? 'pregunta' : 'preguntas'} · ${iCount} ${iCount === 1 ? 'inciso' : 'incisos'}`}
-                                  </span>
+                                  <div className="instructor-bank-topic-counts">
+                                    <span className={`instructor-bank-count${qCount > 0 ? ' is-filled' : ''}`}>
+                                      {qCount === 0
+                                        ? 'Sin preguntas'
+                                        : `${qCount} ${qCount === 1 ? 'pregunta' : 'preguntas'} · ${iCount} ${iCount === 1 ? 'inciso' : 'incisos'}`}
+                                    </span>
+                                    {stats?.has_incomplete && (
+                                      <span className="instructor-topic-incomplete-badge" title="Hay incisos incompletos en este tema">
+                                        Incisos incompletos
+                                      </span>
+                                    )}
+                                  </div>
                                   <button type="button" className="instructor-btn instructor-bank-open-btn" disabled={busy} aria-label={`Abrir banco de ${tema.nombre}`} onClick={() => void openBankTopic(tema)}>
                                     {qCount > 0 ? 'Editar' : 'Agregar'}<ArrowRight size={15} aria-hidden="true" />
                                   </button>

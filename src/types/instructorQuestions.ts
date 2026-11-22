@@ -17,7 +17,7 @@ export type PublicInstructorGroup = { id: string; titulo: string; position: numb
 type BaseQuestion = { id: string; titulo: string };
 type SingleImageQuestion = BaseQuestion & { image?: InstructorReferenceImage; alternate_image?: InstructorReferenceImage };
 // Las preguntas históricas sin type siguen siendo de selección única.
-export type ChoiceQuestion = SingleImageQuestion & { type?: 'single_choice'; options: InstructorOption[]; correct_option_id: string; correct_option_ids?: string[] };
+export type ChoiceQuestion = SingleImageQuestion & { type?: 'single_choice'; options: InstructorOption[]; correct_option_id: string; correct_option_ids?: string[]; multiple?: boolean };
 export type InstructorImageAnnotation = MarkerLocation & { label: string };
 export type InstructorReferenceImage = { url: string; source: 'upload' | 'catalog'; plate_id?: number; annotations?: InstructorImageAnnotation[] };
 export type ShortQuestion = SingleImageQuestion & { type: 'short_answer'; accepted_answers: string[] };
@@ -271,4 +271,91 @@ export function hasInstructorQuestionResponses(question: InstructorQuestion): bo
   if (question.type === 'matching') return question.pairs.some(p => !!p.term.trim() || !!p.definition.trim())
     || !!question.distractors?.some(option => option.texto.trim());
   return !!question.correct_option_id || !!question.correct_option_ids?.length || question.options.some(o => !!o.texto.trim());
+}
+
+export function getInstructorQuestionMissingReasons(question: InstructorQuestion): string[] {
+  const reasons: string[] = [];
+
+  if (question.type === 'image_versus') {
+    if (!question.image_a?.url) reasons.push('Falta la imagen A');
+    if (!question.image_b?.url) reasons.push('Falta la imagen B');
+    return reasons;
+  }
+
+  if (question.type === 'image_point') {
+    if (!question.image?.url) reasons.push('Falta la imagen de referencia');
+    return reasons;
+  }
+
+  if (question.type === 'short_answer') {
+    const answers = question.accepted_answers ?? [];
+    if (!answers.some(a => !!a?.trim())) {
+      reasons.push('Agrega al menos una respuesta aceptada');
+    }
+    return reasons;
+  }
+
+  if (question.type === 'completion') {
+    const blanks = question.blanks ?? [];
+    if (blanks.length === 0) {
+      reasons.push('Agrega al menos un hueco o espacio');
+    } else if (blanks.some(b => !b.accepted_answers?.some(a => !!a?.trim()))) {
+      reasons.push('Cada hueco debe tener al menos una respuesta aceptada');
+    }
+    return reasons;
+  }
+
+  if (question.type === 'matching') {
+    const pairs = question.pairs ?? [];
+    if (pairs.length < 2) {
+      reasons.push('Configura al menos 2 parejas');
+    } else if (pairs.some(p => !p.term?.trim() || !p.definition?.trim())) {
+      reasons.push('Completa el término y su pareja en todas las filas');
+    }
+    if (question.distractors?.some(d => !d.texto?.trim())) {
+      reasons.push('Hay opciones incorrectas con texto vacío');
+    }
+    return reasons;
+  }
+
+  const choice = question as ChoiceQuestion;
+  const opts = choice.options ?? [];
+  if (opts.length < 2) {
+    reasons.push('Se requieren al menos 2 opciones');
+  } else if (opts.some(o => !o.texto?.trim())) {
+    reasons.push('Hay opciones con texto vacío');
+  }
+
+  if (choice.multiple || choice.correct_option_ids !== undefined) {
+    const selected = choice.correct_option_ids ?? [];
+    if (selected.length === 0) {
+      reasons.push('Selecciona al menos una respuesta correcta');
+    } else if (!selected.every(id => opts.some(o => o.id === id))) {
+      reasons.push('Hay respuestas correctas que no coinciden con las opciones');
+    }
+  } else {
+    if (!choice.correct_option_id || !opts.some(o => o.id === choice.correct_option_id)) {
+      reasons.push('Selecciona la respuesta correcta');
+    }
+  }
+  return reasons;
+}
+
+export function isInstructorQuestionIncomplete(question: InstructorQuestion): boolean {
+  return getInstructorQuestionMissingReasons(question).length > 0;
+}
+
+export function isInstructorGroupIncomplete(group: InstructorQuestionGroup, questions: InstructorQuestion[]): boolean {
+  if (!group.item_ids || group.item_ids.length === 0) return true;
+  const byId = new Map(questions.map(q => [q.id, q]));
+  return group.item_ids.some(id => {
+    const q = byId.get(id);
+    return !q || isInstructorQuestionIncomplete(q);
+  });
+}
+
+export function isInstructorContentIncomplete(content: { groups?: InstructorQuestionGroup[]; questions: InstructorQuestion[] }): boolean {
+  const groups = instructorGroups(content);
+  if (groups.length === 0) return false;
+  return groups.some(g => isInstructorGroupIncomplete(g, content.questions));
 }

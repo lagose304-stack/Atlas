@@ -189,4 +189,22 @@ describe('Banco de preguntas y configuración de pruebas de instructores', () =>
     fireEvent.click(screen.getByRole('button', { name: 'Volver al panel' }));
     expect(screen.queryByRole('region', { name: 'Pruebas antiguas pendientes de migrar' })).not.toBeInTheDocument();
   });
+
+  it('muestra el punto indicador y distintivo de incisos incompletos en la tarjeta del tema', async () => {
+    mocks.rpc.mockImplementation(async (name: string) => {
+      if (name === 'atlas_list_instructor_bank') {
+        return {
+          data: [{ tema_id: 1, question_count: 2, inciso_count: 2, has_incomplete: true, revision: 1 }],
+          error: null,
+        };
+      }
+      if (name === 'atlas_list_instructor_tests') return { data: [], error: null };
+      return { data: null, error: null };
+    });
+
+    render(<PruebaInstructores />);
+    expect(await screen.findByText('Tejido epitelial')).toBeInTheDocument();
+    expect(screen.getByLabelText('Tiene preguntas con incisos incompletos')).toBeInTheDocument();
+    expect(screen.getByText('Incisos incompletos')).toBeInTheDocument();
+  });
 });
