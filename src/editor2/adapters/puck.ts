@@ -1,11 +1,17 @@
 import type { Data } from '@puckeditor/core';
 import {
   canvasDocSchema,
+  buttonVariantSchema,
+  headingTextSizePresetSchema,
+  textSizePresetSchema,
+  imageSrcSchema,
   type AccordionItem,
   type BlockStyle,
+  type ButtonBlock,
   type CanvasDoc,
   type CarouselItem,
   type Gap,
+  type HeadingTextSizePreset,
   type LayoutIntent,
   type MediaAppearance,
   type PageTheme,
@@ -14,6 +20,7 @@ import {
   type RichTextValue,
   type TabItem,
   type TextAppearance,
+  type TextSizePreset,
 } from '../domain/schema';
 import { richTextToPlain, sanitizeRichTextV2 } from '../domain/richText';
 import { sanitizeBlockStyle, sanitizeMediaAppearance, sanitizePageTheme } from '../domain/styleSchema';
@@ -55,6 +62,7 @@ export type PuckHeadingData = {
     layout: LayoutIntent;
     level: 1 | 2 | 3;
     text: string;
+    textSizePreset?: HeadingTextSizePreset;
     richText?: RichTextV2;
     appearance?: TextAppearance;
     style?: BlockStyle;
@@ -110,10 +118,12 @@ export type PuckButtonData = {
     layout: LayoutIntent;
     label: string;
     href: string;
-    variant?: 'solid' | 'outline' | 'soft' | 'gradient' | 'pill';
+    textSizePreset?: TextSizePreset;
+    variant?: ButtonBlock['props']['variant'];
     newTab?: boolean;
     color?: string;
     icon?: string;
+    thumbnailSrc?: string;
     align?: 'left' | 'center' | 'right';
     style?: BlockStyle;
   };
@@ -172,6 +182,9 @@ export type PuckCompareData = {
     leftLabel?: string;
     rightSrc: string;
     rightLabel?: string;
+    fit?: 'cover' | 'contain';
+    caption?: string;
+    media?: MediaAppearance;
     style?: BlockStyle;
   };
 };
@@ -244,6 +257,7 @@ export type PuckExamCarouselData = {
     title?: string;
     accentColor?: string;
     maxItems?: number;
+    buttonTextSize?: TextSizePreset;
     style?: BlockStyle;
   };
 };
@@ -332,7 +346,7 @@ export type Editor2PuckData = {
 };
 
 type AnyBlockLike =
-  | { id: string; type: 'heading'; props: { level: 1 | 2 | 3; text: RichTextValue; appearance?: TextAppearance; style?: BlockStyle } }
+  | { id: string; type: 'heading'; props: { level: 1 | 2 | 3; text: RichTextValue; textSizePreset?: HeadingTextSizePreset; appearance?: TextAppearance; style?: BlockStyle } }
   | { id: string; type: 'text'; props: { text: RichTextValue; appearance?: TextAppearance; style?: BlockStyle } }
   | {
       id: string;
@@ -358,10 +372,12 @@ type AnyBlockLike =
       props: {
         label: RichTextV1;
         href: string;
-        variant?: 'solid' | 'outline' | 'soft' | 'gradient' | 'pill';
+        textSizePreset?: TextSizePreset;
+        variant?: ButtonBlock['props']['variant'];
         newTab?: boolean;
         color?: string;
         icon?: string;
+        thumbnailSrc?: string;
         align?: 'left' | 'center' | 'right';
         style?: BlockStyle;
       };
@@ -412,6 +428,9 @@ type AnyBlockLike =
         leftLabel?: string;
         rightSrc: string;
         rightLabel?: string;
+        fit?: 'cover' | 'contain';
+        caption?: string;
+        media?: MediaAppearance;
         style?: BlockStyle;
       };
     }
@@ -473,6 +492,7 @@ type AnyBlockLike =
         title?: string;
         accentColor?: string;
         maxItems?: number;
+        buttonTextSize?: TextSizePreset;
         style?: BlockStyle;
       };
     }
@@ -580,6 +600,7 @@ function puckFromPlaced(item: AnyPlacedLike): PuckBlockData {
           id: toPuckId('heading', item.block.id),
           layout,
           level: item.block.props.level,
+          ...(item.block.props.textSizePreset ? { textSizePreset: item.block.props.textSizePreset } : {}),
           text: textFromRichText(item.block.props.text),
           ...(item.block.props.text.format === 'rich' ? { richText: item.block.props.text } : {}),
           ...(item.block.props.appearance && { appearance: item.block.props.appearance }),
@@ -638,6 +659,8 @@ function puckFromPlaced(item: AnyPlacedLike): PuckBlockData {
           layout,
           label: textFromRichText(item.block.props.label),
           href: item.block.props.href,
+          ...(item.block.props.textSizePreset ? { textSizePreset: item.block.props.textSizePreset } : {}),
+          ...(item.block.props.thumbnailSrc ? { thumbnailSrc: item.block.props.thumbnailSrc } : {}),
           ...(item.block.props.variant ? { variant: item.block.props.variant } : {}),
           ...(item.block.props.newTab !== undefined ? { newTab: item.block.props.newTab } : {}),
           ...(item.block.props.color ? { color: item.block.props.color } : {}),
@@ -701,7 +724,10 @@ function puckFromPlaced(item: AnyPlacedLike): PuckBlockData {
           leftSrc: item.block.props.leftSrc,
           ...(item.block.props.leftLabel ? { leftLabel: item.block.props.leftLabel } : {}),
           rightSrc: item.block.props.rightSrc,
+          ...(item.block.props.fit ? { fit: item.block.props.fit } : {}),
           ...(item.block.props.rightLabel ? { rightLabel: item.block.props.rightLabel } : {}),
+          ...(item.block.props.caption ? { caption: item.block.props.caption } : {}),
+          ...(item.block.props.media ? { media: item.block.props.media } : {}),
           ...styleProp,
         },
       };
@@ -776,6 +802,7 @@ function puckFromPlaced(item: AnyPlacedLike): PuckBlockData {
           ...(item.block.props.title ? { title: item.block.props.title } : {}),
           ...(item.block.props.accentColor ? { accentColor: item.block.props.accentColor } : {}),
           ...(item.block.props.maxItems !== undefined ? { maxItems: item.block.props.maxItems } : {}),
+          ...(item.block.props.buttonTextSize ? { buttonTextSize: item.block.props.buttonTextSize } : {}),
           ...styleProp,
         },
       };
@@ -848,13 +875,15 @@ function placedFromPuck(item: PuckBlockData, insideBox = false): AnyPlacedLike {
   const styleProp = cleanStyle ? { style: cleanStyle } : {};
 
   switch (item.type) {
-    case 'heading':
+    case 'heading': {
+      const textSizePreset = headingTextSizePresetSchema.safeParse(item.props.textSizePreset).data;
       return {
         block: {
           id: toAtlasId('heading', item.props.id),
           type: 'heading',
           props: {
             level: normalizeLevel(item.props.level),
+            ...(textSizePreset ? { textSizePreset } : {}),
             text: richTextFromPuck(item.props.text, item.props.richText),
             ...(item.props.appearance && { appearance: item.props.appearance }),
             ...styleProp,
@@ -862,6 +891,7 @@ function placedFromPuck(item: PuckBlockData, insideBox = false): AnyPlacedLike {
         },
         layout,
       };
+    }
     case 'text':
       return {
         block: {
@@ -930,6 +960,9 @@ function placedFromPuck(item: PuckBlockData, insideBox = false): AnyPlacedLike {
       };
     }
     case 'button': {
+      const variant = buttonVariantSchema.safeParse(item.props.variant).data;
+      const textSizePreset = textSizePresetSchema.safeParse(item.props.textSizePreset).data;
+      const thumbnailSrc = imageSrcSchema.safeParse(item.props.thumbnailSrc).data;
       const newTab = normalizeBoolean(item.props.newTab);
       const color = normalizeHexColor(item.props.color);
       const icon = typeof item.props.icon === 'string' && item.props.icon.trim() ? item.props.icon.trim().slice(0, 40) : undefined;
@@ -944,13 +977,9 @@ function placedFromPuck(item: PuckBlockData, insideBox = false): AnyPlacedLike {
           props: {
             label: richTextFromPlain(item.props.label),
             href: typeof item.props.href === 'string' ? item.props.href : '/temario',
-            ...(item.props.variant === 'solid' ||
-            item.props.variant === 'outline' ||
-            item.props.variant === 'soft' ||
-            item.props.variant === 'gradient' ||
-            item.props.variant === 'pill'
-              ? { variant: item.props.variant }
-              : {}),
+            ...(textSizePreset ? { textSizePreset } : {}),
+            ...(variant ? { variant } : {}),
+            ...(thumbnailSrc ? { thumbnailSrc } : {}),
             ...(newTab !== undefined ? { newTab } : {}),
             ...(color ? { color } : {}),
             ...(icon ? { icon } : {}),
@@ -1031,7 +1060,8 @@ function placedFromPuck(item: PuckBlockData, insideBox = false): AnyPlacedLike {
         },
         layout,
       };
-    case 'compare':
+    case 'compare': {
+      const media = sanitizeMediaAppearance(item.props.media);
       return {
         block: {
           id: toAtlasId('compare', item.props.id),
@@ -1042,14 +1072,20 @@ function placedFromPuck(item: PuckBlockData, insideBox = false): AnyPlacedLike {
               ? { leftLabel: item.props.leftLabel }
               : {}),
             rightSrc: item.props.rightSrc,
+            ...(item.props.fit === 'cover' || item.props.fit === 'contain' ? { fit: item.props.fit } : {}),
             ...(typeof item.props.rightLabel === 'string' && item.props.rightLabel
               ? { rightLabel: item.props.rightLabel }
               : {}),
+            ...(typeof item.props.caption === 'string' && item.props.caption.trim()
+              ? { caption: item.props.caption.slice(0, 500) }
+              : {}),
+            ...(media ? { media } : {}),
             ...styleProp,
           },
         },
         layout,
       };
+    }
     case 'callout':
       return {
         block: {
@@ -1156,6 +1192,7 @@ function placedFromPuck(item: PuckBlockData, insideBox = false): AnyPlacedLike {
       };
     }
     case 'examCarousel': {
+      const buttonTextSize = textSizePresetSchema.safeParse(item.props.buttonTextSize).data;
       const parcial =
         item.props.parcial === 'all' ||
         item.props.parcial === 'primer' ||
@@ -1180,6 +1217,7 @@ function placedFromPuck(item: PuckBlockData, insideBox = false): AnyPlacedLike {
             ...(title ? { title } : {}),
             ...(accentColor ? { accentColor } : {}),
             ...(maxItems !== undefined ? { maxItems } : {}),
+            ...(buttonTextSize ? { buttonTextSize } : {}),
             ...styleProp,
           },
         },

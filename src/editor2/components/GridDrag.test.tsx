@@ -9,7 +9,7 @@ const api = vi.hoisted(() => ({
   dispatch: vi.fn(),
   getItemById: vi.fn(),
   getSelectorForId: vi.fn(),
-  appState: { ui: { itemSelector: null } },
+  appState: { ui: { itemSelector: null as { index: number; zone: string } | null } },
 }));
 
 vi.mock('@puckeditor/core', () => ({
@@ -24,7 +24,7 @@ function mountGrid(item: typeof heading, children: React.ReactNode) {
     return (
       <div className="e2-puck-shell">
         <div ref={host} />
-        <div data-e2-canvas-root="">
+        <div className="e2-canvas-stage--editing" data-e2-canvas-root="">
           <div className="e2-slot-grid" style={{ display: 'grid', gridAutoRows: '10px' }}>
             <div data-e2-block={item.type} data-puck-component={item.props.id} tabIndex={-1}
               style={{ gridColumnStart: '1', gridColumnEnd: 'span 8', gridRowStart: '1', gridRowEnd: 'span 4' }}>
@@ -68,8 +68,40 @@ function pointer(target: Element, type: string, x: number, y: number) {
 
 describe('arrastre en la cuadrícula', () => {
   afterEach(() => {
+    api.appState.ui.itemSelector = null;
     vi.restoreAllMocks();
     vi.clearAllMocks();
+  });
+
+  it('deselecciona al hacer clic en el fondo del lienzo', () => {
+    const { grid, block, restore } = mountGrid(heading, <span>Epitelios</span>);
+    try {
+      api.appState.ui.itemSelector = { index: 0, zone: 'root' };
+      fireEvent.click(block);
+      fireEvent.click(grid.closest('.e2-puck-shell')!);
+      expect(api.dispatch).not.toHaveBeenCalled();
+
+      fireEvent.click(grid);
+      expect(api.dispatch).toHaveBeenCalledTimes(1);
+      expect(api.dispatch).toHaveBeenCalledWith({ type: 'setUi', ui: { itemSelector: null } });
+    } finally {
+      restore();
+    }
+  });
+
+  it('permite pulsar una muestra de color superpuesta a un bloque', () => {
+    const { block, elementsFromPoint, restore } = mountGrid(heading,
+      <div className="e2-text-color-control"><button type="button">Rojo</button></div>,
+    );
+    try {
+      const swatch = block.querySelector('button')!;
+      elementsFromPoint.mockReturnValue([swatch, block]);
+      pointer(swatch, 'pointerdown', 15, 15);
+      pointer(swatch, 'pointerup', 15, 15);
+      expect(api.dispatch).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
   });
 
   it('mueve un texto enfocado desde su superficie al perder el foco', () => {

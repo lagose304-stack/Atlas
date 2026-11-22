@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createEmptyCanvasDoc } from '../domain/defaults';
 import type { CanvasDoc } from '../domain/schema';
@@ -8,6 +8,18 @@ vi.mock('../render/Editor2Renderer', () => ({
   default: ({ doc, variant }: { doc: { pageKey: string }; variant?: string }) => (
     <div data-testid="plain-renderer" data-variant={variant}>
       Contenido de {doc.pageKey}
+      <div className="e2-block--button"><a className="e2-cta-btn" href="#destino">Ver destino</a></div>
+      <div className="e2-block--exam-carousel">
+        <button type="button" className="e2-exam-nav-btn">Siguiente prueba</button>
+        <a className="e2-exam-card__cta" href="#prueba">Iniciar prueba</a>
+      </div>
+      <div className="e2-block--tabs">
+        <button type="button" className="e2-tabs-nav__btn" role="tab">Segunda pestaña</button>
+      </div>
+      <div className="e2-block--accordion">
+        <button type="button" className="e2-accordion-trigger">Abrir sección</button>
+      </div>
+      <button type="button">Otra acción</button>
     </div>
   ),
 }));
@@ -64,6 +76,16 @@ describe('Editor2RealPreview', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent(/todavía no se integra/);
     expect(screen.getByTestId('plain-renderer')).toHaveAttribute('data-variant', 'public');
+  });
+
+  it('permite los controles de los bloques y bloquea las demás acciones', () => {
+    renderInEditor(createEmptyCanvasDoc('creditos'));
+    expect(fireEvent.click(screen.getByRole('link', { name: 'Ver destino' }))).toBe(true);
+    expect(fireEvent.click(screen.getByRole('link', { name: 'Iniciar prueba' }))).toBe(true);
+    expect(fireEvent.click(screen.getByRole('button', { name: 'Siguiente prueba' }))).toBe(true);
+    expect(fireEvent.click(screen.getByRole('tab', { name: 'Segunda pestaña' }))).toBe(true);
+    expect(fireEvent.click(screen.getByRole('button', { name: 'Abrir sección' }))).toBe(true);
+    expect(fireEvent.click(screen.getByRole('button', { name: 'Otra acción' }))).toBe(false);
   });
 
   it('monta la página pública directamente en la raíz de la vista previa', async () => {

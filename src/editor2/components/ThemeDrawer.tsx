@@ -7,6 +7,7 @@ import {
   type PageThemePalette,
 } from '../domain/styleSchema';
 import { useEditor2Store } from '../store/editor2Store';
+import TextColorPicker from './TextColorPicker';
 
 export type ThemeDrawerProps = {
   open: boolean;
@@ -131,7 +132,14 @@ const ThemeDrawer: React.FC<ThemeDrawerProps> = ({ open, onClose }) => {
             <div className="e2-design-section__body">
               <div className="e2-quad-grid">
                 {PALETTE_FIELDS.map((field) => (
-                  <label key={field.key} className="e2-color-chip">
+                  field.key === 'text' ? (
+                    <div key={field.key} className="e2-design-row">
+                      <span className="e2-design-label">{field.label}</span>
+                      <TextColorPicker label="Color Texto" value={activeTheme.palette.text}
+                        fallback={ATLAS_PAGE_THEMES[0].theme.palette.text}
+                        onChange={color => updatePalette('text', color)} />
+                    </div>
+                  ) : <label key={field.key} className="e2-color-chip">
                     <input
                       type="color"
                       aria-label={`Color ${field.label}`}

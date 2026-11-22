@@ -1,5 +1,20 @@
 import type { CSSProperties } from 'react';
+import type { ButtonBlock } from './schema';
 import type { BlockStyle, MediaAppearance, PageTheme, ShadowPreset } from './styleSchema';
+
+export function buttonStyleToCss(variant: NonNullable<ButtonBlock['props']['variant']>, color: string): CSSProperties {
+  if (variant === 'weekly') return { '--e2-weekly-button-accent': color } as CSSProperties;
+  if (variant === 'outline') return { borderColor: color, color, background: 'transparent' };
+  if (variant === 'soft') return { borderColor: color, color, background: `color-mix(in srgb, ${color} 14%, #ffffff)` };
+  if (variant === 'gradient') {
+    return {
+      borderColor: 'transparent',
+      backgroundImage: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 68%, #0b2545))`,
+      color: '#ffffff',
+    };
+  }
+  return { borderColor: color, background: color, color: '#ffffff', ...(variant === 'pill' && { borderRadius: '999px' }) };
+}
 
 function hexToRgba(hex: string, alpha: number): string {
   const clean = hex.replace('#', '');
@@ -211,13 +226,14 @@ const MEDIA_FILTERS: Record<NonNullable<MediaAppearance['filter']>, string | und
   grayscale: 'grayscale(1)',
 };
 
-export function mediaStageStyle(media?: MediaAppearance): CSSProperties {
-  if (!media) return {};
+export function mediaStageStyle(media?: MediaAppearance, fallbackAspect?: MediaAppearance['aspect']): CSSProperties {
   const css: CSSProperties = {};
-  if (media.aspect && media.aspect !== 'auto') {
-    css.aspectRatio = media.aspect.replace('/', ' / ');
+  const aspect = media?.aspect && media.aspect !== 'auto' ? media.aspect : fallbackAspect;
+  if (aspect && aspect !== 'auto') {
+    css.aspectRatio = aspect.replace('/', ' / ');
   }
-  if (media.radius !== undefined) {
+  if (media?.stageBackground) css.backgroundColor = media.stageBackground;
+  if (media?.radius !== undefined) {
     css.borderRadius = `${media.radius}px`;
     css.overflow = 'hidden';
   }

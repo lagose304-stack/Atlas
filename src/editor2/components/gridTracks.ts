@@ -1,4 +1,4 @@
-import { GRID_COLUMNS, GRID_DOTTED_LINE, GRID_DOTTED_MARK, GRID_MAX_ROW, GRID_REFERENCE_MARKS } from '../domain/gridResolution';
+import { GRID_COLUMNS, GRID_DOTTED_MARK, GRID_MAX_ROW, GRID_REFERENCE_MARKS } from '../domain/gridResolution';
 
 function readPixels(value: string) {
   return parseFloat(value) || 0;
@@ -74,10 +74,10 @@ function guideGradient(axis: Axis, direction: 'right' | 'bottom', max: number) {
   for (let line = 1; line <= max; line++) {
     const start = gridLinePosition(axis, line);
     if (start >= axis.extent) break;
-    if (line === GRID_DOTTED_LINE) continue;
+    if (line === GRID_DOTTED_MARK) continue;
     const end = Math.min(start + 1, axis.extent);
     if (start < previousEnd || end <= start) continue;
-    const color = referenceMarks.has(line) && line !== GRID_DOTTED_MARK ? '--e2-guide-reference' : '--e2-guide-line';
+    const color = referenceMarks.has(line) ? '--e2-guide-reference' : '--e2-guide-line';
     stops.push(`transparent ${start}px`, `var(${color}) ${start}px ${end}px`, `transparent ${end}px`);
     previousEnd = end;
   }

@@ -20,7 +20,7 @@ import { EDITOR2_DEFAULT_IMAGE_SRC, createLayoutIntent } from '../domain/default
 import { gridColumnValue, layoutClasses } from '../domain/layout';
 import { GRID_COLUMNS, GRID_MAX_ROW, fromGridLine, fromGridSpan, toGridLine, toGridSpan } from '../domain/gridResolution';
 import { renderRichTextContent, type RichTextV2 } from '../domain/richText';
-import type { BlockStyle, CarouselItem, Gap, LayoutIntent, MediaAppearance, PageTheme, SpanIntent, TextAppearance } from '../domain/schema';
+import type { BlockStyle, ButtonBlock, CarouselItem, Gap, HeadingTextSizePreset, LayoutIntent, MediaAppearance, PageTheme, SpanIntent, TextAppearance, TextSizePreset } from '../domain/schema';
 import { DEFAULT_BOX_STYLE } from '../domain/styleSchema';
 import {
   blockMotionClasses,
@@ -28,11 +28,16 @@ import {
   mediaImageStyle,
   mediaStageStyle,
   mergeBlockStyle,
+  buttonStyleToCss,
 } from '../domain/styleToCss';
 import Editor2Lightbox from './Editor2Lightbox';
 import ExamCarouselBlockView from './ExamCarouselBlockView';
 import { renderAtlasIcon } from './IconPickerModal';
 import InlineRichText from './InlineRichText';
+import BadgeFace, { BADGE_SIZES, BADGE_VARIANTS } from './BadgeFace';
+import TextColorPicker from './TextColorPicker';
+import WeeklyButtonContent from './WeeklyButtonContent';
+import { useWeeklyButtonTopic } from './useWeeklyButtonTopic';
 import { CanvasScreen, ResponsiveCanvas } from './ResponsiveCanvas';
 import { responsiveValues } from '../domain/responsive';
 
@@ -49,7 +54,7 @@ const BREAKPOINT_LABELS: Record<BreakpointKey, string> = {
 
 const COLUMN_OPTIONS = Array.from({ length: GRID_COLUMNS }, (_, index) => index + 1);
 
-function rowStyle(layout: LayoutIntent): CSSProperties {
+function rowStyle(layout: LayoutIntent, fitMediaToRows = false): CSSProperties {
   const styles: Record<string, string> = {};
   if (layout.base.flexSize === 'fixed') styles['--e2-fixed-width'] = `${layout.base.widthPx ?? 240}px`;
   if (layout.base.minWidthPx) styles['--e2-min-width'] = `${layout.base.minWidthPx}px`;
@@ -63,14 +68,23 @@ function rowStyle(layout: LayoutIntent): CSSProperties {
     styles[`--e2-row-${breakpoint}`] = `${row} / span ${rowSpan}`;
     styles[`--e2-align-${breakpoint}`] = effective.verticalAlign ?? (effective.rowSpan ? 'stretch' : 'start');
     styles[`--e2-overflow-${breakpoint}`] = effective.rowSpan ? 'auto' : 'visible';
+    if (fitMediaToRows && effective.rowSpan !== undefined) {
+      styles[`--e2-media-position-${breakpoint}`] = 'absolute';
+      styles[`--e2-media-min-height-${breakpoint}`] = '0px';
+    }
   }
   return styles as CSSProperties;
 }
 
-function typography(style: TextAppearance = {}, defaultColor?: string): CSSProperties {
+function mediaBlockStyles(layout: LayoutIntent, blockStyle?: BlockStyle) {
+  const { maxWidth, width, marginInline, ...frame } = blockStyleToCss(blockStyle, true);
+  return { area: { ...rowStyle(layout, true), maxWidth, width, marginInline }, frame };
+}
+
+function typography(style: TextAppearance = {}): CSSProperties {
   return {
     fontFamily: style.font,
-    color: style.color ?? defaultColor,
+    color: style.color,
     fontWeight: style.bold === undefined ? undefined : style.bold ? 700 : 400,
     fontStyle: style.italic ? 'italic' : undefined,
     textDecorationLine: [style.underline && 'underline', style.strike && 'line-through'].filter(Boolean).join(' ') || undefined,
@@ -120,6 +134,7 @@ export type HeadingBlockViewProps = {
   layout: LayoutIntent;
   level: 1 | 2 | 3;
   text: string;
+  textSizePreset?: HeadingTextSizePreset;
   richText?: RichTextV2;
   appearance?: TextAppearance;
   blockStyle?: BlockStyle;
@@ -132,6 +147,7 @@ export function HeadingBlockView({
   layout,
   level,
   text,
+  textSizePreset,
   richText,
   appearance,
   blockStyle,
@@ -140,7 +156,9 @@ export function HeadingBlockView({
   onTextChange,
 }: HeadingBlockViewProps) {
   const { textSize } = responsiveValues(blockStyle, useContext(CanvasScreen));
-  const sizeStyle = typeof textSize === 'number' ? { '--e2-responsive-text-size': `${textSize}px` } : undefined;
+  const sizeStyle = !textSizePreset && typeof textSize === 'number'
+    ? { '--e2-responsive-text-size': `${textSize}px` }
+    : undefined;
   const Tag = `h${level}` as 'h1' | 'h2' | 'h3';
   const editableRef = useRef<HTMLHeadingElement>(null);
   const [focused, setFocused] = useState(false);
@@ -163,9 +181,10 @@ export function HeadingBlockView({
   return (
     <div
       ref={dragRef ?? undefined}
-      className={`e2-block e2-block--heading ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--heading ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={{ ...mergeBlockStyle(rowStyle(layout), blockStyle), ...sizeStyle }}
       data-e2-text-size={sizeStyle ? '' : undefined}
+      data-e2-text-size-preset={textSizePreset}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="heading"
     >
@@ -345,13 +364,13 @@ export function TextBlockView({
     .filter(Boolean)
     .join(' ');
 
-  const paragraphStyle = typography(appearance, text || focused ? '#000000' : undefined);
+  const paragraphStyle = typography(appearance);
   const ListTag = appearance?.numbered ? 'ol' : 'ul';
 
   return (
     <div
       ref={dragRef ?? undefined}
-      className={`e2-block e2-block--text ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--text ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={{ ...mergeBlockStyle(rowStyle(layout), blockStyle), ...sizeStyle }}
       data-e2-text-size={sizeStyle ? '' : undefined}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
@@ -428,57 +447,61 @@ export function ImageBlockView({
   editing = false,
   dragRef,
 }: ImageBlockViewProps) {
-  const showCaption = editing || (caption ?? '') !== '';
+  const showCaption = media?.showCaption !== false && (editing || Boolean(caption));
   const [zoomed, setZoomed] = useState(false);
 
+  const styles = mediaBlockStyles(layout, blockStyle);
   return (
-    <figure
+    <div
       ref={dragRef ?? undefined}
-      className={`e2-block e2-block--image ${layoutClasses(layout)}`.trim()}
-      style={mergeBlockStyle(rowStyle(layout), blockStyle)}
+      className={`e2-block e2-block--image ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
+      style={styles.area}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="image"
     >
-      <div className="e2-image-stage" style={mediaStageStyle(media)}>
-        <img
-          src={src}
-          alt={alt}
-          loading="lazy"
-          draggable={false}
-          style={mediaImageStyle(fit, media)}
-          onClick={!editing && zoom ? () => setZoomed(true) : undefined}
-        />
-        {media?.overlayBadge && (
-          <span className={`e2-media-overlay-badge e2-media-overlay-badge--${media.overlayPosition ?? 'tl'}`}>
-            {media.overlayBadge}
-          </span>
+      <figure className="e2-media-frame" style={styles.frame}>
+        <div className="e2-image-stage e2-media-stage" style={mediaStageStyle(media)}>
+          <img
+            src={src}
+            alt={alt}
+            loading="lazy"
+            draggable={false}
+            style={mediaImageStyle(fit, media)}
+            onClick={!editing && zoom ? () => setZoomed(true) : undefined}
+          />
+          {media?.overlayBadge && (
+            <span className={`e2-media-overlay-badge e2-media-overlay-badge--${media.overlayPosition ?? 'tl'}`}>
+              {media.overlayBadge}
+            </span>
+          )}
+          {!editing && zoom && (
+            <button
+              type="button"
+              className="e2-image-zoom-btn"
+              aria-label="Ampliar imagen"
+              title="Ampliar imagen"
+              onClick={() => setZoomed(true)}
+            >
+              <ZoomIn size={14} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        {showCaption && (
+          <figcaption className={caption ? 'e2-media-caption' : 'e2-media-caption e2-block__placeholder'}
+            style={{ textAlign: media?.captionAlign }}>
+            {caption || (editing ? 'Añade un pie de imagen' : '')}
+          </figcaption>
         )}
-        {!editing && zoom && (
-          <button
-            type="button"
-            className="e2-image-zoom-btn"
-            aria-label="Ampliar imagen"
-            title="Ampliar imagen"
-            onClick={() => setZoomed(true)}
-          >
-            <ZoomIn size={14} aria-hidden="true" />
-          </button>
-        )}
-      </div>
-      {showCaption && (
-        <figcaption className={caption ? undefined : 'e2-block__placeholder'}>
-          {caption || (editing ? 'Añade un pie de imagen' : '')}
-        </figcaption>
-      )}
+      </figure>
       <Editor2Lightbox
         open={!editing && zoomed}
         src={src}
         alt={alt}
-        caption={caption}
+        caption={showCaption ? caption : undefined}
         onClose={() => setZoomed(false)}
       />
       {editing && <BlockResizeHandles />}
-    </figure>
+    </div>
   );
 }
 
@@ -530,7 +553,7 @@ export function DividerBlockView({
       ref={dragRef ?? undefined}
       role="separator"
       aria-orientation={orientation}
-      className={`e2-block e2-block--divider e2-block--divider-${orientation} ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--divider e2-block--divider-${orientation} ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={mergeBlockStyle(rowStyle(layout), blockStyle)}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="divider"
@@ -553,7 +576,8 @@ export type ButtonBlockViewProps = {
   layout: LayoutIntent;
   label: string;
   href: string;
-  variant?: 'solid' | 'outline' | 'soft' | 'gradient' | 'pill';
+  textSizePreset?: TextSizePreset;
+  variant?: ButtonBlock['props']['variant'];
   newTab?: boolean;
   color?: string;
   icon?: string;
@@ -563,10 +587,22 @@ export type ButtonBlockViewProps = {
   dragRef?: DragRef;
 };
 
+function buttonDestination(href: string): string | undefined {
+  const value = href.trim();
+  if (!value) return undefined;
+  try {
+    const resolved = new URL(value, 'https://atlas.invalid/');
+    if (['https:', 'http:', 'mailto:', 'tel:'].includes(resolved.protocol)) return value;
+  } catch {
+    return undefined;
+  }
+}
+
 export function ButtonBlockView({
   layout,
   label,
   href,
+  textSizePreset,
   variant = 'solid',
   newTab = false,
   color = '#0284c7',
@@ -579,89 +615,83 @@ export function ButtonBlockView({
   const editableRef = useRef<HTMLSpanElement>(null);
   const [focused, setFocused] = useState(false);
   const lastEmittedRef = useRef(label);
+  const topic = useWeeklyButtonTopic(href, variant === 'weekly');
+  const visibleVariant = variant === 'weekly' && !topic ? 'outline' : variant;
+  const canEditLabel = editing && variant !== 'weekly';
 
   useLayoutEffect(() => {
     lastEmittedRef.current = label;
-    if (!editing || !editableRef.current) return;
+    if (!canEditLabel || !editableRef.current) return;
     if (document.activeElement === editableRef.current) return;
     editableRef.current.textContent = label || 'Texto del botón';
-  }, [editing, label]);
-
-  const btnStyle: CSSProperties =
-    variant === 'outline'
-      ? { borderColor: color, color, background: 'transparent' }
-      : variant === 'soft'
-        ? { borderColor: color, color, background: `color-mix(in srgb, ${color} 14%, #ffffff)` }
-        : variant === 'gradient'
-          ? {
-              borderColor: 'transparent',
-              backgroundImage: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 68%, #0b2545))`,
-              color: '#ffffff',
-            }
-          : variant === 'pill'
-            ? { borderColor: color, background: color, color: '#ffffff', borderRadius: '999px' }
-            : { borderColor: color, background: color, color: '#ffffff' };
+  }, [canEditLabel, label]);
 
   const justify = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';
+
+  const labelContent = (
+    <span
+      ref={editableRef}
+      contentEditable={canEditLabel ? false : undefined}
+      suppressContentEditableWarning={canEditLabel || undefined}
+      data-puck-overlay-portal={canEditLabel ? 'true' : undefined}
+      data-e2-editable={canEditLabel ? 'button' : undefined}
+      data-e2-editing-active={canEditLabel && focused ? 'true' : undefined}
+      data-placeholder={canEditLabel ? 'Texto del botón' : undefined}
+      className={['e2-cta-label', topic && 'e2-weekly-button__label', canEditLabel && 'e2-inline-editable'].filter(Boolean).join(' ')}
+      onFocus={(e) => {
+        if (!canEditLabel) return;
+        if (!lastEmittedRef.current) e.currentTarget.textContent = '';
+        setFocused(true);
+      }}
+      onBlur={(e) => {
+        if (!canEditLabel) return;
+        const next = (e.currentTarget.innerText ?? e.currentTarget.textContent ?? '').replace(/\r?\n/g, ' ');
+        setFocused(false);
+        if (next !== lastEmittedRef.current) {
+          lastEmittedRef.current = next;
+          emitInlineBlockPatch(e.currentTarget, { label: next });
+        }
+        e.currentTarget.textContent = next || 'Texto del botón';
+      }}
+      onInput={(e) => {
+        if (!canEditLabel) return;
+        const next = (e.currentTarget.innerText ?? e.currentTarget.textContent ?? '').replace(/\r?\n/g, ' ');
+        lastEmittedRef.current = next;
+        emitInlineBlockPatch(e.currentTarget, { label: next });
+      }}
+      onKeyDown={(e) => {
+        if (!canEditLabel) return;
+        e.stopPropagation();
+        if (e.key === 'Enter' || e.key === 'Escape') {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+      }}
+    >
+      {canEditLabel ? null : topic?.name ?? label}
+    </span>
+  );
 
   return (
     <div
       ref={dragRef ?? undefined}
-      className={`e2-block e2-block--button ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--button ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={{ ...mergeBlockStyle(rowStyle(layout), blockStyle), display: 'flex', justifyContent: justify }}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="button"
     >
       <a
-        href={editing ? undefined : href || '#'}
+        href={editing ? undefined : buttonDestination(href)}
         target={!editing && newTab ? '_blank' : undefined}
         rel={!editing && newTab ? 'noopener noreferrer' : undefined}
-        className={`e2-cta-btn e2-cta-btn--${variant}`}
-        style={btnStyle}
+        className={`e2-cta-btn e2-cta-btn--${visibleVariant}`}
+        data-e2-text-size-preset={textSizePreset}
+        style={buttonStyleToCss(visibleVariant, color)}
         onClick={editing ? (e) => e.preventDefault() : undefined}
       >
-        {icon && renderAtlasIcon(icon, 15)}
-        <span
-          ref={editableRef}
-          contentEditable={editing ? false : undefined}
-          suppressContentEditableWarning={editing || undefined}
-          data-puck-overlay-portal={editing ? 'true' : undefined}
-          data-e2-editable={editing ? 'button' : undefined}
-          data-e2-editing-active={editing && focused ? 'true' : undefined}
-          data-placeholder={editing ? 'Texto del botón' : undefined}
-          className={editing ? 'e2-inline-editable' : undefined}
-          onFocus={(e) => {
-            if (!editing) return;
-            if (!lastEmittedRef.current) e.currentTarget.textContent = '';
-            setFocused(true);
-          }}
-          onBlur={(e) => {
-            if (!editing) return;
-            const next = (e.currentTarget.innerText ?? e.currentTarget.textContent ?? '').replace(/\r?\n/g, ' ');
-            setFocused(false);
-            if (next !== lastEmittedRef.current) {
-              lastEmittedRef.current = next;
-              emitInlineBlockPatch(e.currentTarget, { label: next });
-            }
-            e.currentTarget.textContent = next || 'Texto del botón';
-          }}
-          onInput={(e) => {
-            if (!editing) return;
-            const next = (e.currentTarget.innerText ?? e.currentTarget.textContent ?? '').replace(/\r?\n/g, ' ');
-            lastEmittedRef.current = next;
-            emitInlineBlockPatch(e.currentTarget, { label: next });
-          }}
-          onKeyDown={(e) => {
-            if (!editing) return;
-            e.stopPropagation();
-            if (e.key === 'Enter' || e.key === 'Escape') {
-              e.preventDefault();
-              e.currentTarget.blur();
-            }
-          }}
-        >
-          {editing ? null : label}
-        </span>
+        {topic ? (
+          <WeeklyButtonContent thumbnailSrc={topic.thumbnailSrc} icon={icon}>{labelContent}</WeeklyButtonContent>
+        ) : <>{icon && renderAtlasIcon(icon, 15)}{labelContent}</>}
       </a>
       {editing && <BlockResizeHandles />}
     </div>
@@ -768,7 +798,7 @@ export function TableBlockView({
   return (
     <div
       ref={dragRef ?? undefined}
-      className={`e2-block e2-block--table ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--table ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={mergeBlockStyle(rowStyle(layout), blockStyle)}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="table"
@@ -901,94 +931,98 @@ export function CarouselBlockView({
     changeSlide((currentIndex + 1) % safeItems.length);
   };
 
+  const styles = mediaBlockStyles(layout, blockStyle);
   return (
     <div
       ref={(node) => {
         rootRef.current = node;
         if (typeof dragRef === 'function') dragRef(node);
       }}
-      className={`e2-block e2-block--carousel ${layoutClasses(layout)}`.trim()}
-      style={mergeBlockStyle(rowStyle(layout), blockStyle)}
+      className={`e2-block e2-block--carousel ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
+      style={styles.area}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="carousel"
     >
-      <div className="e2-carousel-stage" style={mediaStageStyle(media)}>
-        <img
-          src={current.src}
-          alt={current.alt}
-          loading="lazy"
-          draggable={false}
-          style={mediaImageStyle(fit, media)}
-          onClick={!editing && zoom ? () => setZoomed(true) : undefined}
-        />
-        {media?.overlayBadge && (
-          <span className={`e2-media-overlay-badge e2-media-overlay-badge--${media.overlayPosition ?? 'tl'}`}>
-            {media.overlayBadge}
-          </span>
-        )}
-        {!editing && zoom && (
-          <button
-            type="button"
-            className="e2-image-zoom-btn"
-            aria-label="Ampliar imagen"
-            title="Ampliar imagen"
-            onClick={() => setZoomed(true)}
-          >
-            <ZoomIn size={14} aria-hidden="true" />
-          </button>
-        )}
-        {safeItems.length > 1 && showArrows && (
-          <>
+      <div className="e2-media-frame" style={styles.frame}>
+        <div className="e2-carousel-stage e2-media-stage" style={mediaStageStyle(media, '4/3')}>
+          <img
+            src={current.src}
+            alt={current.alt}
+            loading="lazy"
+            draggable={false}
+            style={mediaImageStyle(fit, media)}
+            onClick={!editing && zoom ? () => setZoomed(true) : undefined}
+          />
+          {media?.overlayBadge && (
+            <span className={`e2-media-overlay-badge e2-media-overlay-badge--${media.overlayPosition ?? 'tl'}`}>
+              {media.overlayBadge}
+            </span>
+          )}
+          {!editing && zoom && (
             <button
               type="button"
-              className="e2-carousel-nav e2-carousel-nav--prev"
-              aria-label="Imagen anterior"
-              data-puck-overlay-portal="true"
-              onClick={prev}
+              className="e2-image-zoom-btn"
+              aria-label="Ampliar imagen"
+              title="Ampliar imagen"
+              onClick={() => setZoomed(true)}
             >
-              <ChevronLeft size={16} aria-hidden="true" />
+              <ZoomIn size={14} aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              className="e2-carousel-nav e2-carousel-nav--next"
-              aria-label="Siguiente imagen"
-              data-puck-overlay-portal="true"
-              onClick={next}
-            >
-              <ChevronRight size={16} aria-hidden="true" />
-            </button>
-          </>
-        )}
-        {safeItems.length > 1 && showDots && (
-          <div className="e2-carousel-dots" role="tablist" aria-label="Indicadores de galería">
-            {safeItems.map((_, idx) => (
+          )}
+          {safeItems.length > 1 && showArrows && (
+            <>
               <button
-                key={idx}
                 type="button"
-                role="tab"
-                aria-selected={idx === currentIndex}
-                aria-label={`Ir a imagen ${idx + 1}`}
-                className={`e2-carousel-dot ${idx === currentIndex ? 'is-active' : ''}`}
+                className="e2-carousel-nav e2-carousel-nav--prev"
+                aria-label="Imagen anterior"
                 data-puck-overlay-portal="true"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  changeSlide(idx);
-                }}
-              />
-            ))}
-          </div>
+                onClick={prev}
+              >
+                <ChevronLeft size={16} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="e2-carousel-nav e2-carousel-nav--next"
+                aria-label="Siguiente imagen"
+                data-puck-overlay-portal="true"
+                onClick={next}
+              >
+                <ChevronRight size={16} aria-hidden="true" />
+              </button>
+            </>
+          )}
+          {safeItems.length > 1 && showDots && (
+            <div className="e2-carousel-dots" role="tablist" aria-label="Indicadores de galería">
+              {safeItems.map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  role="tab"
+                  aria-selected={idx === currentIndex}
+                  aria-label={`Ir a imagen ${idx + 1}`}
+                  className={`e2-carousel-dot ${idx === currentIndex ? 'is-active' : ''}`}
+                  data-puck-overlay-portal="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    changeSlide(idx);
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+        {media?.showCaption !== false && (current.caption || editing) && (
+          <p className={`e2-carousel-caption e2-media-caption ${current.caption ? '' : 'e2-block__placeholder'}`.trim()}
+            style={{ textAlign: media?.captionAlign }}>
+            {current.caption || `${currentIndex + 1} / ${safeItems.length}`}
+          </p>
         )}
       </div>
-      {(current.caption || editing) && (
-        <p className={`e2-carousel-caption ${current.caption ? '' : 'e2-block__placeholder'}`.trim()}>
-          {current.caption || `${currentIndex + 1} / ${safeItems.length}`}
-        </p>
-      )}
       <Editor2Lightbox
         open={!editing && zoomed}
         src={current.src}
         alt={current.alt}
-        caption={current.caption}
+        caption={media?.showCaption === false ? undefined : current.caption}
         onClose={() => setZoomed(false)}
       />
       {editing && <BlockResizeHandles />}
@@ -1078,7 +1112,7 @@ export function TabsBlockView({
         rootRef.current = node;
         if (typeof dragRef === 'function') dragRef(node);
       }}
-      className={`e2-block e2-block--tabs e2-tabs--${tabStyle} ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--tabs e2-tabs--${tabStyle} ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={{ ...mergeBlockStyle(rowStyle(layout), blockStyle), ['--e2-tab-accent' as string]: accentColor }}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="tabs"
@@ -1234,7 +1268,7 @@ export function VideoBlockView({
   return (
     <figure
       ref={dragRef ?? undefined}
-      className={`e2-block e2-block--video ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--video ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={mergeBlockStyle(rowStyle(layout), blockStyle)}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="video"
@@ -1275,6 +1309,9 @@ export type CompareBlockViewProps = {
   leftLabel?: string;
   rightSrc: string;
   rightLabel?: string;
+  fit?: 'cover' | 'contain';
+  caption?: string;
+  media?: MediaAppearance;
   blockStyle?: BlockStyle;
   editing?: boolean;
   dragRef?: DragRef;
@@ -1286,60 +1323,74 @@ export function CompareBlockView({
   leftLabel = 'Vista A',
   rightSrc,
   rightLabel = 'Vista B',
+  fit = 'contain',
+  caption,
+  media,
   blockStyle,
   editing = false,
   dragRef,
 }: CompareBlockViewProps) {
   const [split, setSplit] = useState(50);
+  const imageStyle = mediaImageStyle(fit, media);
 
+  const styles = mediaBlockStyles(layout, blockStyle);
   return (
     <div
       ref={dragRef ?? undefined}
-      className={`e2-block e2-block--compare ${layoutClasses(layout)}`.trim()}
-      style={mergeBlockStyle(rowStyle(layout), blockStyle)}
+      className={`e2-block e2-block--compare ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
+      style={styles.area}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="compare"
     >
-      <div className="e2-compare-stage">
-        <img
-          src={rightSrc}
-          alt={rightLabel || 'Imagen derecha'}
-          className="e2-compare-img e2-compare-img--right"
-          loading="lazy"
-          draggable={false}
-        />
-        <img
-          src={leftSrc}
-          alt={leftLabel || 'Imagen izquierda'}
-          className="e2-compare-img e2-compare-img--left"
-          style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}
-          loading="lazy"
-          draggable={false}
-        />
-        <div className="e2-compare-divider" style={{ left: `${split}%` }} aria-hidden="true">
-          <span className="e2-compare-knob">↔</span>
+      <div className="e2-media-frame" style={styles.frame}>
+        <div className="e2-compare-stage e2-media-stage" style={mediaStageStyle(media)}>
+          <img
+            src={rightSrc}
+            alt={rightLabel || 'Imagen derecha'}
+            className="e2-compare-img e2-compare-img--right"
+            style={imageStyle}
+            loading="lazy"
+            draggable={false}
+          />
+          <img
+            src={leftSrc}
+            alt={leftLabel || 'Imagen izquierda'}
+            className="e2-compare-img e2-compare-img--left"
+            style={{ ...imageStyle, clipPath: `inset(0 ${100 - split}% 0 0)` }}
+            loading="lazy"
+            draggable={false}
+          />
+          <div className="e2-compare-divider" style={{ left: `${split}%` }} aria-hidden="true">
+            <span className="e2-compare-knob">↔</span>
+          </div>
+          {leftLabel && <span className="e2-compare-badge e2-compare-badge--left">{leftLabel}</span>}
+          {rightLabel && <span className="e2-compare-badge e2-compare-badge--right">{rightLabel}</span>}
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={split}
+            aria-label="Deslizador de comparación de imágenes"
+            className="e2-compare-range"
+            data-puck-overlay-portal="true"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => setSplit(Number(e.target.value))}
+          />
         </div>
-        {leftLabel && <span className="e2-compare-badge e2-compare-badge--left">{leftLabel}</span>}
-        {rightLabel && <span className="e2-compare-badge e2-compare-badge--right">{rightLabel}</span>}
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={split}
-          aria-label="Deslizador de comparación de imágenes"
-          className="e2-compare-range"
-          data-puck-overlay-portal="true"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => setSplit(Number(e.target.value))}
-        />
+        {media?.showCaption !== false && (caption || (editing && media?.showCaption === true)) && (
+          <p className={`e2-carousel-caption e2-media-caption ${caption ? '' : 'e2-block__placeholder'}`.trim()}
+            style={{ textAlign: media?.captionAlign }}>
+            {caption || 'Añade un pie de foto'}
+          </p>
+        )}
       </div>
       {editing && <BlockResizeHandles />}
     </div>
   );
 }
 
-const CALLOUT_TONES = {
+export const CALLOUT_TONES = {
   info: { label: 'Nota', Icon: Info },
   clinical: { label: 'Correlación clínica', Icon: Stethoscope },
   tip: { label: 'Dato clave', Icon: Lightbulb },
@@ -1390,10 +1441,12 @@ export function CalloutBlockView({
   return (
     <aside
       ref={dragRef ?? undefined}
-      className={`e2-block e2-block--callout e2-callout--${tone} ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--callout e2-callout--${tone} ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={mergeBlockStyle(rowStyle(layout), blockStyle)}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="callout"
+      data-e2-custom-border={blockStyle?.border ? '' : undefined}
+      data-e2-transparent={blockStyle?.background?.type === 'none' ? '' : undefined}
     >
       <div className="e2-callout__head">
         <Icon size={16} className="e2-callout__icon" aria-hidden="true" />
@@ -1500,7 +1553,7 @@ export function GifBlockView({
   return (
     <figure
       ref={dragRef ?? undefined}
-      className={`e2-block e2-block--image e2-block--gif ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--image e2-block--gif ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={mergeBlockStyle(rowStyle(layout), blockStyle)}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="gif"
@@ -1585,41 +1638,17 @@ export function BadgeBlockView({
     editableRef.current.textContent = text || 'Etiqueta';
   }, [editing, text]);
 
-  const badgeStyle: CSSProperties =
-    variant === 'solid'
-      ? { backgroundColor: color, borderColor: color, color: '#ffffff' }
-      : variant === 'outline'
-        ? { backgroundColor: 'transparent', borderColor: color, color }
-        : variant === 'glass'
-          ? {
-              backgroundColor: `color-mix(in srgb, ${color} 16%, rgba(255,255,255,0.7))`,
-              borderColor: `color-mix(in srgb, ${color} 35%, transparent)`,
-              color,
-              backdropFilter: 'blur(8px)',
-            }
-          : variant === 'swatch'
-            ? { backgroundColor: 'var(--e2-panel)', borderColor: 'var(--e2-line-strong)', color: 'var(--e2-ink)' }
-            : {
-                backgroundColor: `color-mix(in srgb, ${color} 14%, #ffffff)`,
-                borderColor: `color-mix(in srgb, ${color} 30%, transparent)`,
-                color,
-              };
-
   const justify = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';
 
   return (
     <div
       ref={dragRef ?? undefined}
-      className={`e2-block e2-block--badge ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--badge ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={{ ...mergeBlockStyle(rowStyle(layout), blockStyle), display: 'flex', justifyContent: justify }}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="badge"
     >
-      <span className={`e2-badge e2-badge--${size} e2-badge--${variant}`} style={badgeStyle}>
-        {variant === 'swatch' && (
-          <span className="e2-badge__swatch-dot" style={{ backgroundColor: color }} aria-hidden="true" />
-        )}
-        {icon && renderAtlasIcon(icon, size === 'lg' ? 15 : size === 'sm' ? 11 : 13)}
+      <BadgeFace variant={variant} color={color} size={size} icon={icon}>
         <span
           ref={editableRef}
           contentEditable={editing ? false : undefined}
@@ -1653,7 +1682,7 @@ export function BadgeBlockView({
         >
           {editing ? null : text}
         </span>
-      </span>
+      </BadgeFace>
       {editing && <BlockResizeHandles />}
     </div>
   );
@@ -1700,7 +1729,7 @@ export function IconBlockView({
   return (
     <div
       ref={dragRef ?? undefined}
-      className={`e2-block e2-block--icon ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--icon ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={{ ...mergeBlockStyle(rowStyle(layout), blockStyle), display: 'flex', justifyContent: justify }}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="icon"
@@ -1790,7 +1819,7 @@ export function AccordionBlockView({
         rootRef.current = node;
         if (typeof dragRef === 'function') dragRef(node);
       }}
-      className={`e2-block e2-block--accordion e2-accordion--${mode} ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--accordion e2-accordion--${mode} ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={{ ...mergeBlockStyle(rowStyle(layout), blockStyle), ['--e2-accordion-accent' as string]: accentColor }}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="accordion"
@@ -2174,11 +2203,13 @@ const layoutField: CustomField<LayoutIntent> = {
   render: LayoutField,
 };
 
-function createColorField(label: string, fallback: string): CustomField<string> {
+function createColorField(label: string, fallback: string, forText = false): CustomField<string> {
   return {
     type: 'custom',
     label,
-    render: ({ value, onChange }) => (
+    render: ({ value, onChange }) => forText ? (
+      <TextColorPicker label={label} value={value} fallback={fallback} onChange={onChange} />
+    ) : (
       <input
         type="color"
         aria-label={label}
@@ -2268,11 +2299,12 @@ export const editor2PuckConfig: Config = {
         },
         layout: layoutField,
       },
-      render: ({ layout, level, text, richText, appearance, style, puck }) => (
+      render: ({ layout, level, text, textSizePreset, richText, appearance, style, puck }) => (
         <HeadingBlockView
           layout={layout ?? defaultHeadingLayout}
           level={level ?? 2}
           text={text ?? ''}
+          textSizePreset={textSizePreset}
           richText={richText}
           appearance={appearance}
           blockStyle={style}
@@ -2385,13 +2417,7 @@ export const editor2PuckConfig: Config = {
         thickness: {
           type: 'select',
           label: 'Grosor',
-          options: [
-            { label: '1 px', value: 1 },
-            { label: '2 px', value: 2 },
-            { label: '3 px', value: 3 },
-            { label: '4 px', value: 4 },
-            { label: '6 px', value: 6 },
-          ],
+          options: Array.from({ length: 16 }, (_, index) => ({ label: `${index + 1} px`, value: index + 1 })),
         },
         color: createColorField('Color', '#0284c7'),
         label: { type: 'text', label: 'Etiqueta central' },
@@ -2403,6 +2429,7 @@ export const editor2PuckConfig: Config = {
             { label: '80 %', value: 80 },
             { label: '60 %', value: 60 },
             { label: '40 %', value: 40 },
+            { label: '20 %', value: 20 },
           ],
         },
         layout: layoutField,
@@ -2464,14 +2491,20 @@ export const editor2PuckConfig: Config = {
             { label: 'Nueva pestaña', value: true },
           ],
         },
-        color: createColorField('Color', '#0284c7'),
+        color: createColorField('Color del botón', '#0284c7', true),
         layout: layoutField,
       },
-      render: ({ layout, label, href, variant, newTab, color, icon, align, style, puck }) => (
+      resolveFields: ({ props }, { fields }) => {
+        if (props.variant !== 'weekly') return fields;
+        const { href, variant, ...fixedFields } = fields;
+        return fixedFields;
+      },
+      render: ({ layout, label, href, textSizePreset, variant, newTab, color, icon, align, style, puck }) => (
         <ButtonBlockView
           layout={layout ?? defaultButtonLayout}
           label={label ?? 'Explorar'}
           href={href ?? '/temario'}
+          textSizePreset={textSizePreset}
           variant={variant ?? 'solid'}
           newTab={Boolean(newTab)}
           color={color || '#0284c7'}
@@ -2654,13 +2687,16 @@ export const editor2PuckConfig: Config = {
         rightLabel: { type: 'text', label: 'Etiqueta B' },
         layout: layoutField,
       },
-      render: ({ layout, leftSrc, leftLabel, rightSrc, rightLabel, style, puck }) => (
+      render: ({ layout, leftSrc, leftLabel, rightSrc, rightLabel, fit, caption, media, style, puck }) => (
         <CompareBlockView
           layout={layout ?? defaultCompareLayout}
           leftSrc={leftSrc ?? EDITOR2_DEFAULT_IMAGE_SRC}
           leftLabel={leftLabel}
           rightSrc={rightSrc ?? EDITOR2_DEFAULT_IMAGE_SRC}
           rightLabel={rightLabel}
+          fit={fit}
+          caption={caption}
+          media={media}
           blockStyle={style}
           editing={puck?.isEditing}
           dragRef={puck?.dragRef}
@@ -2719,22 +2755,12 @@ export const editor2PuckConfig: Config = {
         variant: {
           type: 'select',
           label: 'Estilo',
-          options: [
-            { label: 'Suave', value: 'soft' },
-            { label: 'Sólida', value: 'solid' },
-            { label: 'Contorno', value: 'outline' },
-            { label: 'Cristal', value: 'glass' },
-            { label: 'Muestra de color', value: 'swatch' },
-          ],
+          options: [...BADGE_VARIANTS],
         },
         size: {
           type: 'select',
           label: 'Tamaño',
-          options: [
-            { label: 'Pequeña', value: 'sm' },
-            { label: 'Mediana', value: 'md' },
-            { label: 'Grande', value: 'lg' },
-          ],
+          options: [...BADGE_SIZES],
         },
         align: {
           type: 'select',
@@ -2745,7 +2771,7 @@ export const editor2PuckConfig: Config = {
             { label: 'Derecha', value: 'right' },
           ],
         },
-        color: createColorField('Color', '#0284c7'),
+        color: createColorField('Color de insignia', '#0284c7', true),
         layout: layoutField,
       },
       render: ({ layout, text, variant, color, icon, size, align, style, puck }) => (
@@ -2971,10 +2997,7 @@ export const editor2PuckConfig: Config = {
           type: 'text',
           label: 'Título (opcional)',
         },
-        accentColor: {
-          type: 'text',
-          label: 'Color de acento (#hex)',
-        },
+        accentColor: createColorField('Color de acento', '#6d28d9', true),
         maxItems: {
           type: 'number',
           label: 'Máximo de pruebas',
@@ -2983,7 +3006,7 @@ export const editor2PuckConfig: Config = {
         },
         layout: layoutField,
       },
-      render: ({ layout, parcial, title, accentColor, maxItems, style, puck }) => (
+      render: ({ layout, parcial, title, accentColor, maxItems, buttonTextSize, style, puck }) => (
         <ExamCarouselBlockView
           layout={layout ?? defaultExamCarouselLayout}
           parcial={
@@ -2994,6 +3017,7 @@ export const editor2PuckConfig: Config = {
           title={title}
           accentColor={accentColor}
           maxItems={typeof maxItems === 'number' ? maxItems : 8}
+          buttonTextSize={buttonTextSize}
           blockStyle={style}
           editing={puck?.isEditing}
           dragRef={puck?.dragRef}

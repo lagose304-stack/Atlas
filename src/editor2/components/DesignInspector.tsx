@@ -25,8 +25,18 @@ import { ResponsiveField } from './ResponsiveField';
 import { hasVisualStyle } from '../domain/styleToCss';
 import { useEditor2Store } from '../store/editor2Store';
 import FlexSizeControls from './FlexSizeControls';
+import BlockBorderSettings from './BlockBorderSettings';
 import GradientPicker from './GradientPicker';
 import InspectorDialog from './InspectorDialog';
+import TextTemplateGallery from './TextTemplateGallery';
+import TextSizePresetPicker from './TextSizePresetPicker';
+import AtlasPhotoPicker from './AtlasPhotoPicker';
+import { COMPONENT_TEMPLATE_FAMILIES } from '../domain/componentTemplates';
+import BadgeDesignSettings from './BadgeDesignSettings';
+import BadgeFace, { type BadgeAppearance } from './BadgeFace';
+import BlockTemplateGallery from './BlockTemplateGallery';
+import ContentDesignSettings from './ContentDesignSettings';
+import ContentTemplateGallery from './ContentTemplateGallery';
 
 const QUICK_SWATCHES = [
   { label: 'Blanco', color: '#ffffff' },
@@ -38,14 +48,6 @@ const QUICK_SWATCHES = [
   { label: 'Azul Atlas', color: '#0284c7' },
   { label: 'Noche', color: '#0b2545' },
 ] as const;
-
-const BORDER_SIDES: Array<{ value: NonNullable<BorderStyle['sides']>; label: string }> = [
-  { value: 'all', label: 'Todos' },
-  { value: 'left', label: 'Izquierdo' },
-  { value: 'top', label: 'Superior' },
-  { value: 'bottom', label: 'Inferior' },
-  { value: 'right', label: 'Derecho' },
-];
 
 const SHADOW_OPTIONS: Array<{ value: ShadowPreset; label: string }> = [
   { value: 'none', label: 'Ninguna' },
@@ -79,9 +81,11 @@ function isTypingTarget(target: EventTarget | null): boolean {
 export default function DesignInspector({
   editScreen,
   onEditScreenChange,
+  onRequestWeeklyButton,
 }: {
   editScreen?: ScreenSize;
   onEditScreenChange?: (screen?: ScreenSize) => void;
+  onRequestWeeklyButton?: () => void;
 }) {
   const canvasScreen = useContext(CanvasScreen);
   const screen = editScreen ?? canvasScreen;
@@ -111,7 +115,7 @@ export default function DesignInspector({
   const showVerticalAlign = Boolean(item && item.type !== 'canvas' && !['text', 'heading'].includes(item.type) && layout);
   const showMaxWidth = Boolean(item && (item.type === 'canvas' || item.type === 'box'));
 
-  const commitStyle = (nextStyle: BlockStyle | undefined, props?: { gap: Gap }) => {
+  const commitStyle = (nextStyle: BlockStyle | undefined, props?: Record<string, unknown>) => {
     if (!item) return;
     const position = getSelectorForId(item.props.id);
     if (!position) return;
@@ -171,7 +175,14 @@ export default function DesignInspector({
   const flow = style.flow;
   const responsive = responsiveValues(style, screen, item.props.gap as Gap | undefined);
   const overrides = screen === 'desktop' ? undefined : style.responsive?.[screen];
-  const showTextSize = item.type === 'heading' || item.type === 'text';
+  const isHeading = item.type === 'heading';
+  const isTextBlock = isHeading || item.type === 'text';
+  const badgeAppearance: BadgeAppearance | undefined = item.type === 'badge' ? item.props : undefined;
+  const contentType = item.type === 'icon' || item.type === 'table' || item.type === 'callout' ||
+    item.type === 'button' || item.type === 'divider' || item.type === 'examCarousel' ||
+    item.type === 'image' || item.type === 'carousel' || item.type === 'compare' ? item.type : undefined;
+  const hasDefaultSurface = contentType === 'callout' || contentType === 'examCarousel';
+  const showBorderFirst = isTextBlock || hasDefaultSurface;
 
   function editOverride<K extends keyof ResponsiveOverrides>(key: K, value: ResponsiveOverrides[K]) {
     if (screen !== 'desktop') {
@@ -187,6 +198,8 @@ export default function DesignInspector({
   };
   const currentRadius: RadiusStyle = style.radius ?? { mode: 'uniform', value: 0 };
   const currentPadding: PaddingStyle = style.padding ?? { mode: 'uniform', value: 0 };
+  const borderSettings = <BlockBorderSettings border={currentBorder} radius={style.radius} forText={showBorderFirst}
+    onChange={border => patchStyle({ border: border ?? (hasDefaultSurface ? { ...currentBorder, style: 'none', width: 0 } : undefined) })} />;
   const currentShadow: ShadowPreset = style.shadow ?? 'none';
   const currentOpacity = style.opacity ?? 1;
   const currentBlur = style.backdropBlur ?? 0;
@@ -213,7 +226,7 @@ export default function DesignInspector({
 
   const setBgType = (type: BackgroundStyle['type']) => {
     if (type === 'none') {
-      patchStyle({ background: undefined });
+      patchStyle({ background: hasDefaultSurface ? { type: 'none' } : undefined });
       return;
     }
     if (type === 'solid') {
@@ -241,7 +254,27 @@ export default function DesignInspector({
 
   return (
     <div className="e2-design-bar" role="group" aria-label="Herramientas de diseño del bloque">
-      {(showMaxWidth || showTextSize) && (
+      {contentType && <ContentTemplateGallery type={contentType} properties={item.props} style={style} onApply={commitStyle}
+        onRequestWeeklyButton={onRequestWeeklyButton} />}
+      {badgeAppearance && (
+        <BlockTemplateGallery label="Plantillas de insignia" variant="badge"
+          templates={COMPONENT_TEMPLATE_FAMILIES.map(({ label, badge }) => ({
+            label,
+            active: (badgeAppearance.variant ?? 'soft') === badge.variant &&
+              (badgeAppearance.size ?? 'md') === badge.size &&
+              (badgeAppearance.color ?? '#0284c7').toLowerCase() === badge.color &&
+              badgeAppearance.icon === badge.icon,
+            sample: <BadgeFace {...badge}><span>Epitelio</span></BadgeFace>,
+            onSelect: () => commitStyle(style, { ...badge, icon: badge.icon }),
+          }))} />
+      )}
+      {isTextBlock && (
+        <TextTemplateGallery style={style} appearance={item.props.appearance ?? {}}
+          variant={isHeading ? 'heading' : 'paragraph'}
+          themeFont={isHeading ? pageTheme?.typography.headingFont : pageTheme?.typography.bodyFont}
+          onApply={(nextStyle, appearance) => commitStyle(nextStyle, { appearance })} />
+      )}
+      {showMaxWidth && (
         <div className="e2-responsive-fields" role="group" aria-label={`Ajustes por pantalla · ${SCREEN_LABELS[screen]}`}>
           <div className="e2-responsive-fields__scope">
             <span>{screen === 'desktop' ? 'Escritorio · valores base' : SCREEN_LABELS[screen]}</span>
@@ -259,63 +292,44 @@ export default function DesignInspector({
               </label>
             )}
           </div>
-          {showMaxWidth && (
-            <>
-              <ResponsiveField label="Distribución" screen={screen} customized={overrides?.direction !== undefined}
-                onReset={() => editOverride('direction', undefined)}>
-                <select value={responsive.direction} onChange={({ target }) => {
-                  const direction = target.value as typeof responsive.direction;
-                  if (screen === 'desktop') {
-                    patchStyle({ flow: direction === 'grid' ? undefined : { ...style.flow, direction } });
-                  } else editOverride('direction', direction);
-                }}>
-                  <option value="grid">Cuadrícula</option>
-                  <option value="row">Fila</option>
-                  <option value="column">Columna</option>
-                  <option value="overlay">Superposición</option>
-                </select>
-              </ResponsiveField>
-              <ResponsiveField label="Separación interna" screen={screen} customized={overrides?.gap !== undefined}
-                onReset={() => editOverride('gap', undefined)}>
-                <select value={responsive.gap} onChange={({ target }) => {
-                  const gap = target.value as Gap;
-                  if (screen === 'desktop') commitStyle(style, { gap });
-                  else editOverride('gap', gap);
-                }}>
-                  <option value="sm">Compacta</option>
-                  <option value="md">Normal</option>
-                  <option value="lg">Amplia</option>
-                </select>
-              </ResponsiveField>
-              {(responsive.direction === 'row' || responsive.direction === 'column') && (
-                <ResponsiveField label="Alineación del contenido" screen={screen} customized={overrides?.align !== undefined}
-                  onReset={() => editOverride('align', undefined)}>
-                  <select value={responsive.align} onChange={({ target }) => {
-                    const align = target.value as typeof responsive.align;
-                    if (screen === 'desktop' && style.flow) patchStyle({ flow: { ...style.flow, align } });
-                    else editOverride('align', align);
-                  }}>
-                    <option value="stretch">Estirar</option>
-                    <option value="start">Inicio</option>
-                    <option value="center">Centro</option>
-                    <option value="end">Final</option>
-                  </select>
-                </ResponsiveField>
-              )}
-            </>
-          )}
-          {showTextSize && (
-            <ResponsiveField label="Tamaño del texto" screen={screen} customized={overrides?.textSize !== undefined}
-              onReset={() => editOverride('textSize', undefined)}>
-              <select value={responsive.textSize} onChange={({ target }) => {
-                const textSize = target.value === 'theme' ? 'theme' : Number(target.value);
-                if (screen === 'desktop') patchStyle({ textSize: textSize === 'theme' ? undefined : textSize });
-                else editOverride('textSize', textSize);
+          <ResponsiveField label="Distribución" screen={screen} customized={overrides?.direction !== undefined}
+            onReset={() => editOverride('direction', undefined)}>
+            <select value={responsive.direction} onChange={({ target }) => {
+              const direction = target.value as typeof responsive.direction;
+              if (screen === 'desktop') {
+                patchStyle({ flow: direction === 'grid' ? undefined : { ...style.flow, direction } });
+              } else editOverride('direction', direction);
+            }}>
+              <option value="grid">Cuadrícula</option>
+              <option value="row">Fila</option>
+              <option value="column">Columna</option>
+              <option value="overlay">Superposición</option>
+            </select>
+          </ResponsiveField>
+          <ResponsiveField label="Separación interna" screen={screen} customized={overrides?.gap !== undefined}
+            onReset={() => editOverride('gap', undefined)}>
+            <select value={responsive.gap} onChange={({ target }) => {
+              const gap = target.value as Gap;
+              if (screen === 'desktop') commitStyle(style, { gap });
+              else editOverride('gap', gap);
+            }}>
+              <option value="sm">Compacta</option>
+              <option value="md">Normal</option>
+              <option value="lg">Amplia</option>
+            </select>
+          </ResponsiveField>
+          {(responsive.direction === 'row' || responsive.direction === 'column') && (
+            <ResponsiveField label="Alineación del contenido" screen={screen} customized={overrides?.align !== undefined}
+              onReset={() => editOverride('align', undefined)}>
+              <select value={responsive.align} onChange={({ target }) => {
+                const align = target.value as typeof responsive.align;
+                if (screen === 'desktop' && style.flow) patchStyle({ flow: { ...style.flow, align } });
+                else editOverride('align', align);
               }}>
-                <option value="theme">Del tema</option>
-                {Array.from({ length: 61 }, (_, index) => index + 12).map(size => (
-                  <option key={size} value={size}>{size} px</option>
-                ))}
+                <option value="stretch">Estirar</option>
+                <option value="start">Inicio</option>
+                <option value="center">Centro</option>
+                <option value="end">Final</option>
               </select>
             </ResponsiveField>
           )}
@@ -380,6 +394,24 @@ export default function DesignInspector({
         />
       </label>
 
+      {isTextBlock && (
+        <label>Margen interior
+          <select value={currentPadding.mode === 'uniform' ? currentPadding.value ?? 0 : 'custom'}
+            onChange={({ target }) => {
+              const value = Number(target.value);
+              patchStyle({ padding: value ? { mode: 'uniform', value } : undefined });
+            }}>
+            <option value={0}>Sin margen</option>
+            <option value={8}>Compacto</option>
+            <option value={16}>Normal</option>
+            <option value={24}>Amplio</option>
+            {(currentPadding.mode !== 'uniform' || ![0, 8, 16, 24].includes(currentPadding.value ?? 0)) && (
+              <option value={currentPadding.mode === 'uniform' ? currentPadding.value : 'custom'} disabled>Personalizado</option>
+            )}
+          </select>
+        </label>
+      )}
+
       {showVerticalAlign && (
         <span className="e2-text-toolbar__group" role="group" aria-label="Alineación vertical">
           {VERTICAL_ALIGNS.map(([value, label, Icon]) => (
@@ -426,8 +458,22 @@ export default function DesignInspector({
         icon={<Palette size={14} aria-hidden="true" />}
       >
         <div className="e2-design-panel">
+          {isHeading && (
+            <details className="e2-design-section" open>
+              <summary>Aspecto del título</summary>
+              <div className="e2-design-section__body">
+                <TextSizePresetPicker heading value={item.props.textSizePreset}
+                  legacySize={[style.textSize, style.responsive?.mobile?.textSize, style.responsive?.tablet?.textSize]
+                    .some(size => typeof size === 'number')}
+                  onChange={textSizePreset => commitStyle(style, { textSizePreset })} />
+              </div>
+            </details>
+          )}
+          {badgeAppearance && <BadgeDesignSettings appearance={badgeAppearance} onChange={patch => commitStyle(style, patch)} />}
+          {contentType && <ContentDesignSettings type={contentType} properties={item.props} onChange={patch => commitStyle(style, patch)} />}
+          {showBorderFirst && borderSettings}
           {/* 1. Superficie / Fondo */}
-          <details className="e2-design-section" open>
+          <details className="e2-design-section" open={!isTextBlock && !badgeAppearance && !contentType}>
             <summary>Superficie y fondo</summary>
             <div className="e2-design-section__body">
               <div className="e2-segmented" role="group" aria-label="Tipo de fondo">
@@ -487,6 +533,9 @@ export default function DesignInspector({
 
               {currentBg.type === 'image' && (
                 <div className="e2-design-row e2-design-row--stack">
+                  <AtlasPhotoPicker onSelect={imageUrl => patchStyle({
+                    background: { ...currentBg, imageUrl },
+                  })} />
                   <label className="e2-design-field">
                     <span className="e2-design-label">URL de imagen (HTTPS / R2)</span>
                     <input
@@ -546,94 +595,7 @@ export default function DesignInspector({
             </div>
           </details>
 
-          {/* 2. Borde y acento */}
-          <details className="e2-design-section">
-            <summary>Borde y acento lateral</summary>
-            <div className="e2-design-section__body">
-              <div className="e2-segmented" role="group" aria-label="Estilo de borde">
-                {(
-                  [
-                    ['none', 'Sin borde'],
-                    ['solid', 'Sólido'],
-                    ['dashed', 'Guiones'],
-                    ['dotted', 'Puntos'],
-                  ] as const
-                ).map(([bStyle, label]) => (
-                  <button
-                    key={bStyle}
-                    type="button"
-                    className={currentBorder.style === bStyle ? 'is-active' : undefined}
-                    aria-pressed={currentBorder.style === bStyle}
-                    onClick={() =>
-                      patchStyle({
-                        border:
-                          bStyle === 'none'
-                            ? undefined
-                            : {
-                                width: currentBorder.width > 0 ? currentBorder.width : 1,
-                                style: bStyle,
-                                color: currentBorder.color,
-                                sides: currentBorder.sides ?? 'all',
-                              },
-                      })
-                    }
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {currentBorder.style !== 'none' && (
-                <>
-                  <div className="e2-design-row">
-                    <label className="e2-color-chip">
-                      <input
-                        type="color"
-                        aria-label="Color de borde"
-                        value={currentBorder.color}
-                        onChange={(e) =>
-                          patchStyle({ border: { ...currentBorder, color: e.target.value } })
-                        }
-                      />
-                      <span className="e2-mono">{currentBorder.color.toUpperCase()}</span>
-                    </label>
-                    <label className="e2-design-slider">
-                      <span>{currentBorder.width} px</span>
-                      <input
-                        type="range"
-                        aria-label="Grosor del borde"
-                        min={1}
-                        max={12}
-                        step={1}
-                        value={currentBorder.width}
-                        onChange={(e) =>
-                          patchStyle({ border: { ...currentBorder, width: Number(e.target.value) } })
-                        }
-                      />
-                    </label>
-                  </div>
-
-                  <div className="e2-design-row e2-design-row--stack">
-                    <span className="e2-design-label">Lados</span>
-                    <div className="e2-angle-chips" role="group" aria-label="Lados del borde">
-                      {BORDER_SIDES.map((side) => (
-                        <button
-                          key={side.value}
-                          type="button"
-                          className={`e2-chip-btn${(currentBorder.sides ?? 'all') === side.value ? ' is-active' : ''}`}
-                          onClick={() =>
-                            patchStyle({ border: { ...currentBorder, sides: side.value } })
-                          }
-                        >
-                          {side.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </details>
+          {!showBorderFirst && borderSettings}
 
           {/* 3. Esquinas, relleno y ancho */}
           <details className="e2-design-section">

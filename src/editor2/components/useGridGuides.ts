@@ -1,5 +1,5 @@
 import { useEffect, type RefObject } from 'react';
-import { GRID_DOTTED_LINE, GRID_DOTTED_MARK, GRID_REFERENCE_MARKS } from '../domain/gridResolution';
+import { GRID_DOTTED_MARK, GRID_REFERENCE_MARKS } from '../domain/gridResolution';
 import { gridGuideImage, gridLinePosition, readGridTracks } from './gridTracks';
 
 type GridTracks = NonNullable<ReturnType<typeof readGridTracks>>;
@@ -7,12 +7,12 @@ type GridTracks = NonNullable<ReturnType<typeof readGridTracks>>;
 function drawReferenceLabels(ruler: HTMLElement, { columns, rows }: GridTracks, numbered: boolean) {
   const labels = [];
   for (const [direction, axis] of [['column', columns], ['row', rows]] as const) {
-    const dotted = gridLinePosition(axis, GRID_DOTTED_LINE);
+    const dotted = gridLinePosition(axis, GRID_DOTTED_MARK);
     ruler.toggleAttribute(`data-${direction}-24`, dotted < axis.extent);
     ruler.style.setProperty(`--e2-guide-${direction}-24`, `${dotted}px`);
     if (!numbered) continue;
     for (const mark of GRID_REFERENCE_MARKS) {
-      const position = mark === GRID_DOTTED_MARK ? dotted : gridLinePosition(axis, mark);
+      const position = gridLinePosition(axis, mark);
       if (position >= axis.extent) break;
       const label = document.createElement('span');
       label.dataset.axis = direction;
@@ -48,8 +48,8 @@ export function useGridGuides(host: RefObject<HTMLElement>) {
         const numbered = Boolean(tracks && tracks.availableWidth >= 224);
         const ruler = rulers.get(grid);
         const guideMoved = tracks && (!ruler ||
-          ruler.style.getPropertyValue('--e2-guide-column-24') !== `${gridLinePosition(tracks.columns, GRID_DOTTED_LINE)}px` ||
-          ruler.style.getPropertyValue('--e2-guide-row-24') !== `${gridLinePosition(tracks.rows, GRID_DOTTED_LINE)}px`);
+          ruler.style.getPropertyValue('--e2-guide-column-24') !== `${gridLinePosition(tracks.columns, GRID_DOTTED_MARK)}px` ||
+          ruler.style.getPropertyValue('--e2-guide-row-24') !== `${gridLinePosition(tracks.rows, GRID_DOTTED_MARK)}px`);
         if (grid.style.getPropertyValue('--e2-grid-guides') !== guides || guideMoved ||
             numbered !== grid.hasAttribute('data-e2-grid-numbered')) {
           updates.push({ grid, guides, tracks, numbered });

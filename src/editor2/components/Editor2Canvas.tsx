@@ -125,7 +125,7 @@ const fieldOverrides = {
     if (label === 'Distribución') {
       return <div className="e2-field-inline e2-field-inline--layout">{children}</div>;
     }
-    const El = el;
+    const El = ['Color del botón', 'Color de insignia', 'Color de acento'].includes(label) ? 'div' : el;
     return (
       <El className={`e2-field-inline${className ? ` ${className}` : ''}`}>
         {label && <span className="e2-field-inline__label">{label}</span>}
@@ -139,9 +139,12 @@ function BlockTools({
   doc, onSaveSection, editScreen, onEditScreenChange,
 }: Editor2CanvasProps) {
   const { selectedItem, dispatch, getSelectorForId } = usePuck();
+  const [weeklyRequestId, setWeeklyRequestId] = useState<string | null>(null);
   if (!selectedItem) return (
     <section className="e2-palette" aria-label="Insertar bloques"><Puck.Components /></section>
   );
+  const isWeeklyButton = selectedItem.type === 'button' && selectedItem.props.variant === 'weekly';
+  const requestWeekly = selectedItem.type === 'button' && weeklyRequestId === selectedItem.props.id;
 
   const section = onSaveSection && doc.root.slots.children.find(({ block }) => toPuckId(block.type, block.id) === selectedItem.props.id);
   const handleDuplicate = () => {
@@ -183,7 +186,7 @@ function BlockTools({
         </button>
         <BlockBreadcrumb />
         <div className="e2-settings__actions" role="group" aria-label="Acciones del bloque">
-          {hasInlineText(selectedItem.type) && (
+          {hasInlineText(selectedItem.type) && !isWeeklyButton && (
             <button
               type="button"
               className="e2-button e2-button--quiet"
@@ -229,9 +232,11 @@ function BlockTools({
         <TextToolbar key={selectedItem.props.id} />
       )}
       {['image', 'gif', 'compare', 'button', 'table', 'carousel', 'badge', 'icon', 'tabs', 'accordion'].includes(selectedItem.type) && (
-        <BlockComponentTools key={`tools-${selectedItem.props.id}`} />
+          <BlockComponentTools key={`tools-${selectedItem.props.id}`} requestWeekly={requestWeekly}
+            onWeeklyRequestClose={() => setWeeklyRequestId(null)} />
       )}
-      <DesignInspector key={`design-${selectedItem.props.id}`} editScreen={editScreen} onEditScreenChange={onEditScreenChange} />
+      <DesignInspector key={`design-${selectedItem.props.id}`} editScreen={editScreen} onEditScreenChange={onEditScreenChange}
+        onRequestWeeklyButton={() => setWeeklyRequestId(selectedItem.props.id)} />
     </section>
   );
 }

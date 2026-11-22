@@ -873,6 +873,7 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
     function down(e: PointerEvent) {
       ignoreClick = false;
       if (!e.isPrimary || e.button !== 0 || !(e.target instanceof Element) || !shell?.contains(e.target)) return;
+      if (e.target.closest('.e2-text-color-control')) return;
 
       const drawer = e.target.closest('[data-puck-drawer-item]')?.getAttribute('data-testid')?.split(':')[1];
       if (isPlaceableBlock(drawer)) {
@@ -962,7 +963,7 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
 
       if (
         e.target.closest(
-          '.e2-carousel-nav, .e2-carousel-dot, .e2-tabs-nav__btn, .e2-tabs-nav__add, .e2-accordion-trigger, .e2-compare-range, .e2-section-delete',
+          '.e2-carousel-nav, .e2-carousel-dot, .e2-exam-head__nav, .e2-tabs-nav__btn, .e2-tabs-nav__add, .e2-accordion-trigger, .e2-compare-range, .e2-section-delete',
         )
       ) {
         return;
@@ -1444,6 +1445,15 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
           }
         }
         const layer = e.target.closest<HTMLElement>('.e2-slot-grid > [data-puck-component]');
+        if (!layer && e.target.closest('.e2-canvas-stage--editing') &&
+          !e.target.closest('[data-puck-component], [data-puck-overlay], button, a, input, select, textarea')) {
+          const api = getPuck();
+          if (api.appState.ui.itemSelector) {
+            stopTextEditing();
+            api.dispatch({ type: 'setUi', ui: { itemSelector: null } });
+          }
+          return;
+        }
         if (layer?.parentElement?.parentElement?.dataset.flow === 'overlay' &&
           !e.target.closest('button, a, input, select, textarea')) {
           const api = getPuck();
@@ -1469,6 +1479,7 @@ export default function GridDrag({ host }: { host: RefObject<HTMLDivElement> }) 
       'keydown',
       (e) => {
         if (e.key === 'Escape') {
+          if (e.target instanceof Element && e.target.closest('.e2-color-palette')) return;
           if (textEdit) {
             e.preventDefault();
             e.stopImmediatePropagation();

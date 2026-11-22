@@ -5,7 +5,6 @@ import Footer from '../components/Footer';
 import BackButton from '../components/BackButton';
 import Header from '../components/Header';
 import { hasPermission } from '../security/permissions';
-import { canSeeEditor2Card } from '../security/editorV2Access';
 import { useSmartBackNavigation } from '../hooks/useSmartBackNavigation';
 
 const Edicion: React.FC = () => {
@@ -215,7 +214,7 @@ const Edicion: React.FC = () => {
             </div>
           </div>}
 
-          {canEditarPaginas && canSeeEditor2Card(user) && <div style={s.card} className="edicion-card">
+          {canEditarPaginas && <div style={s.card} className="edicion-card">
             <div style={{ ...s.cardAccent, background: '#0f766e' }} />
             <div style={s.cardIcon}>🧩</div>
             <div style={s.cardBody}>

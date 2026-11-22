@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePuck } from '@puckeditor/core';
-import { Images, Microscope, Minus, Plus, SlidersHorizontal, Trash2, Upload } from 'lucide-react';
+import { Microscope, Minus, Plus, SlidersHorizontal, Trash2, Upload } from 'lucide-react';
 import { uploadToCloudinary } from '../../services/cloudinary';
 import { supabase } from '../../services/supabase';
 import type { PuckAccordionItem, PuckTabItem } from '../adapters/puck';
 import { EDITOR2_DEFAULT_IMAGE_SRC } from '../domain/defaults';
 import type { CarouselItem, MediaAppearance } from '../domain/schema';
-import { loadCatalog, type Editor2CatalogSnapshot } from '../services/catalogIndex';
-import { loadPageIndex, type Editor2PageSummary } from '../services/pageIndex';
+import { loadPageIndex, type PageIndexLoadResult } from '../services/pageIndex';
+import AtlasPhotoPicker from './AtlasPhotoPicker';
 import {
   getActiveAccordionIndex,
   getActiveTabIndex,
@@ -16,300 +16,38 @@ import {
 } from './Editor2Blocks';
 import IconPickerModal, { renderAtlasIcon } from './IconPickerModal';
 import InspectorDialog from './InspectorDialog';
+import MediaStyleFields from './MediaStyleFields';
+import TextColorPicker from './TextColorPicker';
+import ButtonDestinationPicker from './ButtonDestinationPicker';
+import { WEEKLY_BUTTON_TEMPLATE } from '../domain/componentTemplates';
 
 type AtlasTestSummary = {
   id: string;
   titulo: string;
 };
 
-function MediaStyleDialog({
-  media,
-  onChange,
-}: {
+function MediaStyleDialog({ media, onChange }: {
   media?: MediaAppearance;
   onChange: (next: MediaAppearance | undefined) => void;
 }) {
-  const current: MediaAppearance = media ?? {};
-  const patch = (partial: Partial<MediaAppearance>) => {
-    const merged: MediaAppearance = { ...current, ...partial };
-    for (const key of Object.keys(merged) as Array<keyof MediaAppearance>) {
-      if (merged[key] === undefined || merged[key] === '') delete merged[key];
-    }
-    onChange(Object.keys(merged).length > 0 ? merged : undefined);
-  };
-
   return (
     <InspectorDialog label="Aspecto y filtros" icon={<SlidersHorizontal size={13} aria-hidden="true" />}>
       <div className="e2-design-panel">
-        <div className="e2-quad-grid">
-          <label className="e2-design-field">
-            <span className="e2-design-label">Relación de aspecto</span>
-            <select
-              aria-label="Relación de aspecto"
-              value={current.aspect ?? 'auto'}
-              onChange={(e) =>
-                patch({ aspect: e.target.value === 'auto' ? undefined : (e.target.value as MediaAppearance['aspect']) })
-              }
-            >
-              <option value="auto">Automática</option>
-              <option value="16/9">16:9 (Panorámica)</option>
-              <option value="4/3">4:3 (Micrografía)</option>
-              <option value="1/1">1:1 (Cuadrada)</option>
-              <option value="3/4">3:4 (Vertical)</option>
-            </select>
-          </label>
-          <label className="e2-design-field">
-            <span className="e2-design-label">Punto focal</span>
-            <select
-              aria-label="Punto focal de la imagen"
-              value={current.objectPosition ?? 'center'}
-              onChange={(e) =>
-                patch({
-                  objectPosition:
-                    e.target.value === 'center' ? undefined : (e.target.value as MediaAppearance['objectPosition']),
-                })
-              }
-            >
-              <option value="center">Centro</option>
-              <option value="top">Arriba</option>
-              <option value="bottom">Abajo</option>
-              <option value="left">Izquierda</option>
-              <option value="right">Derecha</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="e2-quad-grid">
-          <label className="e2-design-field">
-            <span className="e2-design-label">Filtro visual</span>
-            <select
-              aria-label="Filtro visual de la imagen"
-              value={current.filter ?? 'none'}
-              onChange={(e) =>
-                patch({ filter: e.target.value === 'none' ? undefined : (e.target.value as MediaAppearance['filter']) })
-              }
-            >
-              <option value="none">Original</option>
-              <option value="vivid">Vívido</option>
-              <option value="contrast">Alto contraste</option>
-              <option value="warm">Cálido</option>
-              <option value="grayscale">Escala de grises</option>
-            </select>
-          </label>
-          <label className="e2-design-slider">
-            <span>Redondeado: {current.radius ?? 0} px</span>
-            <input
-              type="range"
-              aria-label="Redondeado de la imagen"
-              min={0}
-              max={40}
-              step={2}
-              value={current.radius ?? 0}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                patch({ radius: v > 0 ? v : undefined });
-              }}
-            />
-          </label>
-        </div>
-
-        <div className="e2-quad-grid">
-          <label className="e2-design-field">
-            <span className="e2-design-label">Etiqueta sobre la foto</span>
-            <input
-              type="text"
-              maxLength={60}
-              placeholder="Ej. H&E · 40×"
-              value={current.overlayBadge ?? ''}
-              onChange={(e) => patch({ overlayBadge: e.target.value.trim() ? e.target.value : undefined })}
-            />
-          </label>
-          <label className="e2-design-field">
-            <span className="e2-design-label">Esquina de etiqueta</span>
-            <select
-              aria-label="Esquina de la etiqueta"
-              value={current.overlayPosition ?? 'tl'}
-              onChange={(e) => patch({ overlayPosition: e.target.value as MediaAppearance['overlayPosition'] })}
-            >
-              <option value="tl">Superior izquierda</option>
-              <option value="tr">Superior derecha</option>
-              <option value="bl">Inferior izquierda</option>
-              <option value="br">Inferior derecha</option>
-            </select>
-          </label>
-        </div>
+        <MediaStyleFields media={media} onChange={onChange} />
       </div>
     </InspectorDialog>
   );
 }
 
-type CatalogPlaca = {
-  id: number;
-  photo_url: string;
-  aumento: string | null;
-  tincion: string | null;
-  tema_id: number | null;
-  subtema_id: number | null;
-};
-
-function PlacaCatalogPicker({ onSelect }: { onSelect: (url: string, alt: string) => void }) {
-  const [catalog, setCatalog] = useState<Editor2CatalogSnapshot>({ temas: [], subtemas: [] });
-  const [selectedTemaId, setSelectedTemaId] = useState<string>('');
-  const [selectedSubtemaId, setSelectedSubtemaId] = useState<string>('');
-  const [search, setSearch] = useState('');
-  const [placas, setPlacas] = useState<CatalogPlaca[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    loadCatalog()
-      .then((snap) => {
-        if (active) setCatalog(snap);
-      })
-      .catch(() => {
-        // Ignorar errores de catálogo
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const filteredSubtemas = useMemo(() => {
-    if (!selectedTemaId) return catalog.subtemas;
-    const temaNum = Number(selectedTemaId);
-    return catalog.subtemas.filter((s) => s.tema_id === temaNum);
-  }, [catalog.subtemas, selectedTemaId]);
-
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    const load = async () => {
-      try {
-        let query = supabase
-          .from('placas')
-          .select('id, photo_url, aumento, tincion, tema_id, subtema_id')
-          .order('id', { ascending: false })
-          .limit(60);
-        if (selectedSubtemaId) {
-          query = query.eq('subtema_id', Number(selectedSubtemaId));
-        } else if (selectedTemaId) {
-          query = query.eq('tema_id', Number(selectedTemaId));
-        }
-        const { data } = await query;
-        if (!active) return;
-        const valid: CatalogPlaca[] = [];
-        for (const row of data ?? []) {
-          if (typeof row?.photo_url === 'string' && row.photo_url.startsWith('https://')) {
-            valid.push({
-              id: Number(row.id),
-              photo_url: row.photo_url,
-              aumento: typeof row.aumento === 'string' ? row.aumento : null,
-              tincion: typeof row.tincion === 'string' ? row.tincion : null,
-              tema_id: typeof row.tema_id === 'number' ? row.tema_id : null,
-              subtema_id: typeof row.subtema_id === 'number' ? row.subtema_id : null,
-            });
-          }
-        }
-        setPlacas(valid);
-      } catch {
-        if (active) setPlacas([]);
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      active = false;
-    };
-  }, [selectedTemaId, selectedSubtemaId]);
-
-  const visiblePlacas = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return placas;
-    return placas.filter((p) => {
-      const hay = `placa ${p.id} ${p.tincion ?? ''} ${p.aumento ?? ''}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [placas, search]);
-
-  return (
-    <div className="e2-catalog-picker-wrap">
-      <div className="e2-catalog-picker__filters">
-        <select
-          aria-label="Filtrar por tema"
-          value={selectedTemaId}
-          onChange={(e) => {
-            setSelectedTemaId(e.target.value);
-            setSelectedSubtemaId('');
-          }}
-        >
-          <option value="">Todos los temas</option>
-          {catalog.temas.map((tema) => (
-            <option key={tema.id} value={tema.id}>
-              {tema.nombre}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Filtrar por subtema"
-          value={selectedSubtemaId}
-          onChange={(e) => setSelectedSubtemaId(e.target.value)}
-          disabled={filteredSubtemas.length === 0}
-        >
-          <option value="">Todos los subtemas</option>
-          {filteredSubtemas.map((sub) => (
-            <option key={sub.id} value={sub.id}>
-              {sub.nombre}
-            </option>
-          ))}
-        </select>
-        <input
-          type="search"
-          aria-label="Buscar placa por tinción, aumento o número"
-          placeholder="Buscar tinción, aumento o #..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
-      {loading ? (
-        <p className="e2-catalog-picker__status">Cargando placas del Atlas...</p>
-      ) : visiblePlacas.length === 0 ? (
-        <p className="e2-catalog-picker__status">No se encontraron placas para este filtro.</p>
-      ) : (
-        <div className="e2-catalog-picker" role="list" aria-label="Placas del catálogo del Atlas">
-          {visiblePlacas.map((placa) => {
-            const label = [
-              `Placa #${placa.id}`,
-              placa.tincion ? placa.tincion : null,
-              placa.aumento ? `${placa.aumento}x` : null,
-            ]
-              .filter(Boolean)
-              .join(' · ');
-            return (
-              <button
-                key={placa.id}
-                type="button"
-                className="e2-catalog-picker__item"
-                onClick={() => onSelect(placa.photo_url, label)}
-                title={label}
-              >
-                <img src={placa.photo_url} alt={label} loading="lazy" />
-                <span>{label}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function BlockComponentTools() {
+export default function BlockComponentTools({ requestWeekly, onWeeklyRequestClose }: {
+  requestWeekly?: boolean;
+  onWeeklyRequestClose?: () => void;
+}) {
   const { selectedItem, dispatch, getSelectorForId } = usePuck();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [slideIndex, setSlideIndex] = useState(0);
-  const [atlasPages, setAtlasPages] = useState<Editor2PageSummary[]>([]);
+  const [pageIndex, setPageIndex] = useState<PageIndexLoadResult | null>(null);
   const selectedId = selectedItem?.props?.id as string | undefined;
   const [tabIndex, setTabIndex] = useState(() => getActiveTabIndex(selectedId));
   const [accordionIndex, setAccordionIndex] = useState(() => getActiveAccordionIndex(selectedId));
@@ -322,19 +60,19 @@ export default function BlockComponentTools() {
   }, [selectedId]);
 
   useEffect(() => {
-    if (selectedItem?.type !== 'button' || atlasPages.length > 0) return;
+    if (selectedItem?.type !== 'button' || pageIndex) return;
     let active = true;
     loadPageIndex()
       .then((res) => {
-        if (active) setAtlasPages(res.pages);
+        if (active) setPageIndex(res);
       })
       .catch(() => {
-        // Ignorar errores de carga de índice
+        if (active) setPageIndex({ pages: [], warning: 'No se pudieron cargar los destinos de Atlas.' });
       });
     return () => {
       active = false;
     };
-  }, [atlasPages.length, selectedItem?.type]);
+  }, [pageIndex, selectedItem?.type]);
 
   useEffect(() => {
     if (selectedItem?.type !== 'button' || atlasTests.length > 0) return;
@@ -455,17 +193,7 @@ export default function BlockComponentTools() {
             }}
           />
         </label>
-        <InspectorDialog label="Elegir del Atlas" icon={<Images size={14} aria-hidden="true" />}>
-          <PlacaCatalogPicker
-            onSelect={(url, label) => {
-              updateProps({ src: url, alt: label });
-            }}
-          />
-        </InspectorDialog>
-        <MediaStyleDialog
-          media={item.props.media as MediaAppearance | undefined}
-          onChange={(media) => updateProps({ media })}
-        />
+        <AtlasPhotoPicker onSelect={(src, alt) => updateProps({ src, alt })} />
         {uploadError && <span className="e2-upload-error" role="alert">{uploadError}</span>}
       </div>
     );
@@ -533,15 +261,11 @@ export default function BlockComponentTools() {
           <Minus size={13} aria-hidden="true" />
           <span>Fila</span>
         </button>
-        <label className="e2-layout-field__control">
+        <div className="e2-layout-field__control">
           <span>Cabecera</span>
-          <input
-            type="color"
-            aria-label="Color de cabecera"
-            value={item.props.accentColor ?? '#e0f2fe'}
-            onChange={(e) => updateProps({ accentColor: e.target.value })}
-          />
-        </label>
+          <TextColorPicker label="Color de cabecera" value={item.props.accentColor} fallback="#e0f2fe"
+            onChange={accentColor => updateProps({ accentColor })} />
+        </div>
         <button
           type="button"
           className={`e2-button e2-button--quiet${item.props.striped ? ' is-active' : ''}`}
@@ -645,13 +369,7 @@ export default function BlockComponentTools() {
             }}
           />
         </label>
-        <InspectorDialog label="Elegir del Atlas" icon={<Images size={14} aria-hidden="true" />}>
-          <PlacaCatalogPicker
-            onSelect={(url, label) => {
-              updateSlide({ src: url, alt: label });
-            }}
-          />
-        </InspectorDialog>
+        <AtlasPhotoPicker onSelect={(src, alt) => updateSlide({ src, alt })} />
         {uploadError && <span className="e2-upload-error" role="alert">{uploadError}</span>}
         <label className="e2-layout-field__control">
           <span>URL</span>
@@ -682,10 +400,6 @@ export default function BlockComponentTools() {
         >
           <Trash2 size={13} aria-hidden="true" />
         </button>
-        <MediaStyleDialog
-          media={item.props.media as MediaAppearance | undefined}
-          onChange={(media) => updateProps({ media })}
-        />
         <button
           type="button"
           className={`e2-button e2-button--quiet${item.props.autoplay ? ' is-active' : ''}`}
@@ -826,15 +540,11 @@ export default function BlockComponentTools() {
           <Plus size={13} aria-hidden="true" />
           <span>Pestaña</span>
         </button>
-        <label className="e2-layout-field__control">
+        <div className="e2-layout-field__control">
           <span>Acento</span>
-          <input
-            type="color"
-            aria-label="Color de pestañas"
-            value={item.props.accentColor ?? '#0284c7'}
-            onChange={(e) => updateProps({ accentColor: e.target.value })}
-          />
-        </label>
+          <TextColorPicker label="Color de pestañas" value={item.props.accentColor} fallback="#0284c7"
+            onChange={accentColor => updateProps({ accentColor })} />
+        </div>
         <button
           type="button"
           className="e2-button e2-button--quiet"
@@ -872,6 +582,7 @@ export default function BlockComponentTools() {
             }}
           />
         </label>
+        <AtlasPhotoPicker onSelect={(src, alt) => updateProps({ src, alt })} />
         <MediaStyleDialog
           media={item.props.media as MediaAppearance | undefined}
           onChange={(media) => updateProps({ media })}
@@ -954,13 +665,7 @@ export default function BlockComponentTools() {
             }}
           />
         </label>
-        <InspectorDialog label="Atlas A" icon={<Images size={14} aria-hidden="true" />}>
-          <PlacaCatalogPicker
-            onSelect={(url, label) => {
-              updateProps({ leftSrc: url, leftLabel: label });
-            }}
-          />
-        </InspectorDialog>
+        <AtlasPhotoPicker label="Atlas A" onSelect={(leftSrc, leftLabel) => updateProps({ leftSrc, leftLabel })} />
         <label className="e2-button e2-button--quiet e2-upload-btn">
           <Upload size={13} aria-hidden="true" />
           <span>{uploading ? 'Subiendo...' : 'Subir B'}</span>
@@ -978,13 +683,7 @@ export default function BlockComponentTools() {
             }}
           />
         </label>
-        <InspectorDialog label="Atlas B" icon={<Images size={14} aria-hidden="true" />}>
-          <PlacaCatalogPicker
-            onSelect={(url, label) => {
-              updateProps({ rightSrc: url, rightLabel: label });
-            }}
-          />
-        </InspectorDialog>
+        <AtlasPhotoPicker label="Atlas B" onSelect={(rightSrc, rightLabel) => updateProps({ rightSrc, rightLabel })} />
         {uploadError && <span className="e2-upload-error" role="alert">{uploadError}</span>}
       </div>
     );
@@ -992,28 +691,17 @@ export default function BlockComponentTools() {
 
   if (item.type === 'button') {
     const currentHref = typeof item.props.href === 'string' ? item.props.href : '';
-    const matchingPage = atlasPages.some((p) => p.publicPath === currentHref) ? currentHref : '';
+    const weeklyOnly = requestWeekly || item.props.variant === 'weekly';
     const matchingTest = atlasTests.some((t) => `/evaluaciones/ejecutar/${t.id}` === currentHref) ? currentHref : '';
     return (
       <div className="e2-component-tools" role="group" aria-label="Enlace interno del Atlas">
-        <label className="e2-layout-field__control">
-          <span>Página Atlas</span>
-          <select
-            aria-label="Elegir página interna del Atlas"
-            value={matchingPage}
-            onChange={(e) => {
-              if (e.target.value) updateProps({ href: e.target.value, newTab: false });
-            }}
-          >
-            <option value="">URL personalizada...</option>
-            {atlasPages.map((p) => (
-              <option key={p.pageKey} value={p.publicPath}>
-                {p.title} ({p.publicPath})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="e2-layout-field__control">
+        <ButtonDestinationPicker index={pageIndex} href={currentHref} weeklyOnly={weeklyOnly}
+          openRequest={requestWeekly} onClose={onWeeklyRequestClose}
+          onSelect={href => updateProps({
+            href, newTab: false,
+            ...(requestWeekly ? WEEKLY_BUTTON_TEMPLATE : {}),
+          })} />
+        {!weeklyOnly && <label className="e2-layout-field__control">
           <span>Evaluación</span>
           <select
             aria-label="Elegir evaluación del Atlas"
@@ -1030,7 +718,7 @@ export default function BlockComponentTools() {
               </option>
             ))}
           </select>
-        </label>
+        </label>}
         <button
           type="button"
           className="e2-button e2-button--quiet"
@@ -1138,15 +826,11 @@ export default function BlockComponentTools() {
           <Plus size={13} aria-hidden="true" />
           <span>Sección</span>
         </button>
-        <label className="e2-layout-field__control">
+        <div className="e2-layout-field__control">
           <span>Acento</span>
-          <input
-            type="color"
-            aria-label="Color de acordeón"
-            value={item.props.accentColor ?? '#0284c7'}
-            onChange={(e) => updateProps({ accentColor: e.target.value })}
-          />
-        </label>
+          <TextColorPicker label="Color de acordeón" value={item.props.accentColor} fallback="#0284c7"
+            onChange={accentColor => updateProps({ accentColor })} />
+        </div>
         <button
           type="button"
           className="e2-button e2-button--quiet"

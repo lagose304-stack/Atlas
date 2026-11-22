@@ -6,6 +6,7 @@ import Link from '@tiptap/extension-link';
 import { TextStyle } from '@tiptap/extension-text-style';
 import Underline from '@tiptap/extension-underline';
 import { INLINE_EDIT_MODE } from './inlineEditMode';
+import TextColorPicker from './TextColorPicker';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import {
@@ -228,8 +229,8 @@ const InlineRichText: React.FC<InlineRichTextProps> = ({
     }
   };
 
-  const activeColor = (editor?.getAttributes('textStyle')?.color as string | undefined) ?? '#0b2545';
-  const activeHighlight = (editor?.getAttributes('highlight')?.color as string | undefined) ?? '#fef08a';
+  const activeColor = editor?.getAttributes('textStyle')?.color as string | undefined;
+  const activeHighlight = editor?.getAttributes('highlight')?.color as string | undefined;
 
   return (
     <div
@@ -289,24 +290,14 @@ const InlineRichText: React.FC<InlineRichTextProps> = ({
 
           <span className="e2-rich-bubble__sep" aria-hidden="true" />
 
-          <label className="e2-rich-bubble__color" title="Color de texto">
-            <span aria-hidden="true">A</span>
-            <input
-              type="color"
-              aria-label="Color de fragmento"
-              value={/^#[0-9a-f]{6}$/i.test(activeColor) ? activeColor : '#0b2545'}
-              onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
-            />
-          </label>
-          <label className="e2-rich-bubble__color" title="Resaltado de texto">
-            <Highlighter size={12} aria-hidden="true" />
-            <input
-              type="color"
-              aria-label="Color de resaltado"
-              value={/^#[0-9a-f]{6}$/i.test(activeHighlight) ? activeHighlight : '#fef08a'}
-              onChange={(e) => editor.chain().focus().setHighlight({ color: e.target.value }).run()}
-            />
-          </label>
+          <TextColorPicker label="Color de fragmento" value={activeColor} fallback="#0b2545"
+            icon={<span aria-hidden="true">A</span>}
+            onChange={color => editor.chain().focus().setColor(color).run()}
+            onReset={() => editor.chain().focus().unsetColor().run()} />
+          <TextColorPicker label="Color de resaltado" value={activeHighlight} fallback="#fef08a"
+            icon={<Highlighter size={12} aria-hidden="true" />}
+            onChange={color => editor.chain().focus().setHighlight({ color }).run()}
+            onReset={() => editor.chain().focus().unsetHighlight().run()} resetLabel="Sin resaltado" />
 
           <span className="e2-rich-bubble__sep" aria-hidden="true" />
 

@@ -95,7 +95,7 @@ describe('vistas de bloques', () => {
     expect(config.components.text.fields.text).toBeUndefined();
   });
 
-  it('permite volver a editar un párrafo tras salir y regresar, y usa color negro por defecto', () => {
+  it('permite volver a editar un párrafo tras salir y regresar y deja que el tema defina el color automático', () => {
     const onTextChange = vi.fn();
     const { rerender } = render(
       <TextBlockView
@@ -107,7 +107,7 @@ describe('vistas de bloques', () => {
     );
 
     const paragraph = screen.getByText('Texto inicial');
-    expect(paragraph).toHaveStyle({ color: 'rgb(0, 0, 0)' });
+    expect(paragraph.style.color).toBe('');
 
     fireEvent.focus(paragraph);
     paragraph.textContent = 'Primera edición';
@@ -225,6 +225,31 @@ describe('vistas de bloques', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Pestaña B' }));
     expect(screen.getByText('Contenido B')).toBeInTheDocument();
   });
+  it('oculta el pie de foto en el bloque y en la ampliación, y conserva las etiquetas del comparador', () => {
+    const layout = { base: { span: 12 } };
+    const src = 'https://r2.atlas-tests.invalid/micrografia.webp';
+    const media = { showCaption: false };
+    const { rerender } = render(
+      <>
+        <ImageBlockView layout={layout} src={src} alt="Micrografía" caption="Pie de imagen" media={media} />
+        <CarouselBlockView layout={layout} items={[{ src, alt: 'Muestra', caption: 'Pie de diapositiva' }]} media={media} />
+        <CompareBlockView layout={layout} leftSrc={src} rightSrc={src} leftLabel="10×" rightLabel="40×"
+          fit="cover" caption="Pie de comparación" media={media} />
+      </>,
+    );
+    expect(screen.queryByText(/^Pie de /)).not.toBeInTheDocument();
+    expect(screen.getByText('10×')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '10×' })).toHaveStyle({ objectFit: 'cover', clipPath: 'inset(0 50% 0 0)' });
+    expect(screen.getByRole('img', { name: '40×' })).toHaveStyle({ objectFit: 'cover' });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ampliar imagen' })[0]);
+    expect(screen.getByRole('dialog', { name: 'Micrografía' })).toBeInTheDocument();
+    expect(screen.queryByText('Pie de imagen')).not.toBeInTheDocument();
+
+    rerender(<CompareBlockView layout={layout} leftSrc={src} rightSrc={src} caption="Pie de comparación"
+      media={{ showCaption: true }} />);
+    expect(screen.getByText('Pie de comparación')).toBeInTheDocument();
+  });
+
   it('pinta gif, video, comparador, nota/aviso y acordeón con sus controles', () => {
     render(
       <>

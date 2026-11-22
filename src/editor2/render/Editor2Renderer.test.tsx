@@ -17,10 +17,14 @@ vi.hoisted(() => {
 import {
   createBadgeBlock,
   createButtonBlock,
+  createCarouselBlock,
   createCalloutBlock,
+  createCompareBlock,
+  createDividerBlock,
   createEmptyCanvasDoc,
   createHeadingBlock,
   createImageBlock,
+  createIconBlock,
   createLeafPlacedBlock,
   createNestedCanvasNode,
   createPlacedBlock,
@@ -87,6 +91,57 @@ describe('Editor2Renderer', () => {
     expect(paragraph.parentElement?.style.getPropertyValue('--e2-column-base')).toBe('6 / span 12');
     expect(paragraph.parentElement?.style.getPropertyValue('--e2-row-base')).toBe('4 / span 6');
     expect(paragraph.parentElement?.style.getPropertyValue('--e2-align-lg')).toBe('center');
+  });
+
+  it.each(['preview', 'public'] as const)('muestra los ajustes de diseño guardados en %s', (variant) => {
+    const heading = createHeadingBlock({ text: 'Epitelio' });
+    heading.props.textSizePreset = 'huge';
+    const paragraph = createTextBlock({ text: 'Tejido de revestimiento' });
+    paragraph.props.appearance = { color: '#413176', font: 'Fraunces' };
+    const badge = createBadgeBlock({ text: 'Muestra', variant: 'outline', color: '#725588' });
+    const icon = createIconBlock({ name: 'microscope', frame: 'circle', bgColor: '#efe5f3' });
+    const callout = createCalloutBlock({ tone: 'clinical' });
+    const table = createTableBlock({ headers: ['Tejido'], rows: [['Epitelio']] });
+    table.props.striped = true;
+    const divider = createDividerBlock({ lineStyle: 'dashed', thickness: 3, color: '#654987' });
+    const button = createButtonBlock({ label: 'Ver epitelio', href: '/temario' });
+    button.props.textSizePreset = 'extra-large';
+    const image = createImageBlock({ alt: 'Detalle del tejido', caption: 'Pie de imagen oculto', fit: 'cover' });
+    const carousel = createCarouselBlock({ fit: 'cover' });
+    const compare = createCompareBlock({ leftLabel: 'Vista 10×', rightLabel: 'Vista 40×' });
+    compare.props.fit = 'cover';
+    for (const block of [image, carousel, compare]) {
+      block.props.media = { aspect: '16/9', radius: 12, stageBackground: '#eeddf1', showCaption: false, objectPosition: 'left' };
+    }
+    const blocks = [heading, paragraph, badge, icon, callout, table, divider, button, image, carousel, compare];
+    for (const block of blocks) {
+      block.props.style = {
+        border: { style: 'solid', width: 2, color: '#725588', sides: 'left' },
+        opacity: 0.8,
+        motion: { entrance: 'slide-up', hover: 'lift' },
+      };
+    }
+    const doc = createEmptyCanvasDoc('home', { children: blocks.map(block => createPlacedBlock(block)) });
+    const snapshot = fromPuckData(toPuckData(doc));
+    expect(snapshot).toEqual(doc);
+    const { container } = render(<Editor2Renderer doc={snapshot} variant={variant} />);
+    expect(container.firstElementChild).toHaveClass('editor2-scope');
+    for (const block of blocks) {
+      expect(container.querySelector(`[data-e2-block="${block.type}"]`)).toHaveClass('e2-anim-in--slide-up', 'e2-hover--lift');
+    }
+    expect(screen.getByRole('heading', { name: 'Epitelio' }).parentElement).toHaveAttribute('data-e2-text-size-preset', 'huge');
+    expect(screen.getByText('Tejido de revestimiento')).toHaveStyle({ color: '#413176', fontFamily: 'Fraunces' });
+    expect(container.querySelector('.e2-icon-frame')).toHaveClass('e2-icon-frame--circle');
+    expect(container.querySelector('.e2-block--callout')).toHaveClass('e2-callout--clinical');
+    expect(container.querySelector('.e2-table')).toHaveClass('e2-table--striped');
+    expect(container.querySelector('.e2-divider-line')).toHaveStyle({ borderTop: '3px dashed #654987' });
+    expect(screen.getByRole('link', { name: 'Ver epitelio' })).toHaveAttribute('data-e2-text-size-preset', 'extra-large');
+    expect(container.querySelectorAll('.e2-media-stage > img')).toHaveLength(4);
+    for (const img of container.querySelectorAll('.e2-media-stage > img')) {
+      expect(img).toHaveStyle({ objectFit: 'cover', objectPosition: 'left' });
+      expect(img.parentElement).toHaveStyle({ borderRadius: '12px', backgroundColor: '#eeddf1' });
+    }
+    expect(container.querySelector('.e2-media-caption')).toBeNull();
   });
   it('reserva el fondo de lienzo para edición y conserva el fondo de cada bloque', () => {
     const section = createNestedCanvasNode();

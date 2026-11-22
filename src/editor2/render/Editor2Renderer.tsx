@@ -18,7 +18,7 @@ export type Editor2RendererProps = {
  * integración pública muestran los bloques sobre la superficie que las aloja.
  */
 const Editor2Renderer: React.FC<Editor2RendererProps> = ({ doc, variant = 'preview' }) => (
-  <div className={variant === 'public' ? 'editor2-scope e2-public-surface' : 'e2-preview'} contentEditable={false}>
+  <div className={`editor2-scope ${variant === 'public' ? 'e2-public-surface' : 'e2-preview'}`} contentEditable={false}>
     <ShowCanvasBackground.Provider value={false}>
       <Render config={editor2PuckConfig} data={toPuckCompatibleData(doc)} />
     </ShowCanvasBackground.Provider>

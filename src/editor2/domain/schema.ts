@@ -13,7 +13,7 @@ const uuidSchema = z.uuid();
 const spanSchema = z.number().multipleOf(GRID_STEP).min(GRID_STEP).max(fromGridSpan(GRID_COLUMNS));
 const startSchema = z.number().multipleOf(GRID_STEP).min(1).max(fromGridLine(GRID_COLUMNS));
 
-const imageSrcSchema = z.url().refine((value) => {
+export const imageSrcSchema = z.url().refine((value) => {
   try {
     return new URL(value).protocol === 'https:';
   } catch {
@@ -51,6 +51,10 @@ export const layoutIntentSchema = z.strictObject({
 
 const headingLevelSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 export const gapSchema = responsiveGapSchema;
+export const textSizePresetSchema = z.enum(['normal', 'large', 'extra-large']);
+export type TextSizePreset = z.infer<typeof textSizePresetSchema>;
+export const headingTextSizePresetSchema = z.enum([...textSizePresetSchema.options, 'jumbo', 'huge']);
+export type HeadingTextSizePreset = z.infer<typeof headingTextSizePresetSchema>;
 
 export const EDITOR_FONTS = ['Montserrat', 'Playfair Display', 'Fraunces', 'IBM Plex Mono'] as const;
 
@@ -81,6 +85,7 @@ export const headingBlockSchema = z.strictObject({
   props: z.strictObject({
     level: headingLevelSchema,
     text: richTextSchema,
+    textSizePreset: headingTextSizePresetSchema.optional(),
     appearance: textAppearanceSchema.optional(),
     style: blockStyleSchema.optional(),
   }),
@@ -124,16 +129,21 @@ export const dividerBlockSchema = z.strictObject({
   }),
 });
 
+export const BUTTON_VARIANTS = ['solid', 'outline', 'soft', 'gradient', 'pill', 'weekly'] as const;
+export const buttonVariantSchema = z.enum(BUTTON_VARIANTS);
+
 export const buttonBlockSchema = z.strictObject({
   id: uuidSchema,
   type: z.literal('button'),
   props: z.strictObject({
     label: richTextV1Schema,
     href: z.string().max(500),
-    variant: z.enum(['solid', 'outline', 'soft', 'gradient', 'pill']).optional(),
+    textSizePreset: textSizePresetSchema.optional(),
+    variant: buttonVariantSchema.optional(),
     newTab: z.boolean().optional(),
     color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
     icon: z.string().max(40).optional(),
+    thumbnailSrc: imageSrcSchema.optional(),
     align: z.enum(['left', 'center', 'right']).optional(),
     style: blockStyleSchema.optional(),
   }),
@@ -194,6 +204,9 @@ export const compareBlockSchema = z.strictObject({
     leftLabel: z.string().max(120).optional(),
     rightSrc: imageSrcSchema,
     rightLabel: z.string().max(120).optional(),
+    fit: z.enum(['cover', 'contain']).optional(),
+    caption: z.string().max(500).optional(),
+    media: mediaAppearanceSchema.optional(),
     style: blockStyleSchema.optional(),
   }),
 });
@@ -253,7 +266,6 @@ export const iconBlockSchema = z.strictObject({
 });
 
 export const examParcialSchema = z.enum(['all', 'primer', 'segundo', 'tercer']);
-
 export const examCarouselBlockSchema = z.strictObject({
   id: uuidSchema,
   type: z.literal('examCarousel'),
@@ -262,6 +274,7 @@ export const examCarouselBlockSchema = z.strictObject({
     title: z.string().max(120).optional(),
     accentColor: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
     maxItems: z.number().int().min(1).max(24).optional(),
+    buttonTextSize: textSizePresetSchema.optional(),
     style: blockStyleSchema.optional(),
   }),
 });

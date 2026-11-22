@@ -21,6 +21,7 @@ import type { RichTextV2 } from '../domain/richText';
 import { EDITOR_FONTS, type LayoutIntent, type SpanIntent, type TextAppearance } from '../domain/schema';
 import InlineRichText from './InlineRichText';
 import InspectorDialog from './InspectorDialog';
+import TextColorPicker from './TextColorPicker';
 
 const toggles = [
   ['bold', 'Negrita', Bold], ['italic', 'Cursiva', Italic],
@@ -96,8 +97,8 @@ export default function TextToolbar() {
         <option value="">Fuente del tema</option>
         {EDITOR_FONTS.map(font => <option key={font}>{font}</option>)}
       </select>
-      <input type="color" aria-label="Color del texto" title="Color del texto" value={style.color ?? (heading ? '#0b2545' : '#000000')}
-        onChange={e => change({ color: e.target.value })} />
+      <TextColorPicker label="Color del texto" value={style.color} fallback={heading ? '#0b2545' : '#000000'}
+        onChange={color => change({ color })} onReset={() => change({ color: undefined })} />
       {toggles.map(([key, label, Icon]) => {
         const pressed = style[key] ?? (key === 'bold' && heading);
         return <button key={key} type="button" aria-label={label} title={label} aria-pressed={pressed}
@@ -166,13 +167,8 @@ export default function TextToolbar() {
                 <option value="arrow">Flecha →</option>
                 <option value="circle-number">Círculo numerado</option>
               </select>
-              <input
-                type="color"
-                aria-label="Color de viñeta"
-                title="Color de viñeta"
-                value={style.bulletColor ?? '#0284c7'}
-                onChange={(e) => change({ bulletColor: e.target.value })}
-              />
+              <TextColorPicker label="Color de viñeta" value={style.bulletColor} fallback="#0284c7"
+                onChange={bulletColor => change({ bulletColor })} onReset={() => change({ bulletColor: undefined })} />
             </>
           )}
         </>

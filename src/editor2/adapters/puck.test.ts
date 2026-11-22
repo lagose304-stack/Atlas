@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createButtonBlock,
   createEmptyCanvasDoc,
   createHeadingBlock,
   createImageBlock,
@@ -62,6 +63,13 @@ describe('adaptador Puck', () => {
     const data = toPuckData(doc);
     expect(data.root.props.minRows).toBe(48);
     expect(fromPuckData(data)).toEqual(doc);
+  });
+
+  it('conserva la miniatura y el destino del botón de ficha semanal', () => {
+    const button = createButtonBlock({ variant: 'weekly', href: '/subtemas/1', newTab: true, label: 'Epitelio' });
+    button.props.thumbnailSrc = 'https://r2.atlas-tests.invalid/placa.webp';
+    const doc = createEmptyCanvasDoc('home', { children: [createPlacedBlock(button)] });
+    expect(fromPuckData(toPuckData(doc))).toEqual(doc);
   });
 
   it('conserva primitivos, layout y un canvas anidado en la ida y vuelta', () => {

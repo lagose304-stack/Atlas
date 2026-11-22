@@ -139,7 +139,7 @@ export function createButtonBlock(
     id?: string;
     label?: string;
     href?: string;
-    variant?: 'solid' | 'outline' | 'soft' | 'gradient' | 'pill';
+    variant?: ButtonBlock['props']['variant'];
     newTab?: boolean;
     color?: string;
   } = {},

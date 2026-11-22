@@ -114,7 +114,14 @@ const Editor2RealPreview: React.FC<Editor2RealPreviewProps> = ({ doc }) => {
 
   useEffect(() => {
     const preventActions = (event: Event) => {
-      if (event.type === 'submit' || (event.target instanceof Element && event.target.closest('a, button'))) {
+      const control = event.target instanceof Element ? event.target.closest('a, button') : null;
+      const isAllowed = control?.matches(
+        '.e2-block--button .e2-cta-btn[href], .e2-block--exam-carousel .e2-exam-card__cta[href], .e2-block--exam-carousel .e2-exam-nav-btn, ' +
+        '.e2-block--carousel :is(.e2-carousel-nav, .e2-carousel-dot), ' +
+        ':is(.e2-block--image, .e2-block--carousel) :is(.e2-image-zoom-btn, .e2-zoom-modal__bar button), ' +
+        '.e2-block--tabs .e2-tabs-nav__btn, .e2-block--accordion .e2-accordion-trigger',
+      );
+      if (event.type === 'submit' || (control && !isAllowed)) {
         event.preventDefault();
         event.stopPropagation();
       }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GRID_DOTTED_LINE } from '../domain/gridResolution';
+import { GRID_DOTTED_MARK } from '../domain/gridResolution';
 import { gridGuideImage, gridLinePosition, readGridTracks } from './gridTracks';
 
 describe('medidas de la cuadrícula del editor', () => {
@@ -36,9 +36,12 @@ describe('medidas de la cuadrícula del editor', () => {
       const [columnGuides] = guides.split('), linear-gradient');
       expect(columnGuides.match(/var\(--e2-guide-(?:line|reference)\)/g)).toHaveLength(47);
       expect(columnGuides.match(/var\(--e2-guide-reference\)/g)).toHaveLength(6);
-      expect(gridLinePosition(tracks.columns, GRID_DOTTED_LINE)).toBe(290);
-      expect(columnGuides).toContain('var(--e2-guide-line) 278px 279px');
-      expect(columnGuides).not.toContain('290px 291px');
+      const mark24 = gridLinePosition(tracks.columns, GRID_DOTTED_MARK);
+      expect(mark24).toBe(278);
+      expect(mark24 - gridLinePosition(tracks.columns, 16)).toBe(8 * 12);
+      expect(gridLinePosition(tracks.columns, 32) - mark24).toBe(8 * 12);
+      expect(columnGuides).not.toContain('278px 279px');
+      expect(columnGuides).toContain('var(--e2-guide-line) 290px 291px');
       expect(columnGuides).not.toContain('var(--e2-guide-line) 35px 36px');
 
       style.mockReturnValue({ ...computed, columnGap: 'normal', rowGap: 'normal' });

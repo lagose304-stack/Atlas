@@ -306,6 +306,9 @@ export function sanitizePageTheme(value: unknown): PageTheme | undefined {
 }
 
 export const mediaAppearanceSchema = z.strictObject({
+  showCaption: z.boolean().optional(),
+  captionAlign: z.enum(['left', 'center', 'right']).optional(),
+  stageBackground: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
   aspect: z.enum(['auto', '16/9', '4/3', '1/1', '3/4']).optional(),
   objectPosition: z.enum(['center', 'top', 'bottom', 'left', 'right']).optional(),
   radius: z.number().int().min(0).max(48).optional(),

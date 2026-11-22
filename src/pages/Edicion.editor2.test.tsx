@@ -1,13 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { UserRole } from '../security/permissions';
 import Edicion from './Edicion';
 
 const auth = vi.hoisted(() => ({
   user: {
     id: 4,
-    username: 'elamlagos3@gmail.com',
+    username: 'edicion@example.test',
     rol: 'Administrador' as UserRole,
   },
 }));
@@ -32,13 +32,8 @@ const renderEdicion = () => render(
 );
 
 describe('tarjeta de entrada al editor 2.0 en Edición', () => {
-  beforeEach(() => {
-    auth.user.username = 'elamlagos3@gmail.com';
-    auth.user.rol = 'Administrador';
-  });
-
-  it('aparece para la cuenta autorizada, incluso con espacios y mayúsculas', () => {
-    auth.user.username = '  ELAMlagos3@GMAIL.com  ';
+  it.each(['Administrador', 'Microscopía'] as const)('aparece para el rol %s', (role) => {
+    auth.user.rol = role;
     renderEdicion();
 
     expect(screen.getByRole('heading', { name: 'Editor de páginas 2.0' })).toBeInTheDocument();
@@ -46,15 +41,7 @@ describe('tarjeta de entrada al editor 2.0 en Edición', () => {
     expect(screen.getByRole('link', { name: 'Abrir editor →' })).toHaveAttribute('href', '/editor-paginas');
   });
 
-  it('no aparece para otra cuenta aunque tenga permisos de edición', () => {
-    auth.user.username = 'otra.cuenta@gmail.com';
-    renderEdicion();
-
-    expect(screen.queryByRole('heading', { name: 'Editor de páginas 2.0' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Abrir editor →' })).toBeInTheDocument();
-  });
-
-  it('no aparece para la cuenta autorizada sin permiso de edición de páginas', () => {
+  it('oculta la entrada al rol Instructor', () => {
     auth.user.rol = 'Instructor';
     renderEdicion();
 
