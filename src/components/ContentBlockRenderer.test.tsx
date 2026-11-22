@@ -322,8 +322,12 @@ describe('ContentBlockRenderer', () => {
     expect(screen.getByText('Contenido principal').parentElement).toHaveStyle({ background: '#eff6ff' });
   });
 
-  it('renderiza componentes completos dentro de cada columna sin repetirlos afuera', () => {
-    render(<ContentBlockRenderer blocks={[columnsBlock, nestedHeadingBlock, nestedParagraphBlock]} />);
+  it.each([true, false])('renderiza los componentes de cada columna con texto directo=%s', (hasColumnText) => {
+    const layout = hasColumnText ? columnsBlock : {
+      ...columnsBlock,
+      content: { columns: '2', col_1: '', col_2: '' },
+    };
+    render(<ContentBlockRenderer blocks={[layout, nestedHeadingBlock, nestedParagraphBlock]} />);
     const container = screen.getByText('Componente en columna uno').closest('.cb-columns-container');
     expect(container).not.toBeNull();
     const slots = container?.querySelectorAll('.cb-column-slot');

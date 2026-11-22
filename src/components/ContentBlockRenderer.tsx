@@ -850,7 +850,7 @@ const BlockItem: React.FC<{
         c.col_3 || '',
         c.col_4 || '',
       ].slice(0, columns);
-      if (values.every(v => !v)) return null;
+      if (columnChildren.length === 0 && values.every(v => !v)) return null;
       const ratio = (c.ratio as '1:1' | '2:1' | '1:2') ?? '1:1';
       const templateMap: Record<'1:1' | '2:1' | '1:2', string> = {
         '1:1': '1fr 1fr',
