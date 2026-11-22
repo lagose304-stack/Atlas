@@ -124,13 +124,14 @@ export default function InstructorQuestionEditor({ question: q, index, label, co
         <textarea className="instructor-input" aria-label={`Respuestas aceptadas de ${subject}`} value={q.accepted_answers.join('\n')} onChange={e => onChange({ ...q, accepted_answers: e.target.value.split('\n') })} />
       </label>
     </> : q.type === 'completion' ? <>
-      <p className="instructor-muted">Escribe {'{{1}}'}, {'{{2}}'}, etc. en el enunciado donde deba ir cada hueco, una vez por hueco. {answersHint}</p>
+      <p className="instructor-muted">Añade los espacios o huecos que desees. Puedes indicar los espacios visualmente en el enunciado (por ejemplo con guiones bajos _____) o usar {'{{1}}'}, {'{{2}}'} para incrustar el campo dentro del texto si lo prefieres. {answersHint}</p>
       {q.blanks.map((blank, i) => <label className="instructor-label" key={blank.id}>Respuestas correctas del hueco {i + 1} de {subject}
         <textarea className="instructor-input" value={blank.accepted_answers.join('\n')} onChange={e => onChange({ ...q, blanks: q.blanks.map(b => b.id === blank.id ? { ...b, accepted_answers: e.target.value.split('\n') } : b) })} />
       </label>)}
       <div className="instructor-row">
         <button type="button" className="instructor-btn" disabled={q.blanks.length >= 12} onClick={() => onChange({ ...q,
-          titulo: `${q.titulo} {{${q.blanks.length + 1}}}`, blanks: [...q.blanks, { id: crypto.randomUUID(), accepted_answers: [''] }],
+          titulo: q.titulo.includes('{{') ? `${q.titulo} {{${q.blanks.length + 1}}}` : q.titulo,
+          blanks: [...q.blanks, { id: crypto.randomUUID(), accepted_answers: [''] }],
         })}><Plus size={16} aria-hidden="true" />Añadir hueco</button>
         <button type="button" className="instructor-btn" disabled={q.blanks.length <= 1} onClick={() => onChange({ ...q,
           titulo: q.titulo.split(`{{${q.blanks.length}}}`).join(''), blanks: q.blanks.slice(0, -1),

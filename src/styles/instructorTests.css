@@ -193,6 +193,9 @@ textarea.instructor-input { min-height: 96px; resize: vertical; }
 .instructor-pair-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
 .instructor-completion { white-space: pre-wrap; line-height: 2.6; overflow-wrap: anywhere; }
 .instructor-blank { display: inline-block; width: min(220px, 100%); vertical-align: middle; margin: 4px 6px; }
+.instructor-unplaced-blanks { display: grid; gap: 12px; margin-top: 16px; max-width: 480px; }
+.instructor-unplaced-blanks .instructor-label { margin: 0; }
+.instructor-unplaced-blanks .instructor-blank { width: 100%; margin: 6px 0 0; }
 .instructor-image-editor { border: 1px solid #c6cfdb; border-radius: 12px; padding: 18px; background: #e8edf3; margin: 24px 0; }
 .instructor-image-editor h4 { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .86rem; margin: 0 0 8px; }
 .instructor-image-editor h4 span { font-size: .68rem; color: #64748b; font-weight: 400; margin-left: 4px; }

@@ -56,19 +56,38 @@ export default function InstructorQuestionResponse({ question: q, index, label, 
       {q.image && <InstructorReferenceImageView key={q.image.url} url={q.image.url} annotations={q.image.annotations} />}
       <label className="instructor-label">Respuesta de {subject}
       <input className="instructor-input" maxLength={1000} autoComplete="off" value={typeof answer === 'string' ? answer : ''} onChange={e => onChange(e.target.value)} />
-    </label></div> : q.type === 'completion' ? <>
-      {q.image && <div className="instructor-question-image"><InstructorReferenceImageView key={q.image.url} url={q.image.url} annotations={q.image.annotations} /></div>}
-      <div className="instructor-completion">
-        {q.titulo.split(/(\{\{[0-9]+\}\})/).map((part, i) => {
-          const match = /^\{\{([0-9]+)\}\}$/.exec(part);
-          if (!match) return <span key={i}>{part}</span>;
-          const blankNumber = Number(match[1]);
-          const blank = q.blanks[blankNumber - 1];
-          return blank ? <input key={i} className="instructor-input instructor-blank" aria-label={`Hueco ${blankNumber} de ${subject}`}
-            maxLength={1000} autoComplete="off" value={objectAnswer[blank.id] ?? ''} onChange={e => onChange({ ...objectAnswer, [blank.id]: e.target.value })} /> : <span key={i}>{part}</span>;
-        })}
-      </div>
-    </> : q.type === 'matching' ? <>
+    </label></div> : q.type === 'completion' ? (() => {
+      const placedIds = new Set<string>();
+      const renderedParts = q.titulo.split(/(\{\{[0-9]+\}\})/).map((part, i) => {
+        const match = /^\{\{([0-9]+)\}\}$/.exec(part);
+        if (!match) return <span key={i}>{part}</span>;
+        const blankNumber = Number(match[1]);
+        const blank = q.blanks[blankNumber - 1];
+        if (blank) {
+          placedIds.add(blank.id);
+          return <input key={i} className="instructor-input instructor-blank" aria-label={`Hueco ${blankNumber} de ${subject}`}
+            maxLength={1000} autoComplete="off" value={objectAnswer[blank.id] ?? ''} onChange={e => onChange({ ...objectAnswer, [blank.id]: e.target.value })} />;
+        }
+        return <span key={i}>{part}</span>;
+      });
+      const unplacedBlanks = q.blanks.filter(b => !placedIds.has(b.id));
+
+      return <>
+        {q.image && <div className="instructor-question-image"><InstructorReferenceImageView key={q.image.url} url={q.image.url} annotations={q.image.annotations} /></div>}
+        {promptText ? <div className="instructor-completion">{renderedParts}</div> : null}
+        {unplacedBlanks.length > 0 && <div className="instructor-unplaced-blanks" role="group" aria-label={`Huecos para responder de ${subject}`}>
+          {unplacedBlanks.map((blank) => {
+            const blankIdx = q.blanks.findIndex(b => b.id === blank.id);
+            const blankNumber = blankIdx + 1;
+            return <label className="instructor-label" key={blank.id}>
+              <span>{q.blanks.length > 1 ? `Espacio / Hueco ${blankNumber}` : 'Respuesta del espacio a completar'}</span>
+              <input className="instructor-input instructor-blank" aria-label={`Hueco ${blankNumber} de ${subject}`}
+                maxLength={1000} autoComplete="off" value={objectAnswer[blank.id] ?? ''} onChange={e => onChange({ ...objectAnswer, [blank.id]: e.target.value })} />
+            </label>;
+          })}
+        </div>}
+      </>;
+    })() : q.type === 'matching' ? <>
       {q.image && <div className="instructor-question-image"><InstructorReferenceImageView key={q.image.url} url={q.image.url} annotations={q.image.annotations} /></div>}
       <p className="instructor-muted">Elige una opción para cada término. Puedes usar la misma opción más de una vez.</p>
       {q.terms.map((term, i) => <label className="instructor-label" key={term.id}>

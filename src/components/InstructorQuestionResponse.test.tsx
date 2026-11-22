@@ -199,4 +199,24 @@ describe('Responder formatos de instructores', () => {
     expect(screen.getByText('Pregunta 1')).toBeInTheDocument();
     expect(screen.queryByText('1.')).not.toBeInTheDocument();
   });
+
+  it('renderiza huecos no incrustados como campos de respuesta debajo del enunciado', () => {
+    const question: PublicInstructorQuestion = {
+      id: 'q-custom-completion',
+      type: 'completion',
+      titulo: 'Indica los dos tipos principales: 1. _____ y 2. _____',
+      blanks: [{ id: 'b1' }, { id: 'b2' }],
+    };
+    render(<Response question={question} />);
+    expect(screen.getByText('Indica los dos tipos principales: 1. _____ y 2. _____')).toBeInTheDocument();
+    const input1 = screen.getByLabelText('Hueco 1 de pregunta 1');
+    const input2 = screen.getByLabelText('Hueco 2 de pregunta 1');
+    expect(input1).toBeInTheDocument();
+    expect(input2).toBeInTheDocument();
+
+    fireEvent.change(input1, { target: { value: 'eucariota' } });
+    fireEvent.change(input2, { target: { value: 'procariota' } });
+    expect(JSON.parse(screen.getByTestId('answer').textContent || '{}')).toEqual({ b1: 'eucariota', b2: 'procariota' });
+    expect(screen.getByTestId('complete')).toHaveTextContent('true');
+  });
 });
