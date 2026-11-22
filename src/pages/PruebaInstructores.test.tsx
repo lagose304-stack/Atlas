@@ -134,13 +134,7 @@ describe('Banco de preguntas y configuración de pruebas de instructores', () =>
   it('confirma la eliminación desde la configuración y retira el borrador del listado', async () => {
     render(<PruebaInstructores />);
     fireEvent.click(await screen.findByRole('tab', { name: /Pruebas/ }));
-    const listDelete = await screen.findByRole('button', { name: 'Eliminar borrador Examen parcial 1' });
-    listDelete.focus();
-    fireEvent.click(listDelete);
     const dialog = () => screen.getByRole('alertdialog', { name: '¿Eliminar este borrador?' });
-    fireEvent.click(within(dialog()).getByRole('button', { name: 'Cancelar' }));
-    expect(listDelete).toHaveFocus();
-    expect(mocks.rpc).not.toHaveBeenCalledWith('atlas_delete_instructor_draft', expect.anything());
     fireEvent.click(screen.getByRole('button', { name: 'Configurar Examen parcial 1' }));
     fireEvent.change(await screen.findByLabelText('Nombre de la prueba'), { target: { value: 'Nombre sin guardar' } });
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar borrador' }));
@@ -149,6 +143,32 @@ describe('Banco de preguntas y configuración de pruebas de instructores', () =>
     fireEvent.click(within(dialog()).getByRole('button', { name: 'Eliminar definitivamente' }));
     await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith('atlas_delete_instructor_draft', { p_id: 'bank-test-1', p_revision: 1 }));
     expect(await screen.findByRole('status')).toHaveTextContent('Borrador eliminado.');
+    expect(screen.queryByRole('heading', { name: 'Examen parcial 1' })).not.toBeInTheDocument();
+  });
+
+  it.each(['publicada', 'borrador'])('permite eliminar una prueba con historial en estado %s', async estado => {
+    mocks.rpc.mockImplementation(async (name: string) => {
+      if (name === 'atlas_list_instructor_bank') return { data: [], error: null };
+      if (name === 'atlas_list_instructor_tests') {
+        return { data: [{ ...bankTestSummary, estado, revision: 3, published_revision: 2, can_delete_draft: false }], error: null };
+      }
+      if (name === 'atlas_delete_instructor_test') return { data: { ok: true }, error: null };
+      return { data: null, error: null };
+    });
+    render(<PruebaInstructores />);
+    fireEvent.click(await screen.findByRole('tab', { name: /Pruebas/ }));
+    const remove = await screen.findByRole('button', { name: 'Eliminar prueba Examen parcial 1' });
+    remove.focus();
+    fireEvent.click(remove);
+    const dialog = () => screen.getByRole('alertdialog', { name: '¿Eliminar esta prueba?' });
+    expect(dialog()).toHaveTextContent('todas sus respuestas, calificaciones y avances');
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Cancelar' }));
+    expect(remove).toHaveFocus();
+    expect(mocks.rpc).not.toHaveBeenCalledWith('atlas_delete_instructor_test', expect.anything());
+    fireEvent.click(remove);
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Eliminar definitivamente' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Prueba eliminada.');
+    expect(mocks.rpc).toHaveBeenCalledWith('atlas_delete_instructor_test', { p_id: 'bank-test-1', p_revision: 3 });
     expect(screen.queryByRole('heading', { name: 'Examen parcial 1' })).not.toBeInTheDocument();
   });
 

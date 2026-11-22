@@ -181,6 +181,12 @@ textarea.instructor-input { min-height: 96px; resize: vertical; }
 .instructor-test-item:last-child { border-bottom: 0; }
 .instructor-test-info { flex: 1; min-width: 0; }
 .instructor-test-actions { display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+.instructor-configured-tests .instructor-summary-name { overflow-wrap: anywhere; }
+@media (min-width: 601px) {
+  .instructor-configured-tests .instructor-test-item { flex-wrap: wrap; }
+  .instructor-configured-tests .instructor-test-info { flex-basis: 12rem; }
+  .instructor-configured-tests .instructor-test-actions { flex-shrink: 1; }
+}
 .instructor-public { margin-top: 32px; padding-top: 24px; border-top: 2px solid #ddd6fe; }
 .instructor-public h2 { color: #312e81; }
 .instructor-code { max-width: 220px; letter-spacing: .25em; font-size: 1.4rem; }

@@ -6,7 +6,7 @@ import {
 import { getCloudinaryImageUrl } from '../services/cloudinaryImages';
 import { getCachedTemas, type CatalogTema } from '../services/catalogService';
 import {
-  deleteInstructorDraft, getInstructorBankTopic, getInstructorTest, listInstructorBank, listInstructorTests,
+  deleteInstructorDraft, deleteInstructorTest, getInstructorBankTopic, getInstructorTest, listInstructorBank, listInstructorTests,
   publishInstructorTest, type InstructorBankSummary, type InstructorBankTopic,
   type InstructorEditor, type InstructorSummary,
 } from '../services/instructorTests';
@@ -39,7 +39,9 @@ export default function PruebaInstructores() {
 
   const [activeBankTopic, setActiveBankTopic] = useState<{ tema: CatalogTema; topic: InstructorBankTopic } | null>(null);
   const [configuringTest, setConfiguringTest] = useState<{ editor: InstructorEditor | null } | null>(null);
-  const [deletingDraft, setDeletingDraft] = useState<{ id: string; revision: number; name: string; dirty: boolean } | null>(null);
+  const [deletingTest, setDeletingTest] = useState<{
+    id: string; revision: number; name: string; kind: 'draft' | 'test'; dirty: boolean;
+  } | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [migratingTest, setMigratingTest] = useState<InstructorEditor | null>(null);
   const [reviewTest, setReviewTest] = useState<InstructorSummary | null>(null);
@@ -163,29 +165,30 @@ export default function PruebaInstructores() {
     }
   };
 
-  const requestDraftDeletion = (test: Pick<InstructorSummary, 'id' | 'revision'>, name: string, dirty = false) => {
+  const requestDeletion = (test: Pick<InstructorSummary, 'id' | 'revision'>, name: string, kind: 'draft' | 'test', dirty = false) => {
     setDeleteError('');
-    setDeletingDraft({ id: test.id, revision: test.revision, name, dirty });
+    setDeletingTest({ id: test.id, revision: test.revision, name, kind, dirty });
   };
-  const removeDraft = async () => {
-    if (busy || !deletingDraft) return;
+  const removeTest = async () => {
+    if (busy || !deletingTest) return;
+    const isDraft = deletingTest.kind === 'draft';
     setBusy(true); setDeleteError('');
     try {
-      await deleteInstructorDraft(deletingDraft);
-      setTests(previous => previous.filter(test => test.id !== deletingDraft.id));
+      await (isDraft ? deleteInstructorDraft : deleteInstructorTest)(deletingTest);
+      setTests(previous => previous.filter(test => test.id !== deletingTest.id));
       setConfiguringTest(null);
-      setDeletingDraft(null);
+      setDeletingTest(null);
       setError('');
-      setMessage('Borrador eliminado.');
+      setMessage(isDraft ? 'Borrador eliminado.' : 'Prueba eliminada.');
     } catch (e) {
-      setDeleteError(e instanceof Error ? e.message : 'No se pudo eliminar el borrador.');
+      setDeleteError(e instanceof Error ? e.message : 'No se pudo eliminar la prueba.');
     } finally {
       setBusy(false);
     }
   };
-  const deleteDialog = deletingDraft && <InstructorDeleteConfirmation kind="draft" name={deletingDraft.name}
-    dirty={deletingDraft.dirty} busy={busy} error={deleteError}
-    onCancel={() => setDeletingDraft(null)} onConfirm={() => void removeDraft()} />;
+  const deleteDialog = deletingTest && <InstructorDeleteConfirmation kind={deletingTest.kind} name={deletingTest.name}
+    dirty={deletingTest.dirty} busy={busy} error={deleteError}
+    onCancel={() => setDeletingTest(null)} onConfirm={() => void removeTest()} />;
 
   if (activeBankTopic) {
     return (
@@ -216,7 +219,7 @@ export default function PruebaInstructores() {
         }}
         onClose={() => setConfiguringTest(null)}
         onDeleteDraft={editor?.estado === 'borrador' && editor.can_delete_draft
-          ? dirty => requestDraftDeletion(editor, editor.content.nombre, dirty) : undefined}
+          ? dirty => requestDeletion(editor, editor.content.nombre, 'draft', dirty) : undefined}
       />
       {deleteDialog}
     </>;
@@ -455,7 +458,7 @@ export default function PruebaInstructores() {
                     <p>Crea una prueba para definir la cantidad de preguntas aleatorias por tema y el código de acceso.</p>
                   </div>
                 )}
-                <ul className="instructor-test-list" aria-label="Listado de pruebas guardadas">
+                <ul className="instructor-test-list instructor-configured-tests" aria-label="Listado de pruebas guardadas">
                   {bankTests.map(test => (
                     <li className="instructor-test-item" key={test.id}>
                       <span className="instructor-test-icon"><FileText size={20} aria-hidden="true" /></span>
@@ -486,10 +489,10 @@ export default function PruebaInstructores() {
                         <button type="button" className="instructor-btn" disabled={busy} aria-label={`Configurar ${test.nombre}`} onClick={() => void openTestConfig(test.id)}>
                           <Settings2 size={16} aria-hidden="true" />Configurar
                         </button>
-                        {test.estado === 'borrador' && test.can_delete_draft && <button type="button" className="instructor-btn instructor-btn-danger" disabled={busy}
-                          aria-label={`Eliminar borrador ${test.nombre}`} onClick={() => requestDraftDeletion(test, test.nombre)}>
-                          <Trash2 size={16} aria-hidden="true" />Eliminar borrador
-                        </button>}
+                        <button type="button" className="instructor-btn instructor-btn-danger" disabled={busy}
+                          aria-label={`Eliminar prueba ${test.nombre}`} onClick={() => requestDeletion(test, test.nombre, 'test')}>
+                          <Trash2 size={16} aria-hidden="true" />Eliminar prueba
+                        </button>
                       </div>
                     </li>
                   ))}

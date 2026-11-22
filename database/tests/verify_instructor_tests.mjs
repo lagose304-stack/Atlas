@@ -681,6 +681,7 @@ try {
     await apply('update_instructor_bank_exam');
     await apply('delete_instructor_test_drafts');
     await apply('preserve_instructor_question_images');
+    await apply('delete_instructor_tests');
     await actor(4);
 
     const slots = ['a1', 'b1'];
@@ -817,6 +818,32 @@ try {
       && (await call('atlas_get_instructor_bank_topic', [2])).revision === savedTopic.revision
       && (await call('atlas_get_instructor_submission', [mixedSubmission.id])).id === mixedSubmission.id,
     'Borrar un borrador no afecta las preguntas del banco ni las entregas de otras pruebas');
+
+    await actor(null);
+    await reject(() => call('atlas_delete_instructor_test', [bank.id, bank.revision]), /No autorizado/);
+    await actor(4);
+    await reject(() => call('atlas_delete_instructor_test', [bank.id, bank.revision + 1]), /Otra persona/);
+    await reject(() => call('atlas_delete_instructor_test', [pointPublished.id, pointPublished.revision]), /Solo se pueden eliminar/);
+    const relatedRows = async testId => (await db.query(`
+      SELECT
+        (SELECT count(*)::integer FROM public.instructor_test_access WHERE test_id = $1) AS access,
+        (SELECT count(*)::integer FROM public.instructor_test_attempts WHERE test_id = $1) AS attempts,
+        (SELECT count(*)::integer FROM public.instructor_test_progress WHERE test_id = $1) AS progress,
+        (SELECT count(*)::integer FROM public.instructor_test_submissions WHERE test_id = $1) AS submissions
+    `, [testId])).rows[0];
+    check(Object.values(await relatedRows(bank.id)).every(count => count > 0), 'La prueba publicada tiene historial de cada tipo');
+    const otherRows = await relatedRows(retired.id);
+    check((await call('atlas_delete_instructor_test', [bank.id, bank.revision])).ok
+      && (await call('atlas_delete_instructor_test', [bank.id, bank.revision])).ok, 'El borrado de una prueba ejecutada es idempotente');
+    check(Object.values(await relatedRows(bank.id)).every(count => count === 0), 'El borrado elimina accesos, intentos, progreso y entregas');
+    assert.deepEqual(await relatedRows(retired.id), otherRows);
+    check(!(await call('atlas_public_instructor_tests')).some(test => test.id === bank.id)
+      && !(await call('atlas_list_instructor_tests')).some(test => test.id === bank.id), 'La prueba eliminada desaparece de ambos catálogos');
+    check((await call('atlas_get_instructor_bank_topic', [1])).content.questions.length === topic.questions.length
+      && (await call('atlas_get_instructor_submission', [mixedSubmission.id])).id === mixedSubmission.id,
+    'El borrado conserva el banco y las entregas de otras pruebas');
+    check((await call('atlas_delete_instructor_test', [retired.id, retired.revision])).ok
+      && Object.values(await relatedRows(retired.id)).every(count => count === 0), 'También se elimina el historial de una prueba retirada');
 
     const bank_topics = [1, 2].map(tema_id => ({
       tema_id, nombre: `Tema ${tema_id}`,

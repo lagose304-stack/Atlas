@@ -6,11 +6,12 @@ import { acquireAtlasScrollLock, releaseAtlasScrollLock } from '../constants/scr
 type Props = {
   name: string; dirty: boolean; busy?: boolean; error?: string;
   onCancel: () => void; onConfirm: () => void;
-} & ({ kind: 'draft' } | { kind?: 'submission'; account?: string | null; reference: string });
+} & ({ kind: 'draft' | 'test' } | { kind?: 'submission'; account?: string | null; reference: string });
 
 export default function InstructorDeleteConfirmation(props: Props) {
   const { name, dirty, busy, error, onCancel, onConfirm } = props;
   const isDraft = props.kind === 'draft';
+  const isTest = props.kind === 'test';
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -32,13 +33,15 @@ export default function InstructorDeleteConfirmation(props: Props) {
         }
       }}>
       <span className="instructor-delete-warning"><AlertTriangle size={26} aria-hidden="true" /></span>
-      <h2 id="instructor-delete-title">{isDraft ? '¿Eliminar este borrador?' : '¿Eliminar esta entrega?'}</h2>
+      <h2 id="instructor-delete-title">{isDraft ? '¿Eliminar este borrador?' : isTest ? '¿Eliminar esta prueba?' : '¿Eliminar esta entrega?'}</h2>
       <div className="instructor-delete-identity"><strong>{name}</strong>
-        {props.kind !== 'draft' && <>{props.account && <span>Cuenta: {props.account}</span>}<span>Entrega {props.reference}</span></>}
+        {'reference' in props && <>{props.account && <span>Cuenta: {props.account}</span>}<span>Entrega {props.reference}</span></>}
       </div>
       <p id="instructor-delete-description">{isDraft
         ? 'La configuración guardada se eliminará de forma permanente. Las preguntas seguirán en el banco.'
-        : 'Se borrarán permanentemente sus respuestas, calificación y progreso asociado. Esta acción no se puede deshacer.'}</p>
+        : isTest
+          ? 'Se eliminarán definitivamente la prueba y todas sus respuestas, calificaciones y avances. Las preguntas seguirán en el banco.'
+          : 'Se borrarán permanentemente sus respuestas, calificación y progreso asociado. Esta acción no se puede deshacer.'}</p>
       {dirty && <p>{isDraft ? 'También se descartarán los cambios sin guardar.' : 'También se descartará la revisión que no has guardado.'}</p>}
       {error && <p className="instructor-error" role="alert">{error}</p>}
       <div className="instructor-delete-actions">

@@ -98,6 +98,9 @@ export const publishInstructorTest = (test: Pick<InstructorSummary, 'id' | 'revi
 export const deleteInstructorDraft = (test: Pick<InstructorSummary, 'id' | 'revision'>) => rpc<{ ok: true }>(
   'atlas_delete_instructor_draft', { p_id: test.id, p_revision: test.revision },
 );
+export const deleteInstructorTest = (test: Pick<InstructorSummary, 'id' | 'revision'>) => rpc<{ ok: true }>(
+  'atlas_delete_instructor_test', { p_id: test.id, p_revision: test.revision },
+);
 export const publicInstructorTests = () => rpc<PublicInstructorSummary[]>('atlas_public_instructor_tests');
 export const unlockInstructorTest = (id: string, code: string) => {
   if (!isSixDigitCode(code)) return Promise.reject(new Error('Escribe los 6 dígitos del código.'));
