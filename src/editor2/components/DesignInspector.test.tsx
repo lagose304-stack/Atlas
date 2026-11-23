@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createEmptyCanvasDoc } from '../domain/defaults';
+import { ATLAS_PAGE_THEMES } from '../domain/styleSchema';
 import { useEditor2Store } from '../store/editor2Store';
 import DesignInspector from './DesignInspector';
 import GradientPicker from './GradientPicker';
@@ -230,6 +232,13 @@ describe('DesignInspector (Fase 2 — Parte 2)', () => {
       { orientation: 'vertical', label: 'Capas', thickness: 4, color: '#6089ad', widthPercent: 60 }],
     ['examCarousel', 'Plantillas de pruebas por parcial', { parcial: 'segundo', title: 'Tejido epitelial', maxItems: 4 },
       { parcial: 'segundo', title: 'Tejido epitelial', maxItems: 4, accentColor: '#255a83' }],
+    ['gif', 'Plantillas de GIF', { src: '/mitosis.gif', alt: 'Mitosis', caption: 'División celular', fit: 'cover', zoom: true,
+      media: { filter: 'warm', overlayBadge: 'H&E' } },
+      { src: '/mitosis.gif', alt: 'Mitosis', caption: 'División celular', fit: 'cover', zoom: true,
+        media: { filter: 'warm', overlayBadge: 'H&E', aspect: '16/9', captionAlign: 'right' } }],
+    ['video', 'Plantillas de video', { url: 'https://example.com/tejido.mp4', caption: 'Tejido epitelial', aspect: '4/3' },
+      { url: 'https://example.com/tejido.mp4', caption: 'Tejido epitelial', aspect: '16/9',
+        media: { showCaption: true, captionAlign: 'right', radius: 6 } }],
   ])('aplica una plantilla de %s sin perder contenido ni posición', (type, galleryLabel, content, expected) => {
     const layout = { base: { span: 6, row: 2 } };
     mockSelectedItem = { type, props: { id: 'block-1', layout, ...content } };
@@ -238,6 +247,43 @@ describe('DesignInspector (Fase 2 — Parte 2)', () => {
     expect(within(gallery).getAllByRole('button')).toHaveLength(10);
     fireEvent.click(within(gallery).getByRole('button', { name: 'Definición' }));
     expect(mockDispatch.mock.calls[0][0].data.props).toMatchObject({ ...expected, layout });
+  });
+
+  it.each([
+    ['box', 'tarjeta / caja', { gap: 'lg', content: [{ type: 'text', props: { text: 'Epitelio' } }] }, {}],
+    ['tabs', 'pestañas', { items: [{ title: 'Epitelio', subtitle: 'Capas', content: [{ type: 'text' }] }] },
+      { tabStyle: 'pills', accentColor: '#604587' }],
+    ['accordion', 'acordeón', { items: [{ title: 'Uniones', openByDefault: true, content: [{ type: 'text' }] }] },
+      { mode: 'reveal', accentColor: '#604587' }],
+  ])('conserva el contenido y la distribución al cambiar la plantilla de %s', (type, label, content, expected) => {
+    const layout = { base: { start: 2, span: 12, row: 4 } };
+    const keptStyle = { flow: { direction: 'row', wrap: false }, responsive: { mobile: { gap: 'sm' } }, shadow: 'soft' };
+    const props = { id: 'structure-1', layout, ...content, style: keptStyle };
+    mockSelectedItem = { type, props };
+    const { rerender } = render(<DesignInspector />);
+    const gallery = screen.getByRole('group', { name: `Plantillas de ${label}` });
+    const card = within(gallery).getByRole('button', { name: 'Observación' });
+    expect(within(gallery).getAllByRole('button')).toHaveLength(10);
+    fireEvent.click(card);
+    const next = mockDispatch.mock.calls[0][0].data;
+    expect(next.props).toMatchObject({ ...props, ...expected, style: {
+      ...keptStyle, background: { type: 'solid', color: '#f5f0fc' }, border: { style: 'dashed' },
+    } });
+    mockSelectedItem = next;
+    rerender(<DesignInspector />);
+    expect(card).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('usa un fondo oscuro en la muestra y en el bloque cuando el tema tiene texto claro', () => {
+    const doc = createEmptyCanvasDoc('home');
+    doc.pageTheme = ATLAS_PAGE_THEMES.find(theme => theme.id === 'microscopia-oscura')!.theme;
+    useEditor2Store.getState().setDoc(doc);
+    render(<DesignInspector />);
+    const gallery = screen.getByRole('group', { name: 'Plantillas de tarjeta / caja' });
+    const card = within(gallery).getByRole('button', { name: 'Observación' });
+    expect(card.querySelector('.e2-structure-sample')).toHaveStyle({ color: '#f1f5f9', backgroundColor: '#2e2141' });
+    fireEvent.click(card);
+    expect(mockDispatch.mock.calls[0][0].data.props.style.background).toEqual({ type: 'solid', color: '#2e2141' });
   });
 
   it('muestra diez plantillas y permite editar la línea elegida desde Diseño', () => {

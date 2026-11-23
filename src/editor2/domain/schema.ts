@@ -185,6 +185,13 @@ export const carouselBlockSchema = z.strictObject({
   }),
 });
 
+export const videoAppearanceSchema = mediaAppearanceSchema.pick({
+  showCaption: true,
+  captionAlign: true,
+  stageBackground: true,
+  radius: true,
+});
+
 export const videoBlockSchema = z.strictObject({
   id: uuidSchema,
   type: z.literal('video'),
@@ -192,6 +199,7 @@ export const videoBlockSchema = z.strictObject({
     url: z.string().max(1000),
     caption: richTextV1Schema.optional(),
     aspect: z.enum(['16/9', '4/3', '1/1']).optional(),
+    media: videoAppearanceSchema.optional(),
     style: blockStyleSchema.optional(),
   }),
 });

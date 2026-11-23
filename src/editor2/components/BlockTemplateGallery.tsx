@@ -12,7 +12,7 @@ type TemplateCard = {
 export default function BlockTemplateGallery({ label, variant, templates }: {
   label: string;
   variant: 'heading' | 'paragraph' | 'badge' | 'icon' | 'callout' | 'table' | 'button' | 'divider' | 'examCarousel' |
-    'image' | 'carousel' | 'compare';
+    'image' | 'carousel' | 'compare' | 'gif' | 'video' | 'box' | 'tabs' | 'accordion';
   templates: TemplateCard[];
 }) {
   const list = useRef<HTMLDivElement>(null);

@@ -1,4 +1,4 @@
-import type { BadgeBlock, ButtonBlock, CalloutBlock, DividerBlock, IconBlock, TableBlock, TextAppearance } from './schema';
+import type { AccordionBlock, BadgeBlock, ButtonBlock, CalloutBlock, DividerBlock, IconBlock, TableBlock, TabsBlock, TextAppearance } from './schema';
 import type { BlockStyle, BorderStyle, MediaAppearance } from './styleSchema';
 
 type TemplateSurface = Pick<BlockStyle, 'background' | 'border' | 'radius' | 'padding' | 'shadow' | 'shadowColor' | 'backdropBlur'>;
@@ -49,6 +49,42 @@ function exams(accentColor: string, background: string, borderColor: string, rad
   };
 }
 
+function structure(accentColor: string, background: string, borderColor: string, radius: number,
+  tabStyle: NonNullable<TabsBlock['props']['tabStyle']>, mode: NonNullable<AccordionBlock['props']['mode']> = 'default') {
+  return {
+    accentColor,
+    tabStyle,
+    mode,
+    surface: {
+      background: { type: 'solid', color: background },
+      border: { width: 1, style: mode === 'reveal' ? 'dashed' : 'solid', color: borderColor, sides: 'all' },
+      radius: { mode: 'uniform', value: radius },
+      padding: { mode: 'uniform', value: radius < 8 ? 12 : 16 },
+    } satisfies TemplateSurface,
+  };
+}
+
+function relativeLuminance(color: string) {
+  const channel = (start: number) => {
+    const value = parseInt(color.slice(start, start + 2), 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  return channel(1) * 0.2126 + channel(3) * 0.7152 + channel(5) * 0.0722;
+}
+
+export function structureTemplateForText(template: ReturnType<typeof structure>, textColor?: string) {
+  const { accentColor, surface } = template;
+  if (!textColor) return template;
+  const textLight = relativeLuminance(textColor);
+  const surfaceLight = relativeLuminance(surface.background.color);
+  const contrast = (Math.max(textLight, surfaceLight) + 0.05) / (Math.min(textLight, surfaceLight) + 0.05);
+  if (contrast >= 4.5) return template;
+
+  const darkBackground = accentColor.replace(/[a-f0-9]{2}/gi, channel =>
+    Math.round(parseInt(channel, 16) * 0.48).toString(16).padStart(2, '0'));
+  return { ...template, surface: { ...surface, background: { ...surface.background, color: darkBackground } } };
+}
+
 function note(tone: CalloutTone, background: string, color: string, sides: NonNullable<BorderStyle['sides']>,
   stroke: 'solid' | 'dashed' | 'dotted' = 'solid', radius = 10) {
   return {
@@ -75,9 +111,11 @@ export const COMPONENT_TEMPLATE_FAMILIES: {
   divider: DividerTemplate;
   examCarousel: ReturnType<typeof exams>;
   photo: ReturnType<typeof photo>;
+  structure: ReturnType<typeof structure>;
 }[] = [
   {
     label: 'Texto base', surface: {}, type: {}, badge: { variant: 'outline', color: '#334155', size: 'sm' },
+    structure: structure('#334155', '#ffffff', '#cbd5e1', 8, 'underline'),
     photo: photo({ paper: '#ffffff', matte: '#eef2f5', edge: '#cbd5e1', radius: 0, aspect: 'auto',
       caption: 'left', padding: 0, stroke: 'none' }),
     button: { variant: 'outline', color: '#334155' },
@@ -89,6 +127,7 @@ export const COMPONENT_TEMPLATE_FAMILIES: {
   },
   {
     label: 'Introducción',
+    structure: structure('#234c71', '#f3f8fd', '#b9d4e6', 12, 'cards'),
     photo: photo({ paper: '#f7fafc', matte: '#102a43', edge: '#30739e', radius: 10, aspect: '16/9',
       caption: false, padding: 0, stroke: 'none' }),
     button: { variant: 'solid', color: '#0b2545', icon: 'arrow-right' },
@@ -107,6 +146,7 @@ export const COMPONENT_TEMPLATE_FAMILIES: {
   },
   {
     label: 'Nota de estudio',
+    structure: structure('#0369a1', '#eaf6fc', '#9fcfe7', 8, 'underline'),
     photo: photo({ paper: '#f2f9fd', matte: '#e0edf5', edge: '#0284c7', radius: 2, aspect: '4/3',
       caption: 'left', padding: 8, sides: 'left' }),
     button: { variant: 'soft', color: '#0369a1', icon: 'bookmark' },
@@ -129,6 +169,7 @@ export const COMPONENT_TEMPLATE_FAMILIES: {
   },
   {
     label: 'Observación',
+    structure: structure('#604587', '#f5f0fc', '#cbb9e7', 14, 'pills', 'reveal'),
     photo: photo({ paper: '#f3eff9', matte: '#272139', edge: '#b8a6dc', radius: 12, aspect: '4/3',
       caption: 'center', padding: 8 }),
     button: WEEKLY_BUTTON_TEMPLATE,
@@ -153,6 +194,7 @@ export const COMPONENT_TEMPLATE_FAMILIES: {
   },
   {
     label: 'Idea clave',
+    structure: structure('#27634f', '#edf8f3', '#abcdbf', 18, 'pills', 'reveal'),
     photo: photo({ paper: '#eff8f4', matte: '#dbece4', edge: '#43846e', radius: 18, aspect: '1/1',
       wideAspect: '4/3', caption: false, padding: 0, stroke: 'none' }),
     button: { variant: 'pill', color: '#27634f', icon: 'lightbulb' },
@@ -176,6 +218,7 @@ export const COMPONENT_TEMPLATE_FAMILIES: {
   },
   {
     label: 'Lectura enmarcada',
+    structure: structure('#425f79', '#f8fafc', '#91a9bd', 4, 'cards'),
     photo: photo({ paper: '#ffffff', matte: '#edf1f4', edge: '#72859a', radius: 0, aspect: 'auto',
       caption: 'center', padding: 14 }),
     button: { variant: 'outline', color: '#425f79', icon: 'book-open' },
@@ -199,6 +242,7 @@ export const COMPONENT_TEMPLATE_FAMILIES: {
   },
   {
     label: 'Guía práctica',
+    structure: structure('#825515', '#fff8e7', '#d6b77f', 10, 'cards', 'reveal'),
     photo: photo({ paper: '#fff8e9', matte: '#f4e6c9', edge: '#9a6a25', radius: 4, aspect: '4/3',
       wideAspect: '16/9', caption: 'left', padding: 7, stroke: 'dashed' }),
     button: { variant: 'solid', color: '#825515', icon: 'clipboard-list' },
@@ -223,6 +267,7 @@ export const COMPONENT_TEMPLATE_FAMILIES: {
   },
   {
     label: 'Detalle de lámina',
+    structure: structure('#865370', '#fdf4f9', '#e3bccf', 16, 'pills'),
     photo: photo({ paper: '#fff3f6', matte: '#f3e1e7', edge: '#be5677', radius: 2, aspect: '3/4',
       wideAspect: '4/3', caption: 'right', padding: 6, stroke: 'dotted', sides: 'bottom' }),
     button: { variant: 'soft', color: '#865370', icon: 'scan-eye' },
@@ -245,6 +290,7 @@ export const COMPONENT_TEMPLATE_FAMILIES: {
   },
   {
     label: 'Cita',
+    structure: structure('#6b5035', '#faf5ed', '#dac7b1', 6, 'underline'),
     photo: photo({ paper: '#faf5ec', matte: '#312923', edge: '#a9895f', radius: 8, aspect: '1/1',
       wideAspect: '16/9', caption: false, padding: 12, sides: 'bottom' }),
     button: { variant: 'soft', color: '#6b5035', icon: 'file-text' },
@@ -267,6 +313,7 @@ export const COMPONENT_TEMPLATE_FAMILIES: {
   },
   {
     label: 'Definición',
+    structure: structure('#255a83', '#e8f2fa', '#a9c9e3', 12, 'cards'),
     photo: photo({ paper: '#eaf6fa', matte: '#daeaf0', edge: '#047e99', radius: 6, aspect: '16/9',
       caption: 'right', padding: 5, sides: 'right' }),
     button: { variant: 'gradient', color: '#255a83', icon: 'layers' },

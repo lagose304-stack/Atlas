@@ -1,7 +1,7 @@
-import { ArrowRight, ChevronLeft, ChevronRight, ClipboardList, MoveHorizontal } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Lightbulb, MoveHorizontal, Play } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import micrograph from '../../assets/imagenes/placa_817_cerebelo_miniatura.webp';
-import { COMPONENT_TEMPLATE_FAMILIES, type IconTemplate, type TableTemplate } from '../domain/componentTemplates';
+import { COMPONENT_TEMPLATE_FAMILIES, structureTemplateForText, type IconTemplate, type TableTemplate } from '../domain/componentTemplates';
 import { createLayoutIntent, EDITOR2_DEFAULT_IMAGE_SRC } from '../domain/defaults';
 import type { BlockStyle, MediaAppearance } from '../domain/styleSchema';
 import { weeklyButtonDestination } from '../domain/weeklyButtonDestination';
@@ -21,25 +21,48 @@ const labels = {
   image: 'Plantillas de imagen',
   carousel: 'Plantillas de carrusel',
   compare: 'Plantillas de comparador',
+  gif: 'Plantillas de GIF',
+  video: 'Plantillas de video',
+  box: 'Plantillas de tarjeta / caja',
+  tabs: 'Plantillas de pestañas',
+  accordion: 'Plantillas de acordeón',
 };
 
-export type ContentTemplateType = keyof typeof labels;
+type StructureType = 'box' | 'tabs' | 'accordion';
+type TemplateType = keyof typeof labels;
+export type ContentTemplateType = Exclude<TemplateType, StructureType>;
 const previewLayout = createLayoutIntent();
 
 type Props = {
-  type: ContentTemplateType;
+  type: TemplateType;
   properties: Record<string, unknown>;
   style: BlockStyle;
+  pageTextColor?: string;
   onApply: (style: BlockStyle, patch: Record<string, unknown>) => void;
   onRequestWeeklyButton?: () => void;
 };
 
-export default function ContentTemplateGallery({ type, properties, style, onApply, onRequestWeeklyButton }: Props) {
+export default function ContentTemplateGallery({ type, properties, style, pageTextColor, onApply, onRequestWeeklyButton }: Props) {
   return <BlockTemplateGallery label={labels[type]} variant={type}
     templates={COMPONENT_TEMPLATE_FAMILIES.map(family => {
-      if (type === 'image' || type === 'carousel' || type === 'compare') {
-        const { media: suggestedMedia, surface, wideAspect } = family.photo;
-        const media = { ...suggestedMedia, aspect: type === 'image' ? suggestedMedia.aspect : wideAspect };
+      if (type === 'box' || type === 'tabs' || type === 'accordion') {
+        const template = structureTemplateForText(family.structure, pageTextColor);
+        const { surface, tabStyle, mode, accentColor } = template;
+        const patch = type === 'tabs' ? { tabStyle, accentColor } : type === 'accordion' ? { mode, accentColor } : {};
+        const matchesVariant = type === 'tabs' ? (properties.tabStyle ?? 'underline') === tabStyle :
+          type === 'accordion' ? (properties.mode ?? 'default') === mode : true;
+        return {
+          label: family.label,
+          sample: <StructureSample type={type} template={template} textColor={pageTextColor} />,
+          active: matchesSurface(style, surface) && matchesVariant && (type === 'box' || properties.accentColor === accentColor),
+          onSelect: () => onApply({ ...style, ...surface }, patch),
+        };
+      }
+      if (type === 'image' || type === 'carousel' || type === 'compare' || type === 'gif' || type === 'video') {
+        const { media: { aspect: photoAspect, ...frame }, surface, wideAspect } = family.photo;
+        const aspect = type === 'image' || type === 'gif' ? photoAspect : wideAspect;
+        const videoAspect = photoAspect === '1/1' ? photoAspect : wideAspect === '4/3' ? wideAspect : '16/9';
+        const media = { ...frame, aspect: type === 'video' ? videoAspect : aspect };
         const current = properties.media as MediaAppearance | undefined;
         const fit = properties.fit === 'cover' ? 'cover' : 'contain';
         const imageStyle = mediaImageStyle(fit, current);
@@ -49,6 +72,10 @@ export default function ContentTemplateGallery({ type, properties, style, onAppl
             <span className="e2-photo-template" style={{ ...blockStyleToCss(surface), padding: surface.padding.value / 2 }}>
               <span className="e2-photo-template__stage" style={mediaStageStyle(media, type === 'carousel' ? '4/3' : undefined)}>
                 <img src={micrograph} alt="" loading="lazy" draggable={false} style={imageStyle} />
+                {type === 'gif' && <span className="e2-gif-badge">GIF</span>}
+                {type === 'video' && (
+                  <span className="e2-photo-template__play"><Play size={14} fill="currentColor" /></span>
+                )}
                 {type === 'carousel' && (
                   <>
                     <span className="e2-photo-template__controls"><ChevronLeft size={13} /><ChevronRight size={13} /></span>
@@ -67,10 +94,13 @@ export default function ContentTemplateGallery({ type, properties, style, onAppl
               {media.showCaption && <span className="e2-photo-template__caption" style={{ textAlign: media.captionAlign }}>Cerebelo</span>}
             </span>
           ),
-          active: (current?.aspect ?? 'auto') === media.aspect && (current?.radius ?? 0) === media.radius &&
+          active: (type === 'video' ? (properties.aspect ?? '16/9') === videoAspect : (current?.aspect ?? 'auto') === media.aspect) &&
+            (current?.radius ?? 0) === media.radius &&
             current?.stageBackground === media.stageBackground && current?.captionAlign === media.captionAlign &&
             (current?.showCaption ?? true) === media.showCaption && matchesSurface(style, surface),
-          onSelect: () => onApply({ ...style, ...surface }, { media: { ...current, ...media } }),
+          onSelect: () => onApply({ ...style, ...surface }, type === 'video'
+            ? { aspect: videoAspect, media: { ...current, ...frame } }
+            : { media: { ...current, ...media } }),
         };
       }
       if (type === 'button') {
@@ -151,6 +181,55 @@ export default function ContentTemplateGallery({ type, properties, style, onAppl
         onSelect: () => onApply({ ...style, ...surface }, { tone }),
       };
     })} />;
+}
+
+function StructureSample({ type, template, textColor }: {
+  type: StructureType;
+  template: (typeof COMPONENT_TEMPLATE_FAMILIES)[number]['structure'];
+  textColor?: string;
+}) {
+  const { surface, tabStyle, mode, accentColor } = template;
+  const style = { ...blockStyleToCss(surface), padding: surface.padding.value / 3, color: textColor };
+
+  if (type === 'tabs') {
+    return (
+      <span className={`e2-structure-sample e2-tabs--${tabStyle}`} style={{ ...style, '--e2-tab-accent': accentColor } as CSSProperties}>
+        <span className="e2-tabs-nav">
+          <span className="e2-tabs-nav__btn is-active">Epitelio</span>
+          <span className="e2-tabs-nav__btn">Matriz</span>
+        </span>
+        <span className="e2-structure-sample__copy">Capas celulares</span>
+      </span>
+    );
+  }
+
+  if (type === 'accordion') {
+    return (
+      <span className={`e2-structure-sample e2-accordion--${mode}`} style={{ ...style, '--e2-accordion-accent': accentColor } as CSSProperties}>
+        {['Epitelio', 'Conectivo'].map((title, index) => (
+          <span key={title} className={index === 0 ? 'e2-accordion-item is-open' : 'e2-accordion-item'}>
+            <span className="e2-accordion-trigger">
+              <span className="e2-accordion-trigger__label">
+                {mode === 'reveal' && <Lightbulb size={12} className="e2-accordion-reveal-icon" />}
+                {title}
+              </span>
+              <ChevronDown size={12} className="e2-accordion-chevron" />
+            </span>
+            {index === 0 && <span className="e2-structure-sample__copy">Capas celulares</span>}
+          </span>
+        ))}
+      </span>
+    );
+  }
+
+  return (
+    <span className="e2-structure-sample" style={style}>
+      <span className="e2-structure-sample__box">
+        <strong>Epitelio</strong>
+        <span>Capas celulares</span>
+      </span>
+    </span>
+  );
 }
 
 function matchesSurface(style: BlockStyle, surface: BlockStyle): boolean {

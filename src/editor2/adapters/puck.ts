@@ -5,6 +5,7 @@ import {
   headingTextSizePresetSchema,
   textSizePresetSchema,
   imageSrcSchema,
+  videoAppearanceSchema,
   type AccordionItem,
   type BlockStyle,
   type ButtonBlock,
@@ -21,6 +22,7 @@ import {
   type TabItem,
   type TextAppearance,
   type TextSizePreset,
+  type VideoBlock,
 } from '../domain/schema';
 import { richTextToPlain, sanitizeRichTextV2 } from '../domain/richText';
 import { sanitizeBlockStyle, sanitizeMediaAppearance, sanitizePageTheme } from '../domain/styleSchema';
@@ -169,6 +171,7 @@ export type PuckVideoData = {
     url: string;
     caption?: string;
     aspect?: '16/9' | '4/3' | '1/1';
+    media?: VideoBlock['props']['media'];
     style?: BlockStyle;
   };
 };
@@ -417,6 +420,7 @@ type AnyBlockLike =
         url: string;
         caption?: RichTextV1;
         aspect?: '16/9' | '4/3' | '1/1';
+        media?: VideoBlock['props']['media'];
         style?: BlockStyle;
       };
     }
@@ -712,6 +716,7 @@ function puckFromPlaced(item: AnyPlacedLike): PuckBlockData {
             ? {}
             : { caption: textFromRichText(item.block.props.caption) }),
           ...(item.block.props.aspect ? { aspect: item.block.props.aspect } : {}),
+          ...(item.block.props.media ? { media: item.block.props.media } : {}),
           ...styleProp,
         },
       };
@@ -1042,7 +1047,8 @@ function placedFromPuck(item: PuckBlockData, insideBox = false): AnyPlacedLike {
         layout,
       };
     }
-    case 'video':
+    case 'video': {
+      const appearance = videoAppearanceSchema.safeParse(item.props.media);
       return {
         block: {
           id: toAtlasId('video', item.props.id),
@@ -1055,11 +1061,13 @@ function placedFromPuck(item: PuckBlockData, insideBox = false): AnyPlacedLike {
             ...(item.props.aspect === '16/9' || item.props.aspect === '4/3' || item.props.aspect === '1/1'
               ? { aspect: item.props.aspect }
               : {}),
+            ...(appearance.success ? { media: appearance.data } : {}),
             ...styleProp,
           },
         },
         layout,
       };
+    }
     case 'compare': {
       const media = sanitizeMediaAppearance(item.props.media);
       return {

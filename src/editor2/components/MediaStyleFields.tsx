@@ -1,5 +1,19 @@
 import type { MediaAppearance } from '../domain/styleSchema';
 
+export function MediaRadiusField({ radius = 0, label, onChange }: {
+  radius?: number;
+  label: string;
+  onChange: (radius: number) => void;
+}) {
+  return (
+    <label className="e2-design-slider">
+      <span>Redondeado: {radius} px</span>
+      <input type="range" aria-label={label} min={0} max={40} step={2} value={radius}
+        onChange={event => onChange(Number(event.target.value))} />
+    </label>
+  );
+}
+
 export default function MediaStyleFields({ media, onChange, allowOverlay = true }: {
   media?: MediaAppearance;
   onChange: (next: MediaAppearance | undefined) => void;
@@ -71,18 +85,7 @@ export default function MediaStyleFields({ media, onChange, allowOverlay = true 
             <option value="grayscale">Escala de grises</option>
           </select>
         </label>
-        <label className="e2-design-slider">
-          <span>Redondeado: {current.radius ?? 0} px</span>
-          <input
-            type="range"
-            aria-label="Redondeado de la imagen"
-            min={0}
-            max={40}
-            step={2}
-            value={current.radius ?? 0}
-            onChange={(e) => patch({ radius: Number(e.target.value) })}
-          />
-        </label>
+        <MediaRadiusField radius={current.radius} label="Redondeado de la imagen" onChange={radius => patch({ radius })} />
       </div>
 
       {allowOverlay && (

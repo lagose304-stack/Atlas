@@ -4,7 +4,7 @@ import type { MediaAppearance } from '../domain/styleSchema';
 import type { ContentTemplateType } from './ContentTemplateGallery';
 import { CALLOUT_TONES } from './Editor2Blocks';
 import IconPickerModal, { renderAtlasIcon } from './IconPickerModal';
-import MediaStyleFields from './MediaStyleFields';
+import MediaStyleFields, { MediaRadiusField } from './MediaStyleFields';
 import TextColorPicker from './TextColorPicker';
 import TextSizePresetPicker from './TextSizePresetPicker';
 
@@ -18,6 +18,8 @@ const titles = {
   image: 'Aspecto de la imagen',
   carousel: 'Aspecto del carrusel',
   compare: 'Aspecto del comparador',
+  gif: 'Aspecto del GIF',
+  video: 'Aspecto del video',
 };
 const tableOptions = [
   ['striped', 'Alternar fondo de las filas'],
@@ -36,17 +38,18 @@ export default function ContentDesignSettings({ type, properties, onChange }: {
   const frame = icon.frame ?? 'rounded';
   const name = icon.name ?? 'microscope';
   const media = properties.media as MediaAppearance | undefined;
+  const captionLabel = type === 'video' ? 'pie de video' : type === 'gif' ? 'pie de GIF' : 'pie de foto';
 
   return (
     <details className="e2-design-section" open>
       <summary>{titles[type]}</summary>
       <div className="e2-design-section__body">
-        {(type === 'image' || type === 'carousel' || type === 'compare') && (
+        {(type === 'image' || type === 'carousel' || type === 'compare' || type === 'gif' || type === 'video') && (
           <>
             <label className="e2-design-checkbox">
               <input type="checkbox" checked={media?.showCaption !== false}
                 onChange={event => onChange({ media: { ...media, showCaption: event.target.checked } })} />
-              Mostrar pie de foto
+              Mostrar {captionLabel}
             </label>
             {type === 'compare' && (
               <label className="e2-design-field">
@@ -55,18 +58,20 @@ export default function ContentDesignSettings({ type, properties, onChange }: {
                   onChange={event => onChange({ caption: event.target.value })} />
               </label>
             )}
-            <label className="e2-design-field">
-              <span className="e2-design-label">Ajuste de la imagen</span>
-              <select value={properties.fit === 'cover' ? 'cover' : 'contain'}
-                onChange={event => onChange({ fit: event.target.value })}>
-                <option value="contain">Mostrar completa</option>
-                <option value="cover">Cubrir</option>
-              </select>
-            </label>
+            {type !== 'video' && (
+              <label className="e2-design-field">
+                <span className="e2-design-label">Ajuste de la imagen</span>
+                <select value={properties.fit === 'cover' ? 'cover' : 'contain'}
+                  onChange={event => onChange({ fit: event.target.value })}>
+                  <option value="contain">Mostrar completa</option>
+                  <option value="cover">Cubrir</option>
+                </select>
+              </label>
+            )}
             {media?.showCaption !== false && (
               <label className="e2-design-field">
-                <span className="e2-design-label">Alineación del pie de foto</span>
-                <select value={media?.captionAlign ?? (type === 'image' ? 'left' : 'center')}
+                <span className="e2-design-label">Alineación del {captionLabel}</span>
+                <select value={media?.captionAlign ?? (type === 'image' || type === 'gif' || type === 'video' ? 'left' : 'center')}
                   onChange={event => onChange({
                     media: { ...media, captionAlign: event.target.value as MediaAppearance['captionAlign'] },
                   })}>
@@ -82,8 +87,21 @@ export default function ContentDesignSettings({ type, properties, onChange }: {
                 onChange={stageBackground => onChange({ media: { ...media, stageBackground } })}
                 onReset={() => onChange({ media: { ...media, stageBackground: undefined } })} />
             </div>
-            <MediaStyleFields media={media} allowOverlay={type !== 'compare'}
-              onChange={next => onChange({ media: next })} />
+            {type === 'video' ? (
+              <div className="e2-quad-grid">
+                <label className="e2-design-field">
+                  <span className="e2-design-label">Relación de aspecto</span>
+                  <select value={typeof properties.aspect === 'string' ? properties.aspect : '16/9'}
+                    onChange={event => onChange({ aspect: event.target.value })}>
+                    <option value="16/9">16:9 (Panorámica)</option>
+                    <option value="4/3">4:3</option>
+                    <option value="1/1">1:1 (Cuadrada)</option>
+                  </select>
+                </label>
+                <MediaRadiusField radius={media?.radius} label="Redondeado del video"
+                  onChange={radius => onChange({ media: { ...media, radius } })} />
+              </div>
+            ) : <MediaStyleFields media={media} allowOverlay={type !== 'compare'} onChange={next => onChange({ media: next })} />}
           </>
         )}
         {type === 'icon' && (

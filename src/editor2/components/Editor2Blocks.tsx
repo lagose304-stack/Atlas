@@ -20,7 +20,7 @@ import { EDITOR2_DEFAULT_IMAGE_SRC, createLayoutIntent } from '../domain/default
 import { gridColumnValue, layoutClasses } from '../domain/layout';
 import { GRID_COLUMNS, GRID_MAX_ROW, fromGridLine, fromGridSpan, toGridLine, toGridSpan } from '../domain/gridResolution';
 import { renderRichTextContent, type RichTextV2 } from '../domain/richText';
-import type { BlockStyle, ButtonBlock, CarouselItem, Gap, HeadingTextSizePreset, LayoutIntent, MediaAppearance, PageTheme, SpanIntent, TextAppearance, TextSizePreset } from '../domain/schema';
+import type { BlockStyle, ButtonBlock, CarouselItem, Gap, HeadingTextSizePreset, LayoutIntent, MediaAppearance, PageTheme, SpanIntent, TextAppearance, TextSizePreset, VideoBlock } from '../domain/schema';
 import { DEFAULT_BOX_STYLE } from '../domain/styleSchema';
 import {
   blockMotionClasses,
@@ -76,9 +76,9 @@ function rowStyle(layout: LayoutIntent, fitMediaToRows = false): CSSProperties {
   return styles as CSSProperties;
 }
 
-function mediaBlockStyles(layout: LayoutIntent, blockStyle?: BlockStyle) {
+function mediaBlockStyles(layout: LayoutIntent, blockStyle?: BlockStyle, fitMediaToRows = true) {
   const { maxWidth, width, marginInline, ...frame } = blockStyleToCss(blockStyle, true);
-  return { area: { ...rowStyle(layout, true), maxWidth, width, marginInline }, frame };
+  return { area: { ...rowStyle(layout, fitMediaToRows), maxWidth, width, marginInline }, frame };
 }
 
 function typography(style: TextAppearance = {}): CSSProperties {
@@ -446,18 +446,21 @@ export function ImageBlockView({
   blockStyle,
   editing = false,
   dragRef,
-}: ImageBlockViewProps) {
+  kind = 'image',
+}: ImageBlockViewProps & { kind?: 'image' | 'gif' }) {
   const showCaption = media?.showCaption !== false && (editing || Boolean(caption));
+  const isGif = kind === 'gif';
+  const zoomLabel = isGif ? 'Ampliar GIF' : 'Ampliar imagen';
   const [zoomed, setZoomed] = useState(false);
 
-  const styles = mediaBlockStyles(layout, blockStyle);
+  const styles = mediaBlockStyles(layout, blockStyle, !isGif || !media?.aspect || media.aspect === 'auto');
   return (
     <div
       ref={dragRef ?? undefined}
-      className={`e2-block e2-block--image ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
+      className={`e2-block e2-block--image ${isGif ? 'e2-block--gif ' : ''}${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
       style={styles.area}
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
-      data-e2-block="image"
+      data-e2-block={kind}
     >
       <figure className="e2-media-frame" style={styles.frame}>
         <div className="e2-image-stage e2-media-stage" style={mediaStageStyle(media)}>
@@ -469,17 +472,17 @@ export function ImageBlockView({
             style={mediaImageStyle(fit, media)}
             onClick={!editing && zoom ? () => setZoomed(true) : undefined}
           />
-          {media?.overlayBadge && (
+          {media?.overlayBadge ? (
             <span className={`e2-media-overlay-badge e2-media-overlay-badge--${media.overlayPosition ?? 'tl'}`}>
               {media.overlayBadge}
             </span>
-          )}
+          ) : isGif && <span className="e2-gif-badge" aria-hidden="true">GIF</span>}
           {!editing && zoom && (
             <button
               type="button"
               className="e2-image-zoom-btn"
-              aria-label="Ampliar imagen"
-              title="Ampliar imagen"
+              aria-label={zoomLabel}
+              title={zoomLabel}
               onClick={() => setZoomed(true)}
             >
               <ZoomIn size={14} aria-hidden="true" />
@@ -489,7 +492,7 @@ export function ImageBlockView({
         {showCaption && (
           <figcaption className={caption ? 'e2-media-caption' : 'e2-media-caption e2-block__placeholder'}
             style={{ textAlign: media?.captionAlign }}>
-            {caption || (editing ? 'Añade un pie de imagen' : '')}
+            {caption || (isGif ? 'Añade un pie de GIF' : 'Añade un pie de imagen')}
           </figcaption>
         )}
       </figure>
@@ -1248,6 +1251,7 @@ export type VideoBlockViewProps = {
   url: string;
   caption?: string;
   aspect?: '16/9' | '4/3' | '1/1';
+  media?: VideoBlock['props']['media'];
   blockStyle?: BlockStyle;
   editing?: boolean;
   dragRef?: DragRef;
@@ -1258,12 +1262,13 @@ export function VideoBlockView({
   url,
   caption,
   aspect = '16/9',
+  media,
   blockStyle,
   editing = false,
   dragRef,
 }: VideoBlockViewProps) {
-  const media = parseVideoSource(url);
-  const showCaption = editing || (caption ?? '') !== '';
+  const source = parseVideoSource(url);
+  const showCaption = media?.showCaption !== false && (editing || Boolean(caption));
 
   return (
     <figure
@@ -1273,13 +1278,13 @@ export function VideoBlockView({
       data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
       data-e2-block="video"
     >
-      <div className="e2-video-stage" style={{ aspectRatio: aspect.replace('/', ' / ') }}>
-        {media ? (
-          media.kind === 'video' ? (
-            <video src={media.src} controls playsInline className="e2-video-player" />
+      <div className="e2-video-stage" style={mediaStageStyle(media, aspect)}>
+        {source ? (
+          source.kind === 'video' ? (
+            <video src={source.src} controls playsInline className="e2-video-player" />
           ) : (
             <iframe
-              src={media.src}
+              src={source.src}
               title={caption || 'Video educativo'}
               className="e2-video-iframe"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -1288,13 +1293,16 @@ export function VideoBlockView({
           )
         ) : (
           <div className="e2-video-empty">
-            <Film size={22} aria-hidden="true" />
-            <span>Pega una URL de YouTube, Vimeo o MP4 en la barra superior</span>
+            <span className="e2-video-empty__message">
+              <Film size={22} aria-hidden="true" />
+              Pega una URL de YouTube, Vimeo o MP4 en la barra superior
+            </span>
           </div>
         )}
       </div>
       {showCaption && (
-        <figcaption className={caption ? undefined : 'e2-block__placeholder'}>
+        <figcaption className={caption ? 'e2-media-caption' : 'e2-media-caption e2-block__placeholder'}
+          style={{ textAlign: media?.captionAlign }}>
           {caption || (editing ? 'Añade un pie de video' : '')}
         </figcaption>
       )}
@@ -1522,85 +1530,10 @@ export function CalloutBlockView({
   );
 }
 
-export type GifBlockViewProps = {
-  layout: LayoutIntent;
-  src: string;
-  alt: string;
-  caption?: string;
-  fit?: 'cover' | 'contain';
-  zoom?: boolean;
-  media?: MediaAppearance;
-  blockStyle?: BlockStyle;
-  editing?: boolean;
-  dragRef?: DragRef;
-};
+export type GifBlockViewProps = ImageBlockViewProps;
 
-export function GifBlockView({
-  layout,
-  src,
-  alt,
-  caption,
-  fit = 'contain',
-  zoom = false,
-  media,
-  blockStyle,
-  editing = false,
-  dragRef,
-}: GifBlockViewProps) {
-  const showCaption = editing || (caption ?? '') !== '';
-  const [zoomed, setZoomed] = useState(false);
-
-  return (
-    <figure
-      ref={dragRef ?? undefined}
-      className={`e2-block e2-block--image e2-block--gif ${blockMotionClasses(blockStyle, editing)} ${layoutClasses(layout)}`.trim()}
-      style={mergeBlockStyle(rowStyle(layout), blockStyle)}
-      data-e2-area={Object.values(layout).some((intent) => intent.row || intent.rowSpan) || undefined}
-      data-e2-block="gif"
-    >
-      <div className="e2-image-stage" style={mediaStageStyle(media)}>
-        <img
-          src={src}
-          alt={alt}
-          loading="lazy"
-          draggable={false}
-          style={mediaImageStyle(fit, media)}
-          onClick={!editing && zoom ? () => setZoomed(true) : undefined}
-        />
-        {media?.overlayBadge ? (
-          <span className={`e2-media-overlay-badge e2-media-overlay-badge--${media.overlayPosition ?? 'tl'}`}>
-            {media.overlayBadge}
-          </span>
-        ) : (
-          <span className="e2-gif-badge" aria-hidden="true">GIF</span>
-        )}
-        {!editing && zoom && (
-          <button
-            type="button"
-            className="e2-image-zoom-btn"
-            aria-label="Ampliar GIF"
-            title="Ampliar GIF"
-            onClick={() => setZoomed(true)}
-          >
-            <ZoomIn size={14} aria-hidden="true" />
-          </button>
-        )}
-      </div>
-      {showCaption && (
-        <figcaption className={caption ? undefined : 'e2-block__placeholder'}>
-          {caption || (editing ? 'Añade un pie de GIF' : '')}
-        </figcaption>
-      )}
-      <Editor2Lightbox
-        open={!editing && zoomed}
-        src={src}
-        alt={alt}
-        caption={caption}
-        onClose={() => setZoomed(false)}
-      />
-      {editing && <BlockResizeHandles />}
-    </figure>
-  );
+export function GifBlockView({ zoom = false, ...props }: GifBlockViewProps) {
+  return <ImageBlockView {...props} zoom={zoom} kind="gif" />;
 }
 
 export type BadgeBlockViewProps = {
@@ -2659,12 +2592,13 @@ export const editor2PuckConfig: Config = {
         },
         layout: layoutField,
       },
-      render: ({ layout, url, caption, aspect, style, puck }) => (
+      render: ({ layout, url, caption, aspect, media, style, puck }) => (
         <VideoBlockView
           layout={layout ?? defaultVideoLayout}
           url={url ?? ''}
           caption={typeof caption === 'string' ? caption : undefined}
           aspect={aspect === '4/3' || aspect === '1/1' ? aspect : '16/9'}
+          media={media}
           blockStyle={style}
           editing={puck?.isEditing}
           dragRef={puck?.dragRef}

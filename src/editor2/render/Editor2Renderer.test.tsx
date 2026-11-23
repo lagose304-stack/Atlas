@@ -22,6 +22,7 @@ import {
   createCompareBlock,
   createDividerBlock,
   createEmptyCanvasDoc,
+  createGifBlock,
   createHeadingBlock,
   createImageBlock,
   createIconBlock,
@@ -30,6 +31,7 @@ import {
   createPlacedBlock,
   createTableBlock,
   createTextBlock,
+  createVideoBlock,
 } from '../domain/defaults';
 import { ATLAS_PAGE_THEMES } from '../domain/styleSchema';
 import Editor2Renderer from './Editor2Renderer';
@@ -43,6 +45,26 @@ const IMAGE_ID = '55555555-5555-4555-8555-555555555555';
 const NESTED_TEXT_ID = '66666666-6666-4666-8666-666666666666';
 
 describe('Editor2Renderer', () => {
+  it.each(['preview', 'public'] as const)('conserva el aspecto de GIF y video tras guardar y reabrir en %s', variant => {
+    const gif = createGifBlock({ src: 'https://example.com/tejido.gif', alt: 'Mitosis', caption: 'Pie de GIF' });
+    gif.props.media = { aspect: '3/4', stageBackground: '#f3e1e7', showCaption: false, radius: 2 };
+    const video = createVideoBlock({ url: 'https://example.com/tejido.mp4', caption: 'Pie de video', aspect: '1/1' });
+    video.props.media = { showCaption: true, captionAlign: 'right', stageBackground: '#102a43', radius: 10 };
+    const legacyVideo = createVideoBlock({ url: 'https://example.com/archivo.mp4', caption: 'Pie anterior', aspect: '4/3' });
+    const doc = createEmptyCanvasDoc('home', { children: [gif, video, legacyVideo].map(block => createPlacedBlock(block)) });
+    const reopened = fromPuckData(JSON.parse(JSON.stringify(toPuckData(doc))));
+    expect(reopened).toEqual(doc);
+    const { container } = render(<Editor2Renderer doc={reopened} variant={variant} />);
+
+    expect(screen.getByAltText('Mitosis')).toHaveAttribute('src', gif.props.src);
+    expect(screen.queryByText('Pie de GIF')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-e2-block="gif"] .e2-media-stage')).toHaveStyle({ aspectRatio: '3 / 4' });
+    expect(screen.getByText('Pie de video')).toHaveStyle({ textAlign: 'right' });
+    expect(container.querySelector('video[src="https://example.com/tejido.mp4"]')).toHaveAttribute('controls');
+    expect(container.querySelector('.e2-video-stage')).toHaveStyle({ aspectRatio: '1 / 1', borderRadius: '10px' });
+    expect(screen.getByText('Pie anterior').previousElementSibling).toHaveStyle({ aspectRatio: '4 / 3' });
+  });
+
   it.each(['preview', 'public'] as const)('aplica la altura guardada en %s', (variant) => {
     const doc = createEmptyCanvasDoc('home');
     doc.root.props.minRows = 48;

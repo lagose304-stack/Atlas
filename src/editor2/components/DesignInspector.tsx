@@ -180,7 +180,10 @@ export default function DesignInspector({
   const badgeAppearance: BadgeAppearance | undefined = item.type === 'badge' ? item.props : undefined;
   const contentType = item.type === 'icon' || item.type === 'table' || item.type === 'callout' ||
     item.type === 'button' || item.type === 'divider' || item.type === 'examCarousel' ||
-    item.type === 'image' || item.type === 'carousel' || item.type === 'compare' ? item.type : undefined;
+    item.type === 'image' || item.type === 'carousel' || item.type === 'compare' ||
+    item.type === 'gif' || item.type === 'video' ? item.type : undefined;
+  const structureType = item.type === 'box' || item.type === 'tabs' || item.type === 'accordion' ? item.type : undefined;
+  const templateType = contentType ?? structureType;
   const hasDefaultSurface = contentType === 'callout' || contentType === 'examCarousel';
   const showBorderFirst = isTextBlock || hasDefaultSurface;
 
@@ -254,7 +257,8 @@ export default function DesignInspector({
 
   return (
     <div className="e2-design-bar" role="group" aria-label="Herramientas de diseño del bloque">
-      {contentType && <ContentTemplateGallery type={contentType} properties={item.props} style={style} onApply={commitStyle}
+      {templateType && <ContentTemplateGallery type={templateType} properties={item.props} style={style} onApply={commitStyle}
+        pageTextColor={pageTheme?.palette.text}
         onRequestWeeklyButton={onRequestWeeklyButton} />}
       {badgeAppearance && (
         <BlockTemplateGallery label="Plantillas de insignia" variant="badge"
